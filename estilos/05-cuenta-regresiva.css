@@ -1,0 +1,99 @@
+/* ══════════════════════════════════════════════════════════════════════
+   05 · CUENTA REGRESIVA
+   ══════════════════════════════════════════════════════════════════════
+
+   QUÉ ES ESTE ARCHIVO
+   Estiliza las cuatro cartelas que muestran cuánto falta para la fiesta:
+   días, horas, minutos y segundos. Los números los actualiza cada segundo
+   el archivo 09-cuenta-regresiva.js.
+
+   ÍNDICE
+     1. Fila de cartelas
+     2. Cada cartela
+     3. Mensaje del día del evento
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. FILA DE CARTELAS ──────────────────────────────────────────────
+   flex-wrap: wrap hace que, si no entran las cuatro a lo ancho (celular),
+   bajen solas a una segunda línea en vez de achicarse hasta ser ilegibles.
+   ---------------------------------------------------------------------- */
+.cuenta-regresiva {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(.6rem, 2.5vw, 1.5rem);
+  margin: 0 auto;
+  max-width: 620px;
+}
+
+/* ─── 2. CADA CARTELA ──────────────────────────────────────────────── */
+.cuenta-regresiva__cartela {
+  position: relative;
+  min-width: clamp(68px, 19vw, 120px);
+  padding: 1.1rem .6rem 1.15rem;
+  text-align: center;
+  background:
+    linear-gradient(180deg, rgba(201, 168, 76, .07), rgba(0, 0, 0, .35));
+  border: 1px solid var(--borde-oro-tenue);
+  box-shadow: inset 0 0 22px rgba(0, 0, 0, .6);
+}
+
+/* Esquinitas doradas: cuatro escuadras en las puntas de cada cartela.
+   Se dibujan con bordes parciales sobre dos pseudo-elementos. */
+.cuenta-regresiva__cartela::before,
+.cuenta-regresiva__cartela::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: var(--color-oro);
+  border-style: solid;
+}
+.cuenta-regresiva__cartela::before {
+  top: 4px; left: 4px;
+  border-width: 1px 0 0 1px;   /* arriba e izquierda */
+}
+.cuenta-regresiva__cartela::after {
+  bottom: 4px; right: 4px;
+  border-width: 0 1px 1px 0;   /* abajo y derecha */
+}
+
+.cuenta-regresiva__numero {
+  display: block;
+  font-family: var(--tipo-titulos);
+  font-size: clamp(1.5rem, 5.2vw, 2.5rem);
+  line-height: 1;
+  color: var(--color-oro-claro);
+  text-shadow: 0 0 26px rgba(201, 168, 76, .35);
+  /* Los dígitos ocupan siempre el mismo ancho: así el número no
+     "tiembla" cada vez que cambia de 9 a 10. */
+  font-variant-numeric: tabular-nums;
+}
+
+.cuenta-regresiva__etiqueta {
+  display: block;
+  /* Las palabras competían por el aire con la base de la cartela. Un poco
+     más de separación arriba, y más relleno abajo en la cartela, dejan el
+     bloque ópticamente centrado en vez de hundido. */
+  margin-top: .62rem;
+  font-family: var(--tipo-detalle);
+  font-size: clamp(.58rem, 1.7vw, .72rem);
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--color-oro-apagado);
+}
+
+/* ─── 3. MENSAJE DEL DÍA DEL EVENTO ────────────────────────────────────
+   Cuando la fecha llega, el JS oculta las cartelas y muestra esto.
+   ---------------------------------------------------------------------- */
+.cuenta-regresiva__llegada {
+  display: none;
+  font-family: var(--tipo-titulos);
+  font-size: clamp(1.3rem, 4.5vw, 2rem);
+  color: var(--color-oro-claro);
+  text-align: center;
+  text-shadow: 0 0 40px rgba(201, 168, 76, .45);
+}
+.cuenta-regresiva.es-hoy .cuenta-regresiva__cartela { display: none; }
+.cuenta-regresiva.es-hoy .cuenta-regresiva__llegada { display: block; }

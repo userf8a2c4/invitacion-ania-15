@@ -1,0 +1,491 @@
+/* ══════════════════════════════════════════════════════════════════════
+   01 · FUNDAMENTOS
+   ══════════════════════════════════════════════════════════════════════
+
+   QUÉ ES ESTE ARCHIVO
+   Es la base sobre la que se apoyan todos los demás estilos. Aquí viven
+   los colores, las tipografías y las medidas del proyecto, guardados en
+   "variables". Si cambias un color acá, cambia en TODA la web de golpe.
+
+   ÍNDICE
+     1. Variables (colores, tipografías, medidas)
+     2. Reinicio de estilos del navegador
+     3. Texto base y barra de desplazamiento
+     4. Capa de fondo con efecto parallax
+     5. Piezas compartidas (botones, divisores, marcos, títulos)
+     6. Animaciones y utilidades reutilizables
+
+   QUÉ PUEDES TOCAR SIN MIEDO
+   Los valores de la sección 1. Por ejemplo, si querés un dorado más
+   claro, cambiá --color-oro. Todo lo demás se acomoda solo.
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. VARIABLES ──────────────────────────────────────────────────────
+   Una variable CSS es un valor con nombre. Se declara con dos guiones
+   (--color-oro: #c9a84c) y se usa con var(--color-oro).
+   Ejemplo: si escribís  color: var(--color-oro);  ese texto sale dorado.
+   ---------------------------------------------------------------------- */
+:root {
+  /* Negros y marrones: el fondo de toda la invitación */
+  --color-negro:            #0a0605;
+  --color-negro-profundo:   #060302;
+  --color-carbon:           #120c07;
+  --color-tierra:           #241a0e;
+
+  /* Rojos: el acento dramático (rosas, botones, sellos) */
+  --color-vino:             #5c1220;
+  --color-sangre:           #8e1f30;
+  --color-sangre-viva:      #c0181a;
+  --color-rubi:             #a02538;
+
+  /* Dorados: todo lo ornamental.
+     Es un ORO ENVEJECIDO, de linaje: no el amarillo brillante de una joya
+     recién comprada, sino el ámbar apagado de una pieza que pasó de
+     generación en generación. Por eso los tonos claros no llegan al blanco
+     (nada de destellos de metal nuevo) y las sombras tiran a bronce/oliva,
+     como el oro viejo oscurecido en los recovecos. El cambio es sutil a
+     propósito: se siente antiguo, no sucio. */
+  --color-oro:              #c1a049;   /* ámbar apagado, algo más terroso */
+  --color-oro-claro:        #dcc079;   /* realce cálido, sin blanco */
+  --color-oro-brillante:    #e8d290;   /* el más claro que se permite */
+  --color-oro-apagado:      #6e5824;
+  --color-oro-sombra:       #4a3818;   /* bronce/oliva de los recovecos */
+
+  /* Claros: el texto */
+  --color-marfil:           #f5efe6;
+  --color-marfil-apagado:   #c8bfb0;
+
+  /* Bordes preparados (para no repetir el rgba a mano) */
+  --borde-oro-tenue:        rgba(201, 168, 76, .35);
+  --borde-oro-fuerte:       rgba(201, 168, 76, .75);
+
+  /* Tipografías.
+     titulos  → Cinzel Decorative, la ornamentada de "ANIA"
+     texto    → Cormorant Garamond, la de los párrafos
+     detalle  → IM Fell English, la antigua de los rótulos pequeños */
+  --tipo-titulos:  'Cinzel Decorative', serif;
+  --tipo-texto:    'Cormorant Garamond', serif;
+  --tipo-detalle:  'IM Fell English', serif;
+
+  /* Medidas del marco victoriano.
+     clamp(mínimo, ideal, máximo) elige el valor ideal pero nunca baja
+     del mínimo ni sube del máximo. Así el marco es fino en el celular
+     y grueso en una pantalla grande, sin necesidad de hacer cuentas. */
+  --marco-grosor:  clamp(20px, 3.4vw, 72px);
+  /* La pieza de esquina mide 160 px cuando el riel mide 72 px.
+     160 ÷ 72 = 2.2222, así que la esquina siempre guarda esa proporción. */
+  --marco-esquina: calc(var(--marco-grosor) * 2.2222);
+
+  /* Ancho máximo del contenido legible */
+  --ancho-contenido: 860px;
+
+  /* Altura que ocupa el reproductor de música abajo a la derecha.
+     Se usa para que el pie de página nunca quede tapado por él. */
+  --alto-reproductor: 132px;
+
+  /* Curva de animación elegante (arranca rápido, frena suave) */
+  --curva-elegante: cubic-bezier(.22, .61, .36, 1);
+
+  /* Estado de la luz ambiente, que publica codigo/14-haces-de-luz.js:
+       --luz-x          → posición media del sol, de 0 (izq) a 1 (der)
+       --luz-intensidad → cuánta luz hay ahora, de 0 a 1
+     El oro del relicario y las motas de polvo se cuelgan de estas para
+     moverse en sincronía con los haces. Arrancan apagadas: si no hay JS
+     (o se pidió menos movimiento), no hay brillo que se mueva solo. */
+  --luz-x: 0.5;
+  --luz-intensidad: 0;
+}
+
+
+/* ─── 2. REINICIO DE ESTILOS DEL NAVEGADOR ─────────────────────────────
+   Los navegadores traen márgenes y rellenos por defecto que descuadran
+   los diseños. Esto los pone todos en cero y hace que el tamaño de una
+   caja incluya su borde y su relleno (box-sizing), que es como uno
+   espera que funcione al maquetar.
+   ---------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+
+/* ─── 3. TEXTO BASE Y BARRA DE DESPLAZAMIENTO ─────────────────────────── */
+html {
+  scroll-behavior: smooth;   /* al saltar a una sección, se desliza suave */
+
+  /* IMPORTANTE PARA EL CENTRADO:
+     reserva siempre el espacio de la barra de desplazamiento. Sin esto,
+     cuando la barra aparece y desaparece el contenido "salta" unos
+     píxeles y todo parece descentrado. */
+  scrollbar-gutter: stable;
+
+  /* Barra de desplazamiento dorada (Firefox) */
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-oro-apagado) var(--color-negro-profundo);
+
+  /* ⚠️ NADA DE BARRA HORIZONTAL.
+     Las enredaderas y los ramilletes desbordan A PROPÓSITO sobre la
+     moldura: una planta que se trepa tiene que pasar por encima del
+     marco, si no parece un sticker. Pero ese desborde agranda la página
+     a lo ancho y aparece una barra horizontal que no lleva a ninguna
+     parte.
+
+     Se usa "clip" y no "hidden" porque son distintos: "hidden" convierte
+     al elemento en un contenedor de scroll (aunque no se vea la barra),
+     y eso rompe cosas como scroll-behavior o el salto a una sección.
+     "clip" simplemente recorta y no toca el desplazamiento vertical,
+     que es exactamente lo que queremos.
+
+     La línea de "hidden" queda primero como respaldo para navegadores
+     viejos que todavía no entienden "clip": leen la que entienden y
+     descartan la otra. */
+  overflow-x: hidden;
+  overflow-x: clip;
+
+  /* ⚠️ EL FORMULARIO QUE SE "EXPANDÍA HACIA ARRIBA".
+     Cuando alguien escribía 6 adultos, aparecían seis filas de menú y la
+     página entera daba un salto: el campo que se estaba usando se iba
+     para arriba y había que volver a buscarlo con el mouse.
+
+     La culpa no era del formulario sino de una función del navegador
+     llamada "anclaje de scroll". Funciona así: el navegador elige un
+     elemento visible como ancla y, si aparece contenido nuevo por
+     ENCIMA, corre el scroll para que esa ancla no se mueva. En una
+     página de noticias es útil: evita que un anuncio que carga tarde te
+     corra el texto que estabas leyendo.
+
+     Acá era exactamente al revés. Estando cerca del final de la página,
+     el ancla que elegía quedaba POR DEBAJO de las filas nuevas, así que
+     para dejarla quieta corría todo lo demás hacia arriba, incluido el
+     campo donde la persona estaba escribiendo. Medido: 501 px de salto
+     al pasar de 1 a 8 adultos.
+
+     Se apaga. Esta invitación no carga nada tarde ni inserta contenido
+     por sorpresa: lo único que crece son esas filas, y cuando crecen
+     tienen que empujar hacia abajo, como haría cualquier papel. */
+  overflow-anchor: none;
+}
+
+/* Barra de desplazamiento dorada (Chrome, Edge, Safari) */
+::-webkit-scrollbar             { width: 11px; }
+::-webkit-scrollbar-track       { background: var(--color-negro-profundo); }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(var(--color-oro-apagado), var(--color-oro-sombra));
+  border: 2px solid var(--color-negro-profundo);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--color-oro); }
+
+body {
+  position: relative;        /* el marco victoriano se ancla a esto */
+  background: var(--color-negro);
+  color: var(--color-marfil);
+  font-family: var(--tipo-texto);
+  font-size: 18px;
+  line-height: 1.7;
+  /* Lo mismo que en html: recorta el desborde de las enredaderas sin
+     convertirse en contenedor de scroll. Está en los dos lugares porque
+     según el navegador el que manda es uno o el otro. */
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
+p { color: var(--color-marfil-apagado); margin-bottom: 1rem; }
+
+h2 {
+  font-family: var(--tipo-titulos);
+  font-size: clamp(1.6rem, 4vw, 2.5rem);
+  color: var(--color-oro-claro);
+  text-align: center;
+  margin-bottom: 2rem;
+  font-weight: 400;
+}
+
+/* Rótulo pequeño en versalitas que va arriba de cada título */
+.rotulo-de-seccion {
+  display: block;
+  font-family: var(--tipo-detalle);
+  font-size: .85rem;
+  /* Tracking generoso: en un rótulo corto en versalitas, el aire entre
+     letras es lo que separa un texto "de sistema" de uno compuesto. */
+  letter-spacing: .46em;
+  /* Al espaciar, la última letra arrastra su espacio y el bloque queda
+     ópticamente corrido a la izquierda. Este sangrado lo compensa. */
+  text-indent: .46em;
+  text-transform: uppercase;
+  color: var(--color-oro);
+  text-align: center;
+  margin-bottom: .75rem;
+}
+
+
+/* ─── 4. CAPA DE FONDO CON PARALLAX ────────────────────────────────────
+   Es un rectángulo fijo detrás de todo con el dibujo ornamental. El
+   archivo 08-efectos-de-scroll.js lo mueve más lento que el contenido
+   para dar sensación de profundidad (eso es el "parallax").
+
+   Mide 160vh (una vez y media la altura de la pantalla) justamente para
+   tener margen sobrante que desplazar sin que se vea el borde.
+   ---------------------------------------------------------------------- */
+#capa-fondo {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;      /* 100% y NO 100vw: 100vw incluiría la barra de
+                       desplazamiento y el fondo quedaría corrido */
+  height: 160vh;
+  z-index: -1;      /* detrás de absolutamente todo */
+
+  /* Dos capas superpuestas: primero un velo negro al 20 % que oscurece
+     el dibujo para que el texto resalte, y debajo el dibujo. */
+  background-image:
+    linear-gradient(rgba(0, 0, 0, .2), rgba(0, 0, 0, .2)),
+    url('../recursos/fondo-ornamental.svg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  will-change: transform;   /* aviso al navegador: esto se va a mover */
+}
+
+/* Ruido muy sutil encima de todo: rompe los degradados perfectos y da
+   una textura de papel antiguo. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;     /* no bloquea clics */
+  opacity: .5;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23r)' opacity='0.04'/%3E%3C/svg%3E");
+}
+
+
+/* ─── 5. PIEZAS COMPARTIDAS ────────────────────────────────────────────
+   Elementos que se repiten en varias secciones. Definirlos una sola vez
+   evita copiar y pegar (y que después queden distintos entre sí).
+   ---------------------------------------------------------------------- */
+
+/* Divisor ornamental: una línea dorada que se desvanece con un símbolo
+   en el medio. Se usa entre secciones. */
+.divisor {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 2.5rem auto;
+  max-width: 500px;
+  color: var(--color-oro);
+}
+.divisor::before,
+.divisor::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-oro-apagado), transparent);
+}
+.divisor span { font-size: 1.2rem; white-space: nowrap; }
+
+/* Marco fino con una estrella arriba y otra abajo. Envuelve cajas de
+   contenido (el mensaje de los papás, el formulario, etc.). */
+.marco-ornamental {
+  position: relative;
+  border: 1px solid var(--borde-oro-tenue);
+  box-shadow: inset 0 0 30px rgba(201, 168, 76, .05),
+                    0 0 0 1px rgba(0, 0, 0, .5);
+}
+.marco-ornamental::before,
+.marco-ornamental::after {
+  content: '✦';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--color-oro);
+  font-size: 1rem;
+  background: var(--color-carbon);
+  padding: 0 .5rem;
+}
+.marco-ornamental::before { top: -.6rem; }
+.marco-ornamental::after  { bottom: -.6rem; }
+
+/* ─── DESTELLO ESPECULAR DE LOS BOTONES ───────────────────────────────
+   Una banda de luz cruza el botón de vez en cuando, como el reflejo que
+   recorre una superficie metálica pulida. Es de los detalles que nadie
+   sabe nombrar pero que hacen que una interfaz se sienta cara.
+
+   La clave está en el RETARDO: lo sortea el JS para cada botón
+   (04-invitado-personalizado.js). Si todos compartieran la animación,
+   destellarían al mismo tiempo y se leería como un parpadeo del sistema
+   en vez de como reflejos independientes. */
+.boton-dorado,
+.boton-carmesi {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;   /* la banda no se escapa del botón */
+}
+.boton-dorado::after,
+.boton-carmesi::after {
+  content: '';
+  position: absolute;
+  top: -60%;
+  left: 0;
+  width: 34%;
+  height: 220%;
+  pointer-events: none;
+  background: linear-gradient(100deg,
+              transparent, rgba(255, 255, 255, .38), transparent);
+  transform: translateX(-320%) skewX(-18deg);
+  /* El retardo lo sortea el JS y lo deja en esta variable */
+  animation: barrido-especular 9s var(--retardo-del-destello, 0s) ease-in-out infinite;
+}
+@keyframes barrido-especular {
+  /* Solo el último 12 % del ciclo tiene brillo: el resto está en reposo.
+     Así el destello es un acontecimiento, no un parpadeo constante. */
+  0%, 88%  { transform: translateX(-320%) skewX(-18deg); }
+  100%     { transform: translateX(420%)  skewX(-18deg); }
+}
+/* Al pasar el mouse, el reflejo responde en el acto */
+.boton-dorado:hover::after,
+.boton-carmesi:hover::after {
+  animation: barrido-especular 1.1s ease-out;
+}
+
+/* Botón dorado (acciones principales suaves: ver regalos, calendario…) */
+.boton-dorado {
+  display: inline-block;
+  padding: .75rem 2.5rem;
+  background: linear-gradient(135deg,
+              var(--color-oro-apagado), var(--color-oro), var(--color-oro-apagado));
+  background-size: 200%;
+  color: var(--color-negro);
+  font-family: var(--tipo-detalle);
+  font-size: .95rem;
+  letter-spacing: .1em;
+  text-decoration: none;
+  border: none;
+  transition: background-position .4s, transform .2s, box-shadow .3s;
+}
+.boton-dorado:hover {
+  background-position: right;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(201, 168, 76, .3);
+}
+
+/* Botón carmesí (la acción más importante: confirmar asistencia).
+   El rojo NO es un rojo vivo de alerta: es sangre seca / vino, para que
+   pegue con el vino de las rosas y el granate del relicario. Un rojo
+   brillante acá gritaba "botón de sitio web"; este se siente parte de la
+   pieza. El hover apenas lo enciende, sin llegar nunca al rojo semáforo. */
+.boton-carmesi {
+  display: block;
+  width: 100%;
+  padding: 1rem 2rem;
+  background: linear-gradient(135deg, #3d0d15, #6e1622);
+  color: var(--color-marfil);
+  font-family: var(--tipo-titulos);
+  font-size: 1rem;
+  letter-spacing: .1em;
+  border: 1px solid rgba(140, 32, 42, .55);
+  transition: all .3s;
+  margin-top: 2rem;
+}
+.boton-carmesi:hover {
+  background: linear-gradient(135deg, #55131d, #872030);
+  box-shadow: 0 8px 30px rgba(110, 22, 34, .45);
+  transform: translateY(-2px);
+}
+.boton-carmesi:disabled { opacity: .5; transform: none; }
+
+/* Botón chico con solo el contorno */
+.boton-contorno {
+  padding: .6rem 1.5rem;
+  font-family: var(--tipo-detalle);
+  font-size: .85rem;
+  letter-spacing: .1em;
+  background: transparent;
+  border: 1px solid var(--borde-oro-tenue);
+  color: var(--color-marfil-apagado);
+  transition: all .25s;
+}
+.boton-contorno:hover { border-color: var(--color-oro); color: var(--color-oro); }
+
+
+/* ─── 5b. ÍCONOS Y ROSAS EN LÍNEA ──────────────────────────────────────
+   El juego de íconos dorados de trazo fino, compartido por toda la web.
+
+   POR QUÉ NO SE USAN EMOJI: además de verse infantiles junto a este
+   estilo, cada sistema operativo los dibuja distinto —la misma página se
+   vería diferente en un iPhone que en Windows— y son de color plano,
+   imposibles de integrar a una paleta. Estos comparten grosor de trazo,
+   remates y degradado, así que se leen como una familia.
+   ---------------------------------------------------------------------- */
+.icono-dorado {
+  width: 1.05em;
+  height: 1.05em;
+  vertical-align: -.18em;
+  flex-shrink: 0;
+  fill: none;
+  stroke: url(#oro-icono);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icono-dorado--grande { width: 3rem; height: 3rem; stroke-width: 1.1; }
+
+/* La rosa de la biblioteca, usada como viñeta dentro de un texto */
+.rosa-inline {
+  width: 1.15em;
+  height: 1.15em;
+  vertical-align: -.24em;
+}
+
+
+/* ─── 6. ANIMACIONES Y UTILIDADES ──────────────────────────────────────
+   "revelar" es la clase que usan las secciones para aparecer suavemente
+   cuando entran en pantalla. El archivo 08-efectos-de-scroll.js les
+   agrega la clase "visible" en el momento justo.
+   ---------------------------------------------------------------------- */
+.revelar {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity .8s var(--curva-elegante),
+              transform .8s var(--curva-elegante);
+}
+.revelar.visible { opacity: 1; transform: translateY(0); }
+
+/* Aparecer desde abajo (se usa en la portada) */
+@keyframes aparecer-desde-abajo {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Latido de opacidad (flecha de "desliza") */
+@keyframes latido-suave {
+  0%, 100% { opacity: .3; }
+  50%      { opacity: 1; }
+}
+
+/* Solo para lectores de pantalla: invisible pero audible.
+   Sirve para describir elementos decorativos a personas ciegas. */
+.solo-lectores-de-pantalla {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ACCESIBILIDAD: si la persona pidió en su sistema operativo "reducir
+   movimiento" (por mareos o migrañas), apagamos las animaciones. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,428 @@
+/* ══════════════════════════════════════════════════════════════════════
+   04 · PORTADA (la primera pantalla, con el nombre de Ania)
+   ══════════════════════════════════════════════════════════════════════
+
+   QUÉ ES ESTE ARCHIVO
+   Estiliza el encabezado: el gran marco ovalado dorado y el texto que va
+   dentro de él (antetítulo, "Ania", "XV Años" y la fecha).
+
+   LOS DOS DETALLES IMPORTANTES
+
+   1) CÓMO SE CENTRA TODO
+      El marco y el texto se apilan en la MISMA celda de una rejilla CSS.
+      Cuando dos cosas comparten celda y se les dice "centrado", quedan
+      concéntricas solas, sin cuentas ni porcentajes mágicos.
+
+      Para que funcione, el óvalo tiene que estar en el centro exacto del
+      archivo SVG: por eso el dibujo usa un viewBox de 860 × 816 con todo
+      centrado en (430, 408), que es justo su mitad.
+
+   2) CÓMO SE EVITA QUE EL TEXTO SE SALGA DEL ÓVALO
+      Antes el marco y el texto tenían anchos independientes, así que en
+      algunas pantallas el texto quedaba más ancho que el óvalo. Ahora los
+      dos salen de UNA sola medida, --ancho-broche, y el texto se calcula
+      como una fracción de ella. Así la proporción se respeta siempre.
+
+   ÍNDICE
+     1. Sección de la portada
+     2. El broche (marco + texto apilados)
+     3. El marco ovalado
+     4. Texto dentro del óvalo
+     5. Indicador "Desliza"
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. SECCIÓN DE LA PORTADA ─────────────────────────────────────── */
+#portada {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 3rem 1rem;
+  overflow: hidden;
+}
+
+/* Halos de color detrás del marco: dan atmósfera sin dibujar nada. */
+#portada::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 0%,   rgba(139, 0, 0, .25) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 60% at 80% 100%, rgba(139, 0, 0, .15) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 60% at 20% 100%, rgba(201, 168, 76, .08) 0%, transparent 70%);
+}
+
+
+/* ─── 2. EL BROCHE (marco + texto apilados) ────────────────────────────
+   grid-area: 1 / 1 en los dos hijos los mete en la misma celda, uno
+   encima del otro, y place-items: center los centra a ambos. Resultado:
+   quedan concéntricos sin importar el tamaño de la pantalla.
+
+   --ancho-broche es LA medida de la que sale todo lo demás:
+     · min(92vw, ...)  → nunca más ancho que la pantalla
+     · min(..., 640px) → nunca gigante en un monitor grande
+     · min(..., 78vh)  → y nunca más alto que la ventana, para que no se
+                         corte la corona ni el remate de abajo.
+       (El dibujo es 860 × 816, o sea que su alto es 0,95 de su ancho;
+        limitando el ancho a 78vh, el alto queda en 74vh como mucho, y el
+        resto de la pantalla alcanza para el "Desliza" de abajo.)
+   ---------------------------------------------------------------------- */
+.portada__broche {
+  /* El relicario ~75% más grande que antes (el tope de px pasó de 640 a
+     1080) para que ocupe la pantalla y no quede tanto espacio muerto
+     alrededor. Los otros dos límites lo cuidan:
+       · 94vw  → nunca más ancho que la pantalla
+       · 78vh  → nunca tan alto que se corte la corona o el remate, ni que
+                 empuje el "Desliza" fuera de la vista. Este límite es el
+                 que manda en pantallas anchas y bajas; en pantallas altas
+                 (como un monitor vertical) manda el tope de 1080px. */
+  --ancho-broche: min(94vw, 1120px, 78vh);
+
+  display: grid;
+  place-items: center;
+  width: var(--ancho-broche);
+  position: relative;
+  z-index: 2;
+}
+.portada__broche > * { grid-area: 1 / 1; }
+
+/* ─── BARRIDO DE LUZ SOBRE EL ORO ──────────────────────────────────────
+   Una banda cálida y diagonal que recorre el relicario según dónde esté
+   la luz ambiente. No es un brillo que titila: se DESLIZA, atado a la
+   posición de los haces (--luz-x), y aparece solo cuando hay luz
+   (--luz-intensidad). Así el oro "atrapa" la luz en lugar de ser un color
+   plano.
+
+   Va en el mismo lugar que el marco y el texto (grid-area 1/1), por
+   encima del oro pero por debajo del texto (que está en z-index 4). Como
+   es hijo del broche, se inclina CON él en el parallax 3D: el reflejo
+   viaja sobre la joya, no flota aparte.
+
+   mix-blend-mode: overlay es la clave: enciende lo claro (el oro) y casi
+   no toca lo oscuro (la piedra, el fondo). Sin eso, la banda se vería
+   como un velo gris cruzando todo.
+   ---------------------------------------------------------------------- */
+.portada__brillo-oro {
+  z-index: 3;
+  pointer-events: none;
+  border-radius: 50%;            /* se ciñe al óvalo, no a un rectángulo */
+  mix-blend-mode: overlay;
+
+  /* La banda: un destello angosto y suave sobre transparente. */
+  background-image: linear-gradient(
+    108deg,
+    transparent 34%,
+    rgba(255, 240, 205, .55) 47%,
+    rgba(255, 248, 225, .75) 50%,
+    rgba(255, 240, 205, .55) 53%,
+    transparent 66%);
+
+  /* El fondo es más ancho que la caja para que la banda pueda entrar y
+     salir de cuadro; su posición la manda --luz-x (0 = izquierda,
+     1 = derecha), así se mueve con los haces. */
+  background-size: 260% 100%;
+  background-repeat: no-repeat;
+  background-position: calc(var(--luz-x) * 100%) 0;
+
+  /* Aparece con la luz: apagado mientras el sobre está cerrado, sube al
+     revelarse la web. Se le pone un techo para que sea un realce, no un
+     flash. */
+  opacity: calc(var(--luz-intensidad) * 1.6);
+
+  transition: opacity .3s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portada__brillo-oro { display: none; }
+}
+
+
+/* ─── 3. EL MARCO OVALADO ──────────────────────────────────────────────
+   Ocupa todo el ancho del broche y no recibe clics.
+
+   NO lleva max-height a propósito: si se lo pusiéramos, el dibujo se
+   achicaría dentro de su caja y el óvalo quedaría más angosto que el
+   texto. El límite de altura ya está resuelto en --ancho-broche.
+   ---------------------------------------------------------------------- */
+.portada__marco {
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  /* Dos sombras: el halo dorado que ya tenía (aura de la luz) y una
+     sombra oscura y BAJA que le da PESO —el relicario deja de flotar y se
+     siente un objeto pesado apoyado sobre terciopelo, no un dibujo plano—.
+     Es parte de la presencia del centro: arriba reina la luz y el objeto
+     que la recibe tiene cuerpo. */
+  filter:
+    drop-shadow(0 0 45px rgba(201, 168, 76, .16))
+    drop-shadow(0 26px 30px rgba(0, 0, 0, .55));
+  will-change: opacity;
+
+  /* La entrada anima SOLO la opacidad y el desenfoque, nunca el tamaño:
+     así el broche conserva siempre la misma medida. */
+  opacity: 0;
+  animation: aparecer-marco 1.8s .15s var(--curva-elegante) forwards;
+}
+@keyframes aparecer-marco {
+  from {
+    opacity: 0;
+    filter:
+      drop-shadow(0 0 0 rgba(201, 168, 76, 0))
+      drop-shadow(0 26px 30px rgba(0, 0, 0, 0))
+      blur(6px);
+  }
+  to {
+    opacity: 1;
+    filter:
+      drop-shadow(0 0 45px rgba(201, 168, 76, .16))
+      drop-shadow(0 26px 30px rgba(0, 0, 0, .55))
+      blur(0);
+  }
+}
+
+
+/* ─── 4. TEXTO DENTRO DEL ÓVALO ────────────────────────────────────────
+   El ancho sale de --ancho-broche, así que el texto siempre guarda la
+   misma proporción con el óvalo.
+
+   ¿De dónde sale el 0,46? El óvalo oscuro mide rx = 238 en un dibujo de
+   860 de ancho, o sea 476 ÷ 860 = 0,553 del marco. Dejando un margen de
+   respiro para que las letras no rocen los anillos, queda 0,46.
+   ---------------------------------------------------------------------- */
+.portada__contenido {
+  position: relative;
+  /* 4 y no 3: los pétalos del plano medio están en 3, así que caen sobre
+     el marco del relicario pero SIEMPRE por detrás del nombre. El nombre
+     de Ania no se tapa con nada. */
+  z-index: 4;
+  width: calc(var(--ancho-broche) * 0.46);
+  text-align: center;
+}
+
+/* ¡IMPORTANTE! Todos los tamaños de letra de acá abajo se calculan como
+   una fracción de --ancho-broche, no en píxeles fijos.
+
+   ¿Por qué? Porque el óvalo se agranda y se achica según la pantalla. Si
+   las letras tuvieran un tamaño fijo, en una pantalla chica el óvalo se
+   encogería pero el texto no, y se saldría por los bordes. Atándolos a
+   la misma medida, el conjunto se escala siempre igual y el texto queda
+   SIEMPRE adentro.
+
+   Las fracciones salen de medir el óvalo: su parte oscura mide 0,553 del
+   ancho del broche en el punto más ancho, pero se angosta hacia arriba y
+   hacia abajo. Por eso los valores están calculados para que hasta la
+   línea más larga (la fecha completa) entre con aire. */
+
+/* Antetítulo: "Una velada para recordar".
+   Va DENTRO del óvalo, chiquito y espaciado, con un filete dorado
+   debajo. Antes estaba suelto arriba y se perdía sobre el anillo. */
+.portada__antetitulo {
+  font-family: var(--tipo-detalle);
+  /* Más chico que el resto a propósito: va en la parte ALTA del óvalo,
+     que es justo donde el óvalo se angosta. Si tuviera el mismo cuerpo
+     que la fecha, se saldría por los costados aunque "entre" en el ancho
+     máximo del texto. */
+  /* Más tracking = más lujo. El espaciado entre letras es de los recursos
+     más baratos y más efectivos para elevar la percepción de una pieza:
+     al texto le entra aire y deja de leerse como una etiqueta.
+
+     Pero acá hay un compromiso: espaciar ENSANCHA el bloque, y este va en
+     la parte angosta del óvalo. Por eso se sube el tracking y se baja un
+     punto el cuerpo, para que el ancho total quede igual o menor. */
+  font-size: calc(var(--ancho-broche) * 0.017);
+  line-height: 1.5;
+  letter-spacing: .2em;
+  /* El espaciado le agrega un hueco a la ÚLTIMA letra, que queda colgando
+     a la derecha y corre el texto ópticamente. Este sangrado lo devuelve
+     al centro. */
+  text-indent: .2em;
+  text-transform: uppercase;
+  color: var(--color-oro);
+  /* Un realce mínimo para que no quede como texto pegado sobre la joya;
+     es texto de apoyo, así que sin repujado fuerte. */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
+  margin: 0;
+  opacity: 0;
+  animation: aparecer-desde-abajo .9s .9s forwards;
+}
+
+/* Filete ornamental entre el antetítulo y el nombre */
+.portada__filete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4em;
+  margin: calc(var(--ancho-broche) * 0.012) auto calc(var(--ancho-broche) * 0.006);
+  width: 70%;
+  opacity: 0;
+  animation: aparecer-desde-abajo .9s 1s forwards;
+}
+.portada__filete::before,
+.portada__filete::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-oro-apagado), transparent);
+}
+.portada__filete span {
+  color: var(--color-oro);
+  font-size: calc(var(--ancho-broche) * 0.018);
+  line-height: 1;
+}
+
+/* ─── "ANIA" GRABADO EN LA JOYA (oro repujado) ─────────────────────────
+   El nombre no es texto plano encima del óvalo: es una pieza de orfebrería
+   REPUJADA —una lámina de oro levantada— sobre el granate del relicario.
+   Tres cosas lo logran, y ninguna es un color:
+
+     1. PAN DE ORO. Las letras se rellenan con un gradiente vertical (claro
+        arriba, oro al medio, bronce abajo) recortado a la forma del texto
+        (background-clip: text). Deja de ser un color y pasa a ser metal.
+
+     2. RELIEVE (repujado). Un filo de luz arriba y una línea oscura abajo,
+        puestos con text-shadow, fingen el bisel: la letra se lee levantada
+        de la superficie, no pintada sobre ella.
+
+     3. SOMBRA SOBRE LA JOYA. Una sombra oscura, baja y difusa proyecta el
+        nombre sobre el granate: flota un pelo por encima, con profundidad.
+
+   Y ATRAPA LA LUZ: la posición del gradiente de oro se cuelga de --luz-x
+   (la misma que mueve el barrido del oro del relicario), así un destello
+   recorre las letras cuando la luz ambiente deriva. El nombre brilla al
+   compás del resto del oro, no por su cuenta.
+
+   El relleno de texto se pinta con -webkit-text-fill-color: transparent
+   (y color transparent de respaldo), pero la sombra NO se recorta: por eso
+   el relieve y la sombra sobre la joya siguen viéndose. */
+.portada__nombre {
+  font-family: var(--tipo-titulos);
+  font-size: calc(var(--ancho-broche) * 0.115);
+  line-height: 1.05;
+  margin: calc(var(--ancho-broche) * 0.008) 0;
+
+  /* Pan de oro: la lámina es más ancha que el texto (200%) para que el
+     destello, movido por --luz-x, pueda entrar y salir de las letras. */
+  background-image: linear-gradient(
+    100deg,
+    #8a6a2c 0%, #c9a84c 24%, #f4e2a0 42%,
+    #ffffff 50%, #f4e2a0 58%, #c9a84c 76%, #8a6a2c 100%);
+  background-size: 220% 100%;
+  background-position: calc(var(--luz-x, .5) * 100%) 0;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+
+  /* Relieve (bisel) + sombra proyectada sobre el granate + halo tenue. */
+  text-shadow:
+    0 -1px 0   rgba(255, 246, 214, .35),   /* filo de luz arriba */
+    0  1px 0   rgba(74,  52,  16,  .55),   /* línea oscura abajo  */
+    0  6px 14px rgba(0,   0,   0,   .70),   /* sombra sobre la joya */
+    0  0   55px rgba(201, 168, 76,  .35);   /* halo dorado tenue   */
+
+  transition: background-position .3s linear;
+  opacity: 0;
+  animation: aparecer-desde-abajo .9s 1.15s forwards;
+}
+
+/* Sin movimiento: el pan de oro queda quieto (destello centrado), pero el
+   relieve y la sombra —que son estáticos— se mantienen. */
+@media (prefers-reduced-motion: reduce) {
+  .portada__nombre { background-position: 50% 0; transition: none; }
+}
+
+/* "XV Años": acompaña al nombre. Sigue en rojo sangre, pero con un relieve
+   sutil (filo de luz arriba, línea oscura abajo) y una leve sombra
+   proyectada, para que no quede como texto plano al lado de una pieza
+   repujada. Como el granate esmaltado o grabado en la joya. */
+.portada__edad {
+  font-family: var(--tipo-titulos);
+  font-size: calc(var(--ancho-broche) * 0.042);
+  line-height: 1.25;
+  color: var(--color-sangre-viva);
+  letter-spacing: .18em;
+  margin: 0;
+  text-shadow:
+    0 -1px 0  rgba(255, 180, 190, .25),   /* filo de luz arriba */
+    0  1px 1px rgba(40,  6,   12,  .7),    /* línea oscura abajo */
+    0  4px 10px rgba(0,   0,   0,   .55);   /* sombra sobre la joya */
+  opacity: 0;
+  animation: aparecer-desde-abajo .9s 1.3s forwards;
+}
+
+.portada__fecha {
+  font-family: var(--tipo-detalle);
+  font-size: calc(var(--ancho-broche) * 0.027);
+  line-height: 1.5;
+  color: var(--color-marfil-apagado);
+  letter-spacing: .04em;
+  margin-top: calc(var(--ancho-broche) * 0.03);
+  /* Realce mínimo, igual que el antetítulo: asienta sobre la superficie. */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
+  opacity: 0;
+  animation: aparecer-desde-abajo .9s 1.45s forwards;
+}
+.portada__hora {
+  display: block;
+  font-size: .88em;
+  color: var(--color-oro-apagado);
+  margin-top: .2em;
+}
+
+
+/* ─── EL DESTELLO DE LAS JOYAS LO DA LA LUZ ────────────────────────────
+   Antes cada rubí tenía su propia animación de brillo (un brightness que
+   subía cada 11 s). Se leía como un bombillo parpadeando, no como una
+   piedra. Se quitó.
+
+   Ahora el destello viene de los haces de luz (codigo/14-haces-de-luz.js):
+   como esa capa va en mix-blend-mode: screen y las gemas ya son claras y
+   saturadas, cuando un haz DERIVA por encima del relicario las enciende
+   solas. Es un reflejo MOTIVADO por la luz —igual que una piedra real
+   atrapa el sol cuando cambia el ángulo— y no un titileo autónomo.
+
+   La talla más marcada de la gema (ver <g id="mo-gema"> en index.html) es
+   lo que hace que ese reflejo se lea como facetas y no como un disco. */
+
+
+/* ─── 5. INDICADOR "DESLIZA" ───────────────────────────────────────────
+   ⚠️ ACÁ ESTABA EL PROBLEMA DE ALINEACIÓN QUE MÁS MOLESTABA.
+
+   Antes el "Desliza" estaba posicionado en absoluto (position: absolute
+   con left: 50%). Eso lo sacaba del flujo normal y lo centraba respecto
+   de una caja DISTINTA a la que centra al broche, así que bastaba un
+   relleno o una barra de desplazamiento para que quedaran corridos uno
+   respecto del otro.
+
+   Ahora es un elemento más de la misma columna que el broche. Como
+   #portada centra a todos sus hijos con align-items: center, el broche y
+   el "Desliza" comparten exactamente el mismo eje vertical. Quedan
+   alineados por construcción: ya no hay forma de que se desalineen.
+   ---------------------------------------------------------------------- */
+.portada__desliza {
+  margin-top: clamp(1rem, 3vh, 2.2rem);
+  opacity: 0;
+  animation: aparecer-desde-abajo .9s 1.9s forwards;
+}
+.portada__desliza span {
+  display: block;
+  font-family: var(--tipo-detalle);
+  font-size: .72rem;
+  letter-spacing: .28em;
+  text-transform: uppercase;
+  color: var(--color-oro-apagado);
+  margin-bottom: .5rem;
+}
+.portada__flecha {
+  width: 2px;
+  height: 46px;
+  margin: 0 auto;
+  background: linear-gradient(to bottom, var(--color-oro), transparent);
+  animation: latido-suave 2s ease-in-out infinite;
+}

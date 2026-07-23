@@ -1,0 +1,264 @@
+/* ══════════════════════════════════════════════════════════════════════
+   08 · PASE DE ACCESO (la "entrada" con código QR)
+   ══════════════════════════════════════════════════════════════════════
+
+   QUÉ ES ESTE ARCHIVO
+   Estiliza la ventana que se abre cuando alguien confirma su asistencia:
+   una entrada con su nombre, cuántos van, qué menú eligieron, un código
+   único y su QR.
+
+   ÍNDICE
+     1. Fondo oscurecido que cubre la pantalla
+     2. La entrada
+     3. Encabezado, cuerpo y pie de la entrada
+     4. Estilos de impresión
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. FONDO OSCURECIDO ──────────────────────────────────────────────
+   backdrop-filter: blur desenfoca lo que hay DETRÁS de esta capa, así la
+   invitación queda difuminada y la atención va toda a la entrada.
+   ---------------------------------------------------------------------- */
+#ventana-pase {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, .85);
+  backdrop-filter: blur(8px);
+}
+#ventana-pase.abierta { display: flex; }
+
+
+/* ─── 2. LA ENTRADA ────────────────────────────────────────────────── */
+.pase {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  max-height: 92vh;
+  overflow-y: auto;
+  background: var(--color-carbon);
+  border: 1px solid var(--borde-oro-fuerte);
+  box-shadow: 0 0 60px rgba(201, 168, 76, .2);
+  animation: entrar-pase .5s var(--curva-elegante) forwards;
+}
+@keyframes entrar-pase {
+  from { transform: scale(.85) translateY(30px); opacity: 0; }
+  to   { transform: scale(1)   translateY(0);    opacity: 1; }
+}
+
+/* Cinta de color en el borde superior */
+.pase::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #8b0000, var(--color-oro), #8b0000);
+}
+
+
+/* ─── 2b. DETALLES QUE LO ATAN AL RESTO DE LA WEB ──────────────────────
+   El pase se veía como una tarjeta genérica: un rectángulo con borde.
+   Estos tres recursos son los mismos que usa la invitación, y son los que
+   lo hacen sentir parte del conjunto:
+     · las escuadras doradas de las cartelas de la cuenta regresiva
+     · el filete con la estrella de la portada
+     · la rosa del relicario, acá como sello
+   ---------------------------------------------------------------------- */
+.pase__escuadra {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-color: var(--color-oro);
+  border-style: solid;
+  pointer-events: none;
+  z-index: 2;
+}
+.pase__escuadra--si { top: 7px;    left: 7px;    border-width: 1px 0 0 1px; }
+.pase__escuadra--sd { top: 7px;    right: 7px;   border-width: 1px 1px 0 0; }
+.pase__escuadra--ii { bottom: 7px; left: 7px;    border-width: 0 0 1px 1px; }
+.pase__escuadra--id { bottom: 7px; right: 7px;   border-width: 0 1px 1px 0; }
+
+.pase__sello {
+  display: block;
+  width: 46px;
+  height: 46px;
+  margin: .5rem auto .1rem;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .7));
+}
+
+.pase__filete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  width: 62%;
+  margin: .45rem auto .55rem;
+}
+.pase__filete::before,
+.pase__filete::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-oro-apagado), transparent);
+}
+.pase__filete span { color: var(--color-oro); font-size: .6rem; }
+
+
+/* ─── 3. ENCABEZADO, CUERPO Y PIE ──────────────────────────────────── */
+.pase__encabezado {
+  padding: 1.75rem 2rem 1.5rem;
+  text-align: center;
+  border-bottom: 1px solid var(--borde-oro-tenue);
+  /* Mismo juego de halos que la portada: rojo arriba, oro abajo */
+  background:
+    radial-gradient(ellipse 70% 90% at 50% 0%, rgba(107, 21, 34, .45) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 70% at 50% 100%, rgba(201, 168, 76, .07) 0%, transparent 70%),
+    linear-gradient(160deg, #1c1109, var(--color-negro));
+}
+.pase__rotulo {
+  font-family: var(--tipo-detalle);
+  font-size: .8rem;
+  letter-spacing: .3em;
+  text-transform: uppercase;
+  color: var(--color-oro);
+}
+.pase__nombre {
+  font-family: var(--tipo-titulos);
+  font-size: clamp(1.4rem, 5vw, 2rem);
+  color: var(--color-oro-claro);
+  margin: .25rem 0;
+}
+.pase__lema {
+  font-family: var(--tipo-texto);
+  font-size: 1rem;
+  color: var(--color-marfil-apagado);
+  font-style: italic;
+}
+
+.pase__cuerpo { padding: 1.5rem 2rem; }
+
+/* Cada dato va en una fila: etiqueta a la izquierda, valor a la derecha,
+   separadas por una línea de puntos. */
+.pase__fila {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: .6rem 0;
+  border-bottom: 1px dashed rgba(201, 168, 76, .15);
+  font-family: var(--tipo-texto);
+  font-size: .95rem;
+}
+.pase__fila:last-child { border-bottom: none; }
+
+/* La etiqueta lleva su ícono dorado alineado al texto */
+.pase__etiqueta {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  white-space: nowrap;
+  font-family: var(--tipo-detalle);
+  font-size: .88rem;
+  letter-spacing: .08em;
+  color: var(--color-oro-apagado);
+}
+
+/* Los íconos son de trazo, no de relleno: por eso se pintan con stroke.
+   Comparten grosor y remates redondeados para verse como un juego. */
+.pase__icono {
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: url(#oro-icono);
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: .9;
+}
+
+.pase__valor {
+  color: var(--color-marfil);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pase__pie {
+  padding: 1.5rem 2rem;
+  border-top: 1px solid var(--borde-oro-tenue);
+  text-align: center;
+}
+#codigo-qr { margin: 0 auto 1rem; width: 100px; height: 100px; }
+#codigo-qr img,
+#codigo-qr canvas { margin: 0 auto; }
+
+.pase__codigo {
+  font-family: monospace;
+  font-size: .8rem;
+  letter-spacing: .1em;
+  color: var(--color-oro-apagado);
+}
+.pase__aviso {
+  font-size: .8rem;
+  color: var(--color-marfil-apagado);
+  margin: .5rem 0 0;
+}
+.pase__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+.pase__acciones .boton-dorado { padding: .6rem 1.5rem; font-size: .85rem; }
+
+
+/* ─── 4. ESTILOS DE IMPRESIÓN ──────────────────────────────────────────
+   Lo que hay dentro de @media print SOLO se aplica al imprimir o al
+   guardar como PDF. Acá escondemos toda la web y dejamos únicamente la
+   entrada, en blanco y negro para que no gaste tinta de más.
+   ---------------------------------------------------------------------- */
+@media print {
+  /* Se oculta absolutamente todo… */
+  body > * { display: none !important; }
+
+  /* …menos la ventana del pase, que pasa a ocupar la hoja */
+  #ventana-pase {
+    display: block !important;
+    position: static !important;
+    background: none !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+  }
+
+  .pase {
+    max-width: 100% !important;
+    max-height: none !important;
+    border: 2px solid #333 !important;
+    box-shadow: none !important;
+    animation: none !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .pase__encabezado { background: #f2f2f2 !important; }
+  .pase__nombre,
+  .pase__rotulo,
+  .pase__etiqueta,
+  .pase__codigo   { color: #333 !important; }
+
+  /* En papel, los íconos y las escuadras van en gris: el degradado
+     dorado saldría casi blanco y no se vería nada. */
+  .pase__icono    { stroke: #555 !important; }
+  .pase__escuadra { border-color: #777 !important; }
+  .pase__filete span { color: #777 !important; }
+  .pase__valor,
+  .pase__lema,
+  .pase__aviso    { color: #000 !important; }
+
+  /* Los botones no tienen sentido en papel */
+  .pase__acciones { display: none !important; }
+}

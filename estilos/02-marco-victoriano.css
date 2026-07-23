@@ -1,0 +1,217 @@
+/* ══════════════════════════════════════════════════════════════════════
+   02 · MARCO VICTORIANO
+   ══════════════════════════════════════════════════════════════════════
+
+   QUÉ ES ESTE ARCHIVO
+   Dibuja el marco pesado y ornamentado que rodea la web por los cuatro
+   lados, como el marco de un cuadro antiguo. El marco NO está fijo a la
+   pantalla: envuelve al documento entero y sube junto con el contenido.
+
+   CÓMO ESTÁ ARMADO
+   Se usan 8 piezas: 4 esquinas y 4 tramos rectos. Los tramos rectos son
+   una sola imagen chiquita que se REPITE (como un azulejo) hasta cubrir
+   todo el largo. Por eso el marco pesa apenas unos kilobytes aunque la
+   página mida miles de píxeles de alto.
+
+        ┌────[cenefa superior]────┐
+        │                         │
+     [riel                     riel]
+     izq.]                     der.]
+        │                         │
+        └────[cenefa inferior]────┘
+
+   ÍNDICE
+     1. Contenedor del marco
+     2. Tramos rectos (cenefas y rieles)
+     3. Esquinas
+     4. Enredaderas de rosas que se mecen con el scroll
+     5. Espacio interior para que el contenido no quede debajo
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. CONTENEDOR DEL MARCO ──────────────────────────────────────────
+   position: absolute + inset: 0 hace que ocupe exactamente el alto
+   completo del documento (porque en 01-fundamentos.css le pusimos
+   position: relative al body).
+
+   pointer-events: none es clave: el marco está "por encima" del
+   contenido, así que si no lo desactivamos bloquearía los clics.
+   ---------------------------------------------------------------------- */
+#marco-victoriano {
+  position: absolute;
+  inset: 0;
+  z-index: 60;              /* arriba del contenido y de los pétalos */
+  pointer-events: none;
+  /* Sombra interior: hunde el contenido y hace que el marco parezca
+     tener relieve real en vez de estar pegado encima. */
+  box-shadow: inset 0 0 90px rgba(0, 0, 0, .75);
+}
+
+
+/* ─── 2. TRAMOS RECTOS ─────────────────────────────────────────────────
+   Cada tramo arranca y termina donde terminan las esquinas, para que no
+   se pisen. Por eso llevan  var(--marco-esquina)  en los extremos.
+   ---------------------------------------------------------------------- */
+
+/* Cenefas: arriba y abajo. Se repiten hacia los lados (repeat-x). */
+.marco__cenefa {
+  position: absolute;
+  left: var(--marco-esquina);
+  right: var(--marco-esquina);
+  height: var(--marco-grosor);
+  background-image: url('../recursos/marco-borde-horizontal.svg');
+  background-repeat: repeat-x;
+  /* "auto 100%" = la altura manda y el ancho se calcula solo,
+     así el azulejo nunca se deforma. */
+  background-size: auto 100%;
+}
+.marco__cenefa--superior { top: 0; }
+.marco__cenefa--inferior {
+  bottom: 0;
+  /* La misma imagen dada vuelta en vertical: así el lado ornamentado
+     queda siempre mirando hacia afuera. */
+  transform: scaleY(-1);
+}
+
+/* Rieles: izquierda y derecha. Se repiten hacia abajo (repeat-y). */
+.marco__riel {
+  position: absolute;
+  top: var(--marco-esquina);
+  bottom: var(--marco-esquina);
+  width: var(--marco-grosor);
+  background-image: url('../recursos/marco-borde-vertical.svg');
+  background-repeat: repeat-y;
+  background-size: 100% auto;
+}
+.marco__riel--izquierdo { left: 0; }
+.marco__riel--derecho   { right: 0; transform: scaleX(-1); }
+
+
+/* ─── 3. ESQUINAS ──────────────────────────────────────────────────────
+   Es UNA sola imagen (dibujada para la esquina de arriba a la izquierda)
+   reflejada con transform para las otras tres. Reflejar es gratis para
+   el navegador y nos ahorra 3 archivos.
+   ---------------------------------------------------------------------- */
+.marco__esquina {
+  position: absolute;
+  width: var(--marco-esquina);
+  height: var(--marco-esquina);
+  background-image: url('../recursos/marco-esquina.svg');
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+.marco__esquina--superior-izquierda { top: 0;    left: 0;  }
+.marco__esquina--superior-derecha   { top: 0;    right: 0; transform: scaleX(-1); }
+.marco__esquina--inferior-izquierda { bottom: 0; left: 0;  transform: scaleY(-1); }
+.marco__esquina--inferior-derecha   { bottom: 0; right: 0; transform: scale(-1, -1); }
+
+
+/* ─── 4. ENREDADERAS DE ROSAS ──────────────────────────────────────────
+   Los rosales no están dibujados en ningún archivo: los hace crecer
+   07-marco-y-enredaderas.js, planta por planta, y los mece según hacia
+   dónde y con cuánta fuerza se hace scroll. Cada flor, además, se aparta
+   sola cuando pasa el mouse cerca.
+
+   transform-origin: 50% 100% significa "girá tomando como eje el punto
+   de abajo", o sea la RAÍZ. Es lo que hace que la planta se incline como
+   un rosal plantado en el piso, y no como algo colgado de un clavo.
+   ---------------------------------------------------------------------- */
+.marco__enredadera {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: calc(var(--marco-grosor) * 2.4);
+  z-index: 2;
+  pointer-events: none;
+}
+.marco__enredadera--izquierda { left: 0; }
+.marco__enredadera--derecha   { right: 0; transform: scaleX(-1); }
+
+.racimo-de-rosas {
+  display: block;
+  width: 100%;
+  height: auto;
+  transform-origin: 50% 100%;   /* pivota sobre la raíz */
+  will-change: transform;
+
+  /* ⚠️ ESTO EVITA QUE SE CORTEN LAS ROSAS.
+     Por defecto, un dibujo SVG recorta todo lo que se sale de su caja
+     (como si fuera una ventana). Las flores que crecen hacia afuera
+     quedaban cortadas por la mitad. Con overflow: visible el dibujo deja
+     de recortar y las plantas pueden desbordar sobre el marco, que es
+     justamente lo que hace una enredadera de verdad.
+
+     Por el mismo motivo acá NO se usa filter: drop-shadow(): los filtros
+     de CSS vuelven a recortar lo que sobresale. La profundidad de las
+     plantas viene de sus propios contornos oscuros. */
+  overflow: visible;
+}
+
+/* En pantallas chicas el marco es finito: las enredaderas se achican
+   para no comerse el texto. */
+@media (max-width: 720px) {
+  .marco__enredadera { width: calc(var(--marco-grosor) * 2); }
+}
+
+
+/* ─── 4B. LOS RAMILLETES DE LAS ESQUINAS DE ARRIBA ─────────────────────
+   Llenan las dos esquinas superiores para que el relicario de la portada
+   no quede solo en el medio del cuadro. Los dibuja 07-marco-y-
+   enredaderas.js; acá solo se los ubica.
+
+   Van pegados al vértice y por DENTRO del marco, apenas montados sobre
+   la moldura, que es como se apoyaría un ramo de verdad: sobre el borde,
+   no flotando al lado.
+   ---------------------------------------------------------------------- */
+.marco__ramillete {
+  position: absolute;
+  top: calc(var(--marco-grosor) * .35);
+  width: min(36vw, 620px);
+  z-index: 3;            /* por encima de la moldura, debajo del contenido */
+  pointer-events: none;
+}
+.marco__ramillete--izquierdo { left: calc(var(--marco-grosor) * .35); }
+.marco__ramillete--derecho {
+  right: calc(var(--marco-grosor) * .35);
+  transform: scaleX(-1);  /* el mismo dibujo, reflejado */
+}
+
+/* Pivota sobre la esquina, no sobre su centro: así el vaivén se lee como
+   un ramo apoyado en el vértice y no como un cuadro colgado torcido. */
+.racimo-de-rosas--esquina { transform-origin: 0% 0%; }
+
+/* En el celular el marco es finito y la portada ocupa casi todo: un ramo
+   grande le comería el nombre de Ania. Se achica bastante. */
+@media (max-width: 720px) {
+  .marco__ramillete { width: min(44vw, 200px); }
+}
+
+
+/* ─── 5. ESPACIO INTERIOR ──────────────────────────────────────────────
+   El contenido tiene que respetar el grosor del marco, o quedaría
+   tapado por él. Se le da un relleno igual al grosor más un respiro.
+   ---------------------------------------------------------------------- */
+/* ⚠️ #contenido NO lleva z-index a propósito.
+   Si lo llevara crearía un "contexto de apilamiento": una burbuja que
+   encierra a todos sus hijos, de modo que ninguna capa de afuera podría
+   colarse entre el relicario y su texto. Justamente eso es lo que
+   necesitan los pétalos del plano medio para caer sobre el relicario
+   (ver la escalera completa en 10-cursor-y-petalos.css).
+
+   Sigue estando por encima del fondo porque sus secciones declaran
+   z-index: 2, y el fondo vive en -1. */
+#contenido,
+#pie-de-pagina {
+  position: relative;
+  padding-left:  calc(var(--marco-grosor) + 1.2rem);
+  padding-right: calc(var(--marco-grosor) + 1.2rem);
+}
+#pie-de-pagina { z-index: 2; }
+
+#contenido { padding-top: var(--marco-grosor); }
+
+/* El pie reserva además el alto del reproductor de música para que
+   nunca le tape el texto (ver 09-reproductor.css). */
+#pie-de-pagina {
+  padding-bottom: calc(var(--marco-grosor) + var(--alto-reproductor));
+}

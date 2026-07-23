@@ -1,0 +1,173 @@
+/* ══════════════════════════════════════════════════════════════════════
+   10 · CURSOR PROPIO Y LLUVIA DE PÉTALOS
+   ══════════════════════════════════════════════════════════════════════
+
+   QUÉ ES ESTE ARCHIVO
+   Dos adornos que acompañan al mouse:
+     · un cursor dorado dibujado por nosotros, en vez de la flechita
+     · pétalos de rosa que caen y se apartan cuando pasás el mouse
+
+   POR QUÉ EL CURSOR SE HACE ASÍ Y NO CON  cursor: url(...)
+   Con la propiedad  cursor  del CSS, cualquier elemento que declare
+   "cursor: pointer" (todos los botones) pisa nuestro dibujo y vuelve a
+   la manito del sistema. Además no se le pueden hacer animaciones.
+   Por eso escondemos el cursor real (cursor: none) y movemos dos
+   elementos de verdad siguiendo al mouse: así el diseño es siempre el
+   mismo y puede crecer, brillar o cambiar de forma.
+
+   ÍNDICE
+     1. Ocultar el cursor del sistema
+     2. Anillo y punto dorados
+     3. Estados del cursor
+     4. Lluvia de pétalos
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. OCULTAR EL CURSOR DEL SISTEMA ─────────────────────────────────
+   La clase .con-cursor-propio la agrega 05-cursor-personalizado.js SOLO
+   si el dispositivo tiene mouse. En un celular no se toca nada, porque
+   ahí no hay puntero que reemplazar.
+   ---------------------------------------------------------------------- */
+.con-cursor-propio,
+.con-cursor-propio * { cursor: none !important; }
+
+/* Sobre el mapa de Google (un iframe) el navegador no nos deja controlar
+   el cursor, así que ahí devolvemos el del sistema para que la persona
+   nunca se quede sin puntero visible. */
+.con-cursor-propio iframe,
+.con-cursor-propio iframe * { cursor: auto !important; }
+
+
+/* ─── 2. ANILLO Y PUNTO DORADOS ────────────────────────────────────────
+   Son dos piezas separadas a propósito: el punto sigue al mouse al
+   instante y el anillo llega un poquito después. Ese retraso mínimo es
+   lo que da la sensación de elegancia y "peso".
+   ---------------------------------------------------------------------- */
+#cursor-anillo,
+#cursor-punto {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 3000;          /* por encima de todo, incluso del sobre */
+  pointer-events: none;   /* jamás debe bloquear un clic */
+  opacity: 0;             /* invisible hasta que el mouse se mueve */
+  transition: opacity .3s;
+  will-change: transform;
+}
+#cursor-anillo.visible,
+#cursor-punto.visible { opacity: 1; }
+
+/* El anillo: círculo dorado con un halo suave.
+
+   SIEMPRE mide lo mismo y siempre es un círculo. Antes cambiaba de forma
+   según lo que hubiera debajo (crecía sobre los botones, se volvía una
+   barra sobre los campos de texto) y resultaba molesto. Ahora lo único
+   que cambia es cuánto brilla. */
+#cursor-anillo {
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;   /* lo centra en la punta del mouse */
+  border: 1px solid rgba(201, 168, 76, .85);
+  border-radius: 50%;
+  box-shadow: 0 0 14px rgba(201, 168, 76, .25),
+        inset 0 0 10px rgba(201, 168, 76, .12);
+  transition: border-color .28s, box-shadow .28s, opacity .3s;
+}
+
+/* Cuatro pequeños trazos alrededor del anillo, como una brújula
+   ornamentada. Giran despacio todo el tiempo. */
+#cursor-anillo::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1px dashed rgba(201, 168, 76, .35);
+  animation: girar-anillo 9s linear infinite;
+}
+@keyframes girar-anillo {
+  to { transform: rotate(360deg); }
+}
+
+/* El punto central */
+#cursor-punto {
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  background: var(--color-oro-claro);
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(232, 207, 122, .9);
+  transition: box-shadow .2s, opacity .3s;
+}
+
+
+/* ─── 3. ESTADOS DEL CURSOR ────────────────────────────────────────────
+   Un solo estado, y NO cambia ni la forma ni el tamaño: sobre algo
+   cliqueable el dorado simplemente brilla más fuerte. Es suficiente para
+   avisar que se puede hacer clic, sin que el cursor se deforme.
+   ---------------------------------------------------------------------- */
+#cursor-anillo.sobre-interactivo {
+  border-color: var(--color-oro-brillante);
+  box-shadow: 0 0 26px rgba(201, 168, 76, .55),
+        inset 0 0 14px rgba(201, 168, 76, .3);
+}
+#cursor-punto.sobre-interactivo {
+  box-shadow: 0 0 18px rgba(244, 226, 160, 1);
+}
+
+
+/* ─── 4. LLUVIA DE PÉTALOS ─────────────────────────────────────────────
+   El contenedor cubre la pantalla pero es totalmente transparente a los
+   clics. Cada pétalo es un div con la imagen de pétalo de fondo; toda su
+   posición y su giro los calcula 06-petalos-con-fisica.js.
+
+   z-index 40 los deja por debajo del marco victoriano (60), así los
+   pétalos parecen caer DENTRO del cuadro.
+   ---------------------------------------------------------------------- */
+/* ── LOS TRES PLANOS ──
+   La escalera completa del apilamiento de la web:
+
+      -1  fondo ornamental
+       0  ruido de papel
+       1  PÉTALOS · fondo      ← detrás de las cajas de texto
+       2  secciones y el relicario
+       3  PÉTALOS · medio      ← caen ENCIMA del relicario
+       4  el nombre "ANIA"     ← nunca queda tapado
+      50  PÉTALOS · frente     ← delante de todo el contenido
+      60  marco victoriano
+      70  haces de luz
+
+   Para que esto funcione, #contenido NO puede declarar z-index: si lo
+   hiciera crearía un contexto de apilamiento y encerraría al relicario,
+   dejando afuera a los pétalos del medio (ver 02-marco-victoriano.css). */
+.lluvia-de-petalos {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.lluvia-de-petalos--fondo  { z-index: 1;  }
+.lluvia-de-petalos--medio  { z-index: 3;  }
+.lluvia-de-petalos--frente { z-index: 50; }
+
+/* PROFUNDIDAD DE CAMPO.
+   Lo que separa un plano de otro no es la cantidad de pétalos sino cómo
+   se ven: los de atrás chicos y apagados, los de adelante grandes y
+   apenas desenfocados, como los que pasan cerca del objetivo de una
+   cámara. Es el mismo recurso de perspectiva aérea que usan las flores
+   de las enredaderas. */
+.lluvia-de-petalos--fondo  .petalo { filter: brightness(.62) saturate(.8)
+                                             drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+.lluvia-de-petalos--frente .petalo { filter: blur(1.3px)
+                                             drop-shadow(0 4px 6px rgba(0,0,0,.6)); }
+
+.petalo {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+  will-change: transform;
+  /* La sombra los despega del fondo y los hace ver más reales */
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .55));
+}

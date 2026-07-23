@@ -1,0 +1,381 @@
+<!--
+  ══════════════════════════════════════════════════════════════════════
+  PIEZA DEL MARCO · ESQUINA (se usa en las 4 esquinas)
+  ══════════════════════════════════════════════════════════════════════
+  Mide 160 × 160 px y está dibujada para la esquina SUPERIOR IZQUIERDA.
+  Las otras tres se obtienen reflejándola con CSS:
+      superior derecha   → transform: scaleX(-1)
+      inferior izquierda → transform: scaleY(-1)
+      inferior derecha   → transform: scale(-1, -1)
+
+  LA CLAVE: DÓNDE VA CADA MOTIVO
+  Los azulejos rectos arrancan en el píxel 160. Para que la unión sea
+  invisible, cada motivo de esta pieza tiene que caer justo donde caería
+  si el azulejo siguiera hacia atrás:
+      perlas       cada 24 → 76, 100, 124, 148
+      dentículos   cada 24 → 70, 94, 118, 142
+      guilloché    cada 24 → cruces en 64, 88, 112, 136, 160
+      ovas         cada 30 → 85, 115, 145
+      dardos       cada 30 → 72, 102, 132
+      soga         cada  8 → 73, 81, 89 … 153
+
+  En el cuadrado 0-72 × 0-72 va el clavo ornamental: el bloque tallado
+  que remata la esquina y que le da el peso victoriano al conjunto.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
+  <defs>
+    <!-- Horizontales (para la banda de arriba) -->
+    <linearGradient id="hConvexoOro" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4a3818"/><stop offset="28%" stop-color="#c9a84c"/>
+      <stop offset="48%" stop-color="#e6d090"/><stop offset="70%" stop-color="#a8862f"/>
+      <stop offset="100%" stop-color="#3a2c12"/>
+    </linearGradient>
+    <linearGradient id="hProfundo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#241a0e"/><stop offset="35%" stop-color="#6b5122"/>
+      <stop offset="55%" stop-color="#8a6a2c"/><stop offset="100%" stop-color="#150e07"/>
+    </linearGradient>
+    <linearGradient id="hConcavo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0a0605"/><stop offset="30%" stop-color="#241a0e"/>
+      <stop offset="62%" stop-color="#171009"/><stop offset="100%" stop-color="#080504"/>
+    </linearGradient>
+    <linearGradient id="hFilete" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5a4520"/><stop offset="45%" stop-color="#e6d090"/>
+      <stop offset="100%" stop-color="#5a4520"/>
+    </linearGradient>
+
+    <!-- Verticales (para la banda de la izquierda) -->
+    <linearGradient id="vConvexoOro" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#4a3818"/><stop offset="28%" stop-color="#c9a84c"/>
+      <stop offset="48%" stop-color="#e6d090"/><stop offset="70%" stop-color="#a8862f"/>
+      <stop offset="100%" stop-color="#3a2c12"/>
+    </linearGradient>
+    <linearGradient id="vProfundo" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#241a0e"/><stop offset="35%" stop-color="#6b5122"/>
+      <stop offset="55%" stop-color="#8a6a2c"/><stop offset="100%" stop-color="#150e07"/>
+    </linearGradient>
+    <linearGradient id="vConcavo" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0a0605"/><stop offset="30%" stop-color="#241a0e"/>
+      <stop offset="62%" stop-color="#171009"/><stop offset="100%" stop-color="#080504"/>
+    </linearGradient>
+    <linearGradient id="vFilete" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#5a4520"/><stop offset="45%" stop-color="#e6d090"/>
+      <stop offset="100%" stop-color="#5a4520"/>
+    </linearGradient>
+
+    <radialGradient id="perlaVolumen" cx="34%" cy="30%" r="72%">
+      <stop offset="0%" stop-color="#ecd89a"/><stop offset="42%" stop-color="#c9a84c"/>
+      <stop offset="100%" stop-color="#4a3818"/>
+    </radialGradient>
+    <radialGradient id="ovaVolumen" cx="32%" cy="26%" r="76%">
+      <stop offset="0%" stop-color="#e6d090"/><stop offset="46%" stop-color="#b5983f"/>
+      <stop offset="100%" stop-color="#3f2f14"/>
+    </radialGradient>
+    <linearGradient id="oroTallado" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ecd89a"/><stop offset="32%" stop-color="#c8a955"/>
+      <stop offset="62%" stop-color="#8a6a2c"/><stop offset="100%" stop-color="#4a3818"/>
+    </linearGradient>
+    <radialGradient id="rubiCorner" cx="36%" cy="30%" r="72%">
+      <stop offset="0%" stop-color="#e0697c"/><stop offset="35%" stop-color="#a81f36"/>
+      <stop offset="100%" stop-color="#3a0810"/>
+    </radialGradient>
+    <radialGradient id="panelHundido" cx="42%" cy="34%" r="76%">
+      <stop offset="0%" stop-color="#2e2011"/><stop offset="60%" stop-color="#14100a"/>
+      <stop offset="100%" stop-color="#070504"/>
+    </radialGradient>
+
+    <filter id="sombraTalla" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="1.5" dy="2" stdDeviation="2" flood-color="#000" flood-opacity=".75"/>
+    </filter>
+  </defs>
+
+  <!-- ⚠️ FONDO EN FORMA DE "L", NO UN CUADRADO.
+       Antes acá había un rectángulo de 160 × 160 que pintaba de negro
+       TODA la pieza, incluida la parte de adentro de la esquina, donde no
+       hay ninguna moldura. Eso dejaba un cuadrado negro tapando el fondo
+       de la página justo en las cuatro esquinas.
+
+       Ahora se pintan solo las dos bandas que sí llevan moldura (la de
+       arriba y la de la izquierda), y el hueco interior queda
+       transparente para que se vea el fondo. -->
+  <rect x="0" y="0" width="160" height="72" fill="#090604"/>
+  <rect x="0" y="0" width="72"  height="160" fill="#090604"/>
+
+  <!-- ════════ BANDA HORIZONTAL (continúa hacia la derecha) ════════ -->
+  <g>
+    <rect x="0" y="0" width="160" height="4" fill="url(#hProfundo)"/>
+    <rect x="0" y="0"   width="160" height=".7" fill="#d9c079" opacity=".55"/>
+    <rect x="0" y="3.3" width="160" height=".7" fill="#000"    opacity=".6"/>
+
+    <rect x="0" y="4" width="160" height="10" fill="url(#hConcavo)"/>
+    <g fill="#000" opacity=".45">
+      <ellipse cx="77.4"  cy="10.4" rx="4" ry="3.6"/>
+      <ellipse cx="101.4" cy="10.4" rx="4" ry="3.6"/>
+      <ellipse cx="125.4" cy="10.4" rx="4" ry="3.6"/>
+      <ellipse cx="149.4" cy="10.4" rx="4" ry="3.6"/>
+    </g>
+    <g fill="url(#perlaVolumen)">
+      <ellipse cx="76"  cy="9" rx="4.6" ry="4.1"/>
+      <ellipse cx="100" cy="9" rx="4.6" ry="4.1"/>
+      <ellipse cx="124" cy="9" rx="4.6" ry="4.1"/>
+      <ellipse cx="148" cy="9" rx="4.6" ry="4.1"/>
+    </g>
+    <g fill="url(#hProfundo)">
+      <rect x="86.4"  y="6.2" width="3.2" height="5.6" rx="1.6"/>
+      <rect x="110.4" y="6.2" width="3.2" height="5.6" rx="1.6"/>
+      <rect x="134.4" y="6.2" width="3.2" height="5.6" rx="1.6"/>
+      <rect x="158.4" y="6.2" width="3.2" height="5.6" rx="1.6"/>
+    </g>
+
+    <rect x="0" y="14" width="160" height="4" fill="url(#hProfundo)"/>
+    <g stroke="#e6d090" stroke-width="1.5" stroke-linecap="round" opacity=".72">
+      <path d="M73 14.4  L77 17.6"/>  <path d="M81 14.4  L85 17.6"/>
+      <path d="M89 14.4  L93 17.6"/>  <path d="M97 14.4  L101 17.6"/>
+      <path d="M105 14.4 L109 17.6"/> <path d="M113 14.4 L117 17.6"/>
+      <path d="M121 14.4 L125 17.6"/> <path d="M129 14.4 L133 17.6"/>
+      <path d="M137 14.4 L141 17.6"/> <path d="M145 14.4 L149 17.6"/>
+      <path d="M153 14.4 L157 17.6"/>
+    </g>
+
+    <rect x="0" y="18" width="160" height="22" fill="url(#hConcavo)"/>
+    <g fill="none" stroke="#000" stroke-width="3" opacity=".45">
+      <path d="M65 30 C71 39,83 39,89 30 C95 21,107 21,113 30 C119 39,131 39,137 30 C143 21,155 21,161 30"/>
+      <path d="M65 30 C71 21,83 21,89 30 C95 39,107 39,113 30 C119 21,131 21,137 30 C143 39,155 39,161 30"/>
+    </g>
+    <path d="M64 29 C70 38,82 38,88 29 C94 20,106 20,112 29 C118 38,130 38,136 29 C142 20,154 20,160 29"
+          fill="none" stroke="url(#hFilete)" stroke-width="2.4" opacity=".92"/>
+    <path d="M64 29 C70 20,82 20,88 29 C94 38,106 38,112 29 C118 20,130 20,136 29 C142 38,154 38,160 29"
+          fill="none" stroke="url(#hFilete)" stroke-width="2.4" opacity=".92"/>
+    <g fill="url(#perlaVolumen)">
+      <circle cx="88"  cy="29" r="2.2"/><circle cx="112" cy="29" r="2.2"/>
+      <circle cx="136" cy="29" r="2.2"/><circle cx="160" cy="29" r="2.2"/>
+    </g>
+
+    <rect x="0" y="40" width="160" height="8" fill="#0c0805"/>
+    <g fill="#000" opacity=".6">
+      <rect x="71.4"  y="41.6" width="12" height="7"/>
+      <rect x="95.4"  y="41.6" width="12" height="7"/>
+      <rect x="119.4" y="41.6" width="12" height="7"/>
+      <rect x="143.4" y="41.6" width="12" height="7"/>
+    </g>
+    <g fill="url(#hConvexoOro)">
+      <rect x="70"  y="40.3" width="12" height="7.4"/>
+      <rect x="94"  y="40.3" width="12" height="7.4"/>
+      <rect x="118" y="40.3" width="12" height="7.4"/>
+      <rect x="142" y="40.3" width="12" height="7.4"/>
+    </g>
+    <g fill="#ecd89a" opacity=".5">
+      <rect x="70"  y="40.3" width="12" height="1.2"/>
+      <rect x="94"  y="40.3" width="12" height="1.2"/>
+      <rect x="118" y="40.3" width="12" height="1.2"/>
+      <rect x="142" y="40.3" width="12" height="1.2"/>
+    </g>
+
+    <rect x="0" y="48" width="160" height="4" fill="url(#hFilete)" opacity=".85"/>
+    <rect x="0" y="51.4" width="160" height=".6" fill="#000" opacity=".5"/>
+
+    <rect x="0" y="52" width="160" height="14" fill="url(#hConcavo)"/>
+    <g fill="none" stroke="url(#hFilete)" stroke-width="1.5" opacity=".85">
+      <path d="M85 53.6 C 78 53.6,74.6 55.8,74.6 59 C 74.6 62.2,78 64.4,85 64.4
+               C 91 64.4,95 62.2,95 59 C 95 55.8,91 53.6,85 53.6 Z"/>
+      <path d="M115 53.6 C 108 53.6,104.6 55.8,104.6 59 C 104.6 62.2,108 64.4,115 64.4
+               C 121 64.4,125 62.2,125 59 C 125 55.8,121 53.6,115 53.6 Z"/>
+      <path d="M145 53.6 C 138 53.6,134.6 55.8,134.6 59 C 134.6 62.2,138 64.4,145 64.4
+               C 151 64.4,155 62.2,155 59 C 155 55.8,151 53.6,145 53.6 Z"/>
+    </g>
+    <g fill="#000" opacity=".5">
+      <ellipse cx="86.2"  cy="60.2" rx="7.4" ry="3.6"/>
+      <ellipse cx="116.2" cy="60.2" rx="7.4" ry="3.6"/>
+      <ellipse cx="146.2" cy="60.2" rx="7.4" ry="3.6"/>
+    </g>
+    <g fill="url(#ovaVolumen)">
+      <ellipse cx="85"  cy="59" rx="7.6" ry="3.7"/>
+      <ellipse cx="115" cy="59" rx="7.6" ry="3.7"/>
+      <ellipse cx="145" cy="59" rx="7.6" ry="3.7"/>
+    </g>
+    <g fill="url(#hConvexoOro)">
+      <path d="M66 59 L71 61.4 L78 59 L71 56.6 Z"/>
+      <path d="M96 59 L101 61.4 L108 59 L101 56.6 Z"/>
+      <path d="M126 59 L131 61.4 L138 59 L131 56.6 Z"/>
+      <path d="M156 59 L161 61.4 L168 59 L161 56.6 Z"/>
+    </g>
+
+    <rect x="0" y="66" width="160" height="6" fill="url(#hProfundo)"/>
+    <rect x="0" y="66"   width="160" height=".8" fill="#000"    opacity=".55"/>
+    <rect x="0" y="70.6" width="160" height=".8" fill="#d9c079" opacity=".5"/>
+  </g>
+
+  <!-- ════════ BANDA VERTICAL (continúa hacia abajo) ════════ -->
+  <g>
+    <rect x="0" y="0" width="4" height="160" fill="url(#vProfundo)"/>
+    <rect x="0"   y="0" width=".7" height="160" fill="#d9c079" opacity=".55"/>
+    <rect x="3.3" y="0" width=".7" height="160" fill="#000"    opacity=".6"/>
+
+    <rect x="4" y="0" width="10" height="160" fill="url(#vConcavo)"/>
+    <g fill="#000" opacity=".45">
+      <ellipse cx="10.4" cy="77.4"  rx="3.6" ry="4"/>
+      <ellipse cx="10.4" cy="101.4" rx="3.6" ry="4"/>
+      <ellipse cx="10.4" cy="125.4" rx="3.6" ry="4"/>
+      <ellipse cx="10.4" cy="149.4" rx="3.6" ry="4"/>
+    </g>
+    <g fill="url(#perlaVolumen)">
+      <ellipse cx="9" cy="76"  rx="4.1" ry="4.6"/>
+      <ellipse cx="9" cy="100" rx="4.1" ry="4.6"/>
+      <ellipse cx="9" cy="124" rx="4.1" ry="4.6"/>
+      <ellipse cx="9" cy="148" rx="4.1" ry="4.6"/>
+    </g>
+    <g fill="url(#vProfundo)">
+      <rect x="6.2" y="86.4"  width="5.6" height="3.2" rx="1.6"/>
+      <rect x="6.2" y="110.4" width="5.6" height="3.2" rx="1.6"/>
+      <rect x="6.2" y="134.4" width="5.6" height="3.2" rx="1.6"/>
+      <rect x="6.2" y="158.4" width="5.6" height="3.2" rx="1.6"/>
+    </g>
+
+    <rect x="14" y="0" width="4" height="160" fill="url(#vProfundo)"/>
+    <g stroke="#e6d090" stroke-width="1.5" stroke-linecap="round" opacity=".72">
+      <path d="M14.4 73  L17.6 77"/>  <path d="M14.4 81  L17.6 85"/>
+      <path d="M14.4 89  L17.6 93"/>  <path d="M14.4 97  L17.6 101"/>
+      <path d="M14.4 105 L17.6 109"/> <path d="M14.4 113 L17.6 117"/>
+      <path d="M14.4 121 L17.6 125"/> <path d="M14.4 129 L17.6 133"/>
+      <path d="M14.4 137 L17.6 141"/> <path d="M14.4 145 L17.6 149"/>
+      <path d="M14.4 153 L17.6 157"/>
+    </g>
+
+    <rect x="18" y="0" width="22" height="160" fill="url(#vConcavo)"/>
+    <g fill="none" stroke="#000" stroke-width="3" opacity=".45">
+      <path d="M30 65 C39 71,39 83,30 89 C21 95,21 107,30 113 C39 119,39 131,30 137 C21 143,21 155,30 161"/>
+      <path d="M30 65 C21 71,21 83,30 89 C39 95,39 107,30 113 C21 119,21 131,30 137 C39 143,39 155,30 161"/>
+    </g>
+    <path d="M29 64 C38 70,38 82,29 88 C20 94,20 106,29 112 C38 118,38 130,29 136 C20 142,20 154,29 160"
+          fill="none" stroke="url(#vFilete)" stroke-width="2.4" opacity=".92"/>
+    <path d="M29 64 C20 70,20 82,29 88 C38 94,38 106,29 112 C20 118,20 130,29 136 C38 142,38 154,29 160"
+          fill="none" stroke="url(#vFilete)" stroke-width="2.4" opacity=".92"/>
+    <g fill="url(#perlaVolumen)">
+      <circle cx="29" cy="88"  r="2.2"/><circle cx="29" cy="112" r="2.2"/>
+      <circle cx="29" cy="136" r="2.2"/><circle cx="29" cy="160" r="2.2"/>
+    </g>
+
+    <rect x="40" y="0" width="8" height="160" fill="#0c0805"/>
+    <g fill="#000" opacity=".6">
+      <rect x="41.6" y="71.4"  width="7" height="12"/>
+      <rect x="41.6" y="95.4"  width="7" height="12"/>
+      <rect x="41.6" y="119.4" width="7" height="12"/>
+      <rect x="41.6" y="143.4" width="7" height="12"/>
+    </g>
+    <g fill="url(#vConvexoOro)">
+      <rect x="40.3" y="70"  width="7.4" height="12"/>
+      <rect x="40.3" y="94"  width="7.4" height="12"/>
+      <rect x="40.3" y="118" width="7.4" height="12"/>
+      <rect x="40.3" y="142" width="7.4" height="12"/>
+    </g>
+    <g fill="#ecd89a" opacity=".5">
+      <rect x="40.3" y="70"  width="1.2" height="12"/>
+      <rect x="40.3" y="94"  width="1.2" height="12"/>
+      <rect x="40.3" y="118" width="1.2" height="12"/>
+      <rect x="40.3" y="142" width="1.2" height="12"/>
+    </g>
+
+    <rect x="48" y="0" width="4" height="160" fill="url(#vFilete)" opacity=".85"/>
+    <rect x="51.4" y="0" width=".6" height="160" fill="#000" opacity=".5"/>
+
+    <rect x="52" y="0" width="14" height="160" fill="url(#vConcavo)"/>
+    <g fill="none" stroke="url(#vFilete)" stroke-width="1.5" opacity=".85">
+      <path d="M53.6 85 C 53.6 78,55.8 74.6,59 74.6 C 62.2 74.6,64.4 78,64.4 85
+               C 64.4 91,62.2 95,59 95 C 55.8 95,53.6 91,53.6 85 Z"/>
+      <path d="M53.6 115 C 53.6 108,55.8 104.6,59 104.6 C 62.2 104.6,64.4 108,64.4 115
+               C 64.4 121,62.2 125,59 125 C 55.8 125,53.6 121,53.6 115 Z"/>
+      <path d="M53.6 145 C 53.6 138,55.8 134.6,59 134.6 C 62.2 134.6,64.4 138,64.4 145
+               C 64.4 151,62.2 155,59 155 C 55.8 155,53.6 151,53.6 145 Z"/>
+    </g>
+    <g fill="#000" opacity=".5">
+      <ellipse cx="60.2" cy="86.2"  rx="3.6" ry="7.4"/>
+      <ellipse cx="60.2" cy="116.2" rx="3.6" ry="7.4"/>
+      <ellipse cx="60.2" cy="146.2" rx="3.6" ry="7.4"/>
+    </g>
+    <g fill="url(#ovaVolumen)">
+      <ellipse cx="59" cy="85"  rx="3.7" ry="7.6"/>
+      <ellipse cx="59" cy="115" rx="3.7" ry="7.6"/>
+      <ellipse cx="59" cy="145" rx="3.7" ry="7.6"/>
+    </g>
+    <g fill="url(#vConvexoOro)">
+      <path d="M59 66 L61.4 71 L59 78 L56.6 71 Z"/>
+      <path d="M59 96 L61.4 101 L59 108 L56.6 101 Z"/>
+      <path d="M59 126 L61.4 131 L59 138 L56.6 131 Z"/>
+      <path d="M59 156 L61.4 161 L59 168 L56.6 161 Z"/>
+    </g>
+
+    <rect x="66" y="0" width="6" height="160" fill="url(#vProfundo)"/>
+    <rect x="66"   y="0" width=".8" height="160" fill="#000"    opacity=".55"/>
+    <rect x="70.6" y="0" width=".8" height="160" fill="#d9c079" opacity=".5"/>
+  </g>
+
+  <!-- ════════ CLAVO ORNAMENTAL DE LA ESQUINA (0-72 × 0-72) ════════ -->
+  <g>
+    <!-- Panel hundido con su sombra interior -->
+    <rect x="0" y="0" width="72" height="72" fill="url(#panelHundido)"/>
+    <rect x="0" y="0" width="72" height="72" fill="none"
+          stroke="#000" stroke-width="6" opacity=".45"/>
+
+    <!-- Molduras cuadradas concéntricas, cada una con su luz y su sombra -->
+    <g fill="none">
+      <rect x="2.5" y="2.5" width="67" height="67" stroke="url(#oroTallado)" stroke-width="2.6"/>
+      <rect x="1.6" y="1.6" width="67" height="67" stroke="#ecd89a" stroke-width=".7" opacity=".45"/>
+      <rect x="3.4" y="3.4" width="67" height="67" stroke="#000" stroke-width=".8" opacity=".55"/>
+
+      <rect x="9"  y="9"  width="54" height="54" stroke="#6b5122" stroke-width="1.2" opacity=".85"/>
+      <rect x="14" y="14" width="44" height="44" stroke="url(#oroTallado)" stroke-width="2" opacity=".95"/>
+      <rect x="13.2" y="13.2" width="44" height="44" stroke="#ecd89a" stroke-width=".6" opacity=".4"/>
+    </g>
+
+    <!-- Soga retorcida bordeando el panel interior -->
+    <g stroke="#c9a84c" stroke-width="1.3" stroke-linecap="round" opacity=".55">
+      <path d="M17 11 L21 14"/>  <path d="M25 11 L29 14"/>  <path d="M33 11 L37 14"/>
+      <path d="M41 11 L45 14"/>  <path d="M49 11 L53 14"/>
+      <path d="M11 17 L14 21"/>  <path d="M11 25 L14 29"/>  <path d="M11 33 L14 37"/>
+      <path d="M11 41 L14 45"/>  <path d="M11 49 L14 53"/>
+    </g>
+
+    <!-- Roleos de acanto en las diagonales, con relieve -->
+    <g filter="url(#sombraTalla)">
+      <g fill="none" stroke="url(#oroTallado)" stroke-width="2.2" stroke-linecap="round">
+        <path d="M14 14 C 27 16,35 24,37 37 C 31 31,23 25,14 23"/>
+        <path d="M58 14 C 45 16,37 24,35 37 C 41 31,49 25,58 23"/>
+        <path d="M14 58 C 16 45,24 37,37 35 C 31 41,25 49,23 58"/>
+        <path d="M58 58 C 56 45,48 37,35 35 C 41 41,47 49,49 58"/>
+      </g>
+    </g>
+
+    <!-- Rosetón tallado del centro -->
+    <g filter="url(#sombraTalla)">
+      <circle cx="36" cy="36" r="16" fill="url(#panelHundido)"/>
+      <circle cx="36" cy="36" r="16" fill="none" stroke="url(#oroTallado)" stroke-width="2.2"/>
+      <circle cx="36" cy="36" r="15.2" fill="none" stroke="#ecd89a" stroke-width=".6" opacity=".4"/>
+      <circle cx="36" cy="36" r="11.5" fill="none" stroke="#6b5122" stroke-width="1" opacity=".8"/>
+      <g fill="url(#ovaVolumen)" transform="translate(36 36)">
+        <path d="M0 -11.5 C 3 -6,3 -2,0 1 C -3 -2,-3 -6,0 -11.5 Z"/>
+        <path d="M0 11.5 C 3 6,3 2,0 -1 C -3 2,-3 6,0 11.5 Z"/>
+        <path d="M-11.5 0 C -6 3,-2 3,1 0 C -2 -3,-6 -3,-11.5 0 Z"/>
+        <path d="M11.5 0 C 6 3,2 3,-1 0 C 2 -3,6 -3,11.5 0 Z"/>
+        <path d="M-8.1 -8.1 C -3.7 -5.7,-1.6 -3.7,-0.7 -0.7 C -3.7 -1.6,-5.7 -3.7,-8.1 -8.1 Z"/>
+        <path d="M8.1 -8.1 C 3.7 -5.7,1.6 -3.7,0.7 -0.7 C 3.7 -1.6,5.7 -3.7,8.1 -8.1 Z"/>
+        <path d="M-8.1 8.1 C -3.7 5.7,-1.6 3.7,-0.7 0.7 C -3.7 1.6,-5.7 3.7,-8.1 8.1 Z"/>
+        <path d="M8.1 8.1 C 3.7 5.7,1.6 3.7,0.7 0.7 C 3.7 1.6,5.7 3.7,8.1 8.1 Z"/>
+      </g>
+      <!-- Gema central engastada -->
+      <circle cx="36" cy="36" r="5.4" fill="url(#oroTallado)"/>
+      <circle cx="36" cy="36" r="3.9" fill="url(#rubiCorner)" stroke="#2c070e" stroke-width=".6"/>
+      <ellipse cx="34.8" cy="34.7" rx="1.5" ry="1" fill="#ffd9df" opacity=".55"/>
+    </g>
+
+    <!-- Remaches en las cuatro esquinas del panel -->
+    <g>
+      <g fill="#000" opacity=".6">
+        <circle cx="9.8"  cy="9.8"  r="2.8"/><circle cx="62.8" cy="9.8"  r="2.8"/>
+        <circle cx="9.8"  cy="62.8" r="2.8"/><circle cx="62.8" cy="62.8" r="2.8"/>
+      </g>
+      <g fill="url(#oroTallado)">
+        <circle cx="9"  cy="9"  r="2.8"/><circle cx="63" cy="9"  r="2.8"/>
+        <circle cx="9"  cy="63" r="2.8"/><circle cx="63" cy="63" r="2.8"/>
+      </g>
+    </g>
+  </g>
+</svg>

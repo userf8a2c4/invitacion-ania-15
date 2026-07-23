@@ -1,0 +1,393 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 2100" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <!-- ══ ATMÓSFERA ══ -->
+    <radialGradient id="base" cx="50%" cy="30%" r="95%">
+      <stop offset="0%"   stop-color="#33200f"/>
+      <stop offset="30%"  stop-color="#24160b"/>
+      <stop offset="62%"  stop-color="#150c06"/>
+      <stop offset="100%" stop-color="#070403"/>
+    </radialGradient>
+    <radialGradient id="warmPool" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#c9a84c" stop-opacity=".22"/>
+      <stop offset="55%"  stop-color="#96742f" stop-opacity=".09"/>
+      <stop offset="100%" stop-color="#96742f" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bloodPool" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#7a1522" stop-opacity=".42"/>
+      <stop offset="55%"  stop-color="#4a0d16" stop-opacity=".18"/>
+      <stop offset="100%" stop-color="#4a0d16" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="50%" cy="45%" r="72%">
+      <stop offset="55%"  stop-color="#000" stop-opacity="0"/>
+      <stop offset="82%"  stop-color="#000" stop-opacity=".35"/>
+      <stop offset="100%" stop-color="#000" stop-opacity=".78"/>
+    </radialGradient>
+
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#f4e2a0"/>
+      <stop offset="38%"  stop-color="#c9a84c"/>
+      <stop offset="74%"  stop-color="#8f6d2b"/>
+      <stop offset="100%" stop-color="#5f4820"/>
+    </linearGradient>
+    <linearGradient id="goldV" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#e8cf7a"/>
+      <stop offset="55%"  stop-color="#a8862f"/>
+      <stop offset="100%" stop-color="#6b5122"/>
+    </linearGradient>
+    <!-- ══ PÉTALOS ══
+         Estos degradados son EXACTAMENTE los mismos que usa la biblioteca
+         de rosas del index.html. Este archivo es independiente (es una
+         imagen aparte), así que hay que mantenerlos sincronizados a mano:
+         si cambiás la paleta allá, copiala también acá. -->
+    <linearGradient id="petCara" x1="0" y1="1" x2=".18" y2="0">
+      <stop offset="0%"   stop-color="#2c070e"/>
+      <stop offset="38%"  stop-color="#5c1220"/>
+      <stop offset="78%"  stop-color="#7e1b2c"/>
+      <stop offset="100%" stop-color="#9c2436"/>
+    </linearGradient>
+    <linearGradient id="petMedia" x1="0" y1="1" x2=".12" y2="0">
+      <stop offset="0%"   stop-color="#240610"/>
+      <stop offset="48%"  stop-color="#4e0f1c"/>
+      <stop offset="100%" stop-color="#7a1928"/>
+    </linearGradient>
+    <linearGradient id="petInterior" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%"   stop-color="#170309"/>
+      <stop offset="55%"  stop-color="#3d0b15"/>
+      <stop offset="100%" stop-color="#5e1422"/>
+    </linearGradient>
+    <linearGradient id="petDorso" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%"   stop-color="#1c050b"/>
+      <stop offset="58%"  stop-color="#3f0f19"/>
+      <stop offset="100%" stop-color="#63202c"/>
+    </linearGradient>
+    <linearGradient id="calizVerde" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#1a2410"/>
+      <stop offset="55%"  stop-color="#38441a"/>
+      <stop offset="100%" stop-color="#5d6b2c"/>
+    </linearGradient>
+
+    <!-- ══ FILTROS: profundidad y trazo orgánico ══ -->
+    <filter id="organic" x="-18%" y="-18%" width="136%" height="136%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.013" numOctaves="3" seed="9" result="t"/>
+      <feDisplacementMap in="SourceGraphic" in2="t" scale="9" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="organicSoft" x="-18%" y="-18%" width="136%" height="136%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.009" numOctaves="2" seed="3" result="t"/>
+      <feDisplacementMap in="SourceGraphic" in2="t" scale="14" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="farBlur" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+    <filter id="midBlur" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+    <filter id="lift" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="7" stdDeviation="9" flood-color="#000" flood-opacity=".6"/>
+    </filter>
+    <filter id="emberGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- textura de piedra / lienzo -->
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="4" stitchTiles="stitch" result="n"/>
+      <feColorMatrix in="n" type="matrix"
+        values="0 0 0 0 .80  0 0 0 0 .67  0 0 0 0 .34  0 0 0 .07 0"/>
+    </filter>
+    <filter id="cloudTexture" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency=".004 .006" numOctaves="5" seed="15" result="n"/>
+      <feColorMatrix in="n" type="matrix"
+        values="0 0 0 0 .45  0 0 0 0 .22  0 0 0 0 .10  0 0 0 .30 0"/>
+    </filter>
+
+    <!-- ══ CRAQUELADO ══
+         Es la red de grietas finas que le sale a la pintura al óleo con
+         los años. Antes acá había un patrón de flores de lis que, por ser
+         un patrón, se repetía y se llegaba a intuir la retícula.
+
+         CÓMO SE HACE UNA GRIETA A PARTIR DE RUIDO:
+           1. feTurbulence genera una nube de manchas suaves, sin repetir.
+           2. Esa nube se pasa al canal de transparencia.
+           3. feComponentTransfer aplica una "tabla" con un pico angosto
+              (0 0 0 0 1 0 0 0 0): de todos los tonos de la nube, solo
+              sobrevive una franja finita del medio. Todo lo demás se
+              vuelve invisible.
+           4. Como esa franja recorre la nube por donde el valor cruza el
+              medio, queda dibujada una red de líneas quebradas: grietas.
+
+         Se usan dos capas, una oscura y otra clara apenas corrida, para
+         que las grietas tengan la sombra y la luz de un relieve real. -->
+
+    <filter id="craquelado-sombra" x="0" y="0" width="100%" height="100%"
+            color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.009 0.011"
+                    numOctaves="5" seed="23" result="nube"/>
+      <!-- El canal rojo de la nube pasa a ser la transparencia -->
+      <feColorMatrix in="nube" type="matrix" result="nubeEnAlfa"
+        values="0 0 0 0 0.03   0 0 0 0 0.02   0 0 0 0 0.015   1 0 0 0 0"/>
+      <!-- El pico angosto convierte la nube en líneas -->
+      <feComponentTransfer in="nubeEnAlfa">
+        <feFuncA type="table" tableValues="0 0 0 0 1 0 0 0 0"/>
+      </feComponentTransfer>
+    </filter>
+
+    <filter id="craquelado-luz" x="0" y="0" width="100%" height="100%"
+            color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.009 0.011"
+                    numOctaves="5" seed="23" result="nube"/>
+      <feColorMatrix in="nube" type="matrix" result="nubeEnAlfa"
+        values="0 0 0 0 0.78   0 0 0 0 0.66   0 0 0 0 0.42   1 0 0 0 0"/>
+      <feComponentTransfer in="nubeEnAlfa" result="lineas">
+        <feFuncA type="table" tableValues="0 0 0 0 1 0 0 0 0"/>
+      </feComponentTransfer>
+      <!-- Corrida un pelo: así la luz cae en el borde de cada grieta -->
+      <feOffset in="lineas" dx="-1.2" dy="-1.2"/>
+    </filter>
+
+    <!-- Craquelado más grande y abierto, para el segundo plano -->
+    <filter id="craquelado-amplio" x="0" y="0" width="100%" height="100%"
+            color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.0035 0.0042"
+                    numOctaves="4" seed="41" result="nube"/>
+      <feColorMatrix in="nube" type="matrix" result="nubeEnAlfa"
+        values="0 0 0 0 0.02   0 0 0 0 0.012   0 0 0 0 0.01   1 0 0 0 0"/>
+      <feComponentTransfer in="nubeEnAlfa">
+        <feFuncA type="table" tableValues="0 0 0 1 0 0 0"/>
+      </feComponentTransfer>
+    </filter>
+
+    <!-- ══ FLORA ══ -->
+    <!-- ROSA · el mismo dibujo que usan el relicario y las enredaderas -->
+    <g id="rose">
+      <g fill="url(#petCara)" stroke="#1b0508" stroke-width=".7">
+        <path d="M0 -3 C -12 -6,-23 -14,-26 -24 C -28 -31,-25 -36,-20 -36 C -16 -36,-15 -32,-11 -33 C -7 -35,-6 -31,-2 -32 C 2 -33,4 -30,8 -32 C 13 -34,18 -31,20 -26 C 23 -18,13 -7,0 -3 Z"/>
+        <path d="M0 -3 C -12 -6,-23 -14,-26 -24 C -28 -31,-25 -36,-20 -36 C -16 -36,-15 -32,-11 -33 C -7 -35,-6 -31,-2 -32 C 2 -33,4 -30,8 -32 C 13 -34,18 -31,20 -26 C 23 -18,13 -7,0 -3 Z" transform="rotate(73) scale(.97)"/>
+        <path d="M0 -3 C -12 -6,-23 -14,-26 -24 C -28 -31,-25 -36,-20 -36 C -16 -36,-15 -32,-11 -33 C -7 -35,-6 -31,-2 -32 C 2 -33,4 -30,8 -32 C 13 -34,18 -31,20 -26 C 23 -18,13 -7,0 -3 Z" transform="rotate(147) scale(1.05)"/>
+        <path d="M0 -3 C -12 -6,-23 -14,-26 -24 C -28 -31,-25 -36,-20 -36 C -16 -36,-15 -32,-11 -33 C -7 -35,-6 -31,-2 -32 C 2 -33,4 -30,8 -32 C 13 -34,18 -31,20 -26 C 23 -18,13 -7,0 -3 Z" transform="rotate(216) scale(.93)"/>
+        <path d="M0 -3 C -12 -6,-23 -14,-26 -24 C -28 -31,-25 -36,-20 -36 C -16 -36,-15 -32,-11 -33 C -7 -35,-6 -31,-2 -32 C 2 -33,4 -30,8 -32 C 13 -34,18 -31,20 -26 C 23 -18,13 -7,0 -3 Z" transform="rotate(291)"/>
+      </g>
+      <g fill="url(#petMedia)" stroke="#240710" stroke-width=".6">
+        <path d="M0 -2 C -9 -5,-16 -11,-18 -18 C -19 -23,-17 -27,-13 -27 C -10 -27,-9 -24,-6 -25 C -3 -26,-2 -23,1 -24 C 4 -25,6 -23,9 -24 C 13 -25,16 -22,16 -18 C 16 -12,9 -5,0 -2 Z" transform="rotate(38)"/>
+        <path d="M0 -2 C -9 -5,-16 -11,-18 -18 C -19 -23,-17 -27,-13 -27 C -10 -27,-9 -24,-6 -25 C -3 -26,-2 -23,1 -24 C 4 -25,6 -23,9 -24 C 13 -25,16 -22,16 -18 C 16 -12,9 -5,0 -2 Z" transform="rotate(112) scale(.94)"/>
+        <path d="M0 -2 C -9 -5,-16 -11,-18 -18 C -19 -23,-17 -27,-13 -27 C -10 -27,-9 -24,-6 -25 C -3 -26,-2 -23,1 -24 C 4 -25,6 -23,9 -24 C 13 -25,16 -22,16 -18 C 16 -12,9 -5,0 -2 Z" transform="rotate(188) scale(1.02)"/>
+        <path d="M0 -2 C -9 -5,-16 -11,-18 -18 C -19 -23,-17 -27,-13 -27 C -10 -27,-9 -24,-6 -25 C -3 -26,-2 -23,1 -24 C 4 -25,6 -23,9 -24 C 13 -25,16 -22,16 -18 C 16 -12,9 -5,0 -2 Z" transform="rotate(259) scale(.9)"/>
+      </g>
+      <g fill="url(#petInterior)" stroke="#240710" stroke-width=".55">
+        <path d="M0 0 C -2 -7,3 -13,9 -13 C 15 -13,18 -8,16 -3 C 14 2,7 5,2 4 C 1 3,0 2,0 0 Z"/>
+        <path d="M0 0 C -2 -7,3 -13,9 -13 C 15 -13,18 -8,16 -3 C 14 2,7 5,2 4 C 1 3,0 2,0 0 Z" transform="rotate(65) scale(.84)"/>
+        <path d="M0 0 C -2 -7,3 -13,9 -13 C 15 -13,18 -8,16 -3 C 14 2,7 5,2 4 C 1 3,0 2,0 0 Z" transform="rotate(130) scale(.7)"/>
+        <path d="M0 0 C -2 -7,3 -13,9 -13 C 15 -13,18 -8,16 -3 C 14 2,7 5,2 4 C 1 3,0 2,0 0 Z" transform="rotate(195) scale(.56)"/>
+        <path d="M0 0 C -2 -7,3 -13,9 -13 C 15 -13,18 -8,16 -3 C 14 2,7 5,2 4 C 1 3,0 2,0 0 Z" transform="rotate(260) scale(.43)"/>
+        <path d="M0 0 C -2 -7,3 -13,9 -13 C 15 -13,18 -8,16 -3 C 14 2,7 5,2 4 C 1 3,0 2,0 0 Z" transform="rotate(325) scale(.31)"/>
+      </g>
+      <path d="M0 -1 C 2 -4,6 -3,6 0 C 6 3,3 4,1 3" fill="none" stroke="#150309" stroke-width="1.6" stroke-linecap="round"/>
+    </g>
+
+    <g id="leaf">
+      <path d="M0 0 C 24 -9,48 -5,63 13 C 48 17,39 15,30 11 C 37 20,39 28,37 39 C 24 33,15 24,11 13 C 9 22,4 28,-2 33 C -7 20,-4 7,0 0 Z"
+            fill="url(#calizVerde)" fill-opacity=".72" stroke="#1f2a0c" stroke-width="1" stroke-opacity=".6"/>
+      <path d="M2 2 C 21 6,37 15,48 28" fill="none" stroke="#6d7a35" stroke-width=".8" stroke-opacity=".45"/>
+      <path d="M12 6 l 8 8 M22 10 l 8 9 M32 16 l 7 8" stroke="#5d6b2c" stroke-width=".6" stroke-opacity=".3"/>
+    </g>
+
+    <g id="bud">
+      <path d="M0 -30 C -7 -23,-11 -12,-10 -1 C -9 8,-5 14,-1 16 C -2 8,-3 -2,-2 -10 C -1 -18,-1 -25,0 -30 Z"
+            fill="url(#petDorso)" stroke="#1b0508" stroke-width=".85"/>
+      <path d="M0 -30 C 7 -23,11 -12,10 -1 C 9 8,5 14,1 16 C 0 8,1 -2,0 -10 C -1 -18,-1 -25,0 -30 Z"
+            fill="url(#petCara)" stroke="#1b0508" stroke-width=".85"/>
+      <path d="M0 -28 C 5 -21,8 -11,7 -1 C 6 6,3 11,1 13" fill="none"
+            stroke="#a15361" stroke-width="1" stroke-opacity=".32" stroke-linecap="round"/>
+      <g fill="url(#calizVerde)" stroke="#1f2a0c" stroke-width=".7">
+        <path d="M-9 2 C -16 5,-21 14,-20 23 C -14 16,-10 9,-7 4 Z"/>
+        <path d="M9 2 C 16 5,21 14,20 23 C 14 16,10 9,7 4 Z"/>
+        <path d="M-5 11 C -8 18,-8 26,-4 31 C -2 24,-2 17,-2 12 Z"/>
+        <path d="M5 11 C 8 18,8 26,4 31 C 2 24,2 17,2 12 Z"/>
+      </g>
+      <path d="M0 13 C 0 21,0 27,0 33" fill="none" stroke="#38441a" stroke-width="2.4" stroke-linecap="round"/>
+    </g>
+
+    <!-- ══ RAMA ORGÁNICA (unidad compositiva) ══ -->
+    <g id="branch">
+      <!-- tallo principal, sinuoso -->
+      <path d="M0 0 C 62 96, 18 210, 74 316 C 124 410, 62 520, 110 628 C 152 722, 92 828, 134 930"
+            fill="none" stroke="url(#goldV)" stroke-width="3.4" stroke-opacity=".62" stroke-linecap="round"/>
+      <!-- tallo secundario -->
+      <path d="M18 40 C 66 130, 34 232, 84 330 C 128 416, 78 512, 116 604"
+            fill="none" stroke="#c9a84c" stroke-width="1.3" stroke-opacity=".3"/>
+      <!-- ramitas -->
+      <path d="M40 150 C 84 168, 112 206, 120 254 M78 400 C 34 420, 8 456, 4 502
+               M104 660 C 150 678, 178 716, 184 762 M120 860 C 76 878, 52 912, 48 954"
+            fill="none" stroke="url(#goldV)" stroke-width="1.6" stroke-opacity=".38" stroke-linecap="round"/>
+      <!-- espinas -->
+      <g fill="url(#goldV)" fill-opacity=".55">
+        <path d="M30 76 l 15 -5 l -9 14 Z"/>
+        <path d="M36 196 l -15 -3 l 11 12 Z"/>
+        <path d="M74 292 l 15 -5 l -9 14 Z"/>
+        <path d="M84 452 l -15 -3 l 11 12 Z"/>
+        <path d="M104 566 l 15 -5 l -9 14 Z"/>
+        <path d="M112 706 l -15 -3 l 11 12 Z"/>
+        <path d="M126 830 l 15 -5 l -9 14 Z"/>
+      </g>
+      <!-- hojas -->
+      <use href="#leaf" transform="translate(46 130) rotate(58) scale(.92)"/>
+      <use href="#leaf" transform="translate(22 246) rotate(128) scale(-.8 .8)"/>
+      <use href="#leaf" transform="translate(96 388) rotate(46) scale(.86)"/>
+      <use href="#leaf" transform="translate(62 540) rotate(140) scale(-.75 .75)"/>
+      <use href="#leaf" transform="translate(126 690) rotate(52) scale(.8)"/>
+      <use href="#leaf" transform="translate(96 852) rotate(134) scale(-.72 .72)"/>
+      <!-- capullos -->
+      <use href="#bud" transform="translate(120 254) rotate(28) scale(.85)"/>
+      <use href="#bud" transform="translate(4 502) rotate(-34) scale(.78)"/>
+      <use href="#bud" transform="translate(184 762) rotate(26) scale(.8)"/>
+      <use href="#bud" transform="translate(48 954) rotate(-30) scale(.72)"/>
+      <!-- rosas -->
+      <use href="#rose" transform="translate(70 320) scale(.72)"/>
+      <use href="#rose" transform="translate(112 624) scale(.6)"/>
+      <use href="#rose" transform="translate(134 926) scale(.5)"/>
+    </g>
+
+    <!-- ══ VOLUTA DE ESQUINA (orgánica, no rectangular) ══ -->
+    <!-- ══ GUÍA DE ESQUINA ══
+         Un abanico de volutas que se abre desde el vértice.
+
+         ⚠️ REGLA DE COMPOSICIÓN, POR SI ALGUIEN LA RETOCA:
+         el diseño anterior eran DOS trazos largos, iguales y simétricos,
+         que salían de la esquina y terminaban en DOS capullos redondos
+         uno al lado del otro. Esa combinación —un asta larga rematada en
+         dos formas redondeadas apareadas— se leía como una figura obscena
+         sin que nadie lo hubiera buscado.
+
+         Para evitarlo, el diseño nuevo sigue tres reglas:
+           1. Ninguna rama domina: son de LARGOS DISTINTOS y salen en
+              ángulos distintos, así no hay un eje único.
+           2. Ningún par de formas redondeadas queda apareado al final de
+              una rama; las flores van repartidas y siempre impares.
+           3. Cada rama termina distinto: una en espiral, otra en hoja,
+              otra en flor.
+    -->
+    <g id="scroll">
+      <g fill="none" stroke="url(#gold)" stroke-linecap="round">
+        <!-- rama larga, casi horizontal, termina en espiral cerrada -->
+        <path d="M12 46 C 132 58, 252 92, 330 152 C 366 180,368 220,340 234
+                 C 316 246,292 232,296 210 C 299 194,314 189,324 199"
+              stroke-width="5.6" stroke-opacity=".92"/>
+        <!-- rama vertical, MÁS CORTA que la horizontal: sin eje dominante -->
+        <path d="M46 12 C 60 108, 84 186, 130 250 C 152 280,146 310,120 314"
+              stroke-width="4.6" stroke-opacity=".82"/>
+        <!-- rama diagonal media, se corta sin remate -->
+        <path d="M30 30 C 108 84, 172 150, 208 224"
+              stroke-width="3.4" stroke-opacity=".62"/>
+        <!-- abanico de rulitos abriéndose desde el vértice -->
+        <path d="M18 84 C 70 100, 98 134, 96 170 C 95 192,76 202,62 192"
+              stroke-width="2.6" stroke-opacity=".58"/>
+        <path d="M84 18 C 100 58, 132 82, 170 84 C 192 85,202 72,194 58"
+              stroke-width="2.6" stroke-opacity=".58"/>
+        <path d="M14 130 C 52 146, 72 170, 74 200"
+              stroke-width="1.8" stroke-opacity=".42"/>
+        <path d="M130 14 C 146 52, 170 72, 200 74"
+              stroke-width="1.8" stroke-opacity=".42"/>
+        <!-- zarcillo que se escapa hacia adentro del cuadro -->
+        <path d="M222 124 C 266 140, 288 172, 280 200 C 275 218,256 222,246 210"
+              stroke-width="2" stroke-opacity=".48"/>
+      </g>
+
+      <!-- hojas repartidas sin simetría -->
+      <use href="#leaf" transform="translate(172 74) rotate(34) scale(1)"/>
+      <use href="#leaf" transform="translate(86 176) rotate(62) scale(-.88 .88)"/>
+      <use href="#leaf" transform="translate(262 130) rotate(26) scale(.78)"/>
+      <use href="#leaf" transform="translate(140 262) rotate(80) scale(.7)"/>
+      <use href="#leaf" transform="translate(232 210) rotate(48) scale(-.62 .62)"/>
+
+      <!-- flores impares y de tamaños distintos: nunca dos iguales juntas -->
+      <use href="#rose" transform="translate(92 92) scale(1.08)"/>
+      <use href="#rose" transform="translate(332 212) scale(.5)"/>
+      <use href="#bud"  transform="translate(120 306) rotate(158) scale(.66)"/>
+    </g>
+
+    <!-- ══ BRASA / LUCIÉRNAGA ══ -->
+    <g id="ember"><circle r="2.6" fill="#f4e2a0"/></g>
+  </defs>
+
+  <!-- ══════════ COMPOSICIÓN POR CAPAS ══════════ -->
+
+  <!-- 1 · atmósfera base -->
+  <rect width="1400" height="2100" fill="url(#base)"/>
+  <rect width="1400" height="2100" filter="url(#cloudTexture)" opacity=".55"/>
+
+  <!-- 2 · pozos de luz (profundidad lumínica) -->
+  <ellipse cx="700" cy="330"  rx="720" ry="520" fill="url(#bloodPool)"/>
+  <ellipse cx="700" cy="150"  rx="440" ry="330" fill="url(#warmPool)"/>
+  <ellipse cx="180" cy="1180" rx="440" ry="620" fill="url(#bloodPool)" opacity=".55"/>
+  <ellipse cx="1240" cy="1520" rx="420" ry="600" fill="url(#bloodPool)" opacity=".45"/>
+  <ellipse cx="700" cy="1980" rx="620" ry="380" fill="url(#warmPool)" opacity=".7"/>
+
+  <!-- 3 · craquelado: las grietas del óleo viejo.
+       Primero las grandes y abiertas, después la red fina con su sombra
+       y su luz. Todo a muy baja opacidad: se tiene que intuir, no ver. -->
+  <rect width="1400" height="2100" filter="url(#craquelado-amplio)" opacity=".55"/>
+  <rect width="1400" height="2100" filter="url(#craquelado-sombra)" opacity=".42"/>
+  <rect width="1400" height="2100" filter="url(#craquelado-luz)"    opacity=".16"/>
+
+  <!-- 4 · CAPA LEJANA — ramas desenfocadas (profundidad de campo) -->
+  <g filter="url(#farBlur)" opacity=".5">
+    <use href="#branch" transform="translate(210 -60) scale(1.5) rotate(6)"/>
+    <use href="#branch" transform="translate(1190 -40) scale(-1.5 1.5) rotate(-6)"/>
+    <use href="#branch" transform="translate(430 2160) scale(1.2 -1.2)"/>
+    <use href="#branch" transform="translate(980 2180) scale(-1.1 -1.1)"/>
+  </g>
+
+  <!-- 5 · CAPA MEDIA — ramas suavemente desenfocadas -->
+  <g filter="url(#midBlur)" opacity=".72">
+    <g filter="url(#organicSoft)">
+      <use href="#branch" transform="translate(96 120) scale(1.05)"/>
+      <use href="#branch" transform="translate(1304 120) scale(-1.05 1.05)"/>
+      <use href="#branch" transform="translate(150 2010) scale(.95 -.95)"/>
+      <use href="#branch" transform="translate(1250 2010) scale(-.95 -.95)"/>
+    </g>
+  </g>
+
+  <!-- 6 · CAPA CERCANA — volutas y flora nítidas, con sombra -->
+  <g filter="url(#organic)">
+    <g filter="url(#lift)">
+      <use href="#scroll" transform="translate(30 34)"/>
+      <use href="#scroll" transform="translate(1370 34) scale(-1 1)"/>
+      <use href="#scroll" transform="translate(30 2066) scale(1 -1)"/>
+      <use href="#scroll" transform="translate(1370 2066) scale(-1 -1)"/>
+    </g>
+  </g>
+
+  <!-- 7 · guirnalda orgánica inferior -->
+  <g filter="url(#organic)" opacity=".9">
+    <path d="M250 1990 C 400 1918, 590 1908, 700 1962 C 810 1908, 1000 1918, 1150 1990"
+          fill="none" stroke="url(#goldV)" stroke-width="3" stroke-opacity=".55" stroke-linecap="round"/>
+    <path d="M320 1978 C 460 1926, 606 1924, 700 1954 C 794 1924, 940 1926, 1080 1978"
+          fill="none" stroke="#c9a84c" stroke-width="1.2" stroke-opacity=".3"/>
+    <use href="#rose"  transform="translate(700 1962) scale(.66)"/>
+    <use href="#rose"  transform="translate(470 1930) scale(.44)"/>
+    <use href="#rose"  transform="translate(930 1930) scale(.44)"/>
+    <use href="#bud"   transform="translate(370 1948) rotate(-32) scale(.85)"/>
+    <use href="#bud"   transform="translate(1030 1948) rotate(32) scale(.85)"/>
+    <use href="#leaf"  transform="translate(560 1922) rotate(158) scale(.66)"/>
+    <use href="#leaf"  transform="translate(840 1922) rotate(22) scale(-.66 .66)"/>
+  </g>
+
+  <!-- 8 · brasas suspendidas (vida, escala aérea) -->
+  <g filter="url(#emberGlow)">
+    <g fill-opacity=".75">
+      <use href="#ember" transform="translate(300 520)  scale(1.1)"/>
+      <use href="#ember" transform="translate(1080 700) scale(.85)"/>
+      <use href="#ember" transform="translate(520 900)  scale(.7)"/>
+      <use href="#ember" transform="translate(940 1180) scale(1)"/>
+      <use href="#ember" transform="translate(360 1380) scale(.8)"/>
+      <use href="#ember" transform="translate(1120 1640) scale(.9)"/>
+      <use href="#ember" transform="translate(620 1720) scale(.65)"/>
+      <use href="#ember" transform="translate(820 420)  scale(.75)"/>
+      <use href="#ember" transform="translate(180 780)  scale(.6)"/>
+      <use href="#ember" transform="translate(1260 1020) scale(.7)"/>
+    </g>
+  </g>
+
+  <!-- 9 · viñeta y grano -->
+  <rect width="1400" height="2100" fill="url(#vignette)"/>
+  <rect width="1400" height="2100" filter="url(#grain)" opacity=".9"/>
+</svg>

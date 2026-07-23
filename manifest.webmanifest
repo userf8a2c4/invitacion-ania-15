@@ -1,0 +1,17 @@
+{
+  "name": "XV Años · Ania",
+  "short_name": "Ania XV",
+  "description": "Invitación a los quince años de Ania",
+  "lang": "es",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0605",
+  "theme_color": "#0a0605",
+  "icons": [
+    { "src": "recursos/icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "recursos/icono-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

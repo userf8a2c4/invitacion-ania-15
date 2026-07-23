@@ -1,0 +1,252 @@
+<!--
+  ══════════════════════════════════════════════════════════════════════
+  PIEZA DEL MARCO · RIEL VERTICAL (lados izquierdo y derecho)
+  ══════════════════════════════════════════════════════════════════════
+  Azulejo de 72 × 120 px que se repite hacia abajo (repeat-y) para cubrir
+  todo el alto de la página sin deformarse.
+
+  PARA QUE LA REPETICIÓN NO SE NOTE, todos los motivos tienen un ritmo
+  que divide exacto a 120:
+      perlas y dentículos  cada 24
+      trenza del guilloché cada 24
+      ovas y dardos        cada 30
+      soga                 cada  8
+      rosetón              cada 120
+
+  DE AFUERA (x=0) HACIA ADENTRO (x=72):
+      0-4   canto exterior
+      4-14  astrágalo (hilera de perlas)
+      14-18 soga retorcida
+      18-40 campo con guilloché y rosetón
+      40-48 dentículos
+      48-52 filete
+      52-66 ovas y dardos
+      66-72 canto interior
+
+  EL RELIEVE es lo que hace que se vea talla y no dibujo: cada moldura
+  lleva un degradado que va de oscuro a claro y otra vez a oscuro (como
+  una superficie redondeada iluminada desde afuera), más una línea de luz
+  en un borde y una de sombra en el otro.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="120" viewBox="0 0 72 120">
+  <defs>
+    <!-- Degradados a lo ancho: dan el volumen redondeado de la moldura -->
+    <linearGradient id="convexoOro" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#4a3818"/>
+      <stop offset="28%"  stop-color="#c9a84c"/>
+      <stop offset="48%"  stop-color="#e6d090"/>
+      <stop offset="70%"  stop-color="#a8862f"/>
+      <stop offset="100%" stop-color="#3a2c12"/>
+    </linearGradient>
+    <linearGradient id="convexoProfundo" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#241a0e"/>
+      <stop offset="35%"  stop-color="#6b5122"/>
+      <stop offset="55%"  stop-color="#8a6a2c"/>
+      <stop offset="100%" stop-color="#150e07"/>
+    </linearGradient>
+    <linearGradient id="concavo" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#0a0605"/>
+      <stop offset="30%"  stop-color="#241a0e"/>
+      <stop offset="62%"  stop-color="#171009"/>
+      <stop offset="100%" stop-color="#080504"/>
+    </linearGradient>
+    <linearGradient id="fileteOro" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#5a4520"/>
+      <stop offset="45%"  stop-color="#e6d090"/>
+      <stop offset="100%" stop-color="#5a4520"/>
+    </linearGradient>
+    <radialGradient id="perlaVolumen" cx="34%" cy="30%" r="72%">
+      <stop offset="0%"   stop-color="#ecd89a"/>
+      <stop offset="42%"  stop-color="#c9a84c"/>
+      <stop offset="100%" stop-color="#4a3818"/>
+    </radialGradient>
+    <radialGradient id="ovaVolumen" cx="32%" cy="26%" r="76%">
+      <stop offset="0%"   stop-color="#e6d090"/>
+      <stop offset="46%"  stop-color="#b5983f"/>
+      <stop offset="100%" stop-color="#3f2f14"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="72" height="120" fill="#090604"/>
+
+  <!-- ═══ CANTO EXTERIOR ═══ -->
+  <rect x="0" y="0" width="4" height="120" fill="url(#convexoProfundo)"/>
+  <rect x="0"   y="0" width=".7" height="120" fill="#d9c079" opacity=".55"/>
+  <rect x="3.3" y="0" width=".7" height="120" fill="#000"    opacity=".6"/>
+
+  <!-- ═══ ASTRÁGALO: PERLAS cada 24 ═══ -->
+  <rect x="4" y="0" width="10" height="120" fill="url(#concavo)"/>
+  <g>
+    <ellipse cx="9" cy="12"  rx="4.1" ry="4.6" fill="url(#perlaVolumen)"/>
+    <ellipse cx="9" cy="36"  rx="4.1" ry="4.6" fill="url(#perlaVolumen)"/>
+    <ellipse cx="9" cy="60"  rx="4.1" ry="4.6" fill="url(#perlaVolumen)"/>
+    <ellipse cx="9" cy="84"  rx="4.1" ry="4.6" fill="url(#perlaVolumen)"/>
+    <ellipse cx="9" cy="108" rx="4.1" ry="4.6" fill="url(#perlaVolumen)"/>
+  </g>
+  <!-- sombra proyectada de cada perla sobre el fondo del canal -->
+  <g fill="#000" opacity=".45">
+    <ellipse cx="10.4" cy="13.6"  rx="3.6" ry="4"/>
+    <ellipse cx="10.4" cy="37.6"  rx="3.6" ry="4"/>
+    <ellipse cx="10.4" cy="61.6"  rx="3.6" ry="4"/>
+    <ellipse cx="10.4" cy="85.6"  rx="3.6" ry="4"/>
+    <ellipse cx="10.4" cy="109.6" rx="3.6" ry="4"/>
+  </g>
+  <g>
+    <ellipse cx="9" cy="12"  rx="4.1" ry="4.6" fill="url(#perlaVolumen)"/>
+    <ellipse cx="9" cy="36"  rx="4.1" ry="4.6" fill="url(#perlaVolumen)"/>
+    <ellipse cx="9" cy="60"  rx="4.1" ry="4.6" fill="url(#perlaVolumen)"/>
+    <ellipse cx="9" cy="84"  rx="4.1" ry="4.6" fill="url(#perlaVolumen)"/>
+    <ellipse cx="9" cy="108" rx="4.1" ry="4.6" fill="url(#perlaVolumen)"/>
+  </g>
+  <!-- carretes: los discos chatos que separan perla de perla -->
+  <g fill="url(#convexoProfundo)">
+    <rect x="6.2" y="22.4"  width="5.6" height="3.2" rx="1.6"/>
+    <rect x="6.2" y="46.4"  width="5.6" height="3.2" rx="1.6"/>
+    <rect x="6.2" y="70.4"  width="5.6" height="3.2" rx="1.6"/>
+    <rect x="6.2" y="94.4"  width="5.6" height="3.2" rx="1.6"/>
+    <rect x="6.2" y="-1.6"  width="5.6" height="3.2" rx="1.6"/>
+    <rect x="6.2" y="118.4" width="5.6" height="3.2" rx="1.6"/>
+  </g>
+
+  <!-- ═══ SOGA RETORCIDA cada 8 ═══ -->
+  <rect x="14" y="0" width="4" height="120" fill="url(#convexoProfundo)"/>
+  <g stroke="#e6d090" stroke-width="1.5" stroke-linecap="round" opacity=".72">
+    <path d="M14.4 1  L17.6 5"/>   <path d="M14.4 9  L17.6 13"/>
+    <path d="M14.4 17 L17.6 21"/>  <path d="M14.4 25 L17.6 29"/>
+    <path d="M14.4 33 L17.6 37"/>  <path d="M14.4 41 L17.6 45"/>
+    <path d="M14.4 49 L17.6 53"/>  <path d="M14.4 57 L17.6 61"/>
+    <path d="M14.4 65 L17.6 69"/>  <path d="M14.4 73 L17.6 77"/>
+    <path d="M14.4 81 L17.6 85"/>  <path d="M14.4 89 L17.6 93"/>
+    <path d="M14.4 97 L17.6 101"/> <path d="M14.4 105 L17.6 109"/>
+    <path d="M14.4 113 L17.6 117"/>
+  </g>
+  <g stroke="#000" stroke-width="1.2" stroke-linecap="round" opacity=".5">
+    <path d="M14.4 3.4  L17.6 7.4"/>   <path d="M14.4 11.4 L17.6 15.4"/>
+    <path d="M14.4 19.4 L17.6 23.4"/>  <path d="M14.4 27.4 L17.6 31.4"/>
+    <path d="M14.4 35.4 L17.6 39.4"/>  <path d="M14.4 43.4 L17.6 47.4"/>
+    <path d="M14.4 51.4 L17.6 55.4"/>  <path d="M14.4 59.4 L17.6 63.4"/>
+    <path d="M14.4 67.4 L17.6 71.4"/>  <path d="M14.4 75.4 L17.6 79.4"/>
+    <path d="M14.4 83.4 L17.6 87.4"/>  <path d="M14.4 91.4 L17.6 95.4"/>
+    <path d="M14.4 99.4 L17.6 103.4"/> <path d="M14.4 107.4 L17.6 111.4"/>
+    <path d="M14.4 115.4 L17.6 119.4"/>
+  </g>
+
+  <!-- ═══ CAMPO CON GUILLOCHÉ cada 24 ═══
+       Dos cintas que se cruzan una y otra vez formando una trenza.
+       Las dos arrancan y terminan en el mismo punto (x=29), por eso la
+       repetición del azulejo no se ve. -->
+  <rect x="18" y="0" width="22" height="120" fill="url(#concavo)"/>
+  <!-- sombra de las cintas, apenas corrida -->
+  <g fill="none" stroke="#000" stroke-width="3" opacity=".45">
+    <path d="M30 1 C39 7,39 19,30 25 C21 31,21 43,30 49 C39 55,39 67,30 73 C21 79,21 91,30 97 C39 103,39 115,30 121"/>
+    <path d="M30 1 C21 7,21 19,30 25 C39 31,39 43,30 49 C21 55,21 67,30 73 C39 79,39 91,30 97 C21 103,21 115,30 121"/>
+  </g>
+  <!-- cinta A -->
+  <path d="M29 0 C38 6,38 18,29 24 C20 30,20 42,29 48 C38 54,38 66,29 72 C20 78,20 90,29 96 C38 102,38 114,29 120"
+        fill="none" stroke="url(#fileteOro)" stroke-width="2.4" opacity=".92"/>
+  <!-- cinta B -->
+  <path d="M29 0 C20 6,20 18,29 24 C38 30,38 42,29 48 C20 54,20 66,29 72 C38 78,38 90,29 96 C20 102,20 114,29 120"
+        fill="none" stroke="url(#fileteOro)" stroke-width="2.4" opacity=".92"/>
+  <!-- perlitas en cada cruce -->
+  <g fill="url(#perlaVolumen)">
+    <circle cx="29" cy="0"   r="2.2"/>
+    <circle cx="29" cy="24"  r="2.2"/>
+    <circle cx="29" cy="48"  r="2.2"/>
+    <circle cx="29" cy="72"  r="2.2"/>
+    <circle cx="29" cy="96"  r="2.2"/>
+    <circle cx="29" cy="120" r="2.2"/>
+  </g>
+
+  <!-- Rosetón cada 120: el clavo ornamental que remata el campo -->
+  <g transform="translate(29 60)">
+    <ellipse cx="1.2" cy="1.4" rx="10" ry="10" fill="#000" opacity=".55"/>
+    <circle r="10" fill="url(#convexoProfundo)"/>
+    <circle r="10" fill="none" stroke="url(#fileteOro)" stroke-width="1.6"/>
+    <g fill="url(#ovaVolumen)">
+      <path d="M0 -7.8 C 2.2 -4,2.2 -1,0 1 C -2.2 -1,-2.2 -4,0 -7.8 Z"/>
+      <path d="M0 7.8 C 2.2 4,2.2 1,0 -1 C -2.2 1,-2.2 4,0 7.8 Z"/>
+      <path d="M-7.8 0 C -4 2.2,-1 2.2,1 0 C -1 -2.2,-4 -2.2,-7.8 0 Z"/>
+      <path d="M7.8 0 C 4 2.2,1 2.2,-1 0 C 1 -2.2,4 -2.2,7.8 0 Z"/>
+      <path d="M-5.5 -5.5 C -2.6 -3.6,-1 -2,-0.6 -0.6 C -2 -1,-3.6 -2.6,-5.5 -5.5 Z"/>
+      <path d="M5.5 -5.5 C 2.6 -3.6,1 -2,0.6 -0.6 C 2 -1,3.6 -2.6,5.5 -5.5 Z"/>
+      <path d="M-5.5 5.5 C -2.6 3.6,-1 2,-0.6 0.6 C -2 1,-3.6 2.6,-5.5 5.5 Z"/>
+      <path d="M5.5 5.5 C 2.6 3.6,1 2,0.6 0.6 C 2 1,3.6 2.6,5.5 5.5 Z"/>
+    </g>
+    <circle r="2.6" fill="#8e1f30"/>
+    <circle r="2.6" fill="none" stroke="#e6d090" stroke-width=".8" opacity=".8"/>
+    <circle cx="-.8" cy="-.9" r=".9" fill="#ffd9df" opacity=".55"/>
+  </g>
+
+  <!-- ═══ DENTÍCULOS cada 24 ═══ -->
+  <rect x="40" y="0" width="8" height="120" fill="#0c0805"/>
+  <!-- sombra proyectada de cada diente -->
+  <g fill="#000" opacity=".6">
+    <rect x="41.6" y="7.4"   width="7" height="12"/>
+    <rect x="41.6" y="31.4"  width="7" height="12"/>
+    <rect x="41.6" y="55.4"  width="7" height="12"/>
+    <rect x="41.6" y="79.4"  width="7" height="12"/>
+    <rect x="41.6" y="103.4" width="7" height="12"/>
+  </g>
+  <g fill="url(#convexoOro)">
+    <rect x="40.3" y="6"   width="7.4" height="12"/>
+    <rect x="40.3" y="30"  width="7.4" height="12"/>
+    <rect x="40.3" y="54"  width="7.4" height="12"/>
+    <rect x="40.3" y="78"  width="7.4" height="12"/>
+    <rect x="40.3" y="102" width="7.4" height="12"/>
+  </g>
+  <!-- brillo en la cara superior de cada diente -->
+  <g fill="#ecd89a" opacity=".5">
+    <rect x="40.3" y="6"   width="7.4" height="1.2"/>
+    <rect x="40.3" y="30"  width="7.4" height="1.2"/>
+    <rect x="40.3" y="54"  width="7.4" height="1.2"/>
+    <rect x="40.3" y="78"  width="7.4" height="1.2"/>
+    <rect x="40.3" y="102" width="7.4" height="1.2"/>
+  </g>
+
+  <!-- ═══ FILETE ═══ -->
+  <rect x="48" y="0" width="4" height="120" fill="url(#fileteOro)" opacity=".85"/>
+  <rect x="51.4" y="0" width=".6" height="120" fill="#000" opacity=".5"/>
+
+  <!-- ═══ OVAS Y DARDOS cada 30 ═══
+       Es la moldura clásica del friso griego: un huevo, una punta de
+       flecha, un huevo, una punta… -->
+  <rect x="52" y="0" width="14" height="120" fill="url(#concavo)"/>
+
+  <!-- cáscaras (el marco que rodea a cada huevo) -->
+  <g fill="none" stroke="url(#fileteOro)" stroke-width="1.5" opacity=".85">
+    <path d="M53.6 15 C 53.6 8,55.8 4.6,59 4.6 C 62.2 4.6,64.4 8,64.4 15
+             C 64.4 21,62.2 25,59 25 C 55.8 25,53.6 21,53.6 15 Z"/>
+    <path d="M53.6 45 C 53.6 38,55.8 34.6,59 34.6 C 62.2 34.6,64.4 38,64.4 45
+             C 64.4 51,62.2 55,59 55 C 55.8 55,53.6 51,53.6 45 Z"/>
+    <path d="M53.6 75 C 53.6 68,55.8 64.6,59 64.6 C 62.2 64.6,64.4 68,64.4 75
+             C 64.4 81,62.2 85,59 85 C 55.8 85,53.6 81,53.6 75 Z"/>
+    <path d="M53.6 105 C 53.6 98,55.8 94.6,59 94.6 C 62.2 94.6,64.4 98,64.4 105
+             C 64.4 111,62.2 115,59 115 C 55.8 115,53.6 111,53.6 105 Z"/>
+  </g>
+  <!-- huevos, con su sombra -->
+  <g fill="#000" opacity=".5">
+    <ellipse cx="60.2" cy="16.2"  rx="3.6" ry="7.4"/>
+    <ellipse cx="60.2" cy="46.2"  rx="3.6" ry="7.4"/>
+    <ellipse cx="60.2" cy="76.2"  rx="3.6" ry="7.4"/>
+    <ellipse cx="60.2" cy="106.2" rx="3.6" ry="7.4"/>
+  </g>
+  <g fill="url(#ovaVolumen)">
+    <ellipse cx="59" cy="15"  rx="3.7" ry="7.6"/>
+    <ellipse cx="59" cy="45"  rx="3.7" ry="7.6"/>
+    <ellipse cx="59" cy="75"  rx="3.7" ry="7.6"/>
+    <ellipse cx="59" cy="105" rx="3.7" ry="7.6"/>
+  </g>
+  <!-- dardos: las puntas de flecha entre huevo y huevo -->
+  <g fill="url(#convexoOro)">
+    <path d="M59 -4 L61.4 1 L59 8 L56.6 1 Z"/>
+    <path d="M59 26 L61.4 31 L59 38 L56.6 31 Z"/>
+    <path d="M59 56 L61.4 61 L59 68 L56.6 61 Z"/>
+    <path d="M59 86 L61.4 91 L59 98 L56.6 91 Z"/>
+    <path d="M59 116 L61.4 121 L59 128 L56.6 121 Z"/>
+  </g>
+
+  <!-- ═══ CANTO INTERIOR ═══ -->
+  <rect x="66" y="0" width="6" height="120" fill="url(#convexoProfundo)"/>
+  <rect x="66"   y="0" width=".8" height="120" fill="#000"    opacity=".55"/>
+  <rect x="70.6" y="0" width=".8" height="120" fill="#d9c079" opacity=".5"/>
+</svg>

@@ -1,0 +1,27 @@
+<!--
+  PÉTALO DE ROSA · variante 3 (pétalo pequeño e interior)
+  Es el más chico y oscuro. Al mezclarlo con los otros dos se evita que
+  la lluvia de pétalos se vea repetitiva.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+  <defs>
+    <radialGradient id="carne3" cx="46%" cy="28%" r="80%">
+      <stop offset="0%"   stop-color="#a8354a"/>
+      <stop offset="45%"  stop-color="#711628"/>
+      <stop offset="100%" stop-color="#2c070e"/>
+    </radialGradient>
+  </defs>
+
+  <!-- óvalo asimétrico, más cerrado que los otros -->
+  <path d="M20 37 C 12 32, 7 23, 9 15 C 11 8, 16 5, 20 10 C 24 5, 29 8, 31 15 C 33 23, 28 32, 20 37 Z"
+        fill="url(#carne3)"/>
+  <!-- pliegue central -->
+  <path d="M20 10 C 18 18, 18 28, 20 36 C 22 28, 22 18, 20 10 Z"
+        fill="#3d0b14" fill-opacity=".38"/>
+  <g fill="none" stroke="#3d0b14" stroke-opacity=".42" stroke-linecap="round">
+    <path d="M20 31 C 16 26, 13 21, 12 17" stroke-width=".6"/>
+    <path d="M20 31 C 24 26, 27 21, 28 17" stroke-width=".6"/>
+  </g>
+  <path d="M9 15 C 11 8, 16 5, 20 10 C 24 5, 29 8, 31 15"
+        fill="none" stroke="#e8909d" stroke-width=".7" stroke-opacity=".3"/>
+</svg>

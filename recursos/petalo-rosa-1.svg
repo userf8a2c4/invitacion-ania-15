@@ -1,0 +1,37 @@
+<!--
+  PÉTALO DE ROSA · variante 1 (pétalo abierto, visto de frente)
+  Se usa en la lluvia de pétalos. El escote superior y las nervaduras
+  son lo que lo hacen leer como un pétalo real y no como una mancha.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+  <defs>
+    <radialGradient id="carne1" cx="50%" cy="22%" r="82%">
+      <stop offset="0%"   stop-color="#c94257"/>
+      <stop offset="42%"  stop-color="#8e1f30"/>
+      <stop offset="78%"  stop-color="#5c1220"/>
+      <stop offset="100%" stop-color="#310810"/>
+    </radialGradient>
+    <linearGradient id="brillo1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#ffd9df" stop-opacity=".45"/>
+      <stop offset="60%"  stop-color="#ffd9df" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- cuerpo del pétalo, con el escote característico arriba -->
+  <path d="M20 38 C 8 34, 1 22, 3 12 C 5 4, 12 1, 20 7 C 28 1, 35 4, 37 12 C 39 22, 32 34, 20 38 Z"
+        fill="url(#carne1)"/>
+  <!-- nervadura central y laterales -->
+  <g fill="none" stroke="#3d0b14" stroke-opacity=".5" stroke-linecap="round">
+    <path d="M20 36 C 19 26, 19 16, 20 9" stroke-width="1.1"/>
+    <path d="M20 33 C 14 27, 9 20, 7 13" stroke-width=".7"/>
+    <path d="M20 33 C 26 27, 31 20, 33 13" stroke-width=".7"/>
+    <path d="M20 27 C 16 23, 13 19, 11 15" stroke-width=".5"/>
+    <path d="M20 27 C 24 23, 27 19, 29 15" stroke-width=".5"/>
+  </g>
+  <!-- luz en el borde superior izquierdo -->
+  <path d="M20 38 C 8 34, 1 22, 3 12 C 5 4, 12 1, 20 7 C 28 1, 35 4, 37 12 C 39 22, 32 34, 20 38 Z"
+        fill="url(#brillo1)"/>
+  <!-- filo del borde -->
+  <path d="M3 12 C 5 4, 12 1, 20 7 C 28 1, 35 4, 37 12"
+        fill="none" stroke="#e8909d" stroke-width=".8" stroke-opacity=".35"/>
+</svg>
