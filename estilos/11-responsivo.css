@@ -1,0 +1,104 @@
+/* ══════════════════════════════════════════════════════════════════════
+   11 · RESPONSIVO (ajustes para tablet y celular)
+   ══════════════════════════════════════════════════════════════════════
+
+   QUÉ ES ESTE ARCHIVO
+   "Responsivo" significa que la web se adapta al tamaño de la pantalla.
+   Acá van los retoques que hacen que todo se vea bien en pantallas
+   chicas. Va ÚLTIMO en la lista de estilos a propósito: en CSS, cuando
+   dos reglas compiten, gana la que se escribió después.
+
+   CÓMO FUNCIONA UN @media
+       @media (max-width: 720px) { ... }
+   se lee como: "si la pantalla mide 720 píxeles de ancho o menos,
+   aplicá estas reglas". Si es más ancha, se ignoran por completo.
+
+   ÍNDICE
+     1. Tablet (hasta 900 px)
+     2. Celular (hasta 600 px)
+     3. Celular angosto (hasta 380 px)
+     4. Pantallas bajitas (poca altura)
+     5. Dispositivos táctiles (sin mouse)
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. TABLET ────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  body { font-size: 17px; }
+
+  .seccion { padding: 4rem 1rem; }
+
+  .mapa-marco iframe { height: 320px; }
+}
+
+
+/* ─── 2. CELULAR ───────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  body { font-size: 16px; }
+
+  /* Todo lo que estaba en dos columnas pasa a una sola */
+  .rejilla-doble,
+  .datos-lugar { grid-template-columns: 1fr; }
+
+  .seccion { padding: 3.5rem .75rem; }
+
+  /* El reproductor ocupa el ancho disponible y se pega abajo */
+  #reproductor {
+    width: auto;
+    left:  calc(var(--marco-grosor) + .5rem);
+    right: calc(var(--marco-grosor) + .5rem);
+    bottom: calc(var(--marco-grosor) + .5rem);
+  }
+
+  /* Los botones del pase se apilan para no quedar apretados */
+  .pase__acciones,
+  .mensaje-exito__acciones,
+  .acciones-lugar { flex-direction: column; align-items: stretch; }
+
+  .pase__cuerpo,
+  .pase__pie,
+  .pase__encabezado { padding-inline: 1.25rem; }
+}
+
+
+/* ─── 3. CELULAR ANGOSTO ───────────────────────────────────────────── */
+@media (max-width: 380px) {
+  /* Las cartelas de la cuenta regresiva se acomodan de a dos por fila */
+  .cuenta-regresiva { gap: .5rem; }
+  .cuenta-regresiva__cartela { min-width: calc(50% - .5rem); }
+
+  .caja-mensaje { padding: 1.25rem 1rem; }
+  .formulario   { padding: 1.5rem 1rem; }
+}
+
+
+/* ─── 4. PANTALLAS BAJITAS ─────────────────────────────────────────────
+   Por ejemplo un celular apaisado, donde sobra ancho pero falta alto.
+   El marco ovalado de la portada se achica para que entre completo.
+   ---------------------------------------------------------------------- */
+@media (max-height: 620px) {
+  /* Se achica la ÚNICA medida de la que depende todo el broche, así el
+     marco y el texto se reducen juntos y el óvalo nunca se deforma.
+     (No se usa max-height sobre el marco: eso lo encajonaría y el texto
+     terminaría más ancho que el óvalo.) */
+  .portada__broche { --ancho-broche: min(92vw, 640px, 80vh); }
+  .portada__desliza { display: none; }   /* no hay lugar: se oculta */
+}
+
+
+/* ─── 5. DISPOSITIVOS TÁCTILES ─────────────────────────────────────────
+   (pointer: coarse) significa "el puntero principal es impreciso", o
+   sea: un dedo. En esos casos no tiene sentido el cursor dibujado ni los
+   efectos que dependen de pasar el mouse por encima.
+   ---------------------------------------------------------------------- */
+@media (pointer: coarse) {
+  #cursor-anillo,
+  #cursor-punto { display: none !important; }
+
+  /* Se devuelve el comportamiento normal por las dudas */
+  .con-cursor-propio,
+  .con-cursor-propio * { cursor: auto !important; }
+
+  /* Menos pétalos molestando el desplazamiento con el dedo */
+  .lluvia-de-petalos { opacity: .7; }
+}

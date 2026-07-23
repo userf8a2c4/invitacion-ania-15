@@ -1,0 +1,260 @@
+/* ══════════════════════════════════════════════════════════════════════
+   09 · REPRODUCTOR DE MÚSICA
+   ══════════════════════════════════════════════════════════════════════
+
+   QUÉ ES ESTE ARCHIVO
+   Estiliza el panelcito de abajo a la derecha que reproduce la canción
+   (Hysteria, de Muse), con botón de play/pausa, control de volumen y
+   botón de silencio.
+
+   DÓNDE SE UBICA
+   Queda POR DENTRO del marco victoriano: por eso su separación del borde
+   es  var(--marco-grosor) + 1rem  y no simplemente 1rem.
+
+   ÍNDICE
+     1. Panel
+     2. Barra de título y botón de minimizar
+     3. Botón de play y datos de la canción
+     4. Control de volumen
+     5. Estados: minimizado y aviso inicial
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 0. LA FILA DE CONTROLES FLOTANTES ────────────────────────────────
+   El reproductor no flota solo: comparte la esquina con el botón de
+   volver arriba. Los dos van en esta fila, alineados por abajo.
+
+   El ancla está acá y no en cada uno por separado. Así el botón queda
+   siempre pegado al reproductor sin tener que saber cuánto mide —que
+   cambia al minimizarlo y al achicarse en el celular—, y no hay ninguna
+   medida repetida en dos lugares esperando a desincronizarse.
+   ---------------------------------------------------------------------- */
+#controles-flotantes {
+  position: fixed;
+  bottom: calc(var(--marco-grosor) + 1rem);
+  right:  calc(var(--marco-grosor) + 1rem);
+  z-index: 500;
+
+  display: flex;
+  align-items: flex-end;   /* pegados por la base, midan lo que midan */
+  gap: .65rem;
+
+  max-width: calc(100vw - var(--marco-grosor) * 2 - 2rem);
+  pointer-events: none;    /* la fila no estorba; sus hijos sí reciben clics */
+}
+#controles-flotantes > * { pointer-events: auto; }
+
+
+/* ─── 1. PANEL ─────────────────────────────────────────────────────── */
+#reproductor {
+  /* Ya no se ancla solo: lo ubica la fila de controles (bloque 0) */
+  position: relative;
+  width: 290px;
+  min-width: 0;            /* deja que se encoja en pantallas chicas */
+  background: var(--color-carbon);
+  border: 1px solid var(--borde-oro-tenue);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, .7), 0 0 0 1px rgba(201, 168, 76, .1);
+  transition: transform .4s var(--curva-elegante),
+              box-shadow .3s,
+              opacity .3s;
+}
+#reproductor:hover {
+  box-shadow: 0 12px 50px rgba(0, 0, 0, .8), 0 0 25px rgba(201, 168, 76, .25);
+}
+
+
+/* ─── 2. BARRA DE TÍTULO ───────────────────────────────────────────── */
+.reproductor__barra-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  padding: .4rem .75rem;
+  border-bottom: 1px solid var(--borde-oro-tenue);
+  font-family: var(--tipo-detalle);
+  font-size: .7rem;
+  letter-spacing: .15em;
+  color: var(--color-oro-apagado);
+}
+
+.reproductor__minimizar {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--color-oro-apagado);
+  font-size: .85rem;
+  line-height: 1;
+  padding: .2rem;
+  transition: color .2s;
+}
+.reproductor__minimizar:hover { color: var(--color-oro); }
+
+
+/* ─── 3. BOTÓN DE PLAY Y DATOS DE LA CANCIÓN ───────────────────────── */
+.reproductor__cuerpo {
+  display: flex;
+  align-items: center;
+  gap: .9rem;
+  padding: .75rem;
+}
+
+.reproductor__play {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--borde-oro-fuerte);
+  background: linear-gradient(135deg, rgba(201, 168, 76, .15), rgba(139, 0, 0, .2));
+  color: var(--color-oro-claro);
+  font-size: 1rem;
+  transition: transform .25s, box-shadow .25s;
+}
+.reproductor__play:hover {
+  transform: scale(1.06);
+  box-shadow: 0 0 18px rgba(201, 168, 76, .35);
+}
+
+.reproductor__info { min-width: 0; }   /* permite recortar textos largos */
+.reproductor__cancion {
+  margin: 0;
+  font-family: var(--tipo-texto);
+  font-size: .95rem;
+  color: var(--color-marfil);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.reproductor__artista {
+  margin: 0;
+  font-family: var(--tipo-detalle);
+  font-size: .75rem;
+  letter-spacing: .1em;
+  color: var(--color-oro-apagado);
+}
+
+
+/* ─── 4. CONTROL DE VOLUMEN ────────────────────────────────────────────
+   Las barras deslizantes se ven distintas en cada navegador y hay que
+   estilarlas por separado: ::-webkit-slider-thumb para Chrome/Edge/Safari
+   y ::-moz-range-thumb para Firefox. El "thumb" es la perilla que se
+   arrastra.
+   ---------------------------------------------------------------------- */
+.reproductor__volumen {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: 0 .75rem .75rem;
+}
+
+.reproductor__silencio {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--color-oro-apagado);
+  font-size: .95rem;
+  line-height: 1;
+  transition: color .2s;
+}
+.reproductor__silencio:hover { color: var(--color-oro); }
+
+.reproductor__deslizador {
+  flex: 1;
+  height: 4px;
+  appearance: none;
+  background: linear-gradient(90deg,
+              var(--color-oro) 0%,
+              var(--color-oro) var(--progreso, 70%),
+              rgba(201, 168, 76, .18) var(--progreso, 70%),
+              rgba(201, 168, 76, .18) 100%);
+  border-radius: 2px;
+  outline: none;
+}
+
+/* Perilla — Chrome, Edge y Safari */
+/* La perilla es un ROMBO, no un círculo: hace eco del ✦ que separa las
+   secciones y del rombo de los divisores. Un control genérico delata que
+   es un widget del navegador; este pertenece a la pieza.
+   El rombo se logra girando un cuadrado 45°. */
+.reproductor__deslizador::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  background: linear-gradient(135deg, var(--color-oro-brillante), var(--color-oro));
+  border: 1px solid var(--color-oro-sombra);
+  box-shadow: 0 0 8px rgba(201, 168, 76, .5);
+  transition: transform .18s, box-shadow .18s;
+}
+.reproductor__deslizador::-webkit-slider-thumb:hover {
+  transform: rotate(45deg) scale(1.3);
+  box-shadow: 0 0 14px rgba(201, 168, 76, .8);
+}
+
+/* Perilla — Firefox */
+.reproductor__deslizador::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  background: linear-gradient(135deg, var(--color-oro-brillante), var(--color-oro));
+  border: 1px solid var(--color-oro-sombra);
+  box-shadow: 0 0 8px rgba(201, 168, 76, .5);
+}
+
+.reproductor__deslizador:focus-visible {
+  outline: 2px solid var(--color-oro-claro);
+  outline-offset: 4px;
+}
+
+
+/* ─── 5. ESTADOS ───────────────────────────────────────────────────────
+   Un solo estado: "minimizado", que lo pliega el invitado con la flecha.
+
+   El panel NUNCA se mueve de lugar. Antes, al llegar al pie de página se
+   deslizaba hacia abajo y terminaba montándose sobre el marco: se quitó.
+   El espacio del pie ya está reservado en 02-marco-victoriano.css, así
+   que no hace falta apartarlo de ninguna manera.
+   ---------------------------------------------------------------------- */
+#reproductor.minimizado .reproductor__cuerpo,
+#reproductor.minimizado .reproductor__volumen { display: none; }
+
+/* Aviso que invita a dar play si el navegador bloqueó la música.
+   Se desvanece solo a los 8 segundos. */
+.reproductor__aviso {
+  position: absolute;
+  bottom: calc(100% + .75rem);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: .4rem .9rem;
+  white-space: nowrap;
+  background: var(--color-carbon);
+  border: 1px solid var(--borde-oro-fuerte);
+  color: var(--color-oro-claro);
+  font-family: var(--tipo-detalle);
+  font-size: .78rem;
+  letter-spacing: .1em;
+  pointer-events: none;
+  animation: pulso-aviso 2s ease-in-out infinite,
+             desvanecer-aviso 1s 8s forwards;
+}
+.reproductor__aviso::after {
+  content: '';
+  position: absolute;
+  bottom: -.45rem;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 7px solid var(--color-oro);
+}
+@keyframes pulso-aviso {
+  0%, 100% { box-shadow: 0 4px 20px rgba(201, 168, 76, .15); }
+  50%      { box-shadow: 0 4px 28px rgba(201, 168, 76, .45); }
+}
+@keyframes desvanecer-aviso {
+  to { opacity: 0; visibility: hidden; }
+}
+
+/* Si la música ya está sonando, el aviso sobra */
+#reproductor.sonando .reproductor__aviso { display: none; }

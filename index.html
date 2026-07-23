@@ -1,0 +1,1739 @@
+<!DOCTYPE html>
+<!--
+  ══════════════════════════════════════════════════════════════════════
+  INVITACIÓN DE XV AÑOS · ANIA
+  ══════════════════════════════════════════════════════════════════════
+
+  QUÉ ES ESTE ARCHIVO
+  Es el esqueleto de la web: define QUÉ cosas hay y en qué orden.
+  No define cómo se ven (eso está en la carpeta estilos/) ni qué hacen
+  (eso está en la carpeta codigo/).
+
+  ÍNDICE DE LA PÁGINA
+     1. Cabecera: tipografías, estilos y datos para compartir
+     2. Capas de fondo: fondo, pétalos y cursor
+     3. Sobre de apertura
+     4. Marco victoriano
+     5. Portada (el nombre dentro del óvalo dorado)
+     6. Mensaje de los papás
+     7. Cuenta regresiva
+     8. Mesa de regalos
+     9. Ubicación y mapa
+    10. Confirmación de asistencia
+    11. Pie de página
+    12. Ventana del pase de acceso
+    13. Reproductor de música
+    14. Archivos de código
+
+  CÓMO CAMBIAR LOS TEXTOS
+  Los textos marcados con  data-dato="..."  NO se editan acá: se editan
+  en  codigo/01-configuracion.js  y la web los completa sola. Así la
+  fecha (por ejemplo) se escribe UNA sola vez y nunca queda distinta en
+  dos lugares.
+  ══════════════════════════════════════════════════════════════════════
+-->
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>XV Años · Ania</title>
+  <meta name="description" content="Acompañanos a celebrar los XV años de Ania. Sábado 24 de octubre de 2026, Salones Alvi, Toluca.">
+
+  <!-- ═══ 1. DATOS PARA CUANDO SE COMPARTE EL ENLACE ═══════════════════
+       Estas etiquetas son las que hacen que, al mandar el enlace por
+       WhatsApp o Instagram, aparezca una tarjeta con imagen y texto en
+       lugar de una dirección pelada.
+
+       ⚠️ Cuando la web esté subida a internet, hay que reemplazar
+       "recursos/vista-previa-compartir.jpg" por la dirección completa
+       (por ejemplo https://tusitio.com/recursos/vista-previa-compartir.jpg),
+       porque WhatsApp necesita la dirección absoluta para ir a buscarla.
+  ═══════════════════════════════════════════════════════════════════ -->
+  <meta property="og:type"        content="website">
+  <meta property="og:title"       content="XV Años de Ania · 24 de Octubre de 2026">
+  <meta property="og:description" content="Una velada para recordar. Acompañanos a celebrar los quince años de Ania.">
+  <meta property="og:image"       content="recursos/vista-previa-compartir.jpg">
+  <meta property="og:locale"      content="es_MX">
+  <meta name="twitter:card"       content="summary_large_image">
+  <meta name="twitter:title"      content="XV Años de Ania · 24 de Octubre de 2026">
+  <meta name="twitter:description" content="Una velada para recordar.">
+  <meta name="twitter:image"      content="recursos/vista-previa-compartir.jpg">
+
+  <!-- Ícono de la pestaña del navegador -->
+  <link rel="icon" type="image/svg+xml" href="recursos/icono.svg">
+
+  <!-- ═══ APLICACIÓN INSTALABLE (PWA) ═════════════════════════════════
+       Con esto, al abrir la invitación en el celular, ofrece "agregar a
+       inicio": queda como una app, con su ícono y su pantalla de arranque,
+       y funciona sin internet (ver sw.js). -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0a0605">
+  <link rel="apple-touch-icon" href="recursos/icono.svg">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Ania XV">
+
+  <!-- Tipografías de Google -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Cinzel+Decorative:wght@400;700&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
+
+  <!-- ═══ ESTILOS ═════════════════════════════════════════════════════
+       Se cargan en orden numérico. El orden IMPORTA: si dos archivos
+       dicen cosas distintas sobre lo mismo, gana el que va último.
+  ═══════════════════════════════════════════════════════════════════ -->
+  <link rel="stylesheet" href="estilos/01-fundamentos.css">
+  <link rel="stylesheet" href="estilos/02-marco-victoriano.css">
+  <link rel="stylesheet" href="estilos/03-sobre-de-apertura.css">
+  <link rel="stylesheet" href="estilos/04-portada.css">
+  <link rel="stylesheet" href="estilos/05-cuenta-regresiva.css">
+  <link rel="stylesheet" href="estilos/06-secciones.css">
+  <link rel="stylesheet" href="estilos/07-formulario.css">
+  <link rel="stylesheet" href="estilos/08-pase-de-acceso.css">
+  <link rel="stylesheet" href="estilos/09-reproductor.css">
+  <link rel="stylesheet" href="estilos/10-cursor-y-petalos.css">
+  <link rel="stylesheet" href="estilos/12-haces-de-luz.css">
+  <link rel="stylesheet" href="estilos/11-responsivo.css">
+
+  <!-- Bibliotecas externas: envío de correos y generación del código QR -->
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     BIBLIOTECA DE ROSAS (dibujos compartidos por TODA la web)
+     ══════════════════════════════════════════════════════════════════
+     Este bloque no se ve: es el "juego de sellos" con las rosas, los
+     capullos y las hojas. Tanto el relicario de la portada como las
+     enredaderas del marco los invocan desde acá con <use href="#...">.
+
+     Están en un solo lugar A PROPÓSITO: antes el relicario tenía sus
+     propias flores y las enredaderas otras distintas, y se notaba la
+     disonancia. Si querés cambiar cómo son las rosas de la web, se
+     cambian acá una sola vez y cambian en todos lados.
+══════════════════════════════════════════════════════════════════ -->
+<svg id="biblioteca-de-rosas" width="0" height="0" aria-hidden="true"
+     style="position:absolute">
+<defs>
+      <linearGradient id="rosa-tallo" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%"   stop-color="#3d3216"/>
+        <stop offset="35%"  stop-color="#8a7431"/>
+        <stop offset="62%"  stop-color="#5f5122"/>
+        <stop offset="100%" stop-color="#2a2210"/>
+      </linearGradient>
+      <linearGradient id="rosa-hoja-verde" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%"   stop-color="#5d6b2c"/>
+        <stop offset="45%"  stop-color="#38441a"/>
+        <stop offset="100%" stop-color="#1a2410"/>
+      </linearGradient>
+
+      <!-- ═══ LUZ DE LOS PÉTALOS ═══
+           Cada pétalo lleva su PROPIO degradado, orientado de la base a
+           la punta: oscuro donde nace (ahí está en sombra, metido entre
+           los otros) y claro en el borde de afuera, donde la luz lo
+           atraviesa. Como los pétalos se dibujan girados, el degradado
+           gira con ellos, así que cada uno queda iluminado según hacia
+           dónde mira. Eso es lo que reemplaza al viejo círculo rojo de
+           relleno: ya no hay un fondo macizo, la flor ES sus pétalos. -->
+      <!-- ⚠️ PALETA ÚNICA PARA TODAS LAS ROSAS DE LA WEB.
+           Estos tonos son los MISMOS que usan las rosas del relicario y
+           las de las esquinas del marco: rojo vino profundo, nunca un
+           rosa vivo. El tono más claro que se permite es #9c2436; si se
+           sube de ahí, las flores empiezan a parecer dibujo animado y
+           dejan de pegar con el resto de la invitación. -->
+      <linearGradient id="rosa-pet-cara" x1="0" y1="1" x2=".18" y2="0">
+        <stop offset="0%"   stop-color="#2c070e"/>
+        <stop offset="38%"  stop-color="#5c1220"/>
+        <stop offset="78%"  stop-color="#7e1b2c"/>
+        <stop offset="100%" stop-color="#9c2436"/>
+      </linearGradient>
+      <linearGradient id="rosa-pet-media" x1="0" y1="1" x2=".12" y2="0">
+        <stop offset="0%"   stop-color="#240610"/>
+        <stop offset="48%"  stop-color="#4e0f1c"/>
+        <stop offset="100%" stop-color="#7a1928"/>
+      </linearGradient>
+      <linearGradient id="rosa-pet-interior" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0%"   stop-color="#170309"/>
+        <stop offset="55%"  stop-color="#3d0b15"/>
+        <stop offset="100%" stop-color="#5e1422"/>
+      </linearGradient>
+      <!-- El REVERSO del pétalo es más apagado y frío que la cara -->
+      <linearGradient id="rosa-pet-dorso" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0%"   stop-color="#1c050b"/>
+        <stop offset="58%"  stop-color="#3f0f19"/>
+        <stop offset="100%" stop-color="#63202c"/>
+      </linearGradient>
+      <!-- Verdes apagados: un verde vivo también delata el dibujo -->
+      <linearGradient id="rosa-caliz" x1="0" y1="1" x2="1" y2="0">
+        <stop offset="0%"   stop-color="#1a2410"/>
+        <stop offset="55%"  stop-color="#38441a"/>
+        <stop offset="100%" stop-color="#5d6b2c"/>
+      </linearGradient>
+
+      <!-- ══════════════════════════════════════════════════════════════
+           LAS ROSAS
+           ══════════════════════════════════════════════════════════════
+           DOS REGLAS QUE SE SIGUEN EN TODAS:
+
+           1. NO HAY RELLENO DE FONDO. La silueta de la flor es la unión
+              de sus pétalos, nada más. Antes había un círculo rojo macizo
+              detrás para tapar los huecos, y eso hacía que la flor fuera
+              en realidad un disco con pétalos encima. Ahora los pétalos
+              se superponen entre sí de atrás hacia adelante, así que no
+              queda ningún hueco por tapar.
+
+           2. NO TODAS MIRAN AL FRENTE. Una planta de verdad tiene flores
+              orientadas para cualquier lado. Por eso hay cinco versiones:
+              de frente, de perfil, de tres cuartos, de espaldas y a medio
+              abrir, más el capullo. El generador las va mezclando.
+           ══════════════════════════════════════════════════════════════ -->
+
+      <!-- ─── ROSA DE FRENTE ───
+           Dos rasgos hacen que un dibujo se lea como ROSA y no como una
+           bola de pétalos:
+             · el BORDE ONDULADO de cada pétalo (tres o cuatro ondas en el
+               canto exterior, nunca un arco liso);
+             · la ESPIRAL del centro: pétalos enrollados que se van
+               achicando y girando, cada uno tapando al anterior.
+           Los contornos NO son una línea negra de historieta: son una
+           sombra vino, fina y semitransparente, que solo insinúa la
+           separación entre pétalo y pétalo. Antes eran casi negros y
+           opacos, y por eso la flor se leía "dibujada"; al ablandarlos, se
+           ve el degradado claro del borde de cada pétalo (la luz que lo
+           atraviesa) y la flor pasa a tener carne, no contorno. -->
+      <g id="rosa-frente">
+        <g fill="url(#rosa-pet-cara)" stroke="#2c0b13" stroke-width=".5" stroke-opacity=".5">
+          <path d="M0 -3 C -12 -6,-23 -14,-26 -24 C -28 -31,-25 -36,-20 -36
+                   C -16 -36,-15 -32,-11 -33 C -7 -35,-6 -31,-2 -32
+                   C 2 -33,4 -30,8 -32 C 13 -34,18 -31,20 -26
+                   C 23 -18,13 -7,0 -3 Z"/>
+          <path d="M0 -3 C -12 -6,-23 -14,-26 -24 C -28 -31,-25 -36,-20 -36
+                   C -16 -36,-15 -32,-11 -33 C -7 -35,-6 -31,-2 -32
+                   C 2 -33,4 -30,8 -32 C 13 -34,18 -31,20 -26
+                   C 23 -18,13 -7,0 -3 Z" transform="rotate(73) scale(.97)"/>
+          <path d="M0 -3 C -12 -6,-23 -14,-26 -24 C -28 -31,-25 -36,-20 -36
+                   C -16 -36,-15 -32,-11 -33 C -7 -35,-6 -31,-2 -32
+                   C 2 -33,4 -30,8 -32 C 13 -34,18 -31,20 -26
+                   C 23 -18,13 -7,0 -3 Z" transform="rotate(147) scale(1.05)"/>
+          <path d="M0 -3 C -12 -6,-23 -14,-26 -24 C -28 -31,-25 -36,-20 -36
+                   C -16 -36,-15 -32,-11 -33 C -7 -35,-6 -31,-2 -32
+                   C 2 -33,4 -30,8 -32 C 13 -34,18 -31,20 -26
+                   C 23 -18,13 -7,0 -3 Z" transform="rotate(216) scale(.93)"/>
+          <path d="M0 -3 C -12 -6,-23 -14,-26 -24 C -28 -31,-25 -36,-20 -36
+                   C -16 -36,-15 -32,-11 -33 C -7 -35,-6 -31,-2 -32
+                   C 2 -33,4 -30,8 -32 C 13 -34,18 -31,20 -26
+                   C 23 -18,13 -7,0 -3 Z" transform="rotate(291)"/>
+        </g>
+
+        <g fill="url(#rosa-pet-media)" stroke="#2c0b13" stroke-width=".45" stroke-opacity=".45">
+          <path d="M0 -2 C -9 -5,-16 -11,-18 -18 C -19 -23,-17 -27,-13 -27
+                   C -10 -27,-9 -24,-6 -25 C -3 -26,-2 -23,1 -24
+                   C 4 -25,6 -23,9 -24 C 13 -25,16 -22,16 -18
+                   C 16 -12,9 -5,0 -2 Z" transform="rotate(38)"/>
+          <path d="M0 -2 C -9 -5,-16 -11,-18 -18 C -19 -23,-17 -27,-13 -27
+                   C -10 -27,-9 -24,-6 -25 C -3 -26,-2 -23,1 -24
+                   C 4 -25,6 -23,9 -24 C 13 -25,16 -22,16 -18
+                   C 16 -12,9 -5,0 -2 Z" transform="rotate(112) scale(.94)"/>
+          <path d="M0 -2 C -9 -5,-16 -11,-18 -18 C -19 -23,-17 -27,-13 -27
+                   C -10 -27,-9 -24,-6 -25 C -3 -26,-2 -23,1 -24
+                   C 4 -25,6 -23,9 -24 C 13 -25,16 -22,16 -18
+                   C 16 -12,9 -5,0 -2 Z" transform="rotate(188) scale(1.02)"/>
+          <path d="M0 -2 C -9 -5,-16 -11,-18 -18 C -19 -23,-17 -27,-13 -27
+                   C -10 -27,-9 -24,-6 -25 C -3 -26,-2 -23,1 -24
+                   C 4 -25,6 -23,9 -24 C 13 -25,16 -22,16 -18
+                   C 16 -12,9 -5,0 -2 Z" transform="rotate(259) scale(.9)"/>
+        </g>
+
+        <!-- LA ESPIRAL: seis pétalos enrollados, cada uno más chico y
+             girado ~65°, de modo que se envuelven unos a otros. -->
+        <g fill="url(#rosa-pet-interior)" stroke="#2c0b13" stroke-width=".4" stroke-opacity=".45">
+          <path d="M0 0 C -2 -7,3 -13,9 -13 C 15 -13,18 -8,16 -3
+                   C 14 2,7 5,2 4 C 1 3,0 2,0 0 Z"/>
+          <path d="M0 0 C -2 -7,3 -13,9 -13 C 15 -13,18 -8,16 -3
+                   C 14 2,7 5,2 4 C 1 3,0 2,0 0 Z" transform="rotate(65) scale(.84)"/>
+          <path d="M0 0 C -2 -7,3 -13,9 -13 C 15 -13,18 -8,16 -3
+                   C 14 2,7 5,2 4 C 1 3,0 2,0 0 Z" transform="rotate(130) scale(.7)"/>
+          <path d="M0 0 C -2 -7,3 -13,9 -13 C 15 -13,18 -8,16 -3
+                   C 14 2,7 5,2 4 C 1 3,0 2,0 0 Z" transform="rotate(195) scale(.56)"/>
+          <path d="M0 0 C -2 -7,3 -13,9 -13 C 15 -13,18 -8,16 -3
+                   C 14 2,7 5,2 4 C 1 3,0 2,0 0 Z" transform="rotate(260) scale(.43)"/>
+          <path d="M0 0 C -2 -7,3 -13,9 -13 C 15 -13,18 -8,16 -3
+                   C 14 2,7 5,2 4 C 1 3,0 2,0 0 Z" transform="rotate(325) scale(.31)"/>
+        </g>
+        <path d="M0 -1 C 2 -4,6 -3,6 0 C 6 3,3 4,1 3"
+              fill="none" stroke="#2c0b13" stroke-width="1.1" stroke-opacity=".5" stroke-linecap="round"/>
+      </g>
+
+      <!-- ─── ROSA DE PERFIL Y DE TRES CUARTOS ───
+           TRUCO DE PERSPECTIVA (y por qué es mejor que dibujarlas de nuevo)
+
+           Cuando mirás una rosa de costado, no ves otra flor: ves LA MISMA
+           flor achatada, porque la perspectiva comprime lo que se aleja.
+           Eso se llama escorzo.
+
+           Así que en vez de inventar una rosa distinta para cada ángulo
+           —que es donde antes salían unos pétalos redondos como orejas—,
+           se reutiliza la rosa de frente y se la APLASTA en vertical:
+
+               scale(1, 0.66) → tres cuartos
+               scale(1, 0.38) → casi de perfil
+
+           Como la forma de base ya funciona, las tres versiones son
+           coherentes entre sí. Debajo se agrega el cuerpo de la copa y el
+           cáliz, que es lo único que de verdad se ve distinto según el
+           ángulo desde el que se mire. -->
+
+      <g id="rosa-tres-cuartos">
+        <!-- tallo y receptáculo asomando abajo -->
+        <path d="M-4 16 C -5 24,-2 30,1 32 C 4 30,6 24,5 16 Z"
+              fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".45" stroke-opacity=".5"/>
+        <g fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".4" stroke-opacity=".5">
+          <path d="M-6 14 C -14 13,-19 6,-19 -1 C -14 4,-9 8,-5 10 Z"/>
+          <path d="M7 14 C 15 13,20 6,20 -1 C 15 4,10 8,6 10 Z"/>
+        </g>
+
+        <!-- cuerpo de la copa, visto en escorzo -->
+        <path d="M-21 -2 C -22 7,-13 16,0 17 C 13 16,22 7,21 -2
+                 C 19 -9,11 -13,0 -13 C -11 -13,-19 -9,-21 -2 Z"
+              fill="url(#rosa-pet-dorso)" stroke="#2c0b13" stroke-width=".55" stroke-opacity=".5"/>
+
+        <!-- la flor, comprimida por la perspectiva -->
+        <g transform="translate(0 -4) scale(1 .66)">
+          <use href="#rosa-frente"/>
+        </g>
+      </g>
+
+      <g id="rosa-perfil">
+        <path d="M-4 20 C -5 28,-2 34,1 36 C 4 34,6 28,5 20 Z"
+              fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".45" stroke-opacity=".5"/>
+        <g fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".4" stroke-opacity=".5">
+          <path d="M-6 18 C -15 17,-21 9,-21 1 C -15 7,-10 12,-5 14 Z"/>
+          <path d="M7 18 C 16 17,22 9,22 1 C 16 7,11 12,6 14 Z"/>
+          <path d="M0 20 C -3 27,-2 34,2 37 C 3 30,3 24,2 20 Z"/>
+        </g>
+
+        <!-- la copa se ve casi entera: es lo que domina de perfil -->
+        <path d="M-22 -1 C -23 10,-14 20,0 22 C 14 20,23 10,22 -1
+                 C 20 -9,12 -14,0 -14 C -12 -14,-20 -9,-22 -1 Z"
+              fill="url(#rosa-pet-dorso)" stroke="#2c0b13" stroke-width=".55" stroke-opacity=".5"/>
+        <!-- luz en la panza de la copa -->
+        <path d="M-15 -4 C -13 4,-7 10,1 12" fill="none"
+              stroke="#a15361" stroke-width="1.4" stroke-opacity=".22" stroke-linecap="round"/>
+
+        <!-- la flor, muy achatada: apenas se asoma por el borde -->
+        <g transform="translate(0 -9) scale(1 .38)">
+          <use href="#rosa-frente"/>
+        </g>
+      </g>
+
+      <!-- ─── ROSA A MEDIO ABRIR ───
+           Mismo criterio: la copa cerrada domina y la flor asoma apenas
+           por arriba, todavía muy comprimida. -->
+      <g id="rosa-media">
+        <path d="M-4 16 C -5 24,-2 30,1 32 C 4 30,6 24,5 16 Z"
+              fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".45" stroke-opacity=".5"/>
+        <g fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".4" stroke-opacity=".5">
+          <path d="M-6 14 C -14 12,-19 4,-18 -3 C -13 3,-9 7,-5 9 Z"/>
+          <path d="M7 14 C 15 12,20 4,19 -3 C 14 3,10 7,6 9 Z"/>
+        </g>
+
+        <!-- copa todavía cerrada, con el borde apenas ondulado -->
+        <path d="M-16 -3 C -17 6,-10 15,0 17 C 10 15,17 6,16 -3
+                 C 15 -10,12 -15,7 -17 C 4 -19,2 -15,-1 -16
+                 C -5 -17,-9 -19,-12 -17 C -15 -15,-16 -9,-16 -3 Z"
+              fill="url(#rosa-pet-media)" stroke="#2c0b13" stroke-width=".55" stroke-opacity=".5"/>
+        <path d="M-11 -6 C -9 1,-4 7,2 9" fill="none"
+              stroke="#a15361" stroke-width="1.3" stroke-opacity=".2" stroke-linecap="round"/>
+
+        <!-- el cogollo asomando, muy comprimido -->
+        <g transform="translate(0 -11) scale(.62 .26)">
+          <use href="#rosa-frente"/>
+        </g>
+      </g>
+
+      <!-- ─── ROSA DE ESPALDAS ───
+           La flor mira hacia adentro del marco, así que se le ve la nuca:
+           la estrella de sépalos y el reverso de los pétalos, que es más
+           apagado y frío que la cara. Aporta profundidad, porque no todas
+           las flores de una planta miran para el mismo lado. -->
+      <g id="rosa-dorso">
+        <g fill="url(#rosa-pet-dorso)" stroke="#2c0b13" stroke-width=".55" stroke-opacity=".5">
+          <path d="M0 -1 C -12 -5,-21 -14,-21 -23 C -21 -31,-13 -34,-7 -30
+                   C -2 -27,3 -30,8 -28 C 15 -25,17 -16,13 -9
+                   C 9 -3,5 0,0 -1 Z" transform="rotate(24)"/>
+          <path d="M0 -1 C -12 -5,-21 -14,-21 -23 C -21 -31,-13 -34,-7 -30
+                   C -2 -27,3 -30,8 -28 C 15 -25,17 -16,13 -9
+                   C 9 -3,5 0,0 -1 Z" transform="rotate(150) scale(.94)"/>
+          <path d="M0 -1 C -12 -5,-21 -14,-21 -23 C -21 -31,-13 -34,-7 -30
+                   C -2 -27,3 -30,8 -28 C 15 -25,17 -16,13 -9
+                   C 9 -3,5 0,0 -1 Z" transform="rotate(268) scale(1.02)"/>
+        </g>
+        <!-- estrella de sépalos -->
+        <g fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".5" stroke-opacity=".5">
+          <path d="M0 2 C -5 -8,-4 -20,1 -28 C 5 -20,6 -8,2 2 Z"/>
+          <path d="M0 2 C -5 -8,-4 -20,1 -28 C 5 -20,6 -8,2 2 Z" transform="rotate(72)"/>
+          <path d="M0 2 C -5 -8,-4 -20,1 -28 C 5 -20,6 -8,2 2 Z" transform="rotate(144)"/>
+          <path d="M0 2 C -5 -8,-4 -20,1 -28 C 5 -20,6 -8,2 2 Z" transform="rotate(216)"/>
+          <path d="M0 2 C -5 -8,-4 -20,1 -28 C 5 -20,6 -8,2 2 Z" transform="rotate(288)"/>
+        </g>
+        <circle r="4.6" fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".5" stroke-opacity=".5"/>
+      </g>
+
+      <!-- ─── CAPULLO ───
+           Un huso terminado en punta, con los pétalos enrollados uno
+           sobre otro y el cáliz de sépalos largos abrazándolo. -->
+      <g id="rosa-capullo">
+        <path d="M0 -30 C -7 -23,-11 -12,-10 -1 C -9 8,-5 14,-1 16
+                 C -2 8,-3 -2,-2 -10 C -1 -18,-1 -25,0 -30 Z"
+              fill="url(#rosa-pet-dorso)" stroke="#2c0b13" stroke-width=".6" stroke-opacity=".5"/>
+        <path d="M0 -30 C 7 -23,11 -12,10 -1 C 9 8,5 14,1 16
+                 C 0 8,1 -2,0 -10 C -1 -18,-1 -25,0 -30 Z"
+              fill="url(#rosa-pet-cara)" stroke="#2c0b13" stroke-width=".6" stroke-opacity=".5"/>
+        <path d="M0 -28 C 5 -21,8 -11,7 -1 C 6 6,3 11,1 13"
+              fill="none" stroke="#a15361" stroke-width="1" stroke-opacity=".32" stroke-linecap="round"/>
+
+        <g fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".55" stroke-opacity=".5">
+          <path d="M-9 2 C -16 5,-21 14,-20 23 C -14 16,-10 9,-7 4 Z"/>
+          <path d="M9 2 C 16 5,21 14,20 23 C 14 16,10 9,7 4 Z"/>
+          <path d="M-5 11 C -8 18,-8 26,-4 31 C -2 24,-2 17,-2 12 Z"/>
+          <path d="M5 11 C 8 18,8 26,4 31 C 2 24,2 17,2 12 Z"/>
+        </g>
+        <path d="M0 13 C 0 21,0 27,0 33" fill="none"
+              stroke="#38441a" stroke-width="2.4" stroke-linecap="round"/>
+      </g>
+
+      <!-- HOJA (apunta hacia arriba y hacia afuera) -->
+      <g id="rosa-hoja">
+        <path d="M0 0 C 16 -22,40 -32,62 -28 C 56 -6,38 10,16 12 C 8 12,2 8,0 0 Z"
+              fill="url(#rosa-hoja-verde)" stroke="#2b3512" stroke-width=".6" stroke-opacity=".55"/>
+        <path d="M2 1 C 20 -8,40 -18,60 -26" fill="none" stroke="#6d7a35"
+              stroke-width="1" stroke-opacity=".55"/>
+        <path d="M12 2 l 10 -9 M26 -3 l 9 -10 M40 -10 l 8 -9"
+              stroke="#5d6b2c" stroke-width=".7" stroke-opacity=".38"/>
+      </g>
+    </defs>
+</svg>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ÍCONOS DEL PASE DE ACCESO
+     ══════════════════════════════════════════════════════════════════
+     Dibujos de línea fina en oro, del mismo lenguaje que el resto de la
+     invitación. Reemplazan a los emoji (📅 🕖 📍 …), que rompían el tono:
+     son de colores planos, tienen estilo de teclado de celular y cada
+     sistema operativo los dibuja distinto.
+
+     Todos comparten la misma caja de 24×24 y el mismo grosor de trazo,
+     así se ven como un juego y no como piezas sueltas.
+══════════════════════════════════════════════════════════════════ -->
+<svg id="iconos-del-pase" width="0" height="0" aria-hidden="true" style="position:absolute">
+  <defs>
+    <linearGradient id="oro-icono" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#e6d090"/>
+      <stop offset="55%"  stop-color="#c9a84c"/>
+      <stop offset="100%" stop-color="#8a6a2c"/>
+    </linearGradient>
+
+    <!-- FECHA · almanaque con una estrella marcando el día -->
+    <g id="icono-fecha">
+      <rect x="3.2" y="5.4" width="17.6" height="15.4" rx="1.6"/>
+      <path d="M3.2 10.2 H20.8"/>
+      <path d="M7.6 3.2 V7.2 M16.4 3.2 V7.2"/>
+      <path d="M12 13.2 l.9 2 2.1.2-1.6 1.5.5 2.1-1.9-1.1-1.9 1.1.5-2.1-1.6-1.5 2.1-.2 Z"/>
+    </g>
+
+    <!-- HORA · reloj con marcas de las horas -->
+    <g id="icono-hora">
+      <circle cx="12" cy="12" r="8.6"/>
+      <path d="M12 6.8 V12 L15.6 14.2"/>
+      <path d="M12 3.9 V5.2 M12 18.8 V20.1 M3.9 12 H5.2 M18.8 12 H20.1"/>
+    </g>
+
+    <!-- LUGAR · una plomada ornamental, más elegante que el pin típico -->
+    <g id="icono-lugar">
+      <path d="M12 21.2 C 12 21.2, 5.4 14.6, 5.4 10.2 A 6.6 6.6 0 0 1 18.6 10.2
+               C 18.6 14.6, 12 21.2, 12 21.2 Z"/>
+      <circle cx="12" cy="10" r="2.5"/>
+    </g>
+
+    <!-- ADULTOS · DOS figuras. Que sean dos es lo que lo distingue de un
+         golpe de vista del ícono de niños, que es una sola. -->
+    <g id="icono-adultos">
+      <circle cx="8.4" cy="7.4" r="2.5"/>
+      <path d="M3.4 19.8 C 3.4 15.4, 5.6 12.4, 8.4 12.4 C 11.2 12.4, 13.4 15.4, 13.4 19.8"/>
+      <circle cx="16" cy="8.6" r="2.1"/>
+      <path d="M12.6 19.8 C 12.6 16.2, 14.2 13.6, 16 13.6 C 18.4 13.6, 20.6 16.2, 20.6 19.8"/>
+    </g>
+
+    <!-- NIÑOS · UNA sola figura, más chica y con la cabeza más grande en
+         proporción, que es lo que lee como infantil -->
+    <g id="icono-ninos">
+      <circle cx="12" cy="8.8" r="3"/>
+      <path d="M8 20 C 8 16.4, 9.8 14.2, 12 14.2 C 14.2 14.2, 16 16.4, 16 20"/>
+      <path d="M9.8 20 H14.2"/>
+    </g>
+
+    <!-- REGALO · caja con moño -->
+    <g id="icono-regalo">
+      <rect x="3.6" y="10.6" width="16.8" height="10.2" rx="1.2"/>
+      <path d="M2.6 7.4 H21.4 V10.6 H2.6 Z"/>
+      <path d="M12 7.4 V20.8"/>
+      <path d="M12 7.4 C 9.6 7.4, 7.4 6.4, 7.4 4.8 C 7.4 3.6, 8.4 3, 9.4 3.4
+               C 10.8 4, 11.6 5.6, 12 7.4 Z"/>
+      <path d="M12 7.4 C 14.4 7.4, 16.6 6.4, 16.6 4.8 C 16.6 3.6, 15.6 3, 14.6 3.4
+               C 13.2 4, 12.4 5.6, 12 7.4 Z"/>
+    </g>
+
+    <!-- VEGETARIANO · hoja -->
+    <g id="icono-hoja-menu">
+      <path d="M20 4 C 20 13, 14.6 19.4, 5.6 19.4 C 4.6 10.6, 10.4 4, 20 4 Z"/>
+      <path d="M5.6 19.4 C 9.4 15.2, 13.4 11.4, 17.6 8"/>
+    </g>
+
+    <!-- SONIDO · altavoz con ondas -->
+    <g id="icono-sonido">
+      <path d="M4 9.4 H7.4 L12 5.4 V18.6 L7.4 14.6 H4 Z"/>
+      <path d="M15.4 9.2 C 16.8 10.6, 16.8 13.4, 15.4 14.8"/>
+      <path d="M18 6.8 C 20.6 9.4, 20.6 14.6, 18 17.2"/>
+    </g>
+
+    <!-- SILENCIO · el mismo altavoz, tachado -->
+    <g id="icono-silencio">
+      <path d="M4 9.4 H7.4 L12 5.4 V18.6 L7.4 14.6 H4 Z"/>
+      <path d="M15.6 9.6 L20.4 14.4 M20.4 9.6 L15.6 14.4"/>
+    </g>
+
+    <!-- ESTACIONAMIENTO · llave de coche con su etiqueta -->
+    <g id="icono-estacionamiento">
+      <circle cx="7.6" cy="12.6" r="3.4"/>
+      <path d="M10.8 11.4 H20.4 V14.2 H18.4 V12.4 H16 V14.2 H14 V12.4 H10.8"/>
+      <circle cx="7.6" cy="12.6" r="1"/>
+    </g>
+
+    <!-- VESTIMENTA · pajarita de etiqueta -->
+    <g id="icono-vestimenta">
+      <path d="M10.4 9.2 L3.8 6.6 C 3.2 6.4, 2.8 6.8, 2.8 7.4 V17.2
+               C 2.8 17.8, 3.2 18.2, 3.8 18 L10.4 15.4 Z"/>
+      <path d="M13.6 9.2 L20.2 6.6 C 20.8 6.4, 21.2 6.8, 21.2 7.4 V17.2
+               C 21.2 17.8, 20.8 18.2, 20.2 18 L13.6 15.4 Z"/>
+      <rect x="9.8" y="9" width="4.4" height="6.6" rx="1.2"/>
+    </g>
+
+    <!-- MENÚS · campana de servicio, el símbolo del banquete.
+         La cúpula se dibuja con curvas y no con un arco: un arco cuyo
+         radio es justo la mitad de la cuerda se vuelve inestable y el
+         navegador lo achata hasta dejarlo en una punta. -->
+    <g id="icono-menus">
+      <path d="M4.6 17.4 C 4.6 11.8, 8 8.4, 12 8.4 C 16 8.4, 19.4 11.8, 19.4 17.4 Z"/>
+      <path d="M3.2 17.4 H20.8"/>
+      <path d="M12 8.4 V6.6"/>
+      <circle cx="12" cy="5.6" r="1"/>
+      <path d="M6.4 20.4 H17.6"/>
+    </g>
+  </defs>
+</svg>
+
+<!-- ═══ 2. CAPAS DE FONDO ═══════════════════════════════════════════ -->
+
+<!-- El dibujo ornamental del fondo, que se mueve más lento al hacer scroll -->
+<div id="capa-fondo"></div>
+
+<!-- LOS PÉTALOS CAEN EN TRES PLANOS
+     No es un capricho: la profundidad es lo que convierte una lluvia de
+     recortes en una escena con aire. Cada plano vive a una altura
+     distinta del apilamiento (ver 10-cursor-y-petalos.css):
+
+       fondo  → detrás del relicario y de las cajas de texto
+       medio  → a la altura del relicario: le caen ENCIMA y resbalan
+       frente → por delante de todo el contenido
+
+     El del medio es el que hace la magia: al estar al mismo nivel que el
+     relicario, puede chocar con él. -->
+<div class="lluvia-de-petalos lluvia-de-petalos--fondo"  id="petalos-fondo"  aria-hidden="true"></div>
+<div class="lluvia-de-petalos lluvia-de-petalos--medio"  id="petalos-medio"  aria-hidden="true"></div>
+<div class="lluvia-de-petalos lluvia-de-petalos--frente" id="petalos-frente" aria-hidden="true"></div>
+
+<!-- HACES DE LUZ
+     Rayos que entran en diagonal desde arriba, como el sol colándose
+     entre las nubes. Bañan el relicario, las enredaderas y el marco.
+     El movimiento lo lleva 14-haces-de-luz.js. -->
+<div id="haces-de-luz" aria-hidden="true">
+  <span class="haz"></span>
+  <span class="haz"></span>
+  <span class="haz"></span>
+  <span class="haz"></span>
+  <span class="haz"></span>
+</div>
+
+<!-- MOTAS DE POLVO
+     Partículas doradas mínimas suspendidas en la luz. Es lo que vuelve
+     los haces VOLUMÉTRICOS: sin ellas la luz es una mancha translúcida;
+     con ellas se ve el aire. Las crea y anima codigo/18-motas-de-polvo.js. -->
+<div id="motas-de-polvo" aria-hidden="true"></div>
+
+<!-- VELO DE REVELADO
+     El destello cálido de "encender las luces" al abrir el sobre: la
+     oscuridad se abre, un baño de luz inunda la página y se asienta,
+     dejándola revelada. Se dispara una sola vez (body.revelando) junto
+     con el eco de la música. Ver estilos/12-haces-de-luz.css. -->
+<div id="velo-de-revelado" aria-hidden="true"></div>
+
+<!-- Las dos piezas del cursor dorado -->
+<div id="cursor-anillo" aria-hidden="true"></div>
+<div id="cursor-punto"  aria-hidden="true"></div>
+
+
+<!-- ═══ 3. SOBRE DE APERTURA ════════════════════════════════════════ -->
+<div id="sobre-de-apertura" class="esta-cargando" tabindex="-1">
+
+  <!-- Lo que se ve mientras carga todo -->
+  <div class="sobre__precarga">
+    <svg class="sobre__monograma" viewBox="0 0 100 100" aria-hidden="true">
+      <!-- Una "A" caligráfica de UN SOLO TRAZO, dibujada como una firma.
+
+           Es cursiva y no geométrica a propósito: la de antes eran tres
+           rectas y un círculo, y se leía como un ícono de aplicación, no
+           como el monograma de una invitación.
+
+           Y es un trazo único, sin levantar la pluma: entra con una
+           pequeña floritura abajo a la izquierda, sube al ápice, baja
+           por la derecha y vuelve sobre sí para trazar el travesaño, que
+           termina en un gancho. Por eso al cargar se dibuja de corrido,
+           como si una mano la firmara de una sola pasada.
+
+           pathLength="620" hace que la animación mida el trazo en 620
+           unidades imaginarias, coincidiendo con el stroke-dasharray del
+           CSS. Si se cambia el dibujo, este número puede quedar igual:
+           es una escala, no el largo real. -->
+      <path pathLength="620" d="M10 80
+        C 14 74, 20 74, 26 78
+        C 32 60, 42 32, 52 12
+        C 62 34, 73 62, 88 88
+        C 79 75, 66 64, 42 64
+        C 34 64, 29 68, 26 74" />
+    </svg>
+    <p class="sobre__cargando">Preparando la velada…</p>
+  </div>
+
+  <!-- El sobre lacrado, ya con todo cargado.
+       El sobre entero es el botón: se abre con clic o con la tecla Enter. -->
+  <div class="sobre__carta">
+    <p class="sobre__saludo" id="saludo-del-sobre">Estás invitado</p>
+
+    <svg class="sobre__ilustracion" id="ilustracion-del-sobre"
+         viewBox="0 0 440 300" role="button" tabindex="0"
+         aria-label="Sobre cerrado con un sello de lacre. Activalo para abrir la invitación.">
+      <defs>
+        <!-- Papel: no es un color plano, tiene veta y sombreado -->
+        <linearGradient id="sob-papel" x1=".1" y1="0" x2=".9" y2="1">
+          <stop offset="0%"   stop-color="#332514"/>
+          <stop offset="42%"  stop-color="#241a0e"/>
+          <stop offset="78%"  stop-color="#180f08"/>
+          <stop offset="100%" stop-color="#100a06"/>
+        </linearGradient>
+        <linearGradient id="sob-solapa" x1=".2" y1="0" x2=".8" y2="1">
+          <stop offset="0%"   stop-color="#3d2c19"/>
+          <stop offset="55%"  stop-color="#2a1e11"/>
+          <stop offset="100%" stop-color="#150e08"/>
+        </linearGradient>
+        <linearGradient id="sob-oro" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%"   stop-color="#ecd89a"/>
+          <stop offset="35%"  stop-color="#c9a84c"/>
+          <stop offset="70%"  stop-color="#8a6a2c"/>
+          <stop offset="100%" stop-color="#e0c26a"/>
+        </linearGradient>
+
+        <!-- Cera: tres degradados superpuestos para dar volumen real -->
+        <radialGradient id="sob-cera-base" cx="34%" cy="28%" r="78%">
+          <stop offset="0%"   stop-color="#d4485a"/>
+          <stop offset="34%"  stop-color="#a52338"/>
+          <stop offset="72%"  stop-color="#6d1524"/>
+          <stop offset="100%" stop-color="#3a0810"/>
+        </radialGradient>
+        <linearGradient id="sob-cera-luz" x1=".2" y1=".1" x2=".8" y2=".9">
+          <stop offset="0%"   stop-color="#ff9aa6" stop-opacity=".55"/>
+          <stop offset="38%"  stop-color="#ff9aa6" stop-opacity="0"/>
+          <stop offset="100%" stop-color="#26050b" stop-opacity=".55"/>
+        </linearGradient>
+
+        <!-- Forro interior estampado, el que asoma al abrirse la solapa -->
+        <pattern id="sob-forro" width="26" height="26" patternUnits="userSpaceOnUse"
+                 patternTransform="rotate(45)">
+          <rect width="26" height="26" fill="#3a0d16"/>
+          <path d="M13 4 C 17 8,17 14,13 18 C 9 14,9 8,13 4 Z"
+                fill="none" stroke="#8e1f30" stroke-width="1.1" stroke-opacity=".6"/>
+          <circle cx="0" cy="0" r="1.6" fill="#8e1f30" fill-opacity=".5"/>
+          <circle cx="26" cy="26" r="1.6" fill="#8e1f30" fill-opacity=".5"/>
+        </pattern>
+
+        <!-- Textura de fibra del papel -->
+        <filter id="sob-fibra" x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="3" seed="7" result="n"/>
+          <feColorMatrix in="n" type="matrix"
+            values="0 0 0 0 .72  0 0 0 0 .6  0 0 0 0 .38  0 0 0 .045 0"/>
+        </filter>
+        <!-- Grumo irregular de la cera -->
+        <filter id="sob-grumo" x="-25%" y="-25%" width="150%" height="150%">
+          <feTurbulence type="fractalNoise" baseFrequency=".055" numOctaves="3" seed="11" result="t"/>
+          <feDisplacementMap in="SourceGraphic" in2="t" scale="5"
+                             xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+        <filter id="sob-sombra" x="-30%" y="-30%" width="160%" height="180%">
+          <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#000" flood-opacity=".75"/>
+        </filter>
+      </defs>
+
+      <g filter="url(#sob-sombra)">
+
+        <!-- ── FORRO INTERIOR (se ve al abrirse la solapa) ── -->
+        <path d="M42 74 L398 74 L398 262 L42 262 Z" fill="url(#sob-forro)"/>
+
+        <!-- ── CUERPO DEL SOBRE ──
+             El borde no es una recta perfecta: tiene ondulaciones muy
+             suaves, como el papel hecho a mano ("barbas"). -->
+        <path d="M40 72 C 140 70,300 70,400 72 C 402 130,402 200,400 262
+                 C 300 264,140 264,40 262 C 38 200,38 130,40 72 Z"
+              fill="url(#sob-papel)" stroke="url(#sob-oro)" stroke-width="2.2"/>
+
+        <!-- Dobleces del papel: los dos triángulos laterales y el de abajo -->
+        <path d="M40 262 L214 158 L400 262" fill="#0f0a06" fill-opacity=".55"/>
+        <path d="M40 72 L220 190 L400 72" fill="none" stroke="#c9a84c"
+              stroke-width=".9" stroke-opacity=".22"/>
+        <path d="M40 262 L214 158 L400 262" fill="none" stroke="#c9a84c"
+              stroke-width=".9" stroke-opacity=".3"/>
+
+        <!-- Filete dorado grabado, doble -->
+        <rect x="54" y="86" width="332" height="164" rx="2" fill="none"
+              stroke="url(#sob-oro)" stroke-width=".9" stroke-opacity=".55"/>
+        <rect x="60" y="92" width="320" height="152" rx="2" fill="none"
+              stroke="#8a6a2c" stroke-width=".6" stroke-opacity=".4"/>
+
+        <!-- Escuadras en las cuatro esquinas del filete -->
+        <g stroke="url(#sob-oro)" stroke-width="1.1" fill="none" stroke-opacity=".75">
+          <path d="M54 104 L54 86 L72 86"/>
+          <path d="M368 86 L386 86 L386 104"/>
+          <path d="M54 232 L54 250 L72 250"/>
+          <path d="M368 250 L386 250 L386 232"/>
+        </g>
+
+        <!-- Monograma grabado al pie del sobre -->
+        <text x="220" y="240" text-anchor="middle"
+              font-family="'Cinzel Decorative', serif" font-size="15"
+              letter-spacing="4" fill="#8a6a2c" fill-opacity=".75">XV</text>
+
+        <!-- Textura de fibra encima del papel -->
+        <path d="M40 72 C 140 70,300 70,400 72 C 402 130,402 200,400 262
+                 C 300 264,140 264,40 262 C 38 200,38 130,40 72 Z"
+              filter="url(#sob-fibra)" fill="transparent"/>
+
+        <!-- ── SOLAPA (gira sobre su borde superior) ── -->
+        <g class="sobre__solapa">
+          <!-- cara exterior -->
+          <path d="M40 72 C 140 70,300 70,400 72 L 220 196 Z"
+                fill="url(#sob-solapa)" stroke="url(#sob-oro)" stroke-width="2.2"/>
+          <!-- filete siguiendo la V de la solapa -->
+          <path d="M58 80 L220 182 L382 80" fill="none"
+                stroke="url(#sob-oro)" stroke-width=".9" stroke-opacity=".5"/>
+          <!-- sombra donde la solapa se apoya sobre el cuerpo -->
+          <path d="M40 72 C 140 70,300 70,400 72 L 220 196 Z"
+                fill="url(#sob-cera-luz)" opacity=".18"/>
+          <path d="M40 72 C 140 70,300 70,400 72 L 220 196 Z"
+                filter="url(#sob-fibra)" fill="transparent"/>
+        </g>
+
+        <!-- ── SELLO DE LACRE ──
+             Se dibuja como cera derramada de verdad: borde irregular,
+             volumen con luz arriba a la izquierda y sombra abajo a la
+             derecha, y la letra HUNDIDA en la cera. -->
+        <g class="sobre__sello">
+
+          <!-- salpicaduras que quedaron al caer la cera -->
+          <g fill="#7d1626" fill-opacity=".85" filter="url(#sob-grumo)">
+            <ellipse cx="176" cy="120" rx="4.5" ry="3.4"/>
+            <ellipse cx="268" cy="132" rx="3.4" ry="2.6"/>
+            <ellipse cx="256" cy="182" rx="4"   ry="2.8"/>
+            <ellipse cx="182" cy="186" rx="2.8" ry="2.2"/>
+          </g>
+
+          <g filter="url(#sob-grumo)">
+            <!-- masa de cera: contorno ondulado, no un círculo -->
+            <path d="M220 112
+                     C 240 110,258 120,264 138
+                     C 271 156,266 176,250 186
+                     C 234 197,208 197,193 187
+                     C 176 176,171 155,178 137
+                     C 184 120,201 110,220 112 Z"
+                  fill="url(#sob-cera-base)"/>
+            <!-- volumen: luz arriba-izquierda, sombra abajo-derecha -->
+            <path d="M220 112
+                     C 240 110,258 120,264 138
+                     C 271 156,266 176,250 186
+                     C 234 197,208 197,193 187
+                     C 176 176,171 155,178 137
+                     C 184 120,201 110,220 112 Z"
+                  fill="url(#sob-cera-luz)"/>
+            <!-- reborde del cuño: la cera se levanta donde apretó el sello -->
+            <path d="M220 122
+                     C 236 121,250 129,255 143
+                     C 260 157,256 172,244 179
+                     C 231 187,210 187,198 180
+                     C 185 172,181 156,186 142
+                     C 191 129,205 123,220 122 Z"
+                  fill="none" stroke="#5c0f1c" stroke-width="2.4" stroke-opacity=".65"/>
+            <path d="M198 128 C 210 122,232 122,244 129"
+                  fill="none" stroke="#ffb3bd" stroke-width="1.8"
+                  stroke-opacity=".38" stroke-linecap="round"/>
+            <path d="M247 172 C 236 181,214 183,199 177"
+                  fill="none" stroke="#2a060d" stroke-width="2"
+                  stroke-opacity=".5" stroke-linecap="round"/>
+          </g>
+
+          <!-- La "A" hundida: primero la cara iluminada (abajo-derecha),
+               después la sombra (arriba-izquierda). Ese desfase de un
+               píxel y medio es lo que la hace parecer excavada. -->
+          <g font-family="'Cinzel Decorative', serif" font-size="34"
+             text-anchor="middle" font-weight="700">
+            <text x="221.5" y="167.5" fill="#e8808f" fill-opacity=".5">A</text>
+            <text x="220"   y="166"   fill="#4a0a15" fill-opacity=".92">A</text>
+          </g>
+        </g>
+      </g>
+    </svg>
+
+    <p class="sobre__indicacion">Tocá el sello para abrir</p>
+  </div>
+</div>
+
+
+<!-- ═══ 4. MARCO VICTORIANO ═════════════════════════════════════════
+     Ocho piezas que rodean toda la página. Las enredaderas de rosas las
+     agrega sola la computadora desde codigo/07-marco-y-enredaderas.js.
+═══════════════════════════════════════════════════════════════════ -->
+<div id="marco-victoriano" aria-hidden="true">
+  <div class="marco__cenefa marco__cenefa--superior"></div>
+  <div class="marco__cenefa marco__cenefa--inferior"></div>
+  <div class="marco__riel marco__riel--izquierdo"></div>
+  <div class="marco__riel marco__riel--derecho"></div>
+
+  <div class="marco__esquina marco__esquina--superior-izquierda"></div>
+  <div class="marco__esquina marco__esquina--superior-derecha"></div>
+  <div class="marco__esquina marco__esquina--inferior-izquierda"></div>
+  <div class="marco__esquina marco__esquina--inferior-derecha"></div>
+
+  <div class="marco__enredadera marco__enredadera--izquierda"></div>
+  <div class="marco__enredadera marco__enredadera--derecha"></div>
+
+  <!-- Los ramilletes de las dos esquinas de arriba. Los dibuja sola la
+       computadora desde codigo/07-marco-y-enredaderas.js: acá solo se
+       reserva el lugar donde van. -->
+  <div class="marco__ramillete marco__ramillete--izquierdo"></div>
+  <div class="marco__ramillete marco__ramillete--derecho"></div>
+</div>
+
+
+<!-- PENUMBRA DE PROFUNDIDAD
+     Un velo que cubre TODO el documento y se va oscureciendo hacia abajo,
+     como el agua del océano: arriba, donde está el relicario, es
+     transparente y reina la luz; a medida que se baja, la penumbra gana
+     terreno. Nunca llega al negro —solo se hunde—. Ver estilos/12-haces-
+     de-luz.css. -->
+<div id="penumbra-profunda" aria-hidden="true"></div>
+
+<!-- CANDELABROS DE LA PROFUNDIDAD
+     Cuando la luz del día ya no llega al fondo, la opulencia queda
+     rescatada por candelabros de pared que titilan en la penumbra, como
+     una mansión antigua de noche. Van en dos capas (ver 12-haces-de-luz.css
+     y codigo/19-velas.js): #apliques es la pieza de latón con sus velas
+     (delante de las rosas), y #velas es el resplandor de cada llama
+     (detrás de las rosas, para que se recorten como siluetas). -->
+<div id="apliques" aria-hidden="true"></div>
+<div id="velas" aria-hidden="true"></div>
+
+
+<main id="contenido">
+
+  <!-- ═══ 5. PORTADA ════════════════════════════════════════════════ -->
+  <section id="portada">
+
+    <!-- El broche: el marco y el texto se apilan en la MISMA celda de una
+         rejilla, así quedan concéntricos por construcción (ver el CSS). -->
+    <div class="portada__broche">
+
+    <!-- El marco ovalado dorado. Es un dibujo hecho de formas
+         geométricas: anillos, gemas, hojas y rosas.
+
+         El viewBox mide 860 × 816 y el dibujo está centrado en (430, 408),
+         que es el centro exacto de esa caja. Eso NO es casualidad: el
+         óvalo tiene que caer justo en el medio del archivo para que se
+         alinee solo con el texto, sin necesidad de correcciones raras. -->
+    <svg class="portada__marco" viewBox="0 0 860 816" aria-hidden="true">
+      <defs>
+        <!-- ORO ENVEJECIDO, de linaje: los realces no llegan al blanco
+             (sin destellos de metal nuevo) y las sombras tiran a bronce.
+             Es el oro de una pieza heredada, no de vitrina. -->
+        <linearGradient id="mo-oro" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#ecd89a"/><stop offset="26%" stop-color="#d6bb70"/>
+          <stop offset="52%" stop-color="#c1a049"/><stop offset="78%" stop-color="#846327"/>
+          <stop offset="100%" stop-color="#50401c"/>
+        </linearGradient>
+        <linearGradient id="mo-oro-vertical" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#e6d090"/><stop offset="45%" stop-color="#c1a049"/>
+          <stop offset="100%" stop-color="#5f481e"/>
+        </linearGradient>
+        <linearGradient id="mo-oro-horizontal" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#5f481e"/><stop offset="28%" stop-color="#d6bb70"/>
+          <stop offset="55%" stop-color="#927029"/><stop offset="80%" stop-color="#e6d090"/>
+          <stop offset="100%" stop-color="#5f481e"/>
+        </linearGradient>
+        <!-- EL NÚCLEO ES UNA PIEDRA, NO UN VIDRIO PLANO.
+             Antes el centro era un marrón casi negro liso, que se leía
+             como un fondo. Ahora es un granate profundo: sigue oscuro en
+             el medio (para que el nombre dorado resalte), pero tiene cuerpo
+             de piedra —color rojo real, volumen de cabujón (domo) y vetas—.
+             Los tonos van de granate oscuro al casi negro del corazón. -->
+        <radialGradient id="mo-vidrio" cx="50%" cy="42%" r="80%">
+          <stop offset="0%" stop-color="#250b11"/><stop offset="46%" stop-color="#160609"/>
+          <stop offset="100%" stop-color="#070203"/>
+        </radialGradient>
+        <!-- Fuego interno del granate: un rojo que se insinúa sin lavar el
+             centro donde va el nombre. -->
+        <radialGradient id="mo-sangre" cx="50%" cy="44%" r="70%">
+          <stop offset="0%" stop-color="#7a1a29" stop-opacity=".4"/>
+          <stop offset="55%" stop-color="#571120" stop-opacity=".22"/>
+          <stop offset="100%" stop-color="#3a0d16" stop-opacity="0"/>
+        </radialGradient>
+        <!-- Domo del cabujón: el reflejo suave de la cara pulida y abombada,
+             arriba, por encima del nombre. -->
+        <radialGradient id="mo-nucleo-domo" cx="50%" cy="50%" r="60%">
+          <stop offset="0%" stop-color="#b23a50" stop-opacity=".22"/>
+          <stop offset="60%" stop-color="#7a1c2b" stop-opacity=".06"/>
+          <stop offset="100%" stop-color="#7a1c2b" stop-opacity="0"/>
+        </radialGradient>
+        <!-- Sombra interior del borde: oscurece SOLO el filo, para que la
+             piedra se vea hundida y con peso, no pegada como una calcomanía.
+             (Transparente en el centro, oscura en el borde.) -->
+        <radialGradient id="mo-nucleo-borde" cx="50%" cy="50%" r="52%">
+          <stop offset="0%" stop-color="#000" stop-opacity="0"/>
+          <stop offset="76%" stop-color="#000" stop-opacity="0"/>
+          <stop offset="100%" stop-color="#000" stop-opacity=".5"/>
+        </radialGradient>
+        <!-- Máscara del óvalo: blanco donde el granate se ve, negro afuera.
+             Recorta las vetas y el volumen para que no se salgan del núcleo,
+             sin usar <clipPath> (que rompía el parseo del HTML). -->
+        <mask id="mo-mascara-nucleo">
+          <ellipse rx="238" ry="210" fill="#fff"/>
+        </mask>
+        <radialGradient id="mo-destello" cx="50%" cy="0%" r="72%">
+          <stop offset="0%" stop-color="#e6d090" stop-opacity=".16"/>
+          <stop offset="100%" stop-color="#e6d090" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="mo-petalo" cx="45%" cy="38%" r="72%">
+          <stop offset="0%" stop-color="#ab2a3c"/><stop offset="58%" stop-color="#701526"/>
+          <stop offset="100%" stop-color="#3a0a13"/>
+        </radialGradient>
+        <radialGradient id="mo-petalo-exterior" cx="40%" cy="34%" r="76%">
+          <stop offset="0%" stop-color="#8e1f30"/><stop offset="52%" stop-color="#5c1220"/>
+          <stop offset="100%" stop-color="#2c070e"/>
+        </radialGradient>
+        <!-- Cuerpo del rubí. Más rango que antes (corazón encendido →
+             borde casi negro): es ese contraste el que hace que una gema
+             se lea profunda y no como un botón de color plano. -->
+        <radialGradient id="mo-rubi" cx="42%" cy="37%" r="76%">
+          <stop offset="0%" stop-color="#ef8093"/><stop offset="20%" stop-color="#c02640"/>
+          <stop offset="58%" stop-color="#6e1425"/><stop offset="100%" stop-color="#280610"/>
+        </radialGradient>
+        <!-- La "mesa": la cara plana de arriba de la piedra tallada. Va
+             más clara que el cuerpo, para leerse como el plano que
+             refleja la luz. -->
+        <radialGradient id="mo-rubi-mesa" cx="42%" cy="36%" r="82%">
+          <stop offset="0%" stop-color="#f7a3b2"/><stop offset="50%" stop-color="#c93150"/>
+          <stop offset="100%" stop-color="#7c1728"/>
+        </radialGradient>
+
+        <filter id="mo-relieve" x="-40%" y="-40%" width="180%" height="180%">
+          <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#000" flood-opacity=".62"/>
+        </filter>
+        <filter id="mo-resplandor" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="9" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+
+        <!-- GEMA ENGASTADA
+             Todo se dibuja concéntrico al punto (0,0): las garras, el aro
+             dorado y la piedra. Antes la piedra PARECÍA descentrada porque
+             el brillo era grande y estaba muy corrido hacia arriba a la
+             izquierda, y el ojo tomaba ese brillo como el centro.
+
+             Ahora el brillo es chico y discreto, y se agregaron las
+             facetas: unas líneas finas que salen exactamente del centro
+             hacia los bordes. Esas líneas le marcan al ojo dónde está el
+             centro real, y la piedra se lee perfectamente centrada. -->
+        <!-- GEMA ENGASTADA · talla brillante, todo vector.
+             Radio de la piedra = 8,3. Todo concéntrico a (0,0).
+             Capas, de abajo hacia arriba: garras → aro → asiento →
+             cuerpo → facetas de la corona → mesa → facetas de la mesa →
+             culet → girdle → rim-light → destello. -->
+        <g id="mo-gema">
+          <!-- cuatro garras en diagonal, simétricas entre sí -->
+          <g fill="url(#mo-oro)">
+            <path d="M-9.4 -9.4 l 6 1.4 l -1.4 -6 Z"/>
+            <path d="M9.4 -9.4 l -6 1.4 l 1.4 -6 Z"/>
+            <path d="M-9.4 9.4 l 6 -1.4 l -1.4 6 Z"/>
+            <path d="M9.4 9.4 l -6 -1.4 l 1.4 6 Z"/>
+          </g>
+          <circle r="11.6" fill="url(#mo-oro)"/>
+          <circle r="9.3"  fill="#2c070e"/>
+
+          <!-- cuerpo de la piedra -->
+          <circle r="8.3" fill="url(#mo-rubi)"/>
+
+          <!-- facetas de la corona: ocho radios del centro al borde
+               (cada 45°). Marcan la talla y le dan al ojo el centro. -->
+          <g stroke="#4a0d18" stroke-width=".5" stroke-opacity=".6" fill="none">
+            <path d="M0 0 L0 -8.3 M0 0 L5.87 -5.87 M0 0 L8.3 0 M0 0 L5.87 5.87
+                     M0 0 L0 8.3 M0 0 L-5.87 5.87 M0 0 L-8.3 0 M0 0 L-5.87 -5.87"/>
+          </g>
+
+          <!-- la mesa: octágono central más claro, la cara plana de arriba -->
+          <polygon points="3.4,0 2.4,2.4 0,3.4 -2.4,2.4 -3.4,0 -2.4,-2.4 0,-3.4 2.4,-2.4"
+                   fill="url(#mo-rubi-mesa)"/>
+          <!-- borde de la mesa y sus facetas hacia el girdle -->
+          <g stroke="#5a1120" stroke-width=".4" stroke-opacity=".5" fill="none">
+            <polygon points="3.4,0 2.4,2.4 0,3.4 -2.4,2.4 -3.4,0 -2.4,-2.4 0,-3.4 2.4,-2.4"/>
+          </g>
+
+          <!-- culet: el vértice de abajo de la piedra, visto de frente
+               como un punto oscuro exactamente en el centro -->
+          <circle r=".75" fill="#2a0710"/>
+
+          <!-- girdle: el filo del contorno -->
+          <circle r="8.3" fill="none" stroke="#1a0509" stroke-width=".9" stroke-opacity=".8"/>
+
+          <!-- rim-light: un filo de luz en el borde de arriba, opuesto a
+               la sombra de abajo. Da volumen sin agregar un brillo grande. -->
+          <path d="M-5.4 -6.3 A 8.3 8.3 0 0 1 5.4 -6.3" fill="none"
+                stroke="#ffcdd6" stroke-width=".8" stroke-opacity=".32" stroke-linecap="round"/>
+
+          <!-- destello especular: el reflejo principal arriba-izquierda y
+               una chispa secundaria chica. Es lo que los haces de luz
+               encienden al derivar sobre la gema. -->
+          <ellipse cx="-2.1" cy="-2.7" rx="2.1" ry="1.3" fill="#ffe1e6" fill-opacity=".5"/>
+          <circle cx="1.9" cy="2.1" r=".55" fill="#ffd9df" fill-opacity=".3"/>
+        </g>
+        <g id="mo-borla">
+          <path d="M0 0 V 13" stroke="url(#mo-oro-vertical)" stroke-width="1.6" stroke-opacity=".7"/>
+          <circle cy="19" r="6.4" fill="url(#mo-oro)"/>
+          <circle cy="19" r="2.8" fill="url(#mo-rubi)"/>
+          <path d="M-8 25 C -9 41,-4 53,0 59 C 4 53,9 41,8 25 Z"
+                fill="url(#mo-oro-vertical)" fill-opacity=".62" stroke="#8f6d2b" stroke-width=".8"/>
+          <path d="M-4 27 V 54 M0 27 V 57 M4 27 V 54" stroke="#6b5122" stroke-width=".7" stroke-opacity=".65"/>
+        </g>
+        <g id="mo-filigrana">
+          <path d="M0 0 C 22 -6,40 4,44 24 C 47 39,38 50,26 48 C 16 46,12 36,18 30 C 23 25,31 28,31 35"
+                fill="none" stroke="url(#mo-oro)" stroke-width="2" stroke-opacity=".72" stroke-linecap="round"/>
+          <path d="M0 0 C 14 8,20 20,19 33" fill="none" stroke="#c9a84c" stroke-width="1" stroke-opacity=".4"/>
+        </g>
+        <g id="mo-pinaculo">
+          <path d="M0 -84 L 17 0 L -17 0 Z" fill="url(#mo-sangre)" stroke="url(#mo-oro-vertical)" stroke-width="1.9" stroke-opacity=".85"/>
+          <g fill="url(#mo-oro-vertical)" fill-opacity=".85">
+            <path d="M-6 -58 c -7 -2,-10 -7,-8 -13 c 6 2,8 7,8 13 Z"/>
+            <path d="M6 -58 c 7 -2,10 -7,8 -13 c -6 2,-8 7,-8 13 Z"/>
+            <path d="M-11 -30 c -7 -2,-10 -7,-8 -13 c 6 2,8 7,8 13 Z"/>
+            <path d="M11 -30 c 7 -2,10 -7,8 -13 c -6 2,-8 7,-8 13 Z"/>
+          </g>
+        </g>
+      </defs>
+
+      <g transform="translate(430 408)">
+
+        <!-- Arco gótico de fondo: lo recto que abraza lo orgánico -->
+        <path d="M-230 292 C -294 108,-264 -128,0 -272 C 264 -128,294 108,230 292"
+              fill="none" stroke="url(#mo-oro-vertical)" stroke-width="1.5" stroke-opacity=".3"/>
+        <path d="M-206 292 C -264 116,-238 -112,0 -252 C 238 -112,264 116,206 292"
+              fill="none" stroke="#8f6d2b" stroke-width="1" stroke-opacity=".22"/>
+
+        <!-- Enredaderas que giran lentamente al hacer scroll -->
+        <g id="enredadera-de-la-portada">
+          <path d="M-56 250 C -200 236,-320 148,-320 16 C -320 -112,-214 -216,-64 -258"
+                fill="none" stroke="url(#mo-oro-vertical)" stroke-width="2.6" stroke-opacity=".6" stroke-linecap="round"/>
+          <use href="#rosa-hoja" transform="translate(-320 56) rotate(112) scale(.72)"/>
+          <use href="#rosa-hoja" transform="translate(-278 -150) rotate(152) scale(.6)"/>
+          <use href="#rosa-frente" transform="translate(-320 -34) scale(0.77)"/>
+          <use href="#rosa-frente" transform="translate(-194 214) scale(0.59)"/>
+          <use href="#rosa-capullo" transform="translate(-158 -238) rotate(34) scale(.72)"/>
+          <use href="#rosa-capullo" transform="translate(-290 128) rotate(-22) scale(.66)"/>
+
+          <path d="M56 250 C 200 236,320 148,320 16 C 320 -112,214 -216,64 -258"
+                fill="none" stroke="url(#mo-oro-vertical)" stroke-width="2.6" stroke-opacity=".6" stroke-linecap="round"/>
+          <use href="#rosa-hoja" transform="translate(320 56) rotate(68) scale(-.72 .72)"/>
+          <use href="#rosa-hoja" transform="translate(278 -150) rotate(28) scale(-.6 .6)"/>
+          <use href="#rosa-frente" transform="translate(320 -34) scale(0.77)"/>
+          <use href="#rosa-frente" transform="translate(194 214) scale(0.59)"/>
+          <use href="#rosa-capullo" transform="translate(158 -238) rotate(-34) scale(.72)"/>
+          <use href="#rosa-capullo" transform="translate(290 128) rotate(22) scale(.66)"/>
+        </g>
+
+        <!-- ═══ EL NÚCLEO DE GRANATE ═══
+             Es el "lienzo" donde se lee el nombre, pero tratado como una
+             piedra tallada en cabujón: base de granate + fuego interno +
+             vetas + volumen (domo y sombra de borde). El orden importa:
+             cada capa se apoya sobre la anterior.
+
+             Las vetas van recortadas al óvalo con una máscara (mo-mascara-
+             nucleo, en los defs). Se usa máscara y no <clipPath> a
+             propósito: dentro de un SVG embebido en HTML, ciertas
+             construcciones con clipPath rompen el parseo de la página. La
+             máscara hace lo mismo (mostrar solo lo que cae dentro del
+             óvalo) sin ese riesgo. -->
+        <ellipse rx="238" ry="210" fill="url(#mo-vidrio)"/>
+        <ellipse rx="238" ry="210" fill="url(#mo-sangre)"/>
+
+        <g mask="url(#mo-mascara-nucleo)" fill="none" stroke-linecap="round">
+          <!-- Vetas: unas más claras (la luz entrando en la piedra) y otras
+               más oscuras (inclusiones), como el veteado de un granate. -->
+          <path d="M-236 -70 C -110 -128,70 -44,238 -104"
+                stroke="#8a2334" stroke-width="1.5" stroke-opacity=".22"/>
+          <path d="M-232 74 C -96 18,86 104,236 40"
+                stroke="#2a0810" stroke-width="2.2" stroke-opacity=".38"/>
+          <path d="M-150 -196 C -70 -70,36 44,120 200"
+                stroke="#7e2131" stroke-width="1.2" stroke-opacity=".18"/>
+          <path d="M60 -198 C 20 -70,-30 60,-70 200"
+                stroke="#2a0810" stroke-width="1.8" stroke-opacity=".3"/>
+          <path d="M-238 8 C -120 -18,130 34,238 -6"
+                stroke="#93283a" stroke-width="1" stroke-opacity=".16"/>
+
+          <!-- Sombra interior del borde: le da el hundido y el peso. -->
+          <ellipse rx="238" ry="210" fill="url(#mo-nucleo-borde)" stroke="none"/>
+          <!-- Reflejo del domo pulido, arriba (por encima del nombre). -->
+          <ellipse cx="0" cy="-58" rx="190" ry="128" fill="url(#mo-nucleo-domo)" stroke="none"/>
+        </g>
+
+        <ellipse rx="238" ry="210" fill="url(#mo-destello)"/>
+        <!-- Filo de luz en el borde de arriba: el canto de la piedra
+             atrapando la luz, lo que termina de darle abombado. -->
+        <path d="M-150 -152 A 238 210 0 0 1 150 -152" fill="none"
+              stroke="#c85a6e" stroke-width="2" stroke-opacity=".16" stroke-linecap="round"/>
+        <ellipse rx="238" ry="210" fill="none" stroke="#000" stroke-width="10" stroke-opacity=".45"/>
+
+        <!-- Anillos concéntricos, perlado y guilloche -->
+        <ellipse rx="244" ry="215" fill="none" stroke="#c9a84c" stroke-width="1.2" stroke-opacity=".5"/>
+        <ellipse rx="258" ry="228" fill="none" stroke="url(#mo-oro-horizontal)" stroke-width="4.4" stroke-opacity=".97"/>
+        <ellipse rx="252" ry="222" fill="none" stroke="#e6d090" stroke-width="1" stroke-dasharray="13 9" stroke-opacity=".3"/>
+        <ellipse rx="265" ry="234" fill="none" stroke="#e6d090" stroke-width="1" stroke-dasharray="13 9" stroke-dashoffset="11" stroke-opacity=".22"/>
+        <ellipse rx="275" ry="243" fill="none" stroke="url(#mo-oro-vertical)" stroke-width="5.6"
+                 stroke-dasharray="0.1 15" stroke-linecap="round" stroke-opacity=".92"/>
+        <ellipse rx="289" ry="256" fill="none" stroke="url(#mo-oro-horizontal)" stroke-width="2.2" stroke-opacity=".82"/>
+        <ellipse rx="302" ry="268" fill="none" stroke="#8f6d2b" stroke-width="1" stroke-opacity=".4"/>
+
+        <g opacity=".85">
+          <use href="#mo-filigrana" transform="translate(184 -152) rotate(-46)"/>
+          <use href="#mo-filigrana" transform="translate(-184 -152) rotate(46) scale(-1 1)"/>
+          <use href="#mo-filigrana" transform="translate(184 152) rotate(46)"/>
+          <use href="#mo-filigrana" transform="translate(-184 152) rotate(-46) scale(-1 1)"/>
+        </g>
+
+        <use href="#mo-gema" transform="translate(275 0)"/>
+        <use href="#mo-gema" transform="translate(-275 0)"/>
+        <use href="#mo-gema" transform="translate(194 -172) scale(.85)"/>
+        <use href="#mo-gema" transform="translate(-194 -172) scale(.85)"/>
+        <use href="#mo-gema" transform="translate(194 172) scale(.85)"/>
+        <use href="#mo-gema" transform="translate(-194 172) scale(.85)"/>
+
+        <!-- Corona -->
+        <g filter="url(#mo-relieve)">
+          <g stroke="url(#mo-oro-vertical)" stroke-width="2" stroke-opacity=".45" stroke-linecap="round">
+            <path d="M0 -240 V -284"/>
+            <path d="M-46 -230 L -64 -270"/><path d="M46 -230 L 64 -270"/>
+            <path d="M-92 -214 L -122 -248"/><path d="M92 -214 L 122 -248"/>
+          </g>
+          <g fill="none" stroke="url(#mo-oro)" stroke-width="3.2" stroke-linecap="round" stroke-opacity=".95">
+            <path d="M0 -228 C -18 -264,-58 -288,-108 -290 C -148 -292,-172 -272,-168 -246 C -164 -224,-140 -216,-122 -227 C -110 -235,-110 -251,-122 -258"/>
+            <path d="M0 -228 C 18 -264,58 -288,108 -290 C 148 -292,172 -272,168 -246 C 164 -224,140 -216,122 -227 C 110 -235,110 -251,122 -258"/>
+          </g>
+          <g fill="none" stroke="url(#mo-oro-vertical)" stroke-width="2" stroke-opacity=".6" stroke-linecap="round">
+            <path d="M-96 -282 C -132 -310,-182 -320,-232 -306 C -216 -286,-190 -278,-162 -281"/>
+            <path d="M96 -282 C 132 -310,182 -320,232 -306 C 216 -286,190 -278,162 -281"/>
+          </g>
+          <use href="#rosa-hoja" transform="translate(-170 -290) rotate(196) scale(.72)"/>
+          <use href="#rosa-hoja" transform="translate(170 -290) rotate(-16) scale(-.72 .72)"/>
+          <use href="#mo-pinaculo" transform="translate(0 -278)"/>
+          <path d="M0 -362 V -398 M-12 -387 H 12" stroke="url(#mo-oro)" stroke-width="3.2" stroke-linecap="round"/>
+          <circle cy="-402" r="4.6" fill="#e6d090" filter="url(#mo-resplandor)"/>
+          <use href="#rosa-frente" transform="translate(0 -258) scale(0.84)"/>
+          <use href="#mo-gema" transform="translate(-122 -258) scale(.8)"/>
+          <use href="#mo-gema" transform="translate(122 -258) scale(.8)"/>
+          <use href="#rosa-capullo" transform="translate(-226 -304) rotate(-46) scale(.8)"/>
+          <use href="#rosa-capullo" transform="translate(226 -304) rotate(46) scale(.8)"/>
+        </g>
+
+        <!-- Alas laterales con guirnaldas y borlas -->
+        <g filter="url(#mo-relieve)">
+          <g fill="none" stroke="url(#mo-oro)" stroke-width="2.8" stroke-linecap="round" stroke-opacity=".9">
+            <path d="M-286 -46 C -326 -62,-360 -50,-368 -20 C -373 4,-360 22,-340 18 C -328 15,-324 2,-332 -6"/>
+            <path d="M286 -46 C 326 -62,360 -50,368 -20 C 373 4,360 22,340 18 C 328 15,324 2,332 -6"/>
+            <path d="M-282 62 C -318 78,-342 104,-338 132 C -335 152,-318 160,-304 151 C -294 145,-294 130,-304 126"/>
+            <path d="M282 62 C 318 78,342 104,338 132 C 335 152,318 160,304 151 C 294 145,294 130,304 126"/>
+          </g>
+          <use href="#rosa-hoja" transform="translate(-358 -38) rotate(208) scale(.78)"/>
+          <use href="#rosa-hoja" transform="translate(358 -38) rotate(-28) scale(-.78 .78)"/>
+          <path d="M-350 6 C -334 62,-292 116,-220 150" fill="none"
+                stroke="url(#mo-oro-vertical)" stroke-width="1.6" stroke-dasharray="0.1 9"
+                stroke-linecap="round" stroke-opacity=".7"/>
+          <path d="M350 6 C 334 62,292 116,220 150" fill="none"
+                stroke="url(#mo-oro-vertical)" stroke-width="1.6" stroke-dasharray="0.1 9"
+                stroke-linecap="round" stroke-opacity=".7"/>
+          <!-- Las borlas cuelgan de verdad: codigo/17-joyas-colgantes.js
+               las hace pivotar sobre su punto de amarre (data-pivote-*),
+               balanceándose con el scroll y el mouse como péndulos. -->
+          <g class="joya-colgante" data-pivote-x="-340" data-pivote-y="140">
+            <use href="#mo-borla" transform="translate(-340 140) scale(.9)"/>
+          </g>
+          <g class="joya-colgante" data-pivote-x="340" data-pivote-y="140">
+            <use href="#mo-borla" transform="translate(340 140) scale(.9)"/>
+          </g>
+        </g>
+
+        <!-- Base con lambrequín y pendiente -->
+        <g filter="url(#mo-relieve)">
+          <g fill="none" stroke="url(#mo-oro)" stroke-width="3.2" stroke-linecap="round" stroke-opacity=".95">
+            <path d="M0 228 C -18 264,-58 286,-108 286 C -148 287,-172 268,-168 244 C -164 222,-140 214,-122 226"/>
+            <path d="M0 228 C 18 264,58 286,108 286 C 148 287,172 268,168 244 C 164 222,140 214,122 226"/>
+          </g>
+          <path d="M-168 250 C -110 292,-54 306,0 306 C 54 306,110 292,168 250" fill="none"
+                stroke="url(#mo-oro-vertical)" stroke-width="2" stroke-dasharray="0.1 11"
+                stroke-linecap="round" stroke-opacity=".75"/>
+          <!-- EL PENDIENTE CENTRAL CUELGA CON PESO REAL.
+               Antes la cadena y la gema giraban como una sola barra rígida.
+               Ahora la cadena está ARTICULADA en tres eslabones anidados
+               (.eslabon), cada uno con su punto de amarre (data-pivote-*).
+               codigo/17-joyas-colgantes.js los mueve como un péndulo
+               compuesto: cada eslabón gira un poco respecto del de arriba,
+               las rotaciones se acumulan y la cadena se CURVA, con la gema
+               —el eslabón más pesado— quedándose atrás (lag) al balancearse.
+               Así se siente el peso de una joya, no una varilla tiesa.
+
+               La rosa-engarce fija y las capullos van FUERA de la cadena
+               (no cuelgan). -->
+          <g class="cadena-colgante">
+            <g class="eslabon" data-pivote-x="0" data-pivote-y="228">
+              <!-- eslabón 1: tramo alto de cadena -->
+              <path d="M0 228 V 264" stroke="url(#mo-oro-vertical)" stroke-width="2.4" stroke-opacity=".75"/>
+              <g class="eslabon" data-pivote-x="0" data-pivote-y="264">
+                <!-- eslabón 2: tramo bajo de cadena -->
+                <path d="M0 264 V 300" stroke="url(#mo-oro-vertical)" stroke-width="2.4" stroke-opacity=".75"/>
+                <g class="eslabon" data-pivote-x="0" data-pivote-y="300">
+                  <!-- eslabón 3: la gema y la gota, el peso del extremo -->
+                  <path d="M0 300 V 306" stroke="url(#mo-oro-vertical)" stroke-width="2.2" stroke-opacity=".7"/>
+                  <use href="#mo-gema" transform="translate(0 312) scale(1.05)"/>
+                  <path d="M0 324 V 336" stroke="url(#mo-oro-vertical)" stroke-width="1.6" stroke-opacity=".6"/>
+                  <path d="M0 336 C -9 348,-6 362,0 372 C 6 362,9 348,0 336 Z"
+                        fill="url(#mo-petalo)" stroke="url(#mo-oro)" stroke-width="1.2"/>
+                </g>
+              </g>
+            </g>
+          </g>
+          <use href="#rosa-frente" transform="translate(0 228) scale(0.64)"/>
+          <use href="#rosa-capullo" transform="translate(-222 296) rotate(-52) scale(.78)"/>
+          <use href="#rosa-capullo" transform="translate(222 296) rotate(52) scale(.78)"/>
+        </g>
+      </g>
+    </svg>
+
+    <!-- Barrido de luz sobre el oro del relicario. Una banda cálida y
+         diagonal que se desliza según dónde esté la luz ambiente (la
+         variable --luz-x que publica 14-haces-de-luz.js). Va en
+         mix-blend-mode: overlay, que enciende las zonas claras (el oro) y
+         casi no toca las oscuras (la piedra, el fondo): por eso parece
+         que el metal atrapa la luz. Ver estilos/04-portada.css. -->
+    <div class="portada__brillo-oro" aria-hidden="true"></div>
+
+    <!-- El texto que va DENTRO del óvalo -->
+    <div class="portada__contenido">
+      <p class="portada__antetitulo" data-dato="textos.antetitulo">Una velada para recordar</p>
+
+      <div class="portada__filete"><span>✦</span></div>
+
+      <h1 class="portada__nombre" data-dato="fiesta.nombre">Ania</h1>
+      <p class="portada__edad"><span data-dato="fiesta.edadEnRomanos">XV</span> Años</p>
+
+      <p class="portada__fecha">
+        <span data-dato="fiesta.diaDeLaSemana">Sábado</span> ·
+        <span data-dato="fiesta.fechaEnPalabras">24 de Octubre de 2026</span>
+        <span class="portada__hora" data-dato="fiesta.horaEnPalabras">5:00 PM</span>
+      </p>
+    </div>
+
+    </div><!-- /.portada__broche -->
+
+    <div class="portada__desliza">
+      <span>Desliza</span>
+      <div class="portada__flecha"></div>
+    </div>
+  </section>
+
+
+  <!-- ═══ 6. MENSAJE DE LOS PAPÁS ═══════════════════════════════════ -->
+  <section id="mensaje" class="seccion seccion--ancha">
+    <div class="seccion__interior">
+      <span class="rotulo-de-seccion">De nuestros corazones al tuyo</span>
+      <h2>Un mensaje de los papás</h2>
+
+      <div class="caja-mensaje marco-ornamental revelar">
+        <span class="caja-mensaje__adorno caja-mensaje__adorno--si">❧</span>
+        <span class="caja-mensaje__adorno caja-mensaje__adorno--sd">❧</span>
+        <span class="caja-mensaje__adorno caja-mensaje__adorno--ii">❧</span>
+        <span class="caja-mensaje__adorno caja-mensaje__adorno--id">❧</span>
+        <blockquote>
+          <span data-dato="textos.mensajeDeLosPapas"></span>
+          <cite data-dato="textos.firmaDeLosPapas"></cite>
+        </blockquote>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══ 7. CUENTA REGRESIVA ═══════════════════════════════════════ -->
+  <section id="faltan" class="seccion">
+    <div class="divisor revelar"><span>✦ ✦ ✦</span></div>
+    <span class="rotulo-de-seccion">Cada vez falta menos</span>
+    <h2>La cuenta regresiva</h2>
+
+    <div class="cuenta-regresiva revelar" id="cuenta-regresiva">
+      <div class="cuenta-regresiva__cartela">
+        <span class="cuenta-regresiva__numero" id="cuenta-dias">—</span>
+        <span class="cuenta-regresiva__etiqueta">Días</span>
+      </div>
+      <div class="cuenta-regresiva__cartela">
+        <span class="cuenta-regresiva__numero" id="cuenta-horas">—</span>
+        <span class="cuenta-regresiva__etiqueta">Horas</span>
+      </div>
+      <div class="cuenta-regresiva__cartela">
+        <span class="cuenta-regresiva__numero" id="cuenta-minutos">—</span>
+        <span class="cuenta-regresiva__etiqueta">Minutos</span>
+      </div>
+      <div class="cuenta-regresiva__cartela">
+        <span class="cuenta-regresiva__numero" id="cuenta-segundos">—</span>
+        <span class="cuenta-regresiva__etiqueta">Segundos</span>
+      </div>
+      <p class="cuenta-regresiva__llegada">✦ ¡Hoy es el gran día! ✦</p>
+    </div>
+  </section>
+
+
+  <!-- ═══ 8. MESA DE REGALOS ════════════════════════════════════════ -->
+  <section id="regalos" class="seccion">
+    <div class="divisor revelar"><span>✦ ✦ ✦</span></div>
+    <span class="rotulo-de-seccion">Mesa de regalos</span>
+    <h2>Un detalle con amor</h2>
+
+    <div class="tarjeta-regalo marco-ornamental revelar">
+      <div class="tarjeta-regalo__icono"><svg class="icono-dorado icono-dorado--grande" viewBox="0 0 24 24" aria-hidden="true"><use href="#icono-regalo"/></svg></div>
+      <p>
+        Tu presencia es el mejor regalo.<br>
+        Si deseás obsequiar algo especial a <span data-dato="fiesta.nombre">Ania</span>,<br>
+        preparamos una lista en Amazon.
+      </p>
+      <a class="boton-dorado" target="_blank" rel="noopener"
+         data-enlace="regalos.enlaceDeLaLista" href="#">
+        Ver lista de regalos ↗
+      </a>
+      <p class="tarjeta-regalo__nota" data-dato="regalos.aclaracion"></p>
+    </div>
+  </section>
+
+
+  <!-- ═══ 9. UBICACIÓN Y MAPA ═══════════════════════════════════════ -->
+  <section id="ubicacion" class="seccion">
+    <div class="divisor revelar"><span>✦ ✦ ✦</span></div>
+    <span class="rotulo-de-seccion">¿Cómo llegar?</span>
+    <h2>Ubicación del salón</h2>
+
+    <div class="datos-lugar revelar">
+      <div class="dato-lugar">
+        <svg class="dato-lugar__icono" viewBox="0 0 24 24" aria-hidden="true"><use href="#icono-lugar"/></svg>
+        <span>
+          <strong data-dato="lugar.nombre"></strong>
+          <span data-dato="lugar.direccion"></span>
+        </span>
+      </div>
+      <div class="dato-lugar">
+        <svg class="dato-lugar__icono" viewBox="0 0 24 24" aria-hidden="true"><use href="#icono-hora"/></svg>
+        <span>
+          <strong>Horario</strong>
+          <span data-dato="fiesta.horarioCompleto"></span>
+        </span>
+      </div>
+      <div class="dato-lugar">
+        <svg class="dato-lugar__icono" viewBox="0 0 24 24" aria-hidden="true"><use href="#icono-estacionamiento"/></svg>
+        <span>
+          <strong>Estacionamiento</strong>
+          <span data-dato="fiesta.estacionamiento"></span>
+        </span>
+      </div>
+      <div class="dato-lugar">
+        <svg class="dato-lugar__icono" viewBox="0 0 24 24" aria-hidden="true"><use href="#icono-vestimenta"/></svg>
+        <span>
+          <strong>Código de vestimenta</strong>
+          <span data-dato="fiesta.codigoDeVestimenta"></span>
+        </span>
+      </div>
+    </div>
+
+    <!-- EL MAPA, ENMARCADO COMO UNA LÁMINA
+         El mapa de Google es el único trozo de la web que viene de afuera,
+         y sin enmarcar se nota: termina en un rectángulo perfecto, como una
+         captura pegada encima. Estas piezas lo integran sin tocar el mapa
+         en sí, que sigue siendo el de verdad (se arrastra, hace zoom y se
+         actualiza solo). -->
+    <div class="mapa-marco revelar">
+      <!-- ⚠️ Este iframe NO lleva atributo src: un src vacío hace que el
+           navegador cargue esta misma página adentro del mapa. La
+           dirección real la coloca data-fuente desde la configuración. -->
+      <iframe title="Mapa del salón" loading="lazy" allowfullscreen
+              referrerpolicy="no-referrer-when-downgrade"
+              data-fuente="lugar.enlaceDelMapaIncrustado"></iframe>
+
+      <!-- Viñeta: funde los bordes del mapa con el fondo de la página.
+           No recibe clics, así que el mapa se sigue pudiendo arrastrar. -->
+      <span class="mapa-marco__vineta" aria-hidden="true"></span>
+
+      <!-- Escuadras doradas, el mismo recurso del pase y la cuenta regresiva -->
+      <span class="mapa-marco__escuadra mapa-marco__escuadra--si" aria-hidden="true"></span>
+      <span class="mapa-marco__escuadra mapa-marco__escuadra--sd" aria-hidden="true"></span>
+      <span class="mapa-marco__escuadra mapa-marco__escuadra--ii" aria-hidden="true"></span>
+      <span class="mapa-marco__escuadra mapa-marco__escuadra--id" aria-hidden="true"></span>
+
+      <!-- Cartela: el rótulo de una lámina antigua -->
+      <span class="mapa-marco__cartela" data-dato="lugar.nombre"></span>
+    </div>
+
+    <div class="acciones-lugar revelar">
+      <a class="boton-dorado" target="_blank" rel="noopener"
+         data-enlace="lugar.enlaceParaAbrirEnMaps" href="#">
+        Abrir en Google Maps ↗
+      </a>
+      <button class="boton-dorado" id="boton-agendar" type="button">
+        Agendar la fecha <svg class="icono-dorado" viewBox="0 0 24 24" aria-hidden="true"><use href="#icono-fecha"/></svg>
+      </button>
+    </div>
+  </section>
+
+
+  <!-- ═══ 10. CONFIRMACIÓN DE ASISTENCIA ════════════════════════════ -->
+  <section id="confirmacion" class="seccion seccion--ancha">
+    <div class="seccion__interior">
+      <div class="divisor"><span>✦ ✦ ✦</span></div>
+      <span class="rotulo-de-seccion">Confirmación de asistencia</span>
+      <h2>¿Nos acompañás?</h2>
+
+      <p class="formulario__introduccion">
+        Completá el formulario antes del
+        <strong class="formulario__fecha-limite" data-dato="fiesta.fechaLimiteParaConfirmar"></strong>.
+        Al confirmar vas a recibir tu pase de acceso.
+      </p>
+
+      <div class="formulario marco-ornamental revelar">
+        <form id="formulario-confirmacion" novalidate>
+
+          <div class="campo">
+            <label for="campo-nombre">Nombre completo *</label>
+            <input type="text" id="campo-nombre" name="nombre"
+                   placeholder="Tu nombre y apellido" autocomplete="name" required>
+          </div>
+
+          <div class="campo">
+            <label for="campo-correo">Correo electrónico *</label>
+            <input type="email" id="campo-correo" name="correo"
+                   placeholder="correo@ejemplo.com" autocomplete="email" required>
+            <p class="nota-campo">Tu pase de acceso llegará a este correo</p>
+          </div>
+
+          <div class="campo">
+            <label for="campo-asistencia">¿Confirmás tu asistencia? *</label>
+            <select id="campo-asistencia" name="asistencia" required>
+              <option value="">— Seleccioná —</option>
+              <option value="Sí, asistiré">Sí, asistiré con mucho gusto</option>
+              <option value="No podré asistir">Lamentablemente no podré asistir</option>
+            </select>
+          </div>
+
+          <!-- Todo esto solo aparece si dijo que sí -->
+          <div class="solo-si-asiste" id="bloque-si-asiste">
+
+            <div class="campo">
+              <span class="campo__titulo">¿Cuántos van a venir? *</span>
+              <div class="rejilla-doble">
+                <div>
+                  <label class="campo__subetiqueta" for="campo-adultos"><svg class="icono-dorado" viewBox="0 0 24 24" aria-hidden="true"><use href="#icono-adultos"/></svg> Adultos (incluyéndote)</label>
+                  <input type="number" id="campo-adultos" name="adultos"
+                         min="1" max="20" value="1" required>
+                </div>
+                <div>
+                  <label class="campo__subetiqueta" for="campo-ninos"><svg class="icono-dorado" viewBox="0 0 24 24" aria-hidden="true"><use href="#icono-ninos"/></svg> Niños</label>
+                  <input type="number" id="campo-ninos" name="ninos"
+                         min="0" max="20" value="0">
+                </div>
+              </div>
+            </div>
+
+            <!-- Una fila por adulto, creada por la computadora -->
+            <div class="campo">
+              <span class="campo__titulo">Menú de cada adulto</span>
+              <div class="menus-por-persona" id="menus-de-adultos"></div>
+              <p class="nota-campo">Cada persona come un solo plato: elegí uno por fila.</p>
+            </div>
+
+            <!-- Una fila por niño, solo si anotó niños -->
+            <div class="campo solo-si-asiste" id="bloque-menu-infantil">
+              <span class="campo__titulo">Menú de los niños</span>
+              <div class="menus-por-persona" id="menus-de-ninos"></div>
+              <p class="nota-campo">Todos los niños llevan el mismo menú infantil.</p>
+            </div>
+
+            <div class="campo">
+              <label for="campo-alergias">Alergias o restricciones alimentarias</label>
+              <textarea id="campo-alergias" name="alergias"
+                        placeholder="Ej. alergia a los mariscos, intolerancia a la lactosa… (dejar vacío si no aplica)"></textarea>
+            </div>
+
+            <div class="campo">
+              <label for="campo-notas">¿Algo más que quieras decirnos?</label>
+              <textarea id="campo-notas" name="notas" style="min-height:70px"
+                        placeholder="Mensaje especial para Ania y su familia"></textarea>
+            </div>
+          </div>
+
+          <p class="nota-campo" id="error-del-formulario"
+             style="display:none;color:#e08a92" role="alert"></p>
+
+          <button type="submit" class="boton-carmesi" id="boton-enviar">
+            Confirmar mi asistencia ✦
+          </button>
+        </form>
+
+        <!-- Lo que se ve después de confirmar -->
+        <div class="mensaje-exito" id="mensaje-de-exito">
+          <div class="mensaje-exito__icono"><svg class="rosa-inline" viewBox="-46 -46 92 92" aria-hidden="true"><use href="#rosa-frente"/></svg></div>
+          <h3>¡Gracias por confirmar!</h3>
+          <p id="texto-de-exito">
+            Te enviamos tu pase de acceso al correo.<br>
+            Si no lo encontrás, revisá la carpeta de spam.
+          </p>
+          <div class="mensaje-exito__acciones">
+            <button class="boton-dorado" id="boton-ver-pase" type="button">
+              Ver mi pase de acceso ✦
+            </button>
+            <button class="enlace-sutil" id="boton-confirmar-de-nuevo" type="button">
+              Confirmar de nuevo
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+
+<!-- ═══ 11. PIE DE PÁGINA ═══════════════════════════════════════════ -->
+<footer id="pie-de-pagina">
+  <span data-dato="fiesta.nombre">Ania</span> ·
+  <span data-dato="fiesta.edadEnRomanos">XV</span> Años
+  <span class="rosa"><svg class="rosa-inline" viewBox="-46 -46 92 92" aria-hidden="true"><use href="#rosa-frente"/></svg></span>
+  <span data-dato="fiesta.fechaEnPalabras">24 de Octubre de 2026</span>
+
+  <!-- Enlace a la hoja de confirmaciones, para quienes organizan.
+       Es un rombo apagado que solo se enciende al pasarle el cursor: no
+       llama la atención de los invitados, pero está siempre ahí para
+       quien lo busca. Si no hay hoja configurada, 15-registro-de-
+       confirmaciones.js lo saca de la página. -->
+  <a id="enlace-al-registro" href="#" target="_blank" rel="noopener"
+     aria-label="Ver las confirmaciones recibidas">&#9670;</a>
+</footer>
+
+
+<!-- ═══ 12. VENTANA DEL PASE DE ACCESO ══════════════════════════════ -->
+<div id="ventana-pase" role="dialog" aria-modal="true" aria-label="Tu pase de acceso">
+  <div class="pase">
+    <!-- Escuadras doradas en las cuatro esquinas, el mismo recurso que
+         usan las cartelas de la cuenta regresiva -->
+    <span class="pase__escuadra pase__escuadra--si"></span>
+    <span class="pase__escuadra pase__escuadra--sd"></span>
+    <span class="pase__escuadra pase__escuadra--ii"></span>
+    <span class="pase__escuadra pase__escuadra--id"></span>
+
+    <div class="pase__encabezado">
+      <p class="pase__rotulo">Pase de acceso · XV Años</p>
+
+      <!-- La misma rosa de la portada, como sello del encabezado -->
+      <svg class="pase__sello" viewBox="-46 -46 92 92" aria-hidden="true">
+        <use href="#rosa-frente"/>
+      </svg>
+
+      <p class="pase__nombre" id="pase-nombre">—</p>
+
+      <!-- El filete ornamental de la portada -->
+      <div class="pase__filete"><span>✦</span></div>
+
+      <p class="pase__lema">Una velada para recordar</p>
+    </div>
+
+    <div class="pase__cuerpo">
+      <div class="pase__fila">
+        <span class="pase__etiqueta">
+          <svg class="pase__icono" viewBox="0 0 24 24"><use href="#icono-fecha"/></svg>
+          Fecha
+        </span>
+        <span class="pase__valor" id="pase-fecha">—</span>
+      </div>
+      <div class="pase__fila">
+        <span class="pase__etiqueta">
+          <svg class="pase__icono" viewBox="0 0 24 24"><use href="#icono-hora"/></svg>
+          Hora
+        </span>
+        <span class="pase__valor" id="pase-hora">—</span>
+      </div>
+      <div class="pase__fila">
+        <span class="pase__etiqueta">
+          <svg class="pase__icono" viewBox="0 0 24 24"><use href="#icono-lugar"/></svg>
+          Lugar
+        </span>
+        <span class="pase__valor" id="pase-lugar">—</span>
+      </div>
+      <div class="pase__fila">
+        <span class="pase__etiqueta">
+          <svg class="pase__icono" viewBox="0 0 24 24"><use href="#icono-adultos"/></svg>
+          Adultos
+        </span>
+        <span class="pase__valor" id="pase-adultos">—</span>
+      </div>
+      <div class="pase__fila">
+        <span class="pase__etiqueta">
+          <svg class="pase__icono" viewBox="0 0 24 24"><use href="#icono-ninos"/></svg>
+          Niños
+        </span>
+        <span class="pase__valor" id="pase-ninos">—</span>
+      </div>
+      <div class="pase__fila">
+        <span class="pase__etiqueta">
+          <svg class="pase__icono" viewBox="0 0 24 24"><use href="#icono-menus"/></svg>
+          Menús
+        </span>
+        <span class="pase__valor" id="pase-menus">—</span>
+      </div>
+    </div>
+
+    <div class="pase__pie">
+      <div id="codigo-qr"></div>
+      <p class="pase__codigo" id="pase-codigo">—</p>
+      <p class="pase__aviso">Presentá este pase en la entrada del evento</p>
+      <div class="pase__acciones">
+        <button class="boton-dorado" id="boton-imprimir-pase" type="button">Imprimir pase</button>
+        <button class="boton-contorno" id="boton-cerrar-pase" type="button">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══ 13. CONTROLES FLOTANTES ═════════════════════════════════════
+     El reproductor y el botón de volver arriba viven juntos, en una
+     misma fila anclada abajo a la derecha.
+
+     Antes el botón estaba en la esquina opuesta, y eran dos cosas
+     sueltas flotando sobre la invitación. Agrupados se leen como un
+     solo juego de controles, que es lo que son: lo que la persona puede
+     manejar, todo en el mismo lugar.
+
+     Van en una fila flexible y no con medidas fijas a propósito: así el
+     botón queda siempre pegado al reproductor sin que haya que saber
+     cuánto mide, aunque se lo minimice o se achique en el celular.
+═══════════════════════════════════════════════════════════════════ -->
+<div id="controles-flotantes">
+
+  <!-- Sin texto: la flecha se entiende sola, y el nombre para lectores
+       de pantalla va en el aria-label. -->
+  <button id="volver-arriba" type="button" aria-label="Volver arriba">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <!-- La punta de flecha y su asta, en dos trazos finos -->
+      <path d="M12 19V7" />
+      <path d="M6.5 12.5 12 6.8l5.5 5.7" />
+    </svg>
+  </button>
+
+<aside id="reproductor" aria-label="Reproductor de música">
+  <div class="reproductor__aviso">¡Dale play! · una de mis canciones favoritas</div>
+
+  <div class="reproductor__barra-titulo">
+    <span>Música de la fiesta</span>
+    <button class="reproductor__minimizar" id="boton-minimizar-reproductor"
+            type="button" aria-label="Minimizar el reproductor">▼</button>
+  </div>
+
+  <div class="reproductor__cuerpo">
+    <button class="reproductor__play" id="boton-play" type="button"
+            aria-label="Reproducir la música">▶</button>
+    <div class="reproductor__info">
+      <p class="reproductor__cancion" data-dato="musica.titulo">Hysteria</p>
+      <p class="reproductor__artista">
+        <span data-dato="musica.artista">Muse</span> ·
+        <span data-dato="musica.album">Absolution</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="reproductor__volumen">
+    <button class="reproductor__silencio" id="boton-silencio"
+            type="button" aria-label="Silenciar"><svg class="icono-dorado reproductor__icono-volumen" viewBox="0 0 24 24" aria-hidden="true"><use href="#icono-sonido"/></svg></button>
+    <input class="reproductor__deslizador" id="deslizador-de-volumen"
+           type="range" min="0" max="100" value="70"
+           aria-label="Volumen de la música">
+  </div>
+
+  <audio id="audio-de-fondo" loop preload="auto" data-fuente="musica.archivo"></audio>
+</aside>
+
+</div><!-- /#controles-flotantes -->
+
+
+<!-- ═══ 14. ARCHIVOS DE CÓDIGO ══════════════════════════════════════
+     Se cargan en orden numérico, y ese orden importa: por ejemplo,
+     01-configuracion.js tiene que estar antes que todos los demás,
+     porque el resto lee los datos de ahí.
+═══════════════════════════════════════════════════════════════════ -->
+<script src="codigo/01-configuracion.js"></script>
+<script src="codigo/02-utilidades.js"></script>
+<script src="codigo/03-sobre-de-apertura.js"></script>
+<script src="codigo/04-invitado-personalizado.js"></script>
+<script src="codigo/05-cursor-personalizado.js"></script>
+<script src="codigo/06-petalos-con-fisica.js"></script>
+<script src="codigo/07-marco-y-enredaderas.js"></script>
+<script src="codigo/08-efectos-de-scroll.js"></script>
+<script src="codigo/09-cuenta-regresiva.js"></script>
+<script src="codigo/10-reproductor-de-musica.js"></script>
+<script src="codigo/11-formulario-confirmacion.js"></script>
+<script src="codigo/12-pase-de-acceso.js"></script>
+<script src="codigo/13-agregar-al-calendario.js"></script>
+<script src="codigo/14-haces-de-luz.js"></script>
+<script src="codigo/15-registro-de-confirmaciones.js"></script>
+<script src="codigo/16-volver-arriba.js"></script>
+<script src="codigo/17-joyas-colgantes.js"></script>
+<script src="codigo/18-motas-de-polvo.js"></script>
+<script src="codigo/19-velas.js"></script>
+
+<!-- Registro del service worker: hace que la invitación funcione sin
+     internet y se pueda instalar. Va al final y falla en silencio si el
+     navegador no lo soporta (o si se abre con doble clic como archivo,
+     sin servidor: ahí no aplica, pero tampoco molesta). -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () { /* sin PWA, la web anda igual */ });
+    });
+  }
+</script>
+
+</body>
+</html>

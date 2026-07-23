@@ -1,0 +1,339 @@
+/* ══════════════════════════════════════════════════════════════════════
+   12 · HACES DE LUZ
+   ══════════════════════════════════════════════════════════════════════
+
+   QUÉ ES ESTE ARCHIVO
+   Los rayos de luz que entran en diagonal desde arriba, como el sol
+   colándose entre las nubes de una tarde. Bañan el relicario, las
+   enredaderas y las molduras del marco.
+
+   EL TRUCO: "screen" EN VEZ DE PINTAR ENCIMA
+   Una capa clara puesta encima de la página la ensucia: apaga los negros
+   y todo queda lechoso. Con mix-blend-mode: screen la capa SUMA luz en
+   lugar de taparla, que es exactamente lo que hace un rayo de sol real.
+   Los negros siguen siendo negros y solo se encienden las zonas que ya
+   tenían algo de brillo: el oro de las molduras, los pétalos, las gemas.
+
+   POR QUÉ VAN TAN ARRIBA (z-index 70)
+   Porque tienen que bañar TAMBIÉN el marco victoriano y las enredaderas,
+   que viven en 60. Si fueran por debajo, la luz pasaría por detrás de las
+   rosas y el efecto se perdería justo donde más se luce.
+
+   ÍNDICE
+     1. La capa que los contiene
+     2. Cada haz
+     3. Accesibilidad
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 0. PENUMBRA DE PROFUNDIDAD ───────────────────────────────────────
+   La luz reina arriba, sobre el relicario; a medida que se baja, la
+   página se hunde en penumbra, como el agua del océano: cuanto más hondo,
+   más oscuro. Este velo es lo que oscurece —pero NUNCA llega al negro,
+   solo se apaga—.
+
+   Cubre el documento entero (position: absolute; inset: 0, igual que el
+   marco victoriano) y su color va de transparente arriba a un casi-negro
+   CÁLIDO abajo. Va por encima del marco y las enredaderas (z-index 65)
+   para hundirlas también en la sombra, pero por debajo de los haces de
+   luz (70): así la luz que todavía llega arriba se dibuja por encima del
+   velo, y abajo, donde la luz ya no alcanza, manda la penumbra.
+
+   El tope de oscuridad es moderado a propósito (elegancia por encima del
+   efecto): el formulario y el pie quedan más tenues, nunca ilegibles. */
+#penumbra-profunda {
+  position: absolute;
+  inset: 0;
+  z-index: 65;
+  pointer-events: none;
+  /* Transparente en la portada; la penumbra entra recién más abajo y
+     crece con la profundidad. El color es un negro cálido (tira a
+     borgoña muy oscuro), no un gris neutro, para no enfriar la paleta. */
+  background: linear-gradient(
+    to bottom,
+    rgba(8, 4, 4, 0)   0,
+    rgba(8, 4, 4, 0)   22vh,
+    rgba(7, 4, 4, .26) 90vh,
+    rgba(6, 3, 3, .46) 170vh,
+    rgba(6, 3, 3, .50) 100%);
+}
+
+/* Con menos movimiento el velo se mantiene (es estático, no molesta), pero
+   se atenúa un poco para no oscurecer de más a quien ya pidió sobriedad. */
+@media (prefers-reduced-motion: reduce) {
+  #penumbra-profunda { opacity: .7; }
+}
+
+
+/* ─── 0B. CANDELABROS DE LA PROFUNDIDAD ────────────────────────────────
+   Cuando la luz del día ya no llega, la opulencia queda iluminada por
+   CANDELABROS de pared: apliques de latón que salen de los laterales
+   sosteniendo velas que titilan, como en una mansión antigua de noche.
+   codigo/19-velas.js dibuja los candelabros y los anima.
+
+   HAY DOS CAPAS, Y EL ORDEN IMPORTA:
+
+     · #apliques (z-index 62, DELANTE de las rosas): la pieza de latón con
+       sus velas y llamas. Se ve entera, montada en el marco: la luz tiene
+       una FUENTE visible, no sale de la nada.
+
+     · #velas (z-index 58, DETRÁS de las rosas): el resplandor de cada
+       llama. Al quedar detrás del follaje, las rosas lo tapan y se
+       recortan como SILUETAS difusas, con la luz colándose entre los
+       pétalos. Es oclusión natural —la planta hace su propia sombra—.
+
+   Cada halo de #velas se alinea con la punta de su llama (lo hace el JS
+   midiendo la llama en pantalla). Así fuente y luz coinciden. */
+
+/* La pieza (latón + velas + llamas), por delante de las rosas. */
+#apliques {
+  position: absolute;
+  inset: 0;
+  z-index: 62;
+  pointer-events: none;
+  overflow: hidden;
+}
+.aplique {
+  position: absolute;
+  /* Cada candelabro se ubica y se refleja (lado derecho) desde el JS.
+     ⚠️ SIN filtro CSS acá (nada de drop-shadow): la llama titila DENTRO de
+     este contenedor, y un filtro obligaría a re-rasterizar todo el
+     candelabro en cada cuadro —caro, sobre todo en celulares—. El latón se
+     lee bien sobre la pared oscura sin sombra; y el propio halo de la vela,
+     que va detrás, ya lo despega del fondo. */
+}
+/* La llama titila: el JS le cambia opacidad y un leve escalado. El origen
+   abajo hace que crezca desde la mecha, como una llama real. */
+.llama {
+  transform-box: fill-box;
+  transform-origin: 50% 90%;
+  will-change: opacity, transform;
+}
+
+/* El resplandor de cada llama, por detrás de las rosas. */
+#velas {
+  position: absolute;
+  inset: 0;
+  z-index: 58;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  overflow: hidden;
+}
+
+.vela {
+  position: absolute;
+  border-radius: 50%;
+  /* Amarillo cálido de cera, tenue: fuerte en el corazón de la llama y
+     desvaneciéndose hacia afuera. Charco chico, confinado al borde: baña
+     las rosas y el marco, no llega al texto del centro. */
+  background: radial-gradient(circle,
+    rgba(255, 198, 110, .50) 0%,
+    rgba(226, 150, 66,  .26) 32%,
+    rgba(180, 110, 45,  .10) 56%,
+    transparent 74%);
+  filter: blur(12px);          /* borde de vela, no de reflector */
+  will-change: opacity, transform;
+  opacity: 0;                  /* el JS le da su titileo; sin JS, apagado */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Sin titileo: velas encendidas, quietas y algo más tenues. */
+  .vela  { opacity: .4 !important; }
+  .llama { opacity: 1 !important; transform: none !important; }
+}
+
+
+/* ─── 1. LA CAPA ───────────────────────────────────────────────────────
+   Ocupa exactamente la ventana y recorta lo que se sale (overflow:
+   hidden). Los haces sí son más largos que ella y nacen fuera de la
+   vista: al quedar recortados por la capa, no se les ve ni el principio
+   ni el final, que es lo que los hace leer como rayos y no como barras.
+
+   ⚠️ La capa NO puede ser más ancha que la ventana. Al estar en position:
+   fixed, el overflow-x: hidden del body no la recorta —los elementos
+   fijos se posicionan contra la ventana, no contra el body— y aparecía
+   una barra de desplazamiento horizontal en el celular.
+   ---------------------------------------------------------------------- */
+#haces-de-luz {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  overflow: hidden;
+
+  /* ⚠️ LA LUZ BAÑA EL AMBIENTE, PERO NO EL MARCO VICTORIANO.
+     El relicario, las ramas y las rosas SÍ tienen que encenderse con la
+     luz; el marco dorado del borde NO —ya es todo oro, y sumarle luz lo
+     vuelve un exceso—. Pero como las rosas trepan POR ENCIMA del marco,
+     los dos comparten capa y no se pueden separar por orden de dibujo.
+
+     La salida es esta máscara: la luz se muestra plena en el interior y
+     se desvanece sobre la banda del borde (donde vive el marco). Son dos
+     degradados —uno horizontal, otro vertical— y se combinan con
+     "intersect", así la luz solo aparece donde AMBOS ejes están dentro:
+     el centro. En los bordes y las esquinas se apaga sola.
+
+     La banda es algo más ancha que el marco (1,4×) para que el marco
+     quede bien dentro de la zona apagada y la transición no se corte
+     justo en su filo. */
+  --banda-de-luz: calc(var(--marco-grosor) * 1.4);
+  -webkit-mask:
+    linear-gradient(to right,  transparent 0, #000 var(--banda-de-luz),
+                    #000 calc(100% - var(--banda-de-luz)), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 var(--banda-de-luz),
+                    #000 calc(100% - var(--banda-de-luz)), transparent 100%);
+  -webkit-mask-composite: source-in;
+          mask:
+    linear-gradient(to right,  transparent 0, #000 var(--banda-de-luz),
+                    #000 calc(100% - var(--banda-de-luz)), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 var(--banda-de-luz),
+                    #000 calc(100% - var(--banda-de-luz)), transparent 100%);
+          mask-composite: intersect;
+}
+
+
+/* ─── 2. CADA HAZ ──────────────────────────────────────────────────────
+   Una banda vertical muy alargada, girada en diagonal. El degradado la
+   hace nacer de la nada, alcanzar su máximo hacia el primer tercio y
+   apagarse abajo: así el rayo tiene dirección, no es una franja pareja.
+
+   Los degradados laterales (los dos ::before/::after no hacen falta:
+   basta con que el propio fondo sea un degradado horizontal difuso, que
+   es lo que le da el borde suave de un haz de polvo en suspensión).
+
+   El JS (codigo/14-haces-de-luz.js) les cambia despacio el ancho, la
+   opacidad y la posición. Acá solo se define su forma en reposo.
+   ---------------------------------------------------------------------- */
+.haz {
+  position: absolute;
+  /* Nace bien arriba y muere bien abajo, fuera de la capa: así la capa lo
+     recorta y el rayo no tiene extremos visibles. */
+  top: -45%;
+  height: 190%;
+  width: 12vw;
+
+  /* Degradado en dos ejes: a lo ancho se difumina en los bordes, y a lo
+     largo se apaga hacia abajo. */
+  background:
+    linear-gradient(to bottom,
+      rgba(244, 226, 160, .00) 0%,
+      rgba(244, 226, 160, .55) 18%,
+      rgba(201, 168, 76,  .38) 52%,
+      rgba(201, 168, 76,  .00) 100%);
+
+  /* El desenfoque es lo que lo vuelve luz y no una cinta de papel */
+  filter: blur(26px);
+
+  /* Inclinación: entra desde arriba a la derecha, como un sol de tarde */
+  transform-origin: 50% 0;
+  transform: rotate(18deg);
+
+  opacity: 0;            /* el JS le da su valor; sin JS no molesta */
+  will-change: transform, opacity, width;
+}
+
+/* Cada haz arranca en un sitio distinto. El JS los mueve a partir de acá. */
+.haz:nth-child(1) { left:  6%; }
+.haz:nth-child(2) { left: 24%; }
+.haz:nth-child(3) { left: 45%; }
+.haz:nth-child(4) { left: 63%; }
+.haz:nth-child(5) { left: 82%; }
+
+
+/* ─── 3. ACCESIBILIDAD ─────────────────────────────────────────────────
+   Luz que respira lentamente sobre toda la pantalla es justo el tipo de
+   movimiento que molesta a quien pidió reducirlo. Se apaga por completo.
+   ---------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  #haces-de-luz { display: none; }
+}
+
+/* En pantallas chicas la luz tapa más de lo que aporta: se atenúa. */
+@media (max-width: 700px) {
+  #haces-de-luz { opacity: .55; }
+}
+
+
+/* ─── 4. MOTAS DE POLVO ────────────────────────────────────────────────
+   Partículas mínimas suspendidas en la luz. Solo con los haces, la luz
+   es una mancha; con polvo flotando dentro, se vuelve VOLUMÉTRICA —se ve
+   el aire, como en un rayo de sol que entra por una ventana—.
+
+   Van en su propia capa, apenas por debajo de los haces (z-index 69), y
+   también en screen para sumar luz. Su brillo está atado a --luz-
+   intensidad: aparecen cuando la luz entra y se apagan con ella.
+
+   Las crea y les da sus tamaños y recorridos codigo/18-motas-de-polvo.js.
+   ---------------------------------------------------------------------- */
+#motas-de-polvo {
+  position: fixed;
+  inset: 0;
+  z-index: 69;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  overflow: hidden;
+  opacity: var(--luz-intensidad);
+  transition: opacity .4s linear;
+}
+
+.mota {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    rgba(255, 246, 214, .95) 0%,
+    rgba(244, 226, 160, .55) 42%,
+    transparent 72%);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: flotar-mota var(--mota-dur, 26s) linear var(--mota-delay, 0s) infinite;
+}
+
+/* Cada mota nace, deriva despacio en diagonal (como el polvo cae siguiendo
+   la corriente de aire de la luz) y se apaga, para reaparecer arriba. */
+@keyframes flotar-mota {
+  0%   { transform: translate(0, 0);                                opacity: 0; }
+  12%  {                                                            opacity: var(--mota-op, .6); }
+  88%  {                                                            opacity: var(--mota-op, .6); }
+  100% { transform: translate(var(--mota-dx, -30px), var(--mota-dy, 90px)); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #motas-de-polvo { display: none; }
+}
+
+
+/* ─── 5. VELO DE REVELADO ──────────────────────────────────────────────
+   El baño de luz de "encender las luces" al abrir el sobre. Sube, llena
+   la pantalla y se apaga, todo una sola vez, mientras la música entra
+   como eco lejano (ver codigo/10-reproductor-de-musica.js) y los haces
+   rampan de 0 a su intensidad ambiente (codigo/14-haces-de-luz.js).
+
+   Va en screen para que sume luz cálida sin ensuciar, y por encima de los
+   haces (z-index 71) para que sea el gesto que revela.
+   ---------------------------------------------------------------------- */
+#velo-de-revelado {
+  position: fixed;
+  inset: 0;
+  z-index: 71;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse 95% 75% at 50% 40%,
+      rgba(255, 240, 205, .55) 0%,
+      rgba(230, 180, 120, .22) 42%,
+      transparent 72%);
+}
+body.revelando #velo-de-revelado {
+  animation: bano-de-revelado 2.9s var(--curva-elegante) forwards;
+}
+@keyframes bano-de-revelado {
+  0%   { opacity: 0; }
+  38%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #velo-de-revelado { display: none; }
+}

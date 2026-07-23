@@ -1,0 +1,374 @@
+/* ══════════════════════════════════════════════════════════════════════
+   06 · SECCIONES DE CONTENIDO
+   ══════════════════════════════════════════════════════════════════════
+
+   QUÉ ES ESTE ARCHIVO
+   Estiliza los bloques de en medio de la invitación:
+     · el mensaje de los papás
+     · la mesa de regalos
+     · la ubicación con el mapa
+     · el pie de página
+
+   ÍNDICE
+     1. Caja común de todas las secciones
+     2. Mensaje de los papás
+     3. Mesa de regalos
+     4. Ubicación y mapa
+     5. Pie de página
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. CAJA COMÚN DE TODAS LAS SECCIONES ─────────────────────────────
+   margin-inline: auto es lo que centra el bloque horizontalmente: reparte
+   el espacio sobrante por igual a izquierda y derecha.
+   ---------------------------------------------------------------------- */
+.seccion {
+  position: relative;
+  z-index: 2;
+  max-width: var(--ancho-contenido);
+  margin-inline: auto;
+  padding: 5rem 1rem;
+  text-align: center;
+}
+
+/* Variante a todo el ancho, con línea dorada arriba y abajo. Por dentro
+   el contenido igual se centra con .seccion__interior. */
+.seccion--ancha {
+  max-width: 100%;
+  border-top: 1px solid var(--borde-oro-tenue);
+  border-bottom: 1px solid var(--borde-oro-tenue);
+}
+.seccion__interior {
+  max-width: var(--ancho-contenido);
+  margin-inline: auto;
+}
+
+
+/* ─── 2. MENSAJE DE LOS PAPÁS ──────────────────────────────────────── */
+.caja-mensaje {
+  position: relative;
+  max-width: 700px;
+  margin-inline: auto;
+  padding: clamp(1.5rem, 5vw, 3rem);
+  background: rgba(255, 255, 255, .02);
+  border: 1px solid var(--borde-oro-tenue);
+}
+
+.caja-mensaje blockquote {
+  font-family: var(--tipo-detalle);
+  font-style: italic;
+  font-size: clamp(1rem, 2.6vw, 1.25rem);
+  /* IM Fell English en cursiva es una tipografía con mucha personalidad:
+     tiene trazos que suben y bajan bastante. Si los renglones van
+     apretados, esos trazos casi se tocan y la lectura cansa. Un 13 % más
+     de interlineado la vuelve fluida sin desarmar el bloque. */
+  line-height: 2.15;
+  color: var(--color-marfil);
+  text-align: center;
+}
+
+.caja-mensaje cite {
+  display: block;
+  margin-top: 1.5rem;
+  font-family: var(--tipo-texto);
+  font-size: .9rem;
+  letter-spacing: .15em;
+  color: var(--color-oro-apagado);
+  text-align: right;
+  font-style: normal;
+}
+
+/* Los cuatro adornos de las esquinas del recuadro */
+.caja-mensaje__adorno {
+  position: absolute;
+  color: var(--color-oro);
+  font-size: 1.5rem;
+  opacity: .5;
+}
+.caja-mensaje__adorno--si { top: .5rem;    left: .75rem;  }
+.caja-mensaje__adorno--sd { top: .5rem;    right: .75rem; }
+.caja-mensaje__adorno--ii { bottom: .5rem; left: .75rem;  }
+.caja-mensaje__adorno--id { bottom: .5rem; right: .75rem; }
+
+
+/* ─── 3. MESA DE REGALOS ───────────────────────────────────────────── */
+.tarjeta-regalo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2rem;
+  max-width: 460px;
+  margin-inline: auto;
+  padding: clamp(2rem, 6vw, 3.5rem);
+  background: rgba(201, 168, 76, .04);
+  border: 1px solid var(--borde-oro-tenue);
+  transition: border-color .3s, box-shadow .3s;
+}
+.tarjeta-regalo:hover {
+  border-color: var(--borde-oro-fuerte);
+  box-shadow: 0 0 30px rgba(201, 168, 76, .1);
+}
+.tarjeta-regalo__icono { font-size: 3rem; }
+.tarjeta-regalo p { margin: 0; font-size: 1rem; }
+.tarjeta-regalo__nota {
+  font-size: .95rem;
+  color: var(--color-oro-apagado);
+  font-style: italic;
+}
+
+
+/* ─── 4. UBICACIÓN Y MAPA ──────────────────────────────────────────── */
+
+/* Los cuatro datos prácticos (dirección, horario, estacionamiento,
+   vestimenta) en dos columnas que se vuelven una en el celular. */
+.datos-lugar {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+  max-width: 680px;
+  margin: 0 auto 2rem;
+  text-align: left;
+}
+.dato-lugar {
+  display: flex;
+  gap: .75rem;
+  align-items: flex-start;
+}
+/* Mismo juego de íconos que el pase de acceso: trazo fino en oro, no
+   emoji. Los emoji rompían el tono, y además cada sistema operativo los
+   dibuja distinto, así que la sección se veía diferente en cada equipo. */
+.dato-lugar__icono {
+  flex-shrink: 0;
+  width: 21px;
+  height: 21px;
+  margin-top: .15rem;
+  fill: none;
+  stroke: url(#oro-icono);
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: .92;
+}
+.dato-lugar span { color: var(--color-marfil-apagado); font-size: .95rem; }
+.dato-lugar strong {
+  display: block;
+  color: var(--color-marfil);
+  font-family: var(--tipo-detalle);
+  font-weight: 400;
+}
+
+/* ─── EL MAPA, ENMARCADO COMO UNA LÁMINA ───────────────────────────────
+   El mapa de Google es lo único que viene de un sistema ajeno, y por eso
+   es lo único capaz de romper la ilusión. No se puede estilizar por
+   dentro (el modo incrustado no lo permite), pero sí se puede hacer que
+   deje de parecer una captura pegada. Dos frentes:
+
+     a) que no termine en un rectángulo perfecto  → viñeta + escuadras
+     b) que sus grises no tiren a azul            → temple del filtro
+   ---------------------------------------------------------------------- */
+.mapa-marco {
+  position: relative;
+  max-width: var(--ancho-contenido);
+  margin: 2rem auto 0;
+  overflow: hidden;
+
+  /* Doble filete: uno pleno y otro finísimo hacia adentro */
+  border: 1px solid var(--borde-oro-tenue);
+  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, .12),
+                    0 18px 40px rgba(0, 0, 0, .55);
+}
+
+.mapa-marco iframe {
+  display: block;
+  width: 100%;
+  height: 380px;
+  border: none;
+
+  /* TEMPLE DEL COLOR.
+     El filtro anterior terminaba en hue-rotate(180deg), que es justo lo
+     que empujaba el mapa hacia el azul frío del "modo oscuro" de Google.
+     Esta cadena lo lleva al oro viejo y al vino:
+
+       grayscale  → borra los colores originales de Google
+       invert     → vuelve oscuro el papel y claras las calles
+       sepia      → tiñe de cálido todo lo que quedó gris
+       hue-rotate → corrige ese cálido hacia el oro exacto de la paleta
+       saturate   → le devuelve cuerpo al color que el sepia dejó lavado
+       brightness → lo baja para que no compite con el contenido
+       contrast   → apenas, para que los nombres de las calles se lean */
+  filter: grayscale(100%) invert(91%) sepia(78%) hue-rotate(345deg)
+          saturate(240%) brightness(.58) contrast(1.05);
+}
+
+/* VIÑETA · el detalle que más trabaja.
+   Oscurece los bordes hacia adentro, así el mapa se funde con la página
+   en vez de cortarse en seco. pointer-events: none es imprescindible: sin
+   eso, esta capa se comería los clics y el mapa dejaría de arrastrarse. */
+.mapa-marco__vineta {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 78% 78% at 50% 50%,
+                    transparent 44%, rgba(10, 6, 5, .55) 82%, rgba(10, 6, 5, .88) 100%);
+  box-shadow: inset 0 0 60px rgba(10, 6, 5, .75);
+}
+
+/* Escuadras doradas en las cuatro esquinas */
+.mapa-marco__escuadra {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-color: var(--color-oro);
+  border-style: solid;
+  pointer-events: none;
+  z-index: 2;
+}
+.mapa-marco__escuadra--si { top: 9px;    left: 9px;  border-width: 1px 0 0 1px; }
+.mapa-marco__escuadra--sd { top: 9px;    right: 9px; border-width: 1px 1px 0 0; }
+.mapa-marco__escuadra--ii { bottom: 9px; left: 9px;  border-width: 0 0 1px 1px; }
+.mapa-marco__escuadra--id { bottom: 9px; right: 9px; border-width: 0 1px 1px 0; }
+
+/* Cartela: el rótulo de una lámina antigua */
+.mapa-marco__cartela {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  pointer-events: none;
+  padding: .4rem 1.4rem .45rem;
+  background: linear-gradient(180deg, rgba(10, 6, 5, .95), rgba(10, 6, 5, .78));
+  border: 1px solid var(--borde-oro-tenue);
+  border-top: none;
+  font-family: var(--tipo-detalle);
+  font-size: .72rem;
+  letter-spacing: .3em;
+  text-transform: uppercase;
+  color: var(--color-oro);
+  white-space: nowrap;
+  max-width: calc(100% - 5rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Fila de botones debajo del mapa (abrir en Maps / agendar) */
+.acciones-lugar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+
+/* ─── 5. PIE DE PÁGINA ─────────────────────────────────────────────────
+   El relleno inferior que evita que el reproductor tape el texto está en
+   02-marco-victoriano.css, junto al resto de las medidas del marco.
+   ---------------------------------------------------------------------- */
+#pie-de-pagina {
+  text-align: center;
+  padding-top: 3rem;
+  border-top: 1px solid var(--borde-oro-tenue);
+  font-family: var(--tipo-detalle);
+  font-size: .8rem;
+  letter-spacing: .2em;
+  color: var(--color-oro-apagado);
+}
+#pie-de-pagina .rosa { color: var(--color-sangre); }
+
+/* El acceso a la hoja de confirmaciones, para quienes organizan.
+   Un rombo casi transparente, separado del texto, que recién se enciende
+   al pasarle el cursor: el invitado no lo registra, y quien lo busca lo
+   encuentra. La zona sensible es más grande que el rombo (el padding)
+   para que en el celular no haya que apuntar con precisión de cirujano. */
+#enlace-al-registro {
+  display: inline-block;
+  margin-left: .9em;
+  padding: .4rem;
+  font-size: .55em;
+  line-height: 1;
+  color: var(--color-oro-apagado);
+  opacity: .28;
+  text-decoration: none;
+  vertical-align: middle;
+  transition: opacity .4s ease, color .4s ease;
+}
+#enlace-al-registro:hover,
+#enlace-al-registro:focus-visible {
+  opacity: .6;
+  color: var(--color-oro);
+}
+
+/* Los tres toques que lo abren (ver 15-registro-de-confirmaciones.js).
+   El rombo se enciende con cada uno: es el único indicio de que la
+   cuenta va bien. Sin esto, quien conoce el truco no sabría si el
+   primer toque registró o no. Se apaga solo al segundo y medio. */
+#enlace-al-registro.contando-1 { opacity: .6; color: var(--color-oro); }
+#enlace-al-registro.contando-2 {
+  opacity: 1;
+  color: var(--color-oro-claro);
+  text-shadow: 0 0 8px rgba(201, 168, 76, .5);
+}
+
+
+/* ─── 6. VOLVER ARRIBA ─────────────────────────────────────────────────
+   Va pegado al reproductor, dentro de la fila de controles flotantes
+   (ver el bloque 0 de 09-reproductor.css). Comparte su lenguaje: fondo
+   carbón, filo dorado tenue y la sombra profunda que despega del fondo
+   de óleo. Redondo, para que se distinga de un vistazo del panel
+   rectangular y nadie lo confunda con un control de la música.
+   ---------------------------------------------------------------------- */
+#volver-arriba {
+  flex-shrink: 0;          /* nunca se aplasta: el que cede es el panel */
+
+  display: grid;
+  place-items: center;
+  width: 2.9rem;
+  height: 2.9rem;
+
+  background: var(--color-carbon);
+  border: 1px solid var(--borde-oro-tenue);
+  border-radius: 50%;
+  color: var(--color-oro-apagado);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, .7), 0 0 0 1px rgba(201, 168, 76, .1);
+
+  /* Oculto hasta que se haya bajado lo suficiente. Sale desde abajo, no
+     aparece de la nada: el desplazamiento cuenta de dónde vino. */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(12px);
+  transition: opacity .35s var(--curva-elegante),
+              transform .35s var(--curva-elegante),
+              visibility .35s,
+              color .25s,
+              border-color .25s,
+              box-shadow .25s;
+}
+#volver-arriba.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+#volver-arriba svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#volver-arriba:hover,
+#volver-arriba:focus-visible {
+  color: var(--color-oro);
+  border-color: var(--color-oro-apagado);
+  box-shadow: 0 12px 50px rgba(0, 0, 0, .8), 0 0 25px rgba(201, 168, 76, .25);
+}
+
+/* Al apretarlo, la flecha se adelanta un pelín hacia arriba: el botón
+   contesta el gesto antes de que la página empiece a moverse. */
+#volver-arriba:active svg { transform: translateY(-2px); }
+#volver-arriba svg { transition: transform .2s var(--curva-elegante); }

@@ -1,0 +1,204 @@
+/* ══════════════════════════════════════════════════════════════════════
+   03 · SOBRE DE APERTURA (pantalla de bienvenida)
+   ══════════════════════════════════════════════════════════════════════
+
+   QUÉ ES ESTE ARCHIVO
+   La primera pantalla que ve el invitado: un sobre cerrado con un sello
+   de lacre. Al hacer clic, el sello se rompe, la solapa se abre y la
+   invitación aparece detrás.
+
+   POR QUÉ EXISTE (además de que se ve precioso)
+   Los navegadores PROHÍBEN que una web arranque música sola. Solo la
+   permiten después de que la persona toque algo. Ese clic para abrir el
+   sobre es justamente el permiso que el navegador necesita, así que la
+   música empieza sin que nadie tenga que apretar "play".
+
+   Mientras tanto, aprovechamos para precargar las tipografías, el fondo
+   y la canción: cuando el sobre se abre, ya está todo listo y la web
+   entra sin tironeos.
+
+   ÍNDICE
+     1. Capa que cubre la pantalla
+     2. Monograma que se dibuja solo (mientras carga)
+     3. El sobre: papel, solapa y sello de lacre
+     4. Saludo y botón
+     5. Animación de apertura
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. CAPA QUE CUBRE LA PANTALLA ────────────────────────────────── */
+#sobre-de-apertura {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;            /* por encima de absolutamente todo */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  padding: 2rem;
+  text-align: center;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 40%, #1c1109 0%, #0a0605 55%, #050302 100%);
+  transition: opacity 1.1s var(--curva-elegante),
+              visibility 1.1s;
+}
+
+/* Mientras la web está detrás del sobre no se puede hacer scroll. */
+body.sobre-visible { overflow: hidden; }
+
+/* Cuando termina la animación, el sobre desaparece por completo. */
+#sobre-de-apertura.oculto {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+
+/* ─── 2. MONOGRAMA QUE SE DIBUJA SOLO ──────────────────────────────────
+   Truco clásico: a un trazo SVG se le pone una línea punteada tan larga
+   como el trazo entero (stroke-dasharray) y se la corre hacia afuera
+   (stroke-dashoffset). Al animar el desplazamiento hasta 0, parece que
+   una mano invisible va dibujando la letra.
+   ---------------------------------------------------------------------- */
+.sobre__monograma { width: 130px; height: 130px; }
+
+.sobre__monograma path {
+  fill: none;
+  stroke: var(--color-oro);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 620;
+  stroke-dashoffset: 620;
+  animation: dibujar-trazo 2.6s var(--curva-elegante) infinite;
+}
+
+@keyframes dibujar-trazo {
+  0%   { stroke-dashoffset: 620; opacity: .25; }
+  45%  { stroke-dashoffset: 0;   opacity: 1;   }
+  75%  { stroke-dashoffset: 0;   opacity: 1;   }
+  100% { stroke-dashoffset: -620; opacity: .25; }
+}
+
+.sobre__cargando {
+  font-family: var(--tipo-detalle);
+  font-size: .8rem;
+  letter-spacing: .35em;
+  text-transform: uppercase;
+  color: var(--color-oro-apagado);
+}
+
+/* Cuando terminó de cargar se oculta el monograma y aparece el sobre. */
+#sobre-de-apertura:not(.esta-cargando) .sobre__precarga { display: none; }
+#sobre-de-apertura.esta-cargando       .sobre__carta    { display: none; }
+
+
+/* ─── 3. EL SOBRE ──────────────────────────────────────────────────── */
+.sobre__carta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.75rem;
+  animation: aparecer-desde-abajo 1s var(--curva-elegante) both;
+}
+
+.sobre__ilustracion {
+  width: min(84vw, 440px);
+  height: auto;
+  /* El sobre entero es el botón (ya no hay botón dorado aparte) */
+  transition: transform .5s var(--curva-elegante), filter .5s;
+}
+.sobre__ilustracion:hover {
+  transform: translateY(-5px);
+  filter: brightness(1.06);
+}
+.sobre__ilustracion:focus-visible {
+  outline: 2px solid var(--color-oro-claro);
+  outline-offset: 10px;
+}
+
+/* La solapa gira sobre su borde superior, como una bisagra real.
+
+   transform-box: view-box hace que el origen se mida en las mismas
+   coordenadas del dibujo (las del viewBox), así podemos decir
+   exactamente "el eje está en x=220, y=72", que es donde nace la
+   solapa. Es mucho más preciso que estimar un porcentaje. */
+.sobre__solapa {
+  transform-box: view-box;
+  transform-origin: 220px 72px;
+  transition: transform 1s var(--curva-elegante);
+}
+
+/* El sello de lacre late suavemente para invitar a tocarlo. */
+.sobre__sello {
+  transform-box: view-box;
+  transform-origin: 220px 152px;
+  animation: latir-sello 2.8s ease-in-out infinite;
+}
+@keyframes latir-sello {
+  0%, 100% { transform: scale(1);    filter: drop-shadow(0 0 0 rgba(192,24,26,0)); }
+  50%      { transform: scale(1.05); filter: drop-shadow(0 0 16px rgba(192,24,26,.5)); }
+}
+
+
+/* ─── 4. SALUDO Y BOTÓN ────────────────────────────────────────────── */
+.sobre__saludo {
+  font-family: var(--tipo-titulos);
+  font-size: clamp(1.1rem, 3.4vw, 1.6rem);
+  color: var(--color-oro-claro);
+  margin: 0;
+  text-shadow: 0 0 30px rgba(201, 168, 76, .3);
+}
+
+.sobre__indicacion {
+  font-family: var(--tipo-detalle);
+  font-size: .82rem;
+  letter-spacing: .3em;
+  text-transform: uppercase;
+  color: var(--color-oro-apagado);
+  margin: 0;
+}
+
+/* El aviso "Tocá el sello" parpadea muy suave para guiar sin gritar */
+.sobre__indicacion { animation: respirar-indicacion 3s ease-in-out infinite; }
+@keyframes respirar-indicacion {
+  0%, 100% { opacity: .55; }
+  50%      { opacity: 1; }
+}
+
+
+/* ─── 5. ANIMACIÓN DE APERTURA ─────────────────────────────────────────
+   Al hacer clic, el JS agrega la clase "se-esta-abriendo" y estas tres
+   cosas pasan a la vez:
+     · el sello sale despedido girando (como si se quebrara el lacre)
+     · la solapa se abre hacia atrás
+     · el sobre entero crece y se desvanece, como si entráramos en él
+   ---------------------------------------------------------------------- */
+#sobre-de-apertura.se-esta-abriendo .sobre__sello {
+  animation: romper-sello .8s var(--curva-elegante) forwards;
+}
+@keyframes romper-sello {
+  0%   { transform: scale(1) rotate(0)      translateY(0);    opacity: 1; }
+  35%  { transform: scale(1.25) rotate(-14deg) translateY(-6px); opacity: 1; }
+  100% { transform: scale(.6) rotate(60deg) translateY(120px); opacity: 0; }
+}
+
+#sobre-de-apertura.se-esta-abriendo .sobre__solapa {
+  transform: rotateX(-172deg);
+}
+
+#sobre-de-apertura.se-esta-abriendo .sobre__ilustracion {
+  animation: entrar-en-el-sobre 1.15s .35s var(--curva-elegante) forwards;
+}
+@keyframes entrar-en-el-sobre {
+  to { transform: scale(2.4) translateY(6%); opacity: 0; }
+}
+
+#sobre-de-apertura.se-esta-abriendo .sobre__saludo,
+#sobre-de-apertura.se-esta-abriendo .sobre__indicacion {
+  animation: desvanecer-hacia-abajo .5s var(--curva-elegante) forwards;
+}
+@keyframes desvanecer-hacia-abajo {
+  to { opacity: 0; transform: translateY(18px); }
+}

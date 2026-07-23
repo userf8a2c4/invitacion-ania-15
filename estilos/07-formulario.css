@@ -1,0 +1,354 @@
+/* ══════════════════════════════════════════════════════════════════════
+   07 · FORMULARIO DE CONFIRMACIÓN
+   ══════════════════════════════════════════════════════════════════════
+
+   QUÉ ES ESTE ARCHIVO
+   Estiliza el formulario donde el invitado confirma si viene, cuántos
+   son y qué va a comer cada uno.
+
+   LA PARTE MÁS NUEVA: LOS MENÚS POR PERSONA
+   Antes había dos casillas sueltas para todo el grupo. Ahora, si alguien
+   dice que vienen 3 adultos, aparecen 3 filas (una por adulto) y en cada
+   una se elige SU menú. Esas filas las crea sola la computadora desde
+   11-formulario-confirmacion.js; acá solo definimos cómo se ven.
+
+   ÍNDICE
+     1. Caja del formulario
+     2. Campos (etiquetas, cajas de texto, listas desplegables)
+     3. Filas de menú por persona
+     4. Opciones de menú con tilde dorada
+     5. Mensaje de éxito
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. CAJA DEL FORMULARIO ───────────────────────────────────────── */
+.formulario {
+  position: relative;
+  max-width: 680px;
+  margin-inline: auto;
+  padding: clamp(1.5rem, 5vw, 3rem) clamp(1.25rem, 4vw, 2.5rem);
+  background: rgba(255, 255, 255, .02);
+  border: 1px solid var(--borde-oro-tenue);
+  text-align: left;
+}
+
+.formulario__introduccion {
+  text-align: center;
+  max-width: 540px;
+  margin: 0 auto 2.5rem;
+  color: var(--color-marfil-apagado);
+}
+.formulario__fecha-limite { color: var(--color-oro); }
+
+
+/* ─── 2. CAMPOS ────────────────────────────────────────────────────── */
+.campo { margin-bottom: 1.75rem; }
+
+.campo > label,
+.campo__titulo {
+  display: block;
+  font-family: var(--tipo-detalle);
+  font-size: .85rem;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--color-oro);
+  margin-bottom: .5rem;
+}
+
+.campo input,
+.campo select,
+.campo textarea {
+  width: 100%;
+  padding: .75rem 1rem;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--borde-oro-tenue);
+  color: var(--color-marfil);
+  font-family: var(--tipo-texto);
+  font-size: 1rem;
+  outline: none;
+  appearance: none;
+  transition: border-color .3s, box-shadow .3s;
+}
+/* FOCO · la señal de "tu atención está acá".
+   Antes solo cambiaba el color del borde, que es un cambio tan sutil que
+   pasa desapercibido. Ahora el campo se enciende: el borde se vuelve oro
+   pleno, aparece un resplandor alrededor y el fondo sube un punto. Es la
+   diferencia entre un sitio que se ve bien y uno que se siente vivo. */
+.campo input:focus,
+.campo select:focus,
+.campo textarea:focus {
+  border-color: var(--color-oro);
+  background: rgba(255, 255, 255, .07);
+  box-shadow: 0 0 0 1px rgba(201, 168, 76, .55),
+              0 0 14px rgba(201, 168, 76, .22),
+        inset 0 0 12px rgba(201, 168, 76, .07);
+}
+
+/* El texto de ejemplo se apaga al escribir, para que no compita */
+.campo input:focus::placeholder,
+.campo textarea:focus::placeholder { color: rgba(200, 191, 176, .35); }
+.campo select option { background: var(--color-carbon); color: var(--color-marfil); }
+.campo textarea { resize: vertical; min-height: 90px; }
+
+/* Dos columnas que se vuelven una sola en pantallas angostas */
+.rejilla-doble {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
+}
+
+/* Etiqueta chiquita encima de los contadores de adultos y niños */
+.campo__subetiqueta {
+  display: block;
+  font-size: .75rem;
+  letter-spacing: .1em;
+  color: var(--color-marfil-apagado);
+  margin-bottom: .35rem;
+  text-transform: none;
+}
+
+.nota-campo {
+  font-size: .85rem;
+  color: var(--color-oro-apagado);
+  font-style: italic;
+  margin-top: .4rem;
+}
+
+/* Bloque que solo se ve si la persona confirmó que asiste */
+.solo-si-asiste { display: none; }
+.solo-si-asiste.visible { display: block; }
+
+
+/* ─── 3. FILAS DE MENÚ POR PERSONA ─────────────────────────────────────
+   Una fila por comensal: a la izquierda quién es, a la derecha su menú.
+   ---------------------------------------------------------------------- */
+.menus-por-persona {
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+}
+
+.fila-persona {
+  display: grid;
+  grid-template-columns: minmax(88px, 130px) 1fr;
+  align-items: center;
+  gap: .75rem;
+  padding: .55rem .7rem;
+  background: rgba(255, 255, 255, .015);
+  border: 1px solid rgba(201, 168, 76, .18);
+  /* Aparece con una animación corta cuando se agrega una persona */
+  animation: aparecer-desde-abajo .35s var(--curva-elegante) both;
+}
+
+.fila-persona__nombre {
+  font-family: var(--tipo-detalle);
+  font-size: .82rem;
+  letter-spacing: .1em;
+  color: var(--color-marfil);
+}
+.fila-persona__nombre small {
+  display: block;
+  font-size: .72em;
+  color: var(--color-oro-apagado);
+  letter-spacing: .05em;
+}
+
+.fila-persona__opciones {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: .5rem;
+}
+
+/* En celular, el nombre se pone arriba y las opciones abajo */
+@media (max-width: 560px) {
+  .fila-persona { grid-template-columns: 1fr; gap: .5rem; }
+  .fila-persona__opciones { grid-template-columns: 1fr; }
+}
+
+
+/* ─── 3b. TARJETA DEL MENÚ INFANTIL ────────────────────────────────────
+   Los niños no llevan una fila cada uno, porque su menú es uno solo. Se
+   muestra esta única tarjeta con la cantidad al costado, como se lee un
+   pedido de verdad: "menú infantil ×3".
+   ---------------------------------------------------------------------- */
+.tarjeta-infantil {
+  display: flex;
+  align-items: center;
+  gap: .85rem;
+  padding: .75rem 1rem;
+  background: rgba(201, 168, 76, .06);
+  border: 1px solid var(--color-oro);
+  animation: aparecer-desde-abajo .35s var(--curva-elegante) both;
+}
+
+.tarjeta-infantil__icono { font-size: 1.5rem; line-height: 1; }
+
+.tarjeta-infantil__texto {
+  flex: 1;
+  font-family: var(--tipo-texto);
+  font-size: 1rem;
+  color: var(--color-oro-claro);
+}
+.tarjeta-infantil__texto small {
+  display: block;
+  font-family: var(--tipo-detalle);
+  font-size: .72rem;
+  letter-spacing: .08em;
+  color: var(--color-oro-apagado);
+  margin-top: .1rem;
+}
+
+/* El contador: el dato que reemplaza a las filas repetidas */
+.tarjeta-infantil__cantidad {
+  flex-shrink: 0;
+  min-width: 2.6rem;
+  padding: .3rem .6rem;
+  text-align: center;
+  font-family: var(--tipo-titulos);
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--color-negro);
+  background: linear-gradient(135deg, var(--color-oro), var(--color-oro-claro));
+  box-shadow: 0 0 12px rgba(201, 168, 76, .35);
+  /* Los dígitos ocupan siempre lo mismo: el número no "salta" al cambiar */
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* ─── 4. OPCIONES DE MENÚ CON TILDE DORADA ─────────────────────────────
+   El cuadradito nativo del navegador es feo y no se puede pintar bien,
+   así que se esconde (display: none) y se dibuja uno propio con ::before.
+
+   :has(input:checked) quiere decir "esta etiqueta CONTIENE un control
+   marcado". Es lo que permite iluminar toda la opción, no solo la tilde.
+   ---------------------------------------------------------------------- */
+.opcion-menu {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  padding: .5rem .7rem;
+  background: rgba(255, 255, 255, .035);
+  /* ACCESIBILIDAD: la opción SIN marcar tiene que verse igual de bien que
+     la marcada. Antes su texto y su borde eran tan tenues que a una
+     persona mayor le costaba darse cuenta de que "Vegetariano" existía
+     como alternativa. La marcada no necesita que la otra sea invisible:
+     ya destaca sola por el dorado. */
+  border: 1px solid rgba(201, 168, 76, .5);
+  font-family: var(--tipo-texto);
+  font-size: .9rem;
+  color: rgba(245, 239, 230, .82);
+  transition: all .25s;
+}
+.opcion-menu:hover { border-color: var(--color-oro-apagado); color: var(--color-marfil); }
+
+/* Se oculta el control real, pero sigue existiendo y funcionando */
+.opcion-menu input { display: none; }
+
+/* La casilla dibujada por nosotros */
+.opcion-menu::before {
+  content: '';
+  flex-shrink: 0;
+  width: 19px;
+  height: 19px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--borde-oro-fuerte);
+  background: rgba(255, 255, 255, .03);
+  font-size: .85rem;
+  line-height: 1;
+  transition: all .25s;
+}
+/* Las opciones excluyentes (una sola por persona) llevan casilla redonda */
+.opcion-menu--unica::before { border-radius: 50%; }
+
+/* Estado marcado: aparece la tilde ✓ en negro sobre dorado */
+.opcion-menu:has(input:checked) {
+  border-color: var(--color-oro);
+  color: var(--color-oro-claro);
+  background: rgba(201, 168, 76, .08);
+}
+.opcion-menu:has(input:checked)::before {
+  content: '✓';
+  color: var(--color-negro);
+  font-weight: bold;
+  background: linear-gradient(135deg, var(--color-oro), var(--color-oro-claro));
+  border-color: var(--color-oro-claro);
+  box-shadow: 0 0 10px rgba(201, 168, 76, .45);
+}
+
+/* Accesibilidad: marca visible al navegar con el teclado (tecla Tab) */
+.opcion-menu:has(input:focus-visible) {
+  outline: 2px solid var(--color-oro-claro);
+  outline-offset: 2px;
+}
+
+
+/* ─── 4b. EL BOTÓN MIENTRAS ENVÍA ──────────────────────────────────────
+   Antes el botón simplemente cambiaba su texto a "Enviando…" y de golpe
+   aparecía el pase. Ese salto seco es de las cosas que más delatan a un
+   sitio barato: el usuario no sabe si su clic hizo algo.
+
+   Ahora laten tres rombos en secuencia — los mismos ✦ que separan las
+   secciones—, así el estado de espera pertenece al lenguaje de la pieza
+   en vez de ser un "spinner" genérico. */
+.rombos-de-carga {
+  display: inline-flex;
+  align-items: center;
+  gap: .6rem;
+}
+.rombos-de-carga i {
+  width: 9px;
+  height: 9px;
+  border-radius: 1px;
+  background: var(--color-marfil);
+  transform: rotate(45deg);
+  animation: latir-rombo 1.15s ease-in-out infinite;
+}
+/* El desfase entre los tres es lo que crea la "ola" */
+.rombos-de-carga i:nth-child(2) { animation-delay: .16s; }
+.rombos-de-carga i:nth-child(3) { animation-delay: .32s; }
+
+@keyframes latir-rombo {
+  0%, 100% { opacity: .28; transform: rotate(45deg) scale(.72); }
+  40%      { opacity: 1;   transform: rotate(45deg) scale(1.12); }
+}
+
+/* Mientras envía, el botón no acepta más clics ni muestra el destello */
+.boton-carmesi.esta-enviando { pointer-events: none; }
+.boton-carmesi.esta-enviando::after { display: none; }
+
+
+/* ─── 5. MENSAJE DE ÉXITO ──────────────────────────────────────────── */
+.mensaje-exito {
+  display: none;
+  text-align: center;
+  padding: 2rem;
+}
+.mensaje-exito.visible { display: block; }
+.mensaje-exito__icono { font-size: 3rem; margin-bottom: 1rem; }
+.mensaje-exito h3 {
+  font-family: var(--tipo-titulos);
+  color: var(--color-oro-claro);
+  font-size: 1.5rem;
+  margin-bottom: .75rem;
+}
+.mensaje-exito__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+/* Enlace discreto para volver a confirmar si se equivocó */
+.enlace-sutil {
+  background: none;
+  border: none;
+  color: var(--color-oro-apagado);
+  font-family: var(--tipo-texto);
+  font-size: .85rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.enlace-sutil:hover { color: var(--color-oro); }
