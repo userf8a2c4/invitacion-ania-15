@@ -10,11 +10,12 @@
         el paisaje lejano se corre despacio y el personaje rápido, y el
         cerebro lo interpreta como profundidad.
 
-     2. EL MARCO DE LA PORTADA — al bajar, el óvalo dorado se agranda y
-        se desvanece, como si nos alejáramos de él.
-
-     3. APARICIÓN DE LAS SECCIONES — cada bloque entra suavemente cuando
+     2. APARICIÓN DE LAS SECCIONES — cada bloque entra suavemente cuando
         llega a la pantalla, en vez de estar ahí desde el principio.
+
+   (Antes había un tercer efecto: el óvalo de la portada se desvanecía al
+   bajar. Se quitó a pedido: el relicario es una PIEZA SÓLIDA de joyería y
+   tiene que verse maciza siempre, también mientras se va con el scroll.)
 
    ÍNDICE
      1. Parallax del fondo y marco de la portada
@@ -26,7 +27,6 @@
 (function preparaLosEfectosDeScroll() {
 
   const capaDeFondo    = buscar('#capa-fondo');
-  const brocheDePortada = buscar('.portada__broche');
   const enredaderaDelMarco = buscar('#enredadera-de-la-portada');
 
   /**
@@ -56,21 +56,11 @@
       capaDeFondo.style.transform = `translateY(-${cuantoSeMueve.toFixed(1)}px)`;
     }
 
-    /* ── Broche de la portada ────────────────────────────────────────
-       "avance" vale 0 arriba de todo y 1 cuando ya bajamos una pantalla
-       entera. Con ese número de 0 a 1 se desvanece el broche al salir.
-
-       IMPORTANTE: acá NO se toca el tamaño. El broche conserva siempre
-       la misma medida; si le aplicáramos un scale, el marco y el texto
-       "respirarían" al hacer scroll, que es justo lo que no queremos. */
-    if (brocheDePortada && posicionDelScroll > 2) {
-      const avance = Math.min(posicionDelScroll / window.innerHeight, 1);
-      brocheDePortada.style.opacity = (1 - avance * 0.85).toFixed(3);
-    } else if (brocheDePortada) {
-      // Arriba de todo devolvemos el control al CSS, así la animación de
-      // entrada se ve completa.
-      brocheDePortada.style.opacity = '';
-    }
+    /* ── El broche de la portada NO se desvanece ──────────────────────
+       El relicario es una pieza sólida: se va con el scroll como cualquier
+       contenido, pero SIEMPRE opaco. No se le toca ni la opacidad ni el
+       tamaño (un scale haría "respirar" el marco y el texto al hacer
+       scroll). Su opacidad la maneja solo el CSS (la animación de entrada). */
 
     /* ── Enredadera que rodea el óvalo de la portada ────────────────
        Gira lentísimo a medida que se baja: le da vida sin distraer. */

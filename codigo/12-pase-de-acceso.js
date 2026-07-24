@@ -133,8 +133,31 @@ function mostrarPaseDeAcceso(datos) {
 
   dibujarCodigoQR(datos.codigo || 'XV-2026');
 
+  /* Accesibilidad: recordamos QUIÉN abrió el pase para devolverle el foco al
+     cerrar (si no, el foco cae al principio de la página y quien navega con
+     teclado o lector de pantalla se pierde). Y metemos el foco DENTRO del
+     diálogo, en el botón de cerrar. */
+  disparadorDelPase = document.activeElement;
+
   ventana.classList.add('abierta');
   document.body.style.overflow = 'hidden';   // no se puede hacer scroll detrás
+
+  const botonCerrar = buscar('#boton-cerrar-pase');
+  if (botonCerrar) requestAnimationFrame(() => botonCerrar.focus());
+}
+
+/** Quién tenía el foco antes de abrir el pase (para devolvérselo al cerrar). */
+let disparadorDelPase = null;
+
+/**
+ * Elementos que pueden recibir foco dentro del diálogo, en orden.
+ * @param {HTMLElement} ventana
+ * @returns {HTMLElement[]}
+ */
+function focosDelPase(ventana) {
+  return Array.from(ventana.querySelectorAll(
+    'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  )).filter(el => !el.disabled && el.offsetParent !== null);
 }
 
 /**
@@ -146,6 +169,12 @@ function cerrarPaseDeAcceso() {
   if (!ventana) return;
   ventana.classList.remove('abierta');
   document.body.style.overflow = '';
+
+  /* Le devolvemos el foco a quien abrió el pase. */
+  if (disparadorDelPase && typeof disparadorDelPase.focus === 'function') {
+    disparadorDelPase.focus();
+  }
+  disparadorDelPase = null;
 }
 
 /**
@@ -183,9 +212,30 @@ function imprimirPaseDeAcceso() {
     });
   }
 
-  // Cerrar con la tecla Escape, que es lo que todo el mundo espera
+  // Teclado del diálogo: solo actúa cuando el pase está abierto.
   document.addEventListener('keydown', evento => {
-    if (evento.key === 'Escape') cerrarPaseDeAcceso();
+    if (!ventana || !ventana.classList.contains('abierta')) return;
+
+    // Escape cierra, que es lo que todo el mundo espera.
+    if (evento.key === 'Escape') { cerrarPaseDeAcceso(); return; }
+
+    /* Trampa de foco: mientras el pase está abierto, Tab cicla SOLO entre sus
+       controles (no se escapa a la página de atrás, que está tapada). */
+    if (evento.key === 'Tab') {
+      const focos = focosDelPase(ventana);
+      if (focos.length === 0) return;
+      const primero = focos[0];
+      const ultimo  = focos[focos.length - 1];
+      const activo  = document.activeElement;
+
+      if (evento.shiftKey && (activo === primero || !ventana.contains(activo))) {
+        evento.preventDefault();
+        ultimo.focus();
+      } else if (!evento.shiftKey && activo === ultimo) {
+        evento.preventDefault();
+        primero.focus();
+      }
+    }
   });
 })();
 
@@ -212,7 +262,7 @@ function imprimirPaseDeAcceso() {
   if (textoDeExito) {
     textoDeExito.innerHTML =
       'Ya tenemos tu confirmación, <strong>' + limpiarTexto(paseGuardado.nombre) + '</strong>.<br>' +
-      'Podés volver a ver tu pase cuando quieras.';
+      'Puedes volver a ver tu pase cuando quieras.';
   }
 
   /* Botón para empezar de nuevo: borra la memoria y recarga la página */

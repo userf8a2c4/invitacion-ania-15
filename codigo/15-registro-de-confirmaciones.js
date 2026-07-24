@@ -70,6 +70,56 @@ function armarLaFilaDeLaHoja(datos) {
   };
 }
 
+/* ─── 1B. FIRMA DE INTEGRIDAD (HMAC) ──────────────────────────────────
+   Antes de mandar cada confirmación, la firmamos con una clave compartida
+   con el script de Google. El script rechaza lo que no traiga una firma
+   válida. Sube la barrera contra confirmaciones falsas o basura inyectadas
+   al endpoint. (Salvedad honesta en 01-configuracion.js: la clave vive en
+   el cliente, así que es un disuasivo, no una garantía.)
+
+   Los campos que se firman van en un ORDEN FIJO y con separador '|'. El
+   script arma exactamente la misma cadena y compara. Si cambia cualquiera
+   de esos campos en el camino, la firma no coincide y la fila se descarta. */
+
+/** Los campos firmados, en orden. Debe coincidir con el README (Apps Script). */
+function cadenaCanonica(fila) {
+  return [fila.momento, fila.codigo, fila.correo, fila.asiste, fila.total].join('|');
+}
+
+/**
+ * Devuelve la fila con un campo `firma` (HMAC-SHA256 en hexadecimal).
+ *
+ * Si no hay clave configurada, o el navegador no expone Web Crypto (por
+ * ejemplo al abrir como archivo local, sin https), devuelve la fila TAL CUAL:
+ * la web sigue funcionando y el script acepta como siempre.
+ *
+ * @param {Object} fila
+ * @returns {Promise<Object>}
+ */
+async function firmarLaFila(fila) {
+  const clave = CONFIGURACION.registro.claveDeFirma;
+  if (!clave || clave.startsWith('PEGA_AQUI')) return fila;
+  if (!(window.crypto && crypto.subtle)) return fila;
+
+  try {
+    const codificador = new TextEncoder();
+    const llave = await crypto.subtle.importKey(
+      'raw', codificador.encode(clave),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+    );
+    const firmaBytes = await crypto.subtle.sign(
+      'HMAC', llave, codificador.encode(cadenaCanonica(fila))
+    );
+    const firmaHex = Array.from(new Uint8Array(firmaBytes))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+    return Object.assign({}, fila, { firma: firmaHex });
+  } catch (error) {
+    // Si algo falla al firmar, mandamos sin firma antes que perder la confirmación.
+    console.warn('No se pudo firmar la confirmación; se manda sin firma:', error);
+    return fila;
+  }
+}
+
 /**
  * Manda UNA fila a la hoja y averigua si llegó.
  *
@@ -132,7 +182,10 @@ async function anotarEnLaHoja(datos) {
     return false;
   }
 
-  const fila = armarLaFilaDeLaHoja(datos);
+  /* Se firma UNA vez y se usa la fila firmada tanto para mandar como para
+     guardar como pendiente: así, si se reintenta más tarde, la firma sigue
+     siendo la correcta (cubre los mismos datos y el mismo momento). */
+  const fila = await firmarLaFila(armarLaFilaDeLaHoja(datos));
 
   /* Dos intentos. El primero falla casi siempre por algo pasajero —el
      celular cambiando de wifi a datos, Google tardando—, así que vale
@@ -191,31 +244,30 @@ async function anotarEnLaHoja(datos) {
 /* ─── 3. EL ACCESO DISCRETO DEL PIE ─────────────────────────────────── */
 
 (function preparaElAccesoAlRegistro() {
-  const enlace = buscar('#enlace-al-registro');
-  if (!enlace) return;
+  /* El botón secreto es LA ROSA del pie de página. Parece un adorno más
+     —nadie sospecha que se toca—, y esa es toda la gracia. */
+  const rosa = buscar('#rosa-secreta');
+  if (!rosa) return;
 
   const direccion = CONFIGURACION.registro.urlDeLaHoja;
 
-  /* Sin hoja configurada no hay nada que abrir: se saca del todo, para
-     que no quede un rombo que no lleva a ninguna parte. */
-  if (!direccion || direccion.startsWith('PEGA_AQUI')) {
-    enlace.remove();
-    return;
-  }
+  /* Sin hoja configurada no hay nada que abrir. La rosa NO se saca (es un
+     adorno del pie): solo no se le pone el comportamiento secreto. */
+  if (!direccion || direccion.startsWith('PEGA_AQUI')) return;
 
   /* POR QUÉ TRES TOQUES Y NO UNO
-     Un enlace de un solo clic al pie de una página se pisa sin querer,
-     sobre todo en el celular, donde el dedo tapa lo que toca. Y el
-     invitado que lo pisa se encuentra de golpe con una pantalla de
-     Google pidiéndole permisos: queda raro y preocupa.
+     Un botón de un solo clic al pie se pisa sin querer, sobre todo en el
+     celular, donde el dedo tapa lo que toca. Y el invitado que lo pisa se
+     encuentra de golpe con una pantalla de Google pidiendo permisos: queda
+     raro y preocupa.
 
      Tres toques seguidos no pasan por accidente. Y como no hay forma de
-     adivinar que hay que darlos, funciona además como una cerradura
-     simple: el que sabe, entra.
+     adivinar que hay que darlos —ni que la rosa se toca—, funciona además
+     como una cerradura simple: el que sabe, entra.
 
-     El rombo se va encendiendo con cada toque. Sin eso, quien SÍ sabe
-     el truco no tendría manera de saber si la cuenta va bien o si el
-     primer toque no registró. */
+     La rosa FLORECE un poco con cada toque (crece y brilla). Sin eso, quien
+     conoce el truco no sabría si la cuenta va bien o si el primer toque no
+     registró. */
 
   const TOQUES_NECESARIOS = 3;
   const VENTANA_DE_TIEMPO = 1500;  // ms para completar los tres
@@ -223,21 +275,19 @@ async function anotarEnLaHoja(datos) {
   let toques = 0;
   let reloj = null;
 
+  rosa.style.cursor = 'default';   // no delata que es un botón
+
   /**
-   * Vuelve el rombo a su estado apagado y olvida los toques contados.
+   * Devuelve la rosa a su estado de reposo y olvida los toques contados.
    * @returns {void}
    */
   function volverAEmpezar() {
     toques = 0;
-    enlace.classList.remove('contando-1', 'contando-2');
+    rosa.classList.remove('contando-1', 'contando-2');
     clearTimeout(reloj);
   }
 
-  enlace.addEventListener('click', function alTocarElRombo(evento) {
-    /* Siempre se frena la navegación: el enlace se abre a mano recién
-       cuando la cuenta llega a tres. */
-    evento.preventDefault();
-
+  rosa.addEventListener('click', function alTocarLaRosa() {
     toques++;
 
     if (toques >= TOQUES_NECESARIOS) {
@@ -246,24 +296,21 @@ async function anotarEnLaHoja(datos) {
       return;
     }
 
-    // Se enciende un poco más con cada toque
-    enlace.classList.toggle('contando-1', toques === 1);
-    enlace.classList.toggle('contando-2', toques === 2);
+    // La rosa florece un poco más con cada toque.
+    rosa.classList.toggle('contando-1', toques === 1);
+    rosa.classList.toggle('contando-2', toques === 2);
 
-    /* Si la persona se detiene, la cuenta se borra. Así el rombo no
-       queda "a dos toques de abrirse" para siempre, y un toque suelto de
-       hace media hora no se suma a los de ahora. */
+    /* Si la persona se detiene, la cuenta se borra: la rosa no queda "a dos
+       toques de abrirse" para siempre, y un toque suelto de hace un rato no
+       se suma a los de ahora. */
     clearTimeout(reloj);
     reloj = setTimeout(volverAEmpezar, VENTANA_DE_TIEMPO);
   });
 
   /* QUÉ PROTEGE ESTO, Y QUÉ NO
-     Ser discreto no es ser seguro: cualquiera que mire el código de la
-     página encuentra esta dirección, con tres toques o con treinta.
-
-     Quien cuida los datos de verdad es Google: la hoja está compartida
-     solo con las cuentas de quienes organizan. Si alguien más abre este
-     enlace, ve una pantalla de "no tenés permiso". Los tres toques son
-     para que ningún invitado la pise de casualidad, no para esconderla
-     de alguien que la esté buscando. */
+     Ser discreto no es ser seguro: cualquiera que mire el código encuentra
+     esta dirección. Quien cuida los datos de verdad es Google: la hoja está
+     compartida solo con las cuentas de quienes organizan, y si alguien más
+     la abre ve "no tenés permiso". Los tres toques son para que ningún
+     invitado la pise de casualidad, no para esconderla de quien la busca. */
 })();

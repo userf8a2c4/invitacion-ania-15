@@ -40,9 +40,10 @@
      CSS (el oro del relicario, las motas de polvo). */
   const raiz = document.documentElement;
 
-  // Si la persona pidió menos movimiento, ni siquiera arrancamos.
-  if (prefiereMenosMovimiento()) return;
-
+  /* No se corta acá aunque las animaciones estén apagadas: el bucle se
+     prepara igual y queda en reposo (ver el guard del bucle). Con las
+     animaciones apagadas, además, el CSS esconde la capa de haces. Si se
+     encienden con el botón, la luz vuelve en el acto, sin recargar. */
   const haces = buscarTodos('#haces-de-luz .haz');
   if (haces.length === 0) return;
 
@@ -163,6 +164,11 @@
    */
   function animarLosHaces(momentoActual) {
     if (!animacionActiva) return;
+
+    /* Animaciones apagadas (botón o accesibilidad): el bucle sigue vivo
+       pero no dibuja luz —el CSS, además, esconde la capa—. Listo para
+       reanudar al instante si se encienden, sin recargar. */
+    if (prefiereMenosMovimiento()) { requestAnimationFrame(animarLosHaces); return; }
 
     if (momentoActual - ultimoCalculo >= CADA_CUANTO) {
       ultimoCalculo = momentoActual;

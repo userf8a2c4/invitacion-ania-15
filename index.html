@@ -32,13 +32,50 @@
   dos lugares.
   ══════════════════════════════════════════════════════════════════════
 -->
-<html lang="es">
+<html lang="es-MX">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+  <!-- ANIMACIONES ON/OFF + DETECCIÓN DE EQUIPOS LENTOS (sin parpadeo).
+       Este script minúsculo corre ANTES de dibujar la página y decide si
+       arranca con el movimiento apagado, poniendo la clase de una vez (así
+       no hay "flash" de animación que se corta medio segundo después).
+
+       LA REGLA, en orden:
+         1. Si la persona YA eligió con el botón (guardado en memoria), se
+            respeta siempre: 'off' apaga, 'on' enciende.
+         2. Si NUNCA eligió, se mira el equipo: en celulares viejos o de poca
+            memoria/núcleos (o con el "ahorro de datos" puesto) se arranca
+            liviano solo. Así un invitado con un teléfono lento entra bien
+            sin tener que tocar nada.
+
+       La auto-decisión NO se guarda como elección: se recalcula en cada
+       visita y en cada equipo, y el botón siempre puede cambiarla.
+       El botón vive en codigo/20-boton-de-animaciones.js. -->
+  <script>
+    (function () {
+      try {
+        var elegido = localStorage.getItem('invitacion-ania:animaciones'); // 'on' | 'off' | null
+        var apagar;
+        if (elegido === 'off') { apagar = true; }
+        else if (elegido === 'on') { apagar = false; }
+        else {
+          var mem    = navigator.deviceMemory;        // GB (puede no existir)
+          var nucleos = navigator.hardwareConcurrency; // núcleos (puede no existir)
+          var ahorro = navigator.connection && navigator.connection.saveData;
+          apagar = !!ahorro
+            || (typeof mem === 'number' && mem <= 3)
+            || (typeof nucleos === 'number' && nucleos <= 2)
+            || (typeof mem === 'number' && mem <= 4 && typeof nucleos === 'number' && nucleos <= 4);
+        }
+        if (apagar) document.documentElement.classList.add('animaciones-off');
+      } catch (e) {}
+    })();
+  </script>
+
   <title>XV Años · Ania</title>
-  <meta name="description" content="Acompañanos a celebrar los XV años de Ania. Sábado 24 de octubre de 2026, Salones Alvi, Toluca.">
+  <meta name="description" content="Acompáñanos a celebrar los XV años de Ania. Sábado 24 de octubre de 2026, Salones Alvi, Toluca.">
 
   <!-- ═══ 1. DATOS PARA CUANDO SE COMPARTE EL ENLACE ═══════════════════
        Estas etiquetas son las que hacen que, al mandar el enlace por
@@ -51,12 +88,12 @@
        porque WhatsApp necesita la dirección absoluta para ir a buscarla.
   ═══════════════════════════════════════════════════════════════════ -->
   <meta property="og:type"        content="website">
-  <meta property="og:title"       content="XV Años de Ania · 24 de Octubre de 2026">
-  <meta property="og:description" content="Una velada para recordar. Acompañanos a celebrar los quince años de Ania.">
+  <meta property="og:title"       content="XV Años de Ania · 24 de octubre de 2026">
+  <meta property="og:description" content="Una velada para recordar. Acompáñanos a celebrar los quince años de Ania.">
   <meta property="og:image"       content="recursos/vista-previa-compartir.jpg">
   <meta property="og:locale"      content="es_MX">
   <meta name="twitter:card"       content="summary_large_image">
-  <meta name="twitter:title"      content="XV Años de Ania · 24 de Octubre de 2026">
+  <meta name="twitter:title"      content="XV Años de Ania · 24 de octubre de 2026">
   <meta name="twitter:description" content="Una velada para recordar.">
   <meta name="twitter:image"      content="recursos/vista-previa-compartir.jpg">
 
@@ -624,7 +661,7 @@
 
     <svg class="sobre__ilustracion" id="ilustracion-del-sobre"
          viewBox="0 0 440 300" role="button" tabindex="0"
-         aria-label="Sobre cerrado con un sello de lacre. Activalo para abrir la invitación.">
+         aria-label="Sobre cerrado con un sello de lacre. Actívalo para abrir la invitación.">
       <defs>
         <!-- Papel: no es un color plano, tiene veta y sombreado -->
         <linearGradient id="sob-papel" x1=".1" y1="0" x2=".9" y2="1">
@@ -843,13 +880,22 @@
 
 <!-- CANDELABROS DE LA PROFUNDIDAD
      Cuando la luz del día ya no llega al fondo, la opulencia queda
-     rescatada por candelabros de pared que titilan en la penumbra, como
-     una mansión antigua de noche. Van en dos capas (ver 12-haces-de-luz.css
-     y codigo/19-velas.js): #apliques es la pieza de latón con sus velas
-     (delante de las rosas), y #velas es el resplandor de cada llama
-     (detrás de las rosas, para que se recorten como siluetas). -->
+     rescatada por candelabros de pared, como una mansión antigua de noche.
+
+     VAN EN DOS CAPAS, Y EL ORDEN ES LO QUE HACE QUE FUNCIONEN:
+       · #apliques — la pieza de latón. Va DEBAJO del marco (z 57 < 60), así
+         las enredaderas y las molduras le pasan POR DELANTE y el candelabro
+         queda montado en la pared, no pegado encima de las rosas.
+       · #luz-de-velas — el resplandor. Va POR ENCIMA del velo de penumbra
+         (z 66 > 65). Antes estaba debajo y el velo le comía hasta un 50 %
+         de la luz: por eso el mapa se veía casi negro por más que se
+         subiera el brillo.
+
+     Es también lo correcto físicamente: el metal vive dentro de la escena
+     (y por eso se ensombrece), pero su luz baña la habitación entera.
+     Los dibuja y anima codigo/19-velas.js. -->
 <div id="apliques" aria-hidden="true"></div>
-<div id="velas" aria-hidden="true"></div>
+<div id="luz-de-velas" aria-hidden="true"></div>
 
 
 <main id="contenido">
@@ -1216,19 +1262,32 @@
 
                La rosa-engarce fija y las capullos van FUERA de la cadena
                (no cuelgan). -->
+          <!-- CADENA CON VOLUMEN: cada tramo son ANILLOS de oro entrelazados
+               (uno de frente, uno de canto), no una línea. Los anillos van
+               DENTRO de cada .eslabon, así giran con la física (17-joyas-
+               colgantes.js): la cadena se curva y la gema queda atrás al
+               mecerse. El realce claro interno le da el brillo del metal. -->
           <g class="cadena-colgante">
             <g class="eslabon" data-pivote-x="0" data-pivote-y="228">
-              <!-- eslabón 1: tramo alto de cadena -->
-              <path d="M0 228 V 264" stroke="url(#mo-oro-vertical)" stroke-width="2.4" stroke-opacity=".75"/>
+              <!-- eslabón 1: tramo alto -->
+              <ellipse cx="0" cy="236" rx="4.4" ry="8"   fill="none" stroke="url(#mo-oro)" stroke-width="2.4"/>
+              <ellipse cx="-1.3" cy="235" rx="1.7" ry="4.6" fill="none" stroke="#f6e8b4" stroke-width=".9" opacity=".5"/>
+              <ellipse cx="0" cy="248" rx="6.4" ry="2.6" fill="none" stroke="url(#mo-oro-vertical)" stroke-width="2.2"/>
+              <ellipse cx="0" cy="260" rx="4.4" ry="8"   fill="none" stroke="url(#mo-oro)" stroke-width="2.4"/>
+              <ellipse cx="-1.3" cy="259" rx="1.7" ry="4.6" fill="none" stroke="#f6e8b4" stroke-width=".9" opacity=".5"/>
               <g class="eslabon" data-pivote-x="0" data-pivote-y="264">
-                <!-- eslabón 2: tramo bajo de cadena -->
-                <path d="M0 264 V 300" stroke="url(#mo-oro-vertical)" stroke-width="2.4" stroke-opacity=".75"/>
+                <!-- eslabón 2: tramo bajo -->
+                <ellipse cx="0" cy="272" rx="4.4" ry="8"   fill="none" stroke="url(#mo-oro)" stroke-width="2.4"/>
+                <ellipse cx="-1.3" cy="271" rx="1.7" ry="4.6" fill="none" stroke="#f6e8b4" stroke-width=".9" opacity=".5"/>
+                <ellipse cx="0" cy="284" rx="6.4" ry="2.6" fill="none" stroke="url(#mo-oro-vertical)" stroke-width="2.2"/>
+                <ellipse cx="0" cy="296" rx="4.4" ry="8"   fill="none" stroke="url(#mo-oro)" stroke-width="2.4"/>
+                <ellipse cx="-1.3" cy="295" rx="1.7" ry="4.6" fill="none" stroke="#f6e8b4" stroke-width=".9" opacity=".5"/>
                 <g class="eslabon" data-pivote-x="0" data-pivote-y="300">
-                  <!-- eslabón 3: la gema y la gota, el peso del extremo -->
-                  <path d="M0 300 V 306" stroke="url(#mo-oro-vertical)" stroke-width="2.2" stroke-opacity=".7"/>
-                  <use href="#mo-gema" transform="translate(0 312) scale(1.05)"/>
-                  <path d="M0 324 V 336" stroke="url(#mo-oro-vertical)" stroke-width="1.6" stroke-opacity=".6"/>
-                  <path d="M0 336 C -9 348,-6 362,0 372 C 6 362,9 348,0 336 Z"
+                  <!-- eslabón 3: último anillo + la gema y la gota (el peso) -->
+                  <ellipse cx="0" cy="306" rx="4" ry="6.5" fill="none" stroke="url(#mo-oro)" stroke-width="2.2"/>
+                  <use href="#mo-gema" transform="translate(0 314) scale(1.05)"/>
+                  <ellipse cx="0" cy="329" rx="3" ry="2" fill="none" stroke="url(#mo-oro-vertical)" stroke-width="1.4"/>
+                  <path d="M0 333 C -9 345,-6 359,0 369 C 6 359,9 345,0 333 Z"
                         fill="url(#mo-petalo)" stroke="url(#mo-oro)" stroke-width="1.2"/>
                 </g>
               </g>
@@ -1278,7 +1337,7 @@
   <section id="mensaje" class="seccion seccion--ancha">
     <div class="seccion__interior">
       <span class="rotulo-de-seccion">De nuestros corazones al tuyo</span>
-      <h2>Un mensaje de los papás</h2>
+      <h2>Un mensaje de tus padres</h2>
 
       <div class="caja-mensaje marco-ornamental revelar">
         <span class="caja-mensaje__adorno caja-mensaje__adorno--si">❧</span>
@@ -1332,7 +1391,7 @@
       <div class="tarjeta-regalo__icono"><svg class="icono-dorado icono-dorado--grande" viewBox="0 0 24 24" aria-hidden="true"><use href="#icono-regalo"/></svg></div>
       <p>
         Tu presencia es el mejor regalo.<br>
-        Si deseás obsequiar algo especial a <span data-dato="fiesta.nombre">Ania</span>,<br>
+        Si deseas obsequiar algo especial a <span data-dato="fiesta.nombre">Ania</span>,<br>
         preparamos una lista en Amazon.
       </p>
       <a class="boton-dorado" target="_blank" rel="noopener"
@@ -1426,12 +1485,12 @@
     <div class="seccion__interior">
       <div class="divisor"><span>✦ ✦ ✦</span></div>
       <span class="rotulo-de-seccion">Confirmación de asistencia</span>
-      <h2>¿Nos acompañás?</h2>
+      <h2>¿Nos acompañas?</h2>
 
       <p class="formulario__introduccion">
-        Completá el formulario antes del
+        Completa el formulario antes del
         <strong class="formulario__fecha-limite" data-dato="fiesta.fechaLimiteParaConfirmar"></strong>.
-        Al confirmar vas a recibir tu pase de acceso.
+        Al confirmar recibirás tu pase de acceso.
       </p>
 
       <div class="formulario marco-ornamental revelar">
@@ -1451,9 +1510,9 @@
           </div>
 
           <div class="campo">
-            <label for="campo-asistencia">¿Confirmás tu asistencia? *</label>
+            <label for="campo-asistencia">¿Confirmas tu asistencia? *</label>
             <select id="campo-asistencia" name="asistencia" required>
-              <option value="">— Seleccioná —</option>
+              <option value="">— Selecciona —</option>
               <option value="Sí, asistiré">Sí, asistiré con mucho gusto</option>
               <option value="No podré asistir">Lamentablemente no podré asistir</option>
             </select>
@@ -1482,7 +1541,7 @@
             <div class="campo">
               <span class="campo__titulo">Menú de cada adulto</span>
               <div class="menus-por-persona" id="menus-de-adultos"></div>
-              <p class="nota-campo">Cada persona come un solo plato: elegí uno por fila.</p>
+              <p class="nota-campo">Cada persona come un solo plato: elige uno por fila.</p>
             </div>
 
             <!-- Una fila por niño, solo si anotó niños -->
@@ -1519,7 +1578,7 @@
           <h3>¡Gracias por confirmar!</h3>
           <p id="texto-de-exito">
             Te enviamos tu pase de acceso al correo.<br>
-            Si no lo encontrás, revisá la carpeta de spam.
+            Si no lo encuentras, revisa la carpeta de spam.
           </p>
           <div class="mensaje-exito__acciones">
             <button class="boton-dorado" id="boton-ver-pase" type="button">
@@ -1541,16 +1600,15 @@
 <footer id="pie-de-pagina">
   <span data-dato="fiesta.nombre">Ania</span> ·
   <span data-dato="fiesta.edadEnRomanos">XV</span> Años
-  <span class="rosa"><svg class="rosa-inline" viewBox="-46 -46 92 92" aria-hidden="true"><use href="#rosa-frente"/></svg></span>
-  <span data-dato="fiesta.fechaEnPalabras">24 de Octubre de 2026</span>
 
-  <!-- Enlace a la hoja de confirmaciones, para quienes organizan.
-       Es un rombo apagado que solo se enciende al pasarle el cursor: no
-       llama la atención de los invitados, pero está siempre ahí para
-       quien lo busca. Si no hay hoja configurada, 15-registro-de-
-       confirmaciones.js lo saca de la página. -->
-  <a id="enlace-al-registro" href="#" target="_blank" rel="noopener"
-     aria-label="Ver las confirmaciones recibidas">&#9670;</a>
+  <!-- LA ROSA ES EL BOTÓN SECRETO al registro de invitados. Parece un
+       simple adorno del pie —nadie sospecha—, pero tres toques seguidos
+       abren la hoja de confirmaciones. La rosa florece un poco con cada
+       toque, para que quien conoce el truco vea que la cuenta avanza. Lo
+       maneja codigo/15-registro-de-confirmaciones.js. -->
+  <span class="rosa" id="rosa-secreta"><svg class="rosa-inline" viewBox="-46 -46 92 92" aria-hidden="true"><use href="#rosa-frente"/></svg></span>
+
+  <span data-dato="fiesta.fechaEnPalabras">24 de Octubre de 2026</span>
 </footer>
 
 
@@ -1628,7 +1686,7 @@
     <div class="pase__pie">
       <div id="codigo-qr"></div>
       <p class="pase__codigo" id="pase-codigo">—</p>
-      <p class="pase__aviso">Presentá este pase en la entrada del evento</p>
+      <p class="pase__aviso">Presenta este pase en la entrada del evento</p>
       <div class="pase__acciones">
         <button class="boton-dorado" id="boton-imprimir-pase" type="button">Imprimir pase</button>
         <button class="boton-contorno" id="boton-cerrar-pase" type="button">Cerrar</button>
@@ -1664,7 +1722,7 @@
   </button>
 
 <aside id="reproductor" aria-label="Reproductor de música">
-  <div class="reproductor__aviso">¡Dale play! · una de mis canciones favoritas</div>
+  <div class="reproductor__aviso">¡Ponle play! · una de mis canciones favoritas</div>
 
   <div class="reproductor__barra-titulo">
     <span>Música de la fiesta</span>
@@ -1718,10 +1776,26 @@
 <script src="codigo/13-agregar-al-calendario.js"></script>
 <script src="codigo/14-haces-de-luz.js"></script>
 <script src="codigo/15-registro-de-confirmaciones.js"></script>
+<!-- BOTÓN DE ANIMACIONES (arriba a la izquierda).
+     Enciende o apaga TODO el movimiento de la web. Está desde el inicio
+     —incluso sobre el sobre de entrada— para que quien tenga un equipo
+     lento o sin placa de video pueda apagarlo antes de entrar. La elección
+     se recuerda entre visitas. Lo maneja codigo/20-boton-de-animaciones.js. -->
+<button id="boton-animaciones" type="button" aria-pressed="true"
+        aria-label="Apagar las animaciones">
+  <svg class="boton-animaciones__icono" viewBox="0 0 24 24" aria-hidden="true">
+    <path class="chispa-grande" d="M12 3.5l1.6 4.3 4.3 1.6-4.3 1.6L12 15.3l-1.6-4.3L6.1 9.4l4.3-1.6z"/>
+    <circle class="chispa-chica" cx="17.5" cy="16.5" r="1.7"/>
+  </svg>
+  <span class="boton-animaciones__texto">Animación</span>
+</button>
+
 <script src="codigo/16-volver-arriba.js"></script>
 <script src="codigo/17-joyas-colgantes.js"></script>
 <script src="codigo/18-motas-de-polvo.js"></script>
 <script src="codigo/19-velas.js"></script>
+<script src="codigo/20-boton-de-animaciones.js"></script>
+<script src="codigo/21-monitor-de-rendimiento.js"></script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
      internet y se pueda instalar. Va al final y falla en silencio si el

@@ -402,6 +402,14 @@ function doPost(peticion) {
     var hoja = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
     var datos = JSON.parse(peticion.postData.contents);
 
+    // FIRMA: si hay una clave configurada, la confirmación tiene que venir
+    // firmada por la web con esa misma clave. Si no coincide, se descarta
+    // (frena confirmaciones falsas o basura inyectadas al endpoint). Si no
+    // hay clave configurada, se acepta como siempre: nada se rompe.
+    if (!firmaValida(datos)) {
+      return responder({ ok: false, error: 'firma-invalida' });
+    }
+
     // La primera vez escribe los títulos de las columnas
     if (hoja.getLastRow() === 0) {
       hoja.appendRow([
@@ -441,7 +449,38 @@ function responder(objeto) {
     .createTextOutput(JSON.stringify(objeto))
     .setMimeType(ContentService.MimeType.JSON);
 }
+
+// ── Verificación de la firma (HMAC-SHA256) ──────────────────────────────
+// Rearma la MISMA cadena que firmó la web y compara la firma. La clave se
+// lee de las Propiedades del Script (Configuración del proyecto → Propiedades
+// del script → agregá CLAVE_DE_FIRMA con la misma frase de claveDeFirma).
+function firmaValida(datos) {
+  var clave = PropertiesService.getScriptProperties().getProperty('CLAVE_DE_FIRMA');
+
+  // Sin clave configurada: no se exige firma (compatibilidad).
+  if (!clave) return true;
+
+  // Con clave configurada: la firma es obligatoria y tiene que coincidir.
+  if (!datos.firma) return false;
+
+  // MISMO orden y separador que cadenaCanonica() en 15-registro-de-confirmaciones.js
+  var canonico = [datos.momento, datos.codigo, datos.correo, datos.asiste, datos.total].join('|');
+  var bytes = Utilities.computeHmacSha256Signature(canonico, clave);
+  var hex = bytes.map(function (b) {
+    return ('0' + (b & 0xff).toString(16)).slice(-2);   // byte con signo → hex de 2
+  }).join('');
+
+  return hex === datos.firma;
+}
 ```
+
+> **Nota de seguridad, sin humo.** La firma HMAC frena el spam casual y las
+> inyecciones triviales al endpoint, pero esta web es estática: quien lea su
+> código fuente puede ver la clave. Es un **disuasivo que sube la barrera, no
+> una garantía** contra un atacante decidido. La protección real de los DATOS
+> (que nadie los lea) sigue siendo el permiso de compartición de la hoja. No se
+> agrega ventana de tiempo anti-repetición a propósito: los reintentos legítimos
+> pueden llegar horas después, y la búsqueda por código ya evita duplicados.
 
 > **Dos detalles que parecen de más y no lo son.** El *turno* (`LockService`)
 > evita que dos personas que confirman en el mismo segundo se pisen la fila. Y
@@ -469,6 +508,27 @@ registro: {
 ```
 
 Probá confirmando desde la web: tendría que aparecer una fila nueva.
+
+#### (Opcional pero recomendado) Activar la firma de integridad
+
+Con esto, el script solo acepta confirmaciones firmadas por tu web, y descarta
+lo que mande cualquier otro. **Los dos lados tienen que tener la MISMA frase.**
+
+1. Elegí una frase larga al azar (por ejemplo, cuatro o cinco palabras sueltas).
+2. En la web: pegala en `codigo/01-configuracion.js`, campo
+   `registro.claveDeFirma`.
+3. En Google: en el editor de Apps Script, **Configuración del proyecto**
+   (el engranaje de la izquierda) → **Propiedades del script** → **Agregar
+   propiedad**. Nombre: `CLAVE_DE_FIRMA`. Valor: la MISMA frase.
+4. Volvé a **Implementar → Administrar implementaciones → editar → Nueva
+   versión**, para que el cambio quede publicado.
+
+Si dejás esto sin configurar (la web con `PEGA_AQUI…` y sin la propiedad en
+Google), todo sigue funcionando igual, solo que sin la firma.
+
+> Recordá la salvedad: la firma es un **disuasivo**, no una garantía (la clave
+> viaja en el código de la web). Lo que de verdad protege que nadie LEA los
+> datos es con quién compartís la hoja.
 
 ### Cómo sabés que una confirmación quedó anotada
 

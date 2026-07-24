@@ -39,8 +39,11 @@
   // Hacen falta los tres planos; si falta alguno, no arrancamos
   if (!buscar('#petalos-fondo') || !buscar('#petalos-medio') || !buscar('#petalos-frente')) return;
 
-  // Si la persona pidió menos movimiento, no dibujamos nada.
-  if (prefiereMenosMovimiento()) return;
+  /* No se corta acá aunque las animaciones estén apagadas: los pétalos se
+     preparan igual y el bucle queda en reposo (ver el guard del bucle). En
+     modo apagado, el CSS los esconde (un pétalo congelado en el aire se
+     vería raro). Si se encienden con el botón, empiezan a caer al instante,
+     sin recargar. */
 
 
   /* ─── 1. NÚMEROS QUE SE PUEDEN AJUSTAR ─────────────────────────────
@@ -133,6 +136,9 @@
       tamaño,
       plano,
       rasgos,
+      activo: true,   // el gobernador de rendimiento puede desactivar algunos
+
+
       x: numeroAlAzar(0, anchoDePantalla),
       y: empezarArriba ? numeroAlAzar(-120, -20) : numeroAlAzar(0, altoDePantalla),
       velocidadX: numeroAlAzar(-12, 12),
@@ -155,6 +161,35 @@
   }
 
 
+  /* ─── RENDIMIENTO ADAPTATIVO (POR NIVELES) ──────────────────────────
+     El gobernador de FPS (codigo/21-monitor-de-rendimiento.js) avisa por
+     NIVELES cuánto sufre el equipo. Los pétalos reaccionan así:
+        · nivel 0 o 1 → todos (en nivel 1 solo se apagan las motas).
+        · nivel 2     → la mitad.
+        · nivel 3     → ninguno (se apagan del todo).
+     Los que se apagan se esconden y el bucle los saltea, así se dibuja y se
+     calcula menos. Cuando el equipo se recupera, vuelven. El invitado no ve
+     el recorte —solo una web que sigue fluida—.
+     ---------------------------------------------------------------- */
+  function ajustarCantidadDePetalos(nivel) {
+    let cuantosActivos;
+    if (nivel >= 3)      cuantosActivos = 0;
+    else if (nivel === 2) cuantosActivos = Math.ceil(petalos.length / 2);
+    else                  cuantosActivos = petalos.length;   // niveles 0 y 1
+
+    petalos.forEach((petalo, i) => {
+      const activo = i < cuantosActivos;
+      if (petalo.activo !== activo) {
+        petalo.activo = activo;
+        petalo.elemento.style.display = activo ? '' : 'none';
+      }
+    });
+  }
+  document.addEventListener('rendimiento-cambio', evento => {
+    ajustarCantidadDePetalos((evento.detail && evento.detail.nivel) || 0);
+  });
+
+
   /* ─── 3. SEGUIR EL MOUSE ───────────────────────────────────────────
      Además de dónde está, nos interesa a qué velocidad se mueve: un
      manotazo rápido tiene que revolear los pétalos mucho más que un
@@ -167,16 +202,29 @@
   let velocidadMouseX = 0;
   let velocidadMouseY = 0;
 
-  document.addEventListener('mousemove', evento => {
+  /* Una sola entrada para el mouse Y el dedo: pointermove cubre los dos. Va
+     passive para no bloquear el scroll en el celular —los pétalos se apartan
+     del dedo mientras se desliza, sin trabar el gesto—. */
+  function alMoverPuntero(evento) {
     mouseX = evento.clientX;
     mouseY = evento.clientY;
-  });
+  }
+  document.addEventListener('pointermove', alMoverPuntero, { passive: true });
+  document.addEventListener('pointerdown', alMoverPuntero, { passive: true });
 
-  // Si el mouse se va de la ventana, dejamos de empujar.
-  document.addEventListener('mouseleave', () => {
-    mouseX = -9999;
-    mouseY = -9999;
-  });
+  /* Dejamos de empujar cuando el mouse se va de la ventana o cuando el dedo
+     se levanta. OJO: en un mouse, soltar el clic (pointerup) NO tiene que
+     apagar el empuje —el mouse sigue ahí—; por eso solo se resetea con el
+     dedo (pointerType 'touch') o al salir con el mouse. */
+  function soltarPuntero(evento) {
+    if (!evento || evento.type === 'mouseleave' || evento.pointerType === 'touch') {
+      mouseX = -9999;
+      mouseY = -9999;
+    }
+  }
+  document.addEventListener('mouseleave', soltarPuntero);
+  document.addEventListener('pointerup', soltarPuntero);
+  document.addEventListener('pointercancel', soltarPuntero);
 
 
   /* ─── 3b. EL RELICARIO COMO OBSTÁCULO ──────────────────────────────
@@ -429,7 +477,16 @@
    * @returns {void}
    */
   function dibujarCuadro(momentoActual) {
-    if (!animacionActiva) return;
+    if (!animacionActiva) return;   // pausa por pestaña oculta
+
+    /* Animaciones apagadas (botón o accesibilidad): el bucle sigue vivo
+       pero no mueve pétalos; el CSS los esconde. Listo para reanudar en
+       vivo si se encienden. */
+    if (prefiereMenosMovimiento()) {
+      momentoDelCuadroAnterior = momentoActual;
+      requestAnimationFrame(dibujarCuadro);
+      return;
+    }
 
     // dt en segundos. Se limita a 0,05 (20 cuadros por segundo) porque si
     // la pestaña estuvo minimizada, el salto sería enorme y los pétalos
@@ -446,10 +503,11 @@
     mouseXAnterior = mouseX;
     mouseYAnterior = mouseY;
 
-    // Una sola medición del relicario para los 22 pétalos
+    // Una sola medición del relicario para todos los pétalos
     medirElRelicario();
 
     for (const petalo of petalos) {
+      if (!petalo.activo) continue;   // desactivado por el gobernador: se saltea
       moverPetalo(petalo, dt, tiempoTranscurrido);
     }
 

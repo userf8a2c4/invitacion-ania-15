@@ -150,15 +150,18 @@
 .lluvia-de-petalos--frente { z-index: 50; }
 
 /* PROFUNDIDAD DE CAMPO.
-   Lo que separa un plano de otro no es la cantidad de pétalos sino cómo
-   se ven: los de atrás chicos y apagados, los de adelante grandes y
-   apenas desenfocados, como los que pasan cerca del objetivo de una
-   cámara. Es el mismo recurso de perspectiva aérea que usan las flores
-   de las enredaderas. */
-.lluvia-de-petalos--fondo  .petalo { filter: brightness(.62) saturate(.8)
-                                             drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
-.lluvia-de-petalos--frente .petalo { filter: blur(1.3px)
-                                             drop-shadow(0 4px 6px rgba(0,0,0,.6)); }
+   Lo que separa un plano de otro es cómo se ven: los de atrás chicos y
+   apagados, los de adelante grandes. La distancia la marcan el tamaño y la
+   OPACIDAD (que asigna el JS por plano), no un filtro.
+
+   ⚡ RENDIMIENTO: antes cada pétalo llevaba filtros (drop-shadow en todos,
+   más brightness/saturate atrás y blur adelante). Un pétalo con filtro que
+   se MUEVE se re-rasteriza en cada cuadro, y hay ~20 cayendo a la vez: sin
+   placa de video, eso solo ya fundía la CPU. Se quitaron TODOS los filtros
+   de los pétalos. La profundidad se mantiene con el tamaño y la opacidad;
+   los de atrás, además, van un punto más tenues (regla de abajo) para
+   compensar el brillo que antes bajaba el filtro. */
+.lluvia-de-petalos--fondo  .petalo { opacity: .8; }
 
 .petalo {
   position: absolute;
@@ -168,6 +171,4 @@
   background-size: contain;
   background-position: center;
   will-change: transform;
-  /* La sombra los despega del fondo y los hace ver más reales */
-  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .55));
 }

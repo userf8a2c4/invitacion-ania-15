@@ -58,12 +58,12 @@ const CONFIGURACION = {
 
     /* Los mismos datos escritos "para humanos", tal como se leen en la web */
     diaDeLaSemana:   'Sábado',
-    fechaEnPalabras: '24 de Octubre de 2026',
+    fechaEnPalabras: '24 de octubre de 2026',
     horaEnPalabras:  '5:00 PM',
     horarioCompleto: 'Llegada: 5:00 PM<br>Evento: 5:30 PM — 01:00 AM',
 
     /** Hasta cuándo se puede confirmar asistencia. */
-    fechaLimiteParaConfirmar: '01 de Octubre de 2026',
+    fechaLimiteParaConfirmar: '1 de octubre de 2026',
 
     /** Cómo hay que vestirse. */
     codigoDeVestimenta: 'Formal · Etiqueta<br>Evitar color rojo',
@@ -177,6 +177,28 @@ const CONFIGURACION = {
        definitiva y revisar que no esté compartida con "cualquiera que
        tenga el enlace": ahí van a estar los datos de los invitados. */
     urlDeLaHoja: 'https://docs.google.com/spreadsheets/d/1-pD1-F8C-2b-FXwfOYfayTqFtw9ik6DadVoxTVdU4zs/edit',
+
+    /**
+     * FIRMA DE LAS CONFIRMACIONES (integridad del registro).
+     *
+     * Es una contraseña compartida entre esta web y el script de Google. La
+     * web firma cada confirmación con ella (HMAC-SHA256) y el script rechaza
+     * las que no traigan una firma válida. Eso frena que alguien mande
+     * confirmaciones falsas o basura al endpoint con una herramienta técnica.
+     *
+     * ⚠️ SALVEDAD HONESTA: esta web es estática, así que quien lea el código
+     * fuente PUEDE ver esta clave. Por eso es un DISUASIVO —sube mucho la
+     * barrera contra el spam casual y las inyecciones triviales—, NO una
+     * garantía contra un atacante decidido. La protección de LECTURA de los
+     * datos sigue siendo el permiso de compartición de la hoja de Google.
+     *
+     * Mientras diga "PEGA_AQUI…", la web NO firma y el script (si tampoco
+     * tiene la clave configurada) acepta como siempre: nada se rompe.
+     *
+     * CÓMO ELEGIRLA: una frase larga al azar. La MISMA hay que pegarla en las
+     * Propiedades del Script de Google (ver README, sección 6).
+     */
+    claveDeFirma: 'PEGA_AQUI_UNA_FRASE_SECRETA_LARGA',
   },
 
 

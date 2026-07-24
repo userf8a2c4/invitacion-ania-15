@@ -243,9 +243,19 @@ function borrarDeMemoria(clave) {
 /* ─── 4. ACCESIBILIDAD Y AYUDAS VARIAS ─────────────────────────────── */
 
 /**
- * Dice si la persona pidió en su sistema operativo que se reduzcan las
- * animaciones (una opción de accesibilidad para quienes se marean o
- * sufren migrañas con el movimiento).
+ * Dice si hay que moverse lo menos posible. Es true en DOS casos:
+ *
+ *   1. La persona pidió en su SISTEMA OPERATIVO reducir las animaciones
+ *      (una opción de accesibilidad para quienes se marean o sufren
+ *      migrañas con el movimiento).
+ *   2. La persona APAGÓ las animaciones con el botón de la invitación
+ *      (guardado en la memoria del navegador). Es la salida para equipos
+ *      sin placa de video, donde tanto movimiento pesa demasiado.
+ *
+ * Como TODOS los módulos de animación consultan esta función antes de
+ * arrancar, con que devuelva true alcanza para que la web quede quieta y
+ * liviana. El botón (codigo/20-boton-de-animaciones.js) guarda la elección
+ * y recarga, así los módulos vuelven a leer este valor.
  *
  * @returns {boolean} true si hay que moverse lo menos posible.
  *
@@ -253,7 +263,13 @@ function borrarDeMemoria(clave) {
  *   if (prefiereMenosMovimiento()) return;   // no animamos nada
  */
 function prefiereMenosMovimiento() {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // 1. Accesibilidad del sistema operativo.
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
+  // 2. La clase que pone el script del <head> del index.html, que ya
+  //    resolvió TODO: la elección manual del botón (guardada en memoria) o,
+  //    si no hubo elección, la auto-detección de equipos lentos. Leer la
+  //    clase mantiene una sola fuente de verdad para toda la web.
+  return document.documentElement.classList.contains('animaciones-off');
 }
 
 /**
@@ -281,6 +297,70 @@ function tieneMouse() {
  */
 function esperar(milisegundos) {
   return new Promise(resolve => setTimeout(resolve, milisegundos));
+}
+
+/**
+ * ACELERAR (throttle): deja pasar la función como mucho una vez cada X ms,
+ * por más veces que se la llame en el medio.
+ *
+ * PARA QUÉ SIRVE: eventos como scroll o mousemove pueden dispararse cientos
+ * de veces por segundo. Si cada disparo hace trabajo pesado (mover cosas,
+ * medir la página), el navegador se atraganta. Acelerar limita ese trabajo
+ * a un ritmo que el ojo igual no distingue.
+ *
+ * Se queda con la ÚLTIMA llamada de cada ventana, así el estado final
+ * siempre es el correcto (no se pierde el último movimiento).
+ *
+ * @param {Function} funcion - La función a acelerar.
+ * @param {number} cadaCuanto - Milisegundos mínimos entre ejecuciones.
+ * @returns {Function} La versión acelerada.
+ *
+ * @example
+ *   window.addEventListener('scroll', acelerar(actualizar, 100), { passive: true });
+ */
+function acelerar(funcion, cadaCuanto) {
+  let ultimo = 0;
+  let pendiente = null;
+  return function (...argumentos) {
+    const ahora = Date.now();
+    const faltan = cadaCuanto - (ahora - ultimo);
+    if (faltan <= 0) {
+      clearTimeout(pendiente);
+      pendiente = null;
+      ultimo = ahora;
+      funcion.apply(this, argumentos);
+    } else if (!pendiente) {
+      // Agenda la última llamada de esta ventana, para no perder el cierre.
+      pendiente = setTimeout(() => {
+        ultimo = Date.now();
+        pendiente = null;
+        funcion.apply(this, argumentos);
+      }, faltan);
+    }
+  };
+}
+
+/**
+ * REBOTAR (debounce): espera a que dejen de llamar la función durante X ms
+ * y recién entonces la ejecuta, una sola vez.
+ *
+ * PARA QUÉ SIRVE: cuando importa el RESULTADO FINAL y no los pasos
+ * intermedios —terminar de arrastrar la ventana, dejar de tipear—. Evita
+ * recalcular en cada píxel del camino.
+ *
+ * @param {Function} funcion - La función a rebotar.
+ * @param {number} espera - Milisegundos de quietud antes de ejecutar.
+ * @returns {Function} La versión rebotada.
+ *
+ * @example
+ *   window.addEventListener('resize', rebotar(reacomodar, 200));
+ */
+function rebotar(funcion, espera) {
+  let reloj = null;
+  return function (...argumentos) {
+    clearTimeout(reloj);
+    reloj = setTimeout(() => funcion.apply(this, argumentos), espera);
+  };
 }
 
 /**

@@ -326,12 +326,12 @@
     const asistencia = campoAsistencia.value;
 
     /* Validaciones, de la más básica a la más específica */
-    if (!nombre)  return mostrarError('Por favor escribí tu nombre completo.');
-    if (!correo)  return mostrarError('Por favor escribí tu correo electrónico.');
+    if (!nombre)  return mostrarError('Por favor escribe tu nombre completo.');
+    if (!correo)  return mostrarError('Por favor escribe tu correo electrónico.');
     if (!pareceUnCorreoValido(correo)) {
-      return mostrarError('Ese correo no parece válido. Revisá que tenga @ y un punto.');
+      return mostrarError('Ese correo no parece válido. Revisa que tenga @ y un punto.');
     }
-    if (!asistencia) return mostrarError('Contanos si vas a poder acompañarnos.');
+    if (!asistencia) return mostrarError('Cuéntanos si vas a poder acompañarnos.');
 
     const vieneALaFiesta = asistencia === RESPUESTA_AFIRMATIVA;
     const cantidadAdultos = vieneALaFiesta ? limitar(parseInt(campoAdultos.value, 10) || 1, 1, 20) : 0;
