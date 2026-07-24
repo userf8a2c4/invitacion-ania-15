@@ -25,13 +25,17 @@
   const capa = buscar('#motas-de-polvo');
   if (!capa) return;
 
-  // Si se pidió menos movimiento, no hay polvo flotando (el CSS también
-  // lo esconde, pero así ni siquiera lo creamos).
-  if (prefiereMenosMovimiento()) return;
+  /* Las motas se crean SIEMPRE (así el botón puede encenderlas en vivo).
+     Cuando las animaciones están apagadas, el CSS detiene su vuelo y
+     esconde la capa; encendidas, flotan. Además, su brillo cuelga de
+     --luz-intensidad, que en modo apagado vale 0, así que ni se ven. */
 
   /** Cuántas motas. Menos en pantallas chicas, donde estorban más. */
+  /* ⚡ RENDIMIENTO: menos motas. Antes eran 34 (14 en celular); cada una es
+     una capa que el compositor mueve. Con la mitad, el aire sigue leyéndose
+     poblado y el costo baja bastante, sobre todo sin placa de video. */
   const esPantallaChica = window.matchMedia('(max-width: 700px)').matches;
-  const CUANTAS = esPantallaChica ? 14 : 34;
+  const CUANTAS = esPantallaChica ? 8 : 18;
 
   const fragmento = document.createDocumentFragment();
 

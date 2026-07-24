@@ -292,9 +292,15 @@ body::before {
    contenido (el mensaje de los papás, el formulario, etc.). */
 .marco-ornamental {
   position: relative;
-  border: 1px solid var(--borde-oro-tenue);
-  box-shadow: inset 0 0 30px rgba(201, 168, 76, .05),
-                    0 0 0 1px rgba(0, 0, 0, .5);
+  /* El borde es de oro MÁS presente (antes casi no se veía) para que la
+     luz de las velas —que ahora pasa por encima, ver 12-haces-de-luz.css—
+     tenga metal que encender. Al titilar las velas cercanas, el filete
+     dorado late suavemente: es la luz "interactuando" con el marco. */
+  border: 1px solid rgba(201, 168, 76, .5);
+  box-shadow:
+    inset 0 0 30px rgba(201, 168, 76, .05),
+          0 0 0 1px rgba(0, 0, 0, .5),
+          0 0 22px rgba(196, 150, 70, .12);   /* calor de vela sobre el marco */
 }
 .marco-ornamental::before,
 .marco-ornamental::after {
@@ -477,6 +483,62 @@ body::before {
   white-space: nowrap;
 }
 
+/* ─── BOTÓN DE ANIMACIONES ON/OFF ──────────────────────────────────────
+   Arriba a la izquierda, por encima de todo (incluso del sobre de
+   entrada), para que se pueda apagar el movimiento desde el inicio. Es
+   discreto pero legible: fondo carbón, filo dorado, chiquito.
+   ---------------------------------------------------------------------- */
+#boton-animaciones {
+  position: fixed;
+  top: calc(var(--marco-grosor) + .6rem);
+  left: calc(var(--marco-grosor) + .6rem);
+  z-index: 2500;                 /* sobre el sobre (2000) y el cursor propio */
+
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .34rem .6rem .34rem .44rem;
+
+  background: var(--color-carbon, #14100a);
+  border: 1px solid var(--borde-oro-tenue);
+  border-radius: 999px;
+  color: var(--color-oro-apagado);
+  font-family: var(--tipo-detalle);
+  font-size: .62rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  line-height: 1;
+  cursor: pointer;
+  opacity: .75;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .5);
+  transition: opacity .25s, color .25s, border-color .25s;
+}
+#boton-animaciones:hover,
+#boton-animaciones:focus-visible { opacity: 1; color: var(--color-oro); border-color: var(--color-oro-apagado); }
+
+.boton-animaciones__icono { width: 1rem; height: 1rem; fill: currentColor; flex-shrink: 0; }
+
+/* Cuando el movimiento está APAGADO, el icono baja el brillo y aparece una
+   barra tachándolo, para que se vea de un golpe que está en "off". */
+#boton-animaciones.esta-apagado { color: var(--color-oro-apagado); }
+#boton-animaciones.esta-apagado .chispa-chica { display: none; }
+#boton-animaciones.esta-apagado .boton-animaciones__icono {
+  position: relative;
+  opacity: .6;
+}
+/* La barra de "tachado" del icono en estado apagado. */
+#boton-animaciones.esta-apagado::after {
+  content: '';
+  position: absolute;
+  left: .5rem;
+  width: 1rem;
+  height: 1.5px;
+  background: currentColor;
+  transform: rotate(-45deg);
+  opacity: .85;
+}
+
+
 /* ACCESIBILIDAD: si la persona pidió en su sistema operativo "reducir
    movimiento" (por mareos o migrañas), apagamos las animaciones. */
 @media (prefers-reduced-motion: reduce) {
@@ -484,8 +546,71 @@ body::before {
   *::before,
   *::after {
     animation-duration: .01ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
+    transition-delay: 0s !important;
     scroll-behavior: auto !important;
   }
 }
+
+/* RENDIMIENTO / ELECCIÓN DE LA PERSONA: el botón de animaciones (arriba a
+   la izquierda) apaga TODO el movimiento para equipos sin placa de video.
+   La clase la pone un script chiquito en el <head> según lo guardado, así
+   no hay parpadeo. Los módulos de JS ya no arrancan (prefiereMenosMovimiento
+   devuelve true), y acá se apaga además lo que anima por CSS.
+
+   Se usa duration: .01ms —y no animation: none— a propósito: muchos
+   elementos aparecen con una animación 'forwards' que va de invisible a
+   visible; con .01ms saltan al estado final al instante, en vez de quedar
+   invisibles. */
+html.animaciones-off *,
+html.animaciones-off *::before,
+html.animaciones-off *::after {
+  animation-duration: .01ms !important;
+  /* delay 0 también: las entradas van escalonadas con retardos de hasta
+     ~2 s; sin apagar el delay, el nombre y demás quedarían invisibles ese
+     rato. En off queremos que todo aparezca YA, en su estado final. */
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .01ms !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+/* RESPALDO DE VISIBILIDAD. Los elementos de la portada aparecen con una
+   animación 'forwards' que va de invisible a visible. En off esa animación
+   dura .01ms, pero para que el NOMBRE nunca corra el riesgo de quedar
+   invisible (por ejemplo si el navegador pausa las animaciones), acá se
+   los fuerza a su estado final directamente. Cinturón y tiradores. */
+html.animaciones-off .portada__antetitulo,
+html.animaciones-off .portada__filete,
+html.animaciones-off .portada__nombre,
+html.animaciones-off .portada__edad,
+html.animaciones-off .portada__fecha,
+html.animaciones-off .portada__desliza,
+html.animaciones-off .portada__marco,
+html.animaciones-off .sobre__carta,
+html.animaciones-off .revelar {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+/* Qué se apaga en modo "sin animación":
+     · los haces de luz, las motas de polvo y los pétalos (puro movimiento);
+     · el velo de revelado (solo tiene sentido durante la entrada animada).
+   Qué se MANTIENE, encendido y quieto:
+     · los CANDELABROS y sus halos (son la luz de la profundidad; sin ellos
+       el fondo queda demasiado oscuro);
+     · las rosas del marco (quedan estáticas, no desaparecen). */
+html.animaciones-off #haces-de-luz,
+html.animaciones-off #motas-de-polvo,
+html.animaciones-off .lluvia-de-petalos,
+html.animaciones-off #velo-de-revelado { display: none !important; }
+
+/* Con las animaciones apagadas también se vuelve al cursor del sistema
+   (el cursor propio es un elemento que sigue al mouse; sin él, nada que
+   seguir). */
+html.animaciones-off,
+html.animaciones-off * { cursor: auto !important; }
+html.animaciones-off #cursor-punto,
+html.animaciones-off #cursor-anillo { display: none !important; }

@@ -123,9 +123,15 @@
    vestimenta) en dos columnas que se vuelven una en el celular. */
 .datos-lugar {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1.5rem;
-  max-width: 680px;
+  /* Las columnas se ajustan al ANCHO DEL CONTENIDO (hasta un tope), no a
+     mitades fijas. Con `1fr` cada dato ocupaba media pantalla y el texto
+     quedaba pegado a la izquierda de su celda, con un hueco a la derecha:
+     el conjunto se leía corrido a la izquierda. Ahora las dos columnas se
+     encogen a su texto y `justify-content: center` centra el grupo bajo el
+     título, sin huecos. */
+  grid-template-columns: repeat(2, minmax(0, 18rem));
+  justify-content: center;
+  gap: 1.5rem 2rem;
   margin: 0 auto 2rem;
   text-align: left;
 }
@@ -172,9 +178,12 @@
   margin: 2rem auto 0;
   overflow: hidden;
 
-  /* Doble filete: uno pleno y otro finísimo hacia adentro */
-  border: 1px solid var(--borde-oro-tenue);
-  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, .12),
+  /* Doble filete: uno pleno y otro finísimo hacia adentro. El borde va en
+     oro más presente para que la luz de los candelabros que flanquean el
+     mapa lo encienda (y late al titilar las velas). */
+  border: 1px solid rgba(201, 168, 76, .5);
+  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, .14),
+                    0 0 24px rgba(196, 150, 70, .13),   /* calor de vela */
                     0 18px 40px rgba(0, 0, 0, .55);
 }
 
@@ -277,38 +286,24 @@
 }
 #pie-de-pagina .rosa { color: var(--color-sangre); }
 
-/* El acceso a la hoja de confirmaciones, para quienes organizan.
-   Un rombo casi transparente, separado del texto, que recién se enciende
-   al pasarle el cursor: el invitado no lo registra, y quien lo busca lo
-   encuentra. La zona sensible es más grande que el rombo (el padding)
-   para que en el celular no haya que apuntar con precisión de cirujano. */
-#enlace-al-registro {
+/* LA ROSA SECRETA DEL PIE.
+   Es el acceso a la hoja de confirmaciones (ver 15-registro-de-
+   confirmaciones.js): parece un adorno del pie —el invitado no la
+   registra como botón—, pero tres toques la abren. Con cada toque
+   FLORECE (crece y se enciende), que es la única señal de que la cuenta
+   va bien; se apaga sola al segundo y medio. En reposo es un adorno más. */
+#pie-de-pagina .rosa {
   display: inline-block;
-  margin-left: .9em;
-  padding: .4rem;
-  font-size: .55em;
-  line-height: 1;
-  color: var(--color-oro-apagado);
-  opacity: .28;
-  text-decoration: none;
   vertical-align: middle;
-  transition: opacity .4s ease, color .4s ease;
+  transition: transform .3s var(--curva-elegante), filter .3s;
 }
-#enlace-al-registro:hover,
-#enlace-al-registro:focus-visible {
-  opacity: .6;
-  color: var(--color-oro);
+#pie-de-pagina .rosa.contando-1 {
+  transform: scale(1.18);
+  filter: drop-shadow(0 0 5px rgba(160, 24, 36, .6));
 }
-
-/* Los tres toques que lo abren (ver 15-registro-de-confirmaciones.js).
-   El rombo se enciende con cada uno: es el único indicio de que la
-   cuenta va bien. Sin esto, quien conoce el truco no sabría si el
-   primer toque registró o no. Se apaga solo al segundo y medio. */
-#enlace-al-registro.contando-1 { opacity: .6; color: var(--color-oro); }
-#enlace-al-registro.contando-2 {
-  opacity: 1;
-  color: var(--color-oro-claro);
-  text-shadow: 0 0 8px rgba(201, 168, 76, .5);
+#pie-de-pagina .rosa.contando-2 {
+  transform: scale(1.34);
+  filter: drop-shadow(0 0 11px rgba(201, 168, 76, .75));
 }
 
 

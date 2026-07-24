@@ -49,13 +49,19 @@
   /* Transparente en la portada; la penumbra entra recién más abajo y
      crece con la profundidad. El color es un negro cálido (tira a
      borgoña muy oscuro), no un gris neutro, para no enfriar la paleta. */
+  /* Cuanto más hondo, más oscuro —pero NUNCA negro total—. La franja de
+     abajo se profundizó a pedido: el pie y las últimas secciones quedan
+     bien en sombra, y son la LUZ DE LAS VELAS (candelabros + cirios de
+     piso, que van por encima de este velo, z66) la que abre los claros
+     donde hay texto y botones. Tope ~.62 para que se lea sin esfuerzo entre
+     charco y charco de luz. */
   background: linear-gradient(
     to bottom,
     rgba(8, 4, 4, 0)   0,
     rgba(8, 4, 4, 0)   22vh,
     rgba(7, 4, 4, .26) 90vh,
-    rgba(6, 3, 3, .46) 170vh,
-    rgba(6, 3, 3, .50) 100%);
+    rgba(5, 3, 3, .50) 170vh,
+    rgba(4, 2, 2, .62) 100%);
 }
 
 /* Con menos movimiento el velo se mantiene (es estático, no molesta), pero
@@ -68,28 +74,37 @@
 /* ─── 0B. CANDELABROS DE LA PROFUNDIDAD ────────────────────────────────
    Cuando la luz del día ya no llega, la opulencia queda iluminada por
    CANDELABROS de pared: apliques de latón que salen de los laterales
-   sosteniendo velas que titilan, como en una mansión antigua de noche.
-   codigo/19-velas.js dibuja los candelabros y los anima.
+   sosteniendo velas, como en una mansión antigua de noche.
+   codigo/19-velas.js los dibuja, los ubica y los anima.
 
-   HAY DOS CAPAS, Y EL ORDEN IMPORTA:
+   ⚠️ EL ORDEN DE LAS CAPAS ES LO QUE HACE QUE FUNCIONEN.
+   Antes la pieza iba en z-index 62 y su resplandor en 58, los dos POR
+   DEBAJO del velo de penumbra (#penumbra-profunda, z 65). Resultado: el
+   velo —que en el fondo llega a ~40 % de negro— le comía la luz, y el mapa
+   se veía casi negro por más que se subiera el brillo. Además, al estar en
+   62 la pieza quedaba ENCIMA de las enredaderas (que viven en ~60), como
+   pegada sobre las rosas.
 
-     · #apliques (z-index 62, DELANTE de las rosas): la pieza de latón con
-       sus velas y llamas. Se ve entera, montada en el marco: la luz tiene
-       una FUENTE visible, no sale de la nada.
+   Ahora cada capa va donde corresponde:
 
-     · #velas (z-index 58, DETRÁS de las rosas): el resplandor de cada
-       llama. Al quedar detrás del follaje, las rosas lo tapan y se
-       recortan como SILUETAS difusas, con la luz colándose entre los
-       pétalos. Es oclusión natural —la planta hace su propia sombra—.
+     · #apliques (z-index 57) — la PIEZA de latón, por DEBAJO del marco
+       (60). Las enredaderas y las molduras le pasan por delante, así el
+       candelabro queda montado en la pared y las rosas trepan sobre él.
+       Al estar bajo el velo, el metal se ensombrece con la profundidad,
+       que es lo correcto.
 
-   Cada halo de #velas se alinea con la punta de su llama (lo hace el JS
-   midiendo la llama en pantalla). Así fuente y luz coinciden. */
+     · #luz-de-velas (z-index 66) — el RESPLANDOR, por ENCIMA del velo (65)
+       y por debajo de los haces (70). Su luz ya no se cancela: baña el
+       mapa, el texto y las rosas.
 
-/* La pieza (latón + velas + llamas), por delante de las rosas. */
+   Es también lo físicamente correcto: el objeto vive dentro de la escena y
+   se oscurece con ella, pero la luz que emite ilumina la habitación. */
+
+/* La PIEZA de latón, integrada en la pared (debajo de rosas y molduras). */
 #apliques {
   position: absolute;
   inset: 0;
-  z-index: 62;
+  z-index: 57;
   pointer-events: none;
   overflow: hidden;
 }
@@ -98,9 +113,7 @@
   /* Cada candelabro se ubica y se refleja (lado derecho) desde el JS.
      ⚠️ SIN filtro CSS acá (nada de drop-shadow): la llama titila DENTRO de
      este contenedor, y un filtro obligaría a re-rasterizar todo el
-     candelabro en cada cuadro —caro, sobre todo en celulares—. El latón se
-     lee bien sobre la pared oscura sin sombra; y el propio halo de la vela,
-     que va detrás, ya lo despega del fondo. */
+     candelabro en cada cuadro —caro, sobre todo sin placa de video—. */
 }
 /* La llama titila: el JS le cambia opacidad y un leve escalado. El origen
    abajo hace que crezca desde la mecha, como una llama real. */
@@ -110,35 +123,61 @@
   will-change: opacity, transform;
 }
 
-/* El resplandor de cada llama, por detrás de las rosas. */
-#velas {
+/* El RESPLANDOR de cada llama, por encima del velo de penumbra. */
+#luz-de-velas {
   position: absolute;
   inset: 0;
-  z-index: 58;
+  z-index: 66;
   pointer-events: none;
-  mix-blend-mode: screen;
+  mix-blend-mode: screen;   /* suma luz sin lavar los negros */
   overflow: hidden;
 }
 
+/* Cada vela emite DOS resplandores superpuestos (los crea el JS):
+     · .vela--nucleo  → chico y brillante, el corazón de la llama.
+     · .vela--derrame → ancho y suave, el que de verdad ilumina la sección.
+   Separarlos permite tener un centro nítido y una caída larga sin recurrir
+   a filter: blur (que sin placa de video es carísimo). */
 .vela {
   position: absolute;
   border-radius: 50%;
-  /* Amarillo cálido de cera, tenue: fuerte en el corazón de la llama y
-     desvaneciéndose hacia afuera. Charco chico, confinado al borde: baña
-     las rosas y el marco, no llega al texto del centro. */
+  will-change: opacity;
+  opacity: 0;              /* el JS le da su valor; sin JS, apagado */
+}
+
+.vela--nucleo {
   background: radial-gradient(circle,
-    rgba(255, 198, 110, .50) 0%,
-    rgba(226, 150, 66,  .26) 32%,
-    rgba(180, 110, 45,  .10) 56%,
-    transparent 74%);
-  filter: blur(12px);          /* borde de vela, no de reflector */
-  will-change: opacity, transform;
-  opacity: 0;                  /* el JS le da su titileo; sin JS, apagado */
+    rgba(255, 226, 160, .95)  0%,
+    rgba(255, 190, 105, .55) 18%,
+    rgba(232, 150, 70,  .22) 42%,
+    transparent 70%);
+}
+
+.vela--derrame {
+  background: radial-gradient(circle,
+    rgba(255, 198, 120, .40)  0%,
+    rgba(236, 160, 82,  .26) 22%,
+    rgba(208, 130, 60,  .15) 42%,
+    rgba(170, 100, 46,  .07) 62%,
+    transparent 80%);
+}
+
+/* Cuando un derrame queda MUY cerca de una caja de texto, el JS lo manda a
+   #apliques (bajo el velo de penumbra) para que no encandile la lectura.
+   Allí no hay screen: se asegura mezcla normal y una caída extra de fuerza,
+   así queda como un rescoldo detrás de la caja, no como un lavado encima. */
+.vela--detras {
+  mix-blend-mode: normal;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* Sin titileo: velas encendidas, quietas y algo más tenues. */
-  .vela  { opacity: .4 !important; }
+  /* Sin titileo: velas encendidas y quietas (nunca apagadas: son la luz
+     de la profundidad y sin ellas el fondo queda negro).
+     ⚠️ El derrame NO se fuerza con !important: su opacidad la fija el JS en
+     acomodarTodo() ya rebajada según lo cerca que esté de la caja de texto
+     (ver 19-velas.js), y un !important acá le ganaría y volvería a lavar la
+     lectura. El núcleo y la llama sí quedan clavados: no se atenúan. */
+  .vela--nucleo  { opacity: .85 !important; }
   .llama { opacity: 1 !important; transform: none !important; }
 }
 
@@ -213,24 +252,27 @@
   height: 190%;
   width: 12vw;
 
-  /* Degradado en dos ejes: a lo ancho se difumina en los bordes, y a lo
-     largo se apaga hacia abajo. */
-  background:
-    linear-gradient(to bottom,
-      rgba(244, 226, 160, .00) 0%,
-      rgba(244, 226, 160, .55) 18%,
-      rgba(201, 168, 76,  .38) 52%,
-      rgba(201, 168, 76,  .00) 100%);
+  /* ⚡ RENDIMIENTO: antes el haz era una banda recta + filter: blur(26px)
+     para suavizar los bordes. Ese blur enorme, en 5 bandas que se animan,
+     se recalcula en CADA cuadro y sin placa de video lo hace la CPU: era
+     uno de los mayores costos de la web.
 
-  /* El desenfoque es lo que lo vuelve luz y no una cinta de papel */
-  filter: blur(26px);
+     Ahora el borde suave viene del PROPIO degradado —una elipse radial que
+     nace clara arriba y se desvanece a la nada— sin ningún filtro. Se ve
+     igual (un rayo de polvo en suspensión) y no cuesta prácticamente nada. */
+  background:
+    radial-gradient(ellipse 62% 46% at 50% 24%,
+      rgba(244, 226, 160, .50)  0%,
+      rgba(219, 183, 110, .30) 38%,
+      rgba(201, 168, 76,  .10) 62%,
+      transparent 80%);
 
   /* Inclinación: entra desde arriba a la derecha, como un sol de tarde */
   transform-origin: 50% 0;
   transform: rotate(18deg);
 
   opacity: 0;            /* el JS le da su valor; sin JS no molesta */
-  will-change: transform, opacity, width;
+  will-change: transform, opacity;
 }
 
 /* Cada haz arranca en un sitio distinto. El JS los mueve a partir de acá. */
@@ -301,6 +343,16 @@
 @media (prefers-reduced-motion: reduce) {
   #motas-de-polvo { display: none; }
 }
+
+/* RENDIMIENTO ADAPTATIVO POR NIVELES: el gobernador de FPS
+   (codigo/21-monitor-de-rendimiento.js) marca el <html> con clases
+   acumulativas según cuánto sufra el equipo.
+     · nivel 1 (leve)   → se apagan las MOTAS (capa animada en screen, lo más
+       prescindible).
+     · nivel 3 (severo) → además se apagan los HACES de luz.
+   Los pétalos los reduce el JS por nivel (ver 06-petalos-con-fisica.js). */
+html.rendimiento-nivel1 #motas-de-polvo { display: none; }
+html.rendimiento-nivel3 #haces-de-luz   { display: none; }
 
 
 /* ─── 5. VELO DE REVELADO ──────────────────────────────────────────────

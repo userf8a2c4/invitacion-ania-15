@@ -1162,10 +1162,14 @@
   let mouseX = -9999;
   let mouseY = -9999;
 
+  /* El handler solo GUARDA las coordenadas (barato); el trabajo pesado —mecer
+     las plantas, apartar flores— vive en el bucle rAF, que ya está limitado a
+     un cuadro. Por eso no hace falta acelerarlo. Se marca passive para no
+     bloquear nunca el desplazamiento. */
   document.addEventListener('mousemove', evento => {
     mouseX = evento.clientX;
     mouseY = evento.clientY;
-  });
+  }, { passive: true });
   document.addEventListener('mouseleave', () => {
     mouseX = -9999;
     mouseY = -9999;
@@ -1182,6 +1186,17 @@
    * @returns {void}
    */
   function dibujarCuadro(momentoActual) {
+    /* Pestaña oculta o animaciones apagadas: el bucle sigue vivo pero no
+       mece nada. Las rosas del marco quedan quietas (siempre visibles), y
+       si se encienden las animaciones con el botón, vuelven a mecerse en el
+       acto, sin recargar. Se actualiza el reloj para que al reanudar no dé
+       un salto por el tiempo acumulado. */
+    if (document.hidden || prefiereMenosMovimiento()) {
+      momentoAnterior = momentoActual;
+      requestAnimationFrame(dibujarCuadro);
+      return;
+    }
+
     const dt = Math.min((momentoActual - momentoAnterior) / 1000, 0.05);
     momentoAnterior = momentoActual;
     tiempoTranscurrido += dt;
@@ -1335,9 +1350,9 @@
     requestAnimationFrame(dibujarCuadro);
   }
 
-  if (!prefiereMenosMovimiento()) {
-    requestAnimationFrame(dibujarCuadro);
-  }
+  /* El bucle arranca SIEMPRE (aunque las animaciones estén apagadas): se
+     queda en reposo hasta que se enciendan, para poder reanudar en vivo. */
+  requestAnimationFrame(dibujarCuadro);
 
 
   /* Si cambia el tamaño de la ventana hay que rehacer todo. Se espera un

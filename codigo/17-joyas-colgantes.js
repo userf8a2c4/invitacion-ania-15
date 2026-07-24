@@ -52,8 +52,12 @@
   const relicario = buscar('.portada__marco');
   if (!relicario) return;
 
-  // Si se pidió menos movimiento, las joyas quedan quietas y rectas.
-  if (prefiereMenosMovimiento()) return;
+  /* NOTA: no se corta acá aunque las animaciones estén apagadas. El bucle
+     se prepara igual, pero se queda en reposo (ver el guard dentro de
+     dibujarCuadro). Así, si se ENCIENDEN las animaciones con el botón, las
+     joyas empiezan a colgar y balancearse en el acto, sin recargar. En
+     reposo, las joyas quedan rectas (ángulo 0), que es como cuelga una
+     joya quieta. */
 
   /* El dibujo está centrado en (430,408) dentro del viewBox de 860×816. El
      pivote, que en el SVG está en coordenadas relativas a ese centro, se
@@ -126,7 +130,9 @@
         tope:    TOPE_ESLABON[Math.min(i, TOPE_ESLABON.length - 1)],
       };
     });
-    return { eslabones };
+    /* faseDeRespiracion: cada cadena arranca su vaivén de reposo en un punto
+       distinto, para que no todas se mezan iguales. */
+    return { eslabones, faseDeRespiracion: Math.random() * Math.PI * 2 };
   });
 
   if (borlas.length === 0 && cadenas.length === 0) return;
@@ -187,7 +193,10 @@
   }
 
   function dibujarCuadro(momentoActual) {
-    if (document.hidden) { requestAnimationFrame(dibujarCuadro); return; }
+    /* Pestaña oculta o animaciones apagadas: el bucle sigue vivo pero no
+       mueve nada (las joyas quedan rectas). Listo para reanudar si se
+       encienden las animaciones con el botón, sin recargar la página. */
+    if (document.hidden || prefiereMenosMovimiento()) { requestAnimationFrame(dibujarCuadro); return; }
 
     const caja = relicario.getBoundingClientRect();
     const escala = caja.width / ANCHO_DEL_VIEWBOX;
@@ -198,7 +207,9 @@
     /* ── a) BORLAS: péndulo rígido ── */
     for (const borla of borlas) {
       const externo = envionExterno(borla.pivote, caja, escala);
-      const respiracion = Math.sin(momentoActual / 1600 + borla.faseDeRespiracion) * 0.04;
+      /* Respiración de reposo (subida a .06 para que el balanceo se NOTE aun
+         sin scroll ni mouse: antes era tan sutil que parecían quietas). */
+      const respiracion = Math.sin(momentoActual / 1600 + borla.faseDeRespiracion) * 0.06;
 
       const aceleracion =
         (-borla.angulo * RIGIDEZ_BORLA) - (borla.velocidad * AMORT_BORLA)
@@ -219,6 +230,13 @@
       const cima = cadena.eslabones[0];
       const externo = envionExterno(cima.pivote, caja, escala);
 
+      /* BRISA DE REPOSO: un vaivén lentísimo que entra por la CIMA de la
+         cadena aunque no haya scroll ni mouse. El acople lo va bajando por
+         los eslabones y la gema (el más pesado) queda atrás, así la cadena
+         se mece sola y con volumen, como una joya colgada en una corriente
+         de aire. Sin esto, en la portada quieta la cadena quedaba tiesa. */
+      const brisa = Math.sin(momentoActual / 2100 + cadena.faseDeRespiracion) * 0.02;
+
       let anguloAbsAcum = 0;   // suma de los ángulos de los eslabones de arriba
       let velPadre = 0;        // velocidad del eslabón de arriba (para el acople)
 
@@ -228,7 +246,7 @@
 
         const gravedad = -anguloAbsoluto * s.rigidez;
         const acople   = velPadre * ACOPLE;
-        const externoEsl = (i === 0) ? externo : 0;
+        const externoEsl = (i === 0) ? externo + brisa : 0;
         const amortig  = -s.velocidad * s.amort;
 
         s.velocidad += gravedad + acople + externoEsl + amortig;
