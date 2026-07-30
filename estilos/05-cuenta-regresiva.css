@@ -37,6 +37,27 @@
     linear-gradient(180deg, rgba(201, 168, 76, .07), rgba(0, 0, 0, .35));
   border: 1px solid var(--borde-oro-tenue);
   box-shadow: inset 0 0 22px rgba(0, 0, 0, .6);
+
+  /* ⚡ ENCERRAR EL TRABAJO DE LA CUENTA REGRESIVA.
+     Los segundos cambian una vez por segundo, y cada cambio de texto obliga
+     al navegador a revisar el layout. Sin esto, esa revisión se propagaba a
+     TODA la página —más de 4.000 nodos—: en el perfil, `actualizarLaCuenta`
+     figuraba con 110 ms, el 11,4 % del total, siendo que la cuenta en sí son
+     cuatro restas.
+
+     `contain` le dice al navegador que lo que pase acá adentro no puede
+     afectar a nada de afuera, así que el recálculo se queda dentro de la
+     cartela. Se puede hacer sin riesgo porque el tamaño de la cartela no
+     depende del texto: lo fija `min-width` y el alto sale del padding más
+     dos renglones de altura fija.
+
+     La otra mitad del arreglo está en codigo/09-cuenta-regresiva.js: no se
+     reescribe el número si no cambió. */
+     ⛔ SIN `paint`: el número lleva un text-shadow de 26 px de radio, y la
+     contención de pintado lo cortaría en el borde de la cartela. Con
+     `layout` y `style` alcanza —son las que impiden que el recálculo se
+     propague—, y el resplandor del número queda intacto. */
+  contain: layout style;
 }
 
 /* Esquinitas doradas: cuatro escuadras en las puntas de cada cartela.

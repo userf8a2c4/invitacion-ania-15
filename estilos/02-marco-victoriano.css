@@ -26,6 +26,7 @@
      3. Esquinas
      4. Enredaderas de rosas que se mecen con el scroll
      5. Espacio interior para que el contenido no quede debajo
+     6. Los doce tonos de las rosas (lo que reemplazó a los filtros)
    ══════════════════════════════════════════════════════════════════════ */
 
 
@@ -46,6 +47,129 @@
      tener relieve real en vez de estar pegado encima. */
   box-shadow: inset 0 0 90px rgba(0, 0, 0, .75);
 }
+
+/* ─── EL PASO DEL TIEMPO SOBRE EL MARCO ────────────────────────────────
+   Un marco de madera dorada que lleva décadas en una pared no está
+   impecable de arriba abajo: arriba lo mantienen limpio —se ve, se toca,
+   le da la luz— y hacia abajo, en la penumbra, se le acumula el polvo, la
+   humedad deja cercos y la vegetación que trepa le va dejando su verdín.
+
+   REGLA QUE PIDIÓ EL PROYECTO: **arriba se deja intacto**. La portada es
+   lo primero que se ve y ahí el oro tiene que brillar como nuevo. La
+   suciedad entra recién al bajar, junto con la oscuridad, así que se lee
+   como profundidad y edad — no como un dibujo mal hecho.
+
+   Se hace con un pseudo-elemento y no tocando el SVG del marco, por dos
+   razones: el SVG es un azulejo que se repite (mancharlo repetiría la
+   misma mancha cien veces, y eso sí se nota como error), y así el envejecido
+   se puede graduar con la altura del documento.
+
+   ⚡ COSTO: cero por cuadro. Son tres degradados estáticos que se pintan una
+   vez. No se anima, no lleva `will-change`, no crea capa de compositor. */
+#marco-victoriano::after {
+  content: '';
+  position: absolute;
+  /* ⚡ SOLO LA MITAD DE ABAJO, y es puro rendimiento.
+     Antes era `inset: 0`: el documento entero. En la pantalla objetivo eso
+     son 3305 × 5869 = 19,4 MEGAPÍXELES cubiertos por una decena de
+     degradados, y "Paint" llegó al 31 % del perfil.
+
+     Pero arriba no hay NADA que pintar: todas las manchas, la carcoma y los
+     golpes están por debajo del 54 % por diseño —la portada tiene que verse
+     impecable—. Empezar en el 45 % quita 8 millones de píxeles de trabajo
+     sin borrar una sola marca. */
+  inset: 45% 0 0 0;
+  pointer-events: none;
+
+  /* ⛔ ACÁ HABÍA UNA `mask-image` Y ERA UN ERROR CARO.
+     Hacía el degradado del tiempo —transparente arriba, opaca abajo— pero
+     una máscara obliga al navegador a renderizar el elemento a un búfer
+     aparte, renderizar la máscara y componer los dos. Este elemento mide
+     `inset: 0` sobre el documento entero: 1546 × 5590 = **8,6 MEGAPÍXELES**.
+     "Layerize" saltó del 27,6 % al 40,9 % justo en el lote donde la agregué.
+
+     Y en la máquina objetivo —una Intel HD 4600 sin memoria propia, que
+     comparte el bus con la CPU— un búfer de ese tamaño es directamente
+     inviable.
+
+     La máscara sobraba: el degradado del polvo (capa 3) ya hace la
+     transición de limpio a sucio. Basta con COLOCAR las manchas en la mitad
+     inferior y darles el alfa que les toca. Mismo aspecto, cero capas,
+     cero búferes fuera de pantalla. */
+  background-image:
+    /* 1. VERDÍN DE LA VEGETACIÓN. Manchas verdosas irregulares pegadas a
+          los bordes, donde las enredaderas se apoyan en la moldura.
+          ⚠️ Todas por debajo del 34 % de altura y con el alfa creciendo al
+          descender: eso es lo que reemplaza a la máscara. Arriba no hay
+          ninguna, así que la portada queda impecable. */
+    radial-gradient(ellipse 8% 4%  at 2% 1.0%, rgba(74, 92, 44, .09) 0%, transparent 70%),
+    radial-gradient(ellipse 6% 5%  at 98% 9.1%, rgba(66, 84, 40, .12) 0%, transparent 70%),
+    radial-gradient(ellipse 7% 3%  at 1% 41.8%, rgba(80, 96, 50, .18) 0%, transparent 70%),
+    radial-gradient(ellipse 9% 4%  at 99% 63.6%, rgba(70, 88, 44, .20) 0%, transparent 70%),
+
+    /* 2. CERCOS DE HUMEDAD. Óvalos pardos difusos, como los que deja el
+          agua al secarse: más oscuros en el borde que en el centro.
+          Mismo criterio: los de más arriba, más tenues. */
+    radial-gradient(ellipse 12% 5% at 4% 16.4%, rgba(58, 40, 22, .12) 40%, rgba(46, 32, 18, .06) 75%, transparent 92%),
+    radial-gradient(ellipse 10% 6% at 96% 41.8%, rgba(54, 38, 20, .18) 40%, rgba(44, 30, 16, .09) 75%, transparent 92%),
+    radial-gradient(ellipse 14% 4% at 50% 81.8%, rgba(50, 36, 20, .24) 40%, rgba(40, 28, 16, .12) 75%, transparent 92%),
+
+    /* 3. CARCOMA. Agujeritos de 2 px, en racimos irregulares y SOLO en la
+          mitad de abajo. El polvo y la humedad se pintan con degradados
+          suaves; la carcoma NO: es un agujero, tiene borde. Por eso van con
+          una parada dura (color hasta el 70 %, nada al 100 %) en vez de
+          desvanecerse. Sin ese borde parecen manchas, no daño.
+
+          Van pegados a los rieles (x ≈ 1 % y 99 %), que es donde está la
+          madera del marco. */
+    radial-gradient(circle 2px at 1.1% 30.9%,  rgba(16, 9, 5, .62) 0 70%, transparent 100%),
+    radial-gradient(circle 2px at 1.9% 34.5%,  rgba(16, 9, 5, .55) 0 70%, transparent 100%),
+    radial-gradient(circle 1px at 1.4% 38.2%,  rgba(16, 9, 5, .58) 0 70%, transparent 100%),
+    radial-gradient(circle 2px at 98.8% 47.3%, rgba(16, 9, 5, .60) 0 70%, transparent 100%),
+    radial-gradient(circle 1px at 99.4% 50.9%, rgba(16, 9, 5, .52) 0 70%, transparent 100%),
+    radial-gradient(circle 2px at 98.5% 70.9%, rgba(16, 9, 5, .64) 0 70%, transparent 100%),
+    radial-gradient(circle 2px at 1.6% 78.2%,  rgba(16, 9, 5, .64) 0 70%, transparent 100%),
+    radial-gradient(circle 1px at 1.0% 81.8%,  rgba(16, 9, 5, .50) 0 70%, transparent 100%),
+
+    /* 4. GOLPES Y ORO DESGASTADO. Donde el pan de oro se saltó, asoma el
+          BOL: la preparación rojiza que va debajo del dorado. Ese rojo
+          ladrillo es LA señal de un marco dorado antiguo de verdad —sin él,
+          un desconchón parece una mancha de suciedad—.
+
+          Se dibujan como elipses chicas con borde definido, no difuminadas:
+          un golpe arranca material, no lo mancha. */
+    radial-gradient(ellipse 5px 3px at 1.5% 41.8%,  rgba(112, 48, 24, .50) 0 75%, transparent 100%),
+    radial-gradient(ellipse 4px 6px at 98.9% 60.0%, rgba(112, 48, 24, .46) 0 75%, transparent 100%),
+    radial-gradient(ellipse 7px 3px at 1.2% 87.3%,  rgba(104, 44, 22, .55) 0 75%, transparent 100%),
+    radial-gradient(ellipse 6px 4px at 99.1% 90.9%, rgba(104, 44, 22, .52) 0 75%, transparent 100%),
+    /* Dos roces largos en la cenefa de abajo, donde el marco se apoya y roza */
+    radial-gradient(ellipse 40px 2px at 28% 99.3%, rgba(108, 46, 22, .40) 0 80%, transparent 100%),
+    radial-gradient(ellipse 60px 2px at 67% 99.5%, rgba(108, 46, 22, .36) 0 80%, transparent 100%),
+
+    /* 5. POLVO ASENTADO. Un velo pardo general que crece hacia el fondo:
+          es lo que apaga el oro y le quita el brillo de nuevo. */
+    linear-gradient(to bottom,
+      transparent 0%,
+      rgba(42, 32, 20, .07) 18%,
+      rgba(36, 28, 18, .14) 55%,
+      rgba(30, 24, 16, .22) 100%);
+
+  /* ⛔ ACÁ NO VA `mix-blend-mode`, POR MUY TENTADOR QUE SEA.
+     `soft-light` respetaría mejor el relieve de la moldura… pero cualquier
+     modo de mezcla obliga al compositor a LEER DE VUELTA el fondo, y esta
+     capa cubre el documento entero. Es exactamente el tipo de capa que
+     llevamos toda la sesión eliminando: entre "Layerize" y "Commit" llegaron
+     a costar la mitad de cada cuadro.
+
+     Se consigue el mismo efecto con composición normal y opacidades bajas
+     (todas por debajo de .22): al ser tan tenues, el oro y su relieve se
+     siguen viendo por debajo, que es justo lo que hace el polvo real. La
+     diferencia con soft-light es mínima; la diferencia de costo, enorme. */
+}
+
+/* En calidad baja se deja el marco limpio: es el único adorno que se puede
+   quitar sin que se note una ausencia, porque su gracia es sutil. */
+html.calidad-baja #marco-victoriano::after { display: none; }
 
 
 /* ─── 2. TRAMOS RECTOS ─────────────────────────────────────────────────
@@ -132,7 +256,6 @@
   width: 100%;
   height: auto;
   transform-origin: 50% 100%;   /* pivota sobre la raíz */
-  will-change: transform;
 
   /* ⚠️ ESTO EVITA QUE SE CORTEN LAS ROSAS.
      Por defecto, un dibujo SVG recorta todo lo que se sale de su caja
@@ -146,6 +269,41 @@
      plantas viene de sus propios contornos oscuros. */
   overflow: visible;
 }
+
+/* ⚡ ACÁ ARRIBA YA NO HAY `will-change`, Y ES A PROPÓSITO.
+   Antes esta regla pedía una capa de GPU propia para CADA .racimo-de-rosas,
+   y esa clase la llevan las ~20 plantas de la enredadera MÁS los 2
+   ramilletes de esquina: 22 SVG promovidos, uno de ellos con 341 nodos
+   hijos. Promover a capa un dibujo así obliga a rasterizarlo entero en su
+   propia textura.
+
+   Se le quitó primero en media y baja, y después en TODOS los niveles, al
+   medir la página viva y encontrar 179 elementos promovidos entre velas,
+   llamas, pétalos, motas, haces y plantas. `will-change` es una PISTA para
+   el navegador, no una optimización: la documentación de Chrome dice
+   expresamente que no se ponga en muchos elementos, porque cada capa hay
+   que recorrerla y administrarla en cada cuadro —eso es la fase
+   "Layerize", que llegó a ser el 31 % del perfil—.
+
+   Las plantas se mecen despacio y con poquísima amplitud: no necesitan
+   capa dedicada para verse bien, y de hecho se ven exactamente igual sin
+   ella. Mismo criterio en .vela, .llama, .mota y .petalo. */
+
+/* ⛔ ACÁ NO VA `content-visibility`, NI NINGÚN TIPO DE CONTENCIÓN DE PINTADO.
+   Se probó y fue un error grave: se veían TALLOS Y FLORES CORTADOS con un
+   filo recto a cierta altura de cada planta.
+
+   El motivo: `content-visibility` (y `contain: paint`) recortan todo lo que
+   se sale de la caja del elemento. Pero estas plantas están hechas
+   justamente para DESBORDAR —por eso el SVG lleva `overflow: visible`, ver
+   más arriba—: las ramas crecen por encima del marco, que es lo que hace
+   que parezcan enredaderas de verdad y no un dibujo pegado dentro de un
+   rectángulo.
+
+   REGLA DEL PROYECTO: ninguna optimización puede recortar el dibujo. Si
+   hace falta bajar el costo de las enredaderas, se hace por otro lado
+   —menos escrituras por cuadro, menos capas de GPU—, nunca cortando lo que
+   se ve. */
 
 /* En pantallas chicas el marco es finito: las enredaderas se achican
    para no comerse el texto. */
@@ -169,7 +327,31 @@
   width: min(36vw, 620px);
   z-index: 3;            /* por encima de la moldura, debajo del contenido */
   pointer-events: none;
+
+  /* ⛔ ACÁ NO VA NINGÚN TIPO DE `contain` NI `content-visibility`.
+     Se intentó tres veces y las tres rompieron el dibujo:
+
+       · con `paint` y con `content-visibility`, las rosas aparecían
+         cortadas con un filo recto (estos ramilletes desbordan sobre el
+         marco a propósito, igual que las enredaderas);
+       · con `layout` y `style` sueltos, los ramilletes perdieron los
+         TALLOS y quedaron como flores flotando en el aire.
+
+     El ramillete es un SVG de ~341 nodos y sería el candidato ideal para
+     aislarlo… pero no a costa de que se vea mal. La regla del proyecto
+     manda: ninguna optimización puede cambiar el dibujo.
+
+     Si algún día hace falta bajar su costo, el camino es reducir escrituras
+     por cuadro o capas de GPU, nunca contener el pintado o el layout de
+     este elemento. */
 }
+/* ⚠️ ESA LLAVE DE ARRIBA COSTÓ CINCO INTENTOS. Al quitar el `contain` se fue
+   con él, y sin ella el parser de CSS considera que las dos reglas de abajo
+   siguen dentro del bloque anterior y LAS DESCARTA ENTERAS. Resultado: ni el
+   izquierdo recibía su `left` ni el derecho su `right`, así que los dos caían
+   en la posición estática —x=0— apilados uno encima del otro. El de la
+   derecha nunca faltó: estaba escondido debajo del otro.
+   Lo delató el cartel de ?fps=1: «izq …@0,19 · der …@0,19». */
 .marco__ramillete--izquierdo { left: calc(var(--marco-grosor) * .35); }
 .marco__ramillete--derecho {
   right: calc(var(--marco-grosor) * .35);
@@ -214,4 +396,107 @@
    nunca le tape el texto (ver 09-reproductor.css). */
 #pie-de-pagina {
   padding-bottom: calc(var(--marco-grosor) + var(--alto-reproductor));
+}
+
+
+/* ─── 6. LOS DOCE TONOS DE LAS ROSAS ───────────────────────────────────
+   Cada flor lleva una de estas clases según cuánta luz le toca y cuán
+   cerca está del que mira. La clase no hace más que elegir con qué juego
+   de gradientes se pintan sus pétalos.
+
+   ESTO REEMPLAZA A  filter: brightness() saturate()  Y ES LA RAZÓN DE QUE
+   LA WEB DEJARA DE AHOGARSE. Un filtro de CSS le da al elemento su propia
+   capa de pintura: con ~350 flores eran ~350 capas rearmándose en cada
+   cuadro, y la fase "Layerize" se llevaba el 38,9 % del tiempo. Los colores
+   de abajo son EXACTAMENTE los que producía el filtro (calculados con la
+   fórmula del spec, ver el bloque de <defs> en index.html), así que no se
+   perdió nada de la profundidad: se ve igual y no cuesta una sola capa.
+
+   ⚠️ NO ESCRIBIR ESTOS COLORES A MANO. Salen de un cálculo; si hace falta
+   cambiar la paleta, se cambian los gradientes base de index.html y se
+   vuelven a generar los doce juegos junto con estas clases.
+   ---------------------------------------------------------------------- */
+.tono-0 {
+  --pet-cara: url(#rosa-pet-cara-t0);
+  --pet-media: url(#rosa-pet-media-t0);
+  --pet-interior: url(#rosa-pet-interior-t0);
+  --pet-dorso: url(#rosa-pet-dorso-t0);
+  --caliz: url(#rosa-caliz-t0);
+}
+.tono-1 {
+  --pet-cara: url(#rosa-pet-cara-t1);
+  --pet-media: url(#rosa-pet-media-t1);
+  --pet-interior: url(#rosa-pet-interior-t1);
+  --pet-dorso: url(#rosa-pet-dorso-t1);
+  --caliz: url(#rosa-caliz-t1);
+}
+.tono-2 {
+  --pet-cara: url(#rosa-pet-cara-t2);
+  --pet-media: url(#rosa-pet-media-t2);
+  --pet-interior: url(#rosa-pet-interior-t2);
+  --pet-dorso: url(#rosa-pet-dorso-t2);
+  --caliz: url(#rosa-caliz-t2);
+}
+.tono-3 {
+  --pet-cara: url(#rosa-pet-cara-t3);
+  --pet-media: url(#rosa-pet-media-t3);
+  --pet-interior: url(#rosa-pet-interior-t3);
+  --pet-dorso: url(#rosa-pet-dorso-t3);
+  --caliz: url(#rosa-caliz-t3);
+}
+.tono-4 {
+  --pet-cara: url(#rosa-pet-cara-t4);
+  --pet-media: url(#rosa-pet-media-t4);
+  --pet-interior: url(#rosa-pet-interior-t4);
+  --pet-dorso: url(#rosa-pet-dorso-t4);
+  --caliz: url(#rosa-caliz-t4);
+}
+.tono-5 {
+  --pet-cara: url(#rosa-pet-cara-t5);
+  --pet-media: url(#rosa-pet-media-t5);
+  --pet-interior: url(#rosa-pet-interior-t5);
+  --pet-dorso: url(#rosa-pet-dorso-t5);
+  --caliz: url(#rosa-caliz-t5);
+}
+.tono-6 {
+  --pet-cara: url(#rosa-pet-cara-t6);
+  --pet-media: url(#rosa-pet-media-t6);
+  --pet-interior: url(#rosa-pet-interior-t6);
+  --pet-dorso: url(#rosa-pet-dorso-t6);
+  --caliz: url(#rosa-caliz-t6);
+}
+.tono-7 {
+  --pet-cara: url(#rosa-pet-cara-t7);
+  --pet-media: url(#rosa-pet-media-t7);
+  --pet-interior: url(#rosa-pet-interior-t7);
+  --pet-dorso: url(#rosa-pet-dorso-t7);
+  --caliz: url(#rosa-caliz-t7);
+}
+.tono-8 {
+  --pet-cara: url(#rosa-pet-cara-t8);
+  --pet-media: url(#rosa-pet-media-t8);
+  --pet-interior: url(#rosa-pet-interior-t8);
+  --pet-dorso: url(#rosa-pet-dorso-t8);
+  --caliz: url(#rosa-caliz-t8);
+}
+.tono-9 {
+  --pet-cara: url(#rosa-pet-cara-t9);
+  --pet-media: url(#rosa-pet-media-t9);
+  --pet-interior: url(#rosa-pet-interior-t9);
+  --pet-dorso: url(#rosa-pet-dorso-t9);
+  --caliz: url(#rosa-caliz-t9);
+}
+.tono-10 {
+  --pet-cara: url(#rosa-pet-cara-t10);
+  --pet-media: url(#rosa-pet-media-t10);
+  --pet-interior: url(#rosa-pet-interior-t10);
+  --pet-dorso: url(#rosa-pet-dorso-t10);
+  --caliz: url(#rosa-caliz-t10);
+}
+.tono-11 {
+  --pet-cara: url(#rosa-pet-cara-t11);
+  --pet-media: url(#rosa-pet-media-t11);
+  --pet-interior: url(#rosa-pet-interior-t11);
+  --pet-dorso: url(#rosa-pet-dorso-t11);
+  --caliz: url(#rosa-caliz-t11);
 }

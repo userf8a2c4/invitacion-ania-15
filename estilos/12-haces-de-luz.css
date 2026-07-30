@@ -55,13 +55,26 @@
      piso, que van por encima de este velo, z66) la que abre los claros
      donde hay texto y botones. Tope ~.62 para que se lea sin esfuerzo entre
      charco y charco de luz. */
-  background: linear-gradient(
-    to bottom,
-    rgba(8, 4, 4, 0)   0,
-    rgba(8, 4, 4, 0)   22vh,
-    rgba(7, 4, 4, .26) 90vh,
-    rgba(5, 3, 3, .50) 170vh,
-    rgba(4, 2, 2, .62) 100%);
+  /* DOS capas: primero el TINTE DE LA HORA y debajo la penumbra de siempre.
+
+     El tinte es lo que hace que la SALA entera cambie de temperatura, no
+     solo la ventana. Este velo cubre el documento completo, así que teñirlo
+     a él es la forma más barata y más envolvente de que la escena sea de
+     tarde dorada o de madrugada azul: una sola capa que ya existía, sin
+     añadir ninguna nueva.
+
+     Lo escribe codigo/22-luz-de-la-hora.js una vez cada diez minutos. El
+     valor de reserva es transparente, así que sin ese módulo se ve como
+     siempre. */
+  background:
+    linear-gradient(var(--tinte-del-velo, transparent), var(--tinte-del-velo, transparent)),
+    linear-gradient(
+      to bottom,
+      rgba(8, 4, 4, 0)   0,
+      rgba(8, 4, 4, 0)   22vh,
+      rgba(7, 4, 4, .26) 90vh,
+      rgba(5, 3, 3, .50) 170vh,
+      rgba(4, 2, 2, .62) 100%);
 }
 
 /* Con menos movimiento el velo se mantiene (es estático, no molesta), pero
@@ -100,6 +113,32 @@
    Es también lo físicamente correcto: el objeto vive dentro de la escena y
    se oscurece con ella, pero la luz que emite ilumina la habitación. */
 
+/* ─── EL LIENZO DE LUZ ─────────────────────────────────────────────────
+   Un solo <canvas> que dibuja TODOS los resplandores de las velas, en vez
+   de los ~104 divs con mezcla que había antes. Lo crea y lo pinta
+   codigo/23-lienzo-de-luz.js.
+
+   POR QUÉ NO LLEVA `mix-blend-mode`
+   Porque no lo necesita: dentro del canvas la luz se suma con
+   `globalCompositeOperation = 'lighter'`, que es la misma matemática que
+   hacía el `screen` —y lo que hace la luz de verdad— pero SIN costarle una
+   capa al compositor. Ese era el problema: diez capas de mezcla apiladas
+   obligaban al navegador a leer de vuelta el fondo y le impedían fusionar
+   nada, y entre "Layerize" y "Commit" se llevaban la mitad del tiempo.
+
+   `position: fixed` porque el canvas cubre solo la ventana, no el
+   documento entero; el JS le resta el scroll a cada luz. Así el lienzo
+   mide 1920×1080 en vez de 1920×5592, que es una quinta parte de píxeles.
+
+   z-index 66: el mismo que tenía #luz-de-velas, para conservar el orden de
+   la escena (por encima del velo de penumbra, por debajo de los haces). */
+#lienzo-de-luz {
+  position: fixed;
+  inset: 0;
+  z-index: 66;
+  pointer-events: none;
+}
+
 /* La PIEZA de latón, integrada en la pared (debajo de rosas y molduras). */
 #apliques {
   position: absolute;
@@ -120,16 +159,35 @@
 .llama {
   transform-box: fill-box;
   transform-origin: 50% 90%;
-  will-change: opacity, transform;
+  /* ⚡ ACÁ TAMPOCO VA `will-change`, POR LA MISMA RAZÓN QUE EN .vela.
+     `will-change` es una PISTA para que el navegador reserve una capa de
+     GPU, no una optimización mágica: la documentación de Chrome dice
+     expresamente que no se ponga en muchos elementos, porque cada capa hay
+     que recorrerla y administrarla en CADA cuadro. Eso es la fase
+     "Layerize", que llegó a comerse el 31 % del perfil.
+
+     Al medir la página viva aparecieron 179 elementos promovidos entre
+     velas, llamas, pétalos, motas, haces y plantas. Se podaron casi todos.
+     Las llamas, además, están dentro de un contenedor que se mezcla con el
+     fondo, así que su capa nunca pudo aprovecharse. Se ven exactamente
+     igual sin ella. */
 }
 
-/* El RESPLANDOR de cada llama, por encima del velo de penumbra. */
+/* El RESPLANDOR de cada llama, por encima del velo de penumbra.
+   ⚠️ ACÁ NO VA `mix-blend-mode`. Esta capa es `absolute; inset: 0`, o sea
+   que mide TODO el documento (en una pantalla ancha, más de diez millones
+   de píxeles). Poner la mezcla acá obligaba al navegador a leer, mezclar y
+   reescribir esa superficie entera CADA vez que una vela titilaba: en un
+   perfil real, "Commit" (composición) se llevaba el 32 % del tiempo.
+   La mezcla ahora va en cada .vela (unos cientos de píxeles cada una), que
+   da el mismo resultado —cada luz suma sobre lo que tiene debajo— pero
+   sobre un área ínfima en comparación. El área de esta capa se acota,
+   además, desde codigo/19-velas.js. */
 #luz-de-velas {
   position: absolute;
   inset: 0;
   z-index: 66;
   pointer-events: none;
-  mix-blend-mode: screen;   /* suma luz sin lavar los negros */
   overflow: hidden;
 }
 
@@ -138,10 +196,48 @@
      · .vela--derrame → ancho y suave, el que de verdad ilumina la sección.
    Separarlos permite tener un centro nítido y una caída larga sin recurrir
    a filter: blur (que sin placa de video es carísimo). */
+/* LA MEZCLA VIVE ACÁ: una capa por PIEZA (candelabro o cúmulo de cirios).
+   Se midieron los dos extremos y los dos eran peores:
+     · mezcla en la capa que cubre todo el documento → "Commit" 25,6 %
+       (millones de píxeles a releer y remezclar en cada titileo).
+     · mezcla en cada .vela → el navegador arma una capa POR ELEMENTO, y son
+       52: "Layerize" saltó de 5,8 % a 22,3 % y "Pre-paint" de 4,1 % a 18,1 %.
+   Con una capa por pieza son 8, cada una del tamaño de su candelabro más el
+   margen de su derrame. El resultado en pantalla es el mismo: cada luz sigue
+   sumando claridad sobre lo que tiene debajo.
+   El JS (codigo/19-velas.js) le da posición y tamaño a cada uno. */
+.luz-de-pieza {
+  position: absolute;
+  pointer-events: none;
+  mix-blend-mode: screen;
+
+  /* ⛔ SIN `content-visibility`, aunque parezca el lugar perfecto.
+     Estas son las capas más caras de la web —`mix-blend-mode` obliga al
+     compositor a leer de vuelta el fondo y le impide fusionar nada de lo
+     que hay debajo—, y saltear las que no se ven parecía gratis.
+
+     Pero `content-visibility` recorta al borde de la caja, y en este
+     proyecto ya rompió el dibujo tres veces (ver .marco__ramillete y
+     .marco__planta en estilos/02-marco-victoriano.css). No se arriesga otra
+     vez con la luz de las velas.
+
+     El costo se bajó por el camino seguro: ajustando la caja de mezcla al
+     resplandor real en vez de al candelabro entero. Cuatro de estas cajas
+     tenían el 87 % de su área vacía y el compositor la leía igual. Ver
+     acomodarTodo() en codigo/19-velas.js: la caja es ahora la unión de los
+     centros de llama ± el radio máximo del derrame, así que por definición
+     no puede recortar la luz. */
+}
+
 .vela {
   position: absolute;
   border-radius: 50%;
-  will-change: opacity;
+  /* ⚡ SIN `will-change`, Y ES DELIBERADO.
+     Cada .vela vive DENTRO de un .luz-de-pieza, que se mezcla con el fondo
+     (mix-blend-mode: screen). Un elemento que se mezcla NO PUEDE componerse
+     por separado: el navegador necesita el fondo para calcularlo, así que
+     la capa que se le reservaba había que volver a fundirla igual. Eran 52
+     capas de puro trabajo perdido. Ver la nota completa en .llama. */
   opacity: 0;              /* el JS le da su valor; sin JS, apagado */
 }
 
@@ -162,10 +258,11 @@
     transparent 80%);
 }
 
-/* Cuando un derrame queda MUY cerca de una caja de texto, el JS lo manda a
-   #apliques (bajo el velo de penumbra) para que no encandile la lectura.
-   Allí no hay screen: se asegura mezcla normal y una caída extra de fuerza,
-   así queda como un rescoldo detrás de la caja, no como un lavado encima. */
+/* Cuando un derrame queda MUY cerca de una caja de texto, el JS lo saca del
+   contenedor de mezcla de su pieza y lo manda a #apliques (bajo el velo de
+   penumbra), para que no encandile la lectura. Ahí ya no le llega el screen
+   del contenedor —queda como un rescoldo DETRÁS de la caja, no como un
+   lavado encima—; esta regla lo deja explícito por las dudas. */
 .vela--detras {
   mix-blend-mode: normal;
 }
@@ -180,6 +277,12 @@
   .vela--nucleo  { opacity: .85 !important; }
   .llama { opacity: 1 !important; transform: none !important; }
 }
+
+/* (Acá había una regla que le quitaba el will-change a .vela y .llama solo
+   en media y baja. Ya no hace falta: se lo quitamos a TODOS los niveles en
+   sus propias reglas, porque medir la página mostró que esas capas nunca
+   se aprovechaban —las velas se mezclan con el fondo, y eso impide
+   componerlas por separado—.) */
 
 
 /* ─── 1. LA CAPA ───────────────────────────────────────────────────────
@@ -260,6 +363,18 @@
      Ahora el borde suave viene del PROPIO degradado —una elipse radial que
      nace clara arriba y se desvanece a la nada— sin ningún filtro. Se ve
      igual (un rayo de polvo en suspensión) y no cuesta prácticamente nada. */
+  /* ⚠️ ACÁ NO VA `var()` DENTRO DEL DEGRADADO, aunque el color cambie con
+     la hora del día. Se probó y costó caro: `14-haces-de-luz.js` escribe
+     --luz-intensidad en estas capas cada 65 ms, y escribir una propiedad
+     personalizada invalida el estilo de TODO el subárbol. Con `var()` en el
+     fondo, cada una de esas escrituras obligaba a volver a resolver los
+     degradados de los 5 haces y las 32 motas: "Recalculate style" saltó del
+     13 % al 21 % del perfil.
+
+     La luz por hora se aplica igual, pero al revés: codigo/22-luz-de-la-hora.js
+     escribe el degradado COMPLETO, ya armado, una vez cada diez minutos. El
+     valor de abajo es el de las 18:00 —la luz de tarde de siempre— y queda
+     como reserva por si ese módulo no llegara a cargar. */
   background:
     radial-gradient(ellipse 62% 46% at 50% 24%,
       rgba(244, 226, 160, .50)  0%,
@@ -322,12 +437,21 @@
 .mota {
   position: absolute;
   border-radius: 50%;
+  /* El polvo brilla con la luz que lo atraviesa, así que su color también
+     cambia con la hora — pero SIN `var()` acá dentro, por el mismo motivo
+     que en .haz (ver la nota de arriba: estas 32 motas re-resolvían su
+     degradado 15 veces por segundo). Lo escribe 22-luz-de-la-hora.js ya
+     armado, cada diez minutos. */
   background: radial-gradient(circle,
     rgba(255, 246, 214, .95) 0%,
     rgba(244, 226, 160, .55) 42%,
     transparent 72%);
   opacity: 0;
-  will-change: transform, opacity;
+  /* ⚡ SIN `will-change`: acá era literalmente redundante.
+     Esta animación es de CSS y solo toca `transform` y `opacity`. Chrome
+     detecta ese caso solo y la manda al compositor por su cuenta —no hace
+     falta pedírselo—. El `will-change` que había acá no aportaba nada y sí
+     sumaba 32 capas más que "Layerize" tenía que administrar por cuadro. */
   animation: flotar-mota var(--mota-dur, 26s) linear var(--mota-delay, 0s) infinite;
 }
 
@@ -344,15 +468,36 @@
   #motas-de-polvo { display: none; }
 }
 
-/* RENDIMIENTO ADAPTATIVO POR NIVELES: el gobernador de FPS
-   (codigo/21-monitor-de-rendimiento.js) marca el <html> con clases
-   acumulativas según cuánto sufra el equipo.
-     · nivel 1 (leve)   → se apagan las MOTAS (capa animada en screen, lo más
-       prescindible).
-     · nivel 3 (severo) → además se apagan los HACES de luz.
-   Los pétalos los reduce el JS por nivel (ver 06-petalos-con-fisica.js). */
-html.rendimiento-nivel1 #motas-de-polvo { display: none; }
-html.rendimiento-nivel3 #haces-de-luz   { display: none; }
+/* CALIDAD GRÁFICA ADAPTATIVA: codigo/21-monitor-de-rendimiento.js marca el
+   <html> con "calidad-media" o "calidad-baja" (alta = ninguna) según lo que
+   el equipo puede sostener de verdad.
+
+   ⚡ BAJA YA NO ES "APAGADO". Antes acá se escondían los haces Y las motas
+   por completo, y el resultado era un nivel sin atmósfera: la penumbra
+   quedaba muerta, sin polvo en suspensión ni luz entrando. Ahora baja
+   conserva UN par de haces y su polvo (18-motas-de-polvo.js siembra pocas),
+   que es lo que vuelve volumétrica la luz. Se puede permitir porque el
+   costo se fue a otro lado: se les quita la capa de GPU dedicada (abajo) y
+   se recuperaron capas de las 24 que gastaban los SVG de las plantas
+   (ver estilos/02-marco-victoriano.css).
+
+     · calidad-media → 4 de los 5 haces.
+     · calidad-baja  → 2 de los 5 haces, con las motas puestas pero sin capa
+       de compositor propia.
+   Los candelabros, las velas y las joyas no se tocan en ningún nivel. */
+html.calidad-media #haces-de-luz .haz:nth-child(5) { display: none; }
+
+html.calidad-baja #haces-de-luz .haz:nth-child(3),
+html.calidad-baja #haces-de-luz .haz:nth-child(4),
+html.calidad-baja #haces-de-luz .haz:nth-child(5) { display: none; }
+
+/* Sin capa de GPU propia para el adorno animado en calidad baja: el iGPU de
+   un equipo modesto sufre más sosteniendo texturas que pintando estas formas
+   simples junto con el resto. */
+html.calidad-baja .haz,
+html.calidad-baja .mota {
+  will-change: auto;
+}
 
 
 /* ─── 5. VELO DE REVELADO ──────────────────────────────────────────────
@@ -371,13 +516,28 @@ html.rendimiento-nivel3 #haces-de-luz   { display: none; }
   pointer-events: none;
   mix-blend-mode: screen;
   opacity: 0;
+
+  /* ⚡ APAGADO POR DEFECTO, Y ES UN ARREGLO DE RENDIMIENTO REAL.
+     Este velo dura 2,9 segundos UNA vez, al abrir el sobre… pero antes se
+     quedaba en el árbol para siempre: una capa de mezcla del tamaño de toda
+     la pantalla, con opacidad 0, sin dibujar nada y costando igual.
+
+     Y `mix-blend-mode` no es una capa cualquiera: obliga al compositor a
+     LEER DE VUELTA el fondo y le impide fusionar nada de lo que hay debajo.
+     Con `display: none` desaparece del árbol de capas en cuanto termina su
+     momento. Se enciende solo mientras el body tiene la clase .revelando. */
+  display: none;
   background:
     radial-gradient(ellipse 95% 75% at 50% 40%,
       rgba(255, 240, 205, .55) 0%,
       rgba(230, 180, 120, .22) 42%,
       transparent 72%);
 }
+/* Solo existe mientras dura el revelado. Al quitarse la clase .revelando
+   (lo hace codigo/03-sobre-de-apertura.js al terminar), vuelve a
+   display:none y su capa de mezcla deja de existir. */
 body.revelando #velo-de-revelado {
+  display: block;
   animation: bano-de-revelado 2.9s var(--curva-elegante) forwards;
 }
 @keyframes bano-de-revelado {

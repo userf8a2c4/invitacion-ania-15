@@ -36,9 +36,34 @@
   const capa = buscar('#haces-de-luz');
   if (!capa) return;
 
-  /* Donde publicamos las variables de luz para que las lea el resto del
-     CSS (el oro del relicario, las motas de polvo). */
-  const raiz = document.documentElement;
+  /* ─── DÓNDE SE PUBLICAN LAS VARIABLES DE LUZ (y por qué NO en el <html>)
+     La luz publica dos números para que los lea el CSS: --luz-x (dónde está
+     el sol) y --luz-intensidad (cuánta luz hay). Antes se escribían en
+     document.documentElement, o sea en el <html>.
+
+     ⚠️ Eso costaba carísimo, y lo confirmó un perfil de rendimiento: las
+     variables de CSS SE HEREDAN, así que al escribirlas en la raíz el
+     navegador tiene que invalidar y recalcular el estilo de TODO el
+     documento —cualquier descendiente podría estar usándolas—. Con este
+     DOM (cientos de flores, decenas de velas, los SVG del relicario y del
+     marco) eso es un recálculo enorme… varias veces por segundo. En el
+     perfil, "Recalculate style" se llevaba el 39 % del tiempo total, sin
+     ninguna función de JavaScript colgando debajo: el costo lo pagaba el
+     navegador DESPUÉS de la escritura.
+
+     Solo TRES elementos leen estas variables, así que se escriben
+     directamente en ellos. Cada uno ve exactamente el mismo valor —var()
+     lo encuentra en el propio elemento antes de salir a heredar— pero la
+     invalidación pasa de "todo el documento" a "estos tres".
+
+     Las referencias se buscan UNA vez acá, no en cada cuadro. Y los valores
+     por defecto de estilos/01-fundamentos.css (--luz-x: .5,
+     --luz-intensidad: 0) se mantienen: son la base antes del primer cuadro. */
+  const destinosDeLaLuz = [
+    buscar('#motas-de-polvo'),        // opacity: var(--luz-intensidad)
+    buscar('.portada__brillo-oro'),   // background-position + opacity
+    buscar('.portada__nombre'),       // background-position del barrido de oro
+  ].filter(Boolean);
 
   /* No se corta acá aunque las animaciones estén apagadas: el bucle se
      prepara igual y queda en reposo (ver el guard del bucle). Con las
@@ -74,8 +99,23 @@
    *  "se sabe que está, pero no deslumbra". */
   const BRILLO_MAXIMO = 0.22;
 
+  /** ¿Dibuja el lienzo? (ver codigo/23-lienzo-de-luz.js). Se decide una
+   *  sola vez, al cargar: no cambia en mitad de la sesión. */
+  const usaElLienzo = !!(window.LienzoDeLuz && window.LienzoDeLuz.activo);
+
   const estadoDeLosHaces = haces.map((elemento, i) => ({
     elemento,
+
+    /* Dónde nace el haz, en porcentaje del ancho de la ventana. Lo pone el
+       CSS (.haz:nth-child(N) { left: … }) y se lee UNA sola vez acá, al
+       arrancar, para no volver a preguntarle nada al navegador después. */
+    izquierda: parseFloat(getComputedStyle(elemento).left) /
+               Math.max(1, window.innerWidth) * 100 || 0,
+
+    /* El objeto que lee el lienzo cuadro a cuadro. Se crea una vez y
+       después solo se le cambian los números: cero basura por cuadro. */
+    enElLienzo: { x: 0, y: 0, ancho: 0, alto: 0, giro: 0, alfa: 0 },
+
     anchoBase: 8 + (i % 3) * 4,          // entre 8vw y 16vw
     periodoDeGrosor: PERIODOS_DE_GROSOR[i % PERIODOS_DE_GROSOR.length],
     periodoDeBrillo: PERIODOS_DE_BRILLO[i % PERIODOS_DE_BRILLO.length],
@@ -85,8 +125,29 @@
     faseDeGrosor: Math.random() * Math.PI * 2,
     faseDeBrillo: Math.random() * Math.PI * 2,
     faseDeDeriva: Math.random() * Math.PI * 2,
-    inclinacion: 14 + Math.random() * 9,  // entre 14° y 23°
+    /* ⚠️ ANTES ACÁ HABÍA UNA INCLINACIÓN FIJA (entre 14° y 23°), y era el
+       motivo de que la hora no se sintiera: por muy bien que se tiñera la
+       luz, entraba SIEMPRE POR EL MISMO SITIO.
+
+       Ahora la inclinación la manda el sol —codigo/22-luz-de-la-hora.js la
+       publica en window.LuzDeLaHora—, y esto de acá es solo el desvío
+       personal de cada haz: unos grados arriba o abajo para que los cinco no
+       sean paralelos perfectos, que delataría el truco.
+
+       A las 7 de la mañana los haces entran rasantes desde un lado; al
+       mediodía, casi verticales; al atardecer, rasantes desde el otro. Es la
+       señal más legible de todas: mucho más que el color. */
+    desvio: Math.random() * 9 - 4.5,
   }));
+
+  /* Se le entregan al lienzo los objetos de los haces. A partir de acá el
+     bucle solo les cambia los números; la lista no se vuelve a armar. Y la
+     capa vieja, con su mix-blend-mode a pantalla completa, se apaga. */
+  if (usaElLienzo) {
+    window.LienzoDeLuz.haces = estadoDeLosHaces.map(h => h.enElLienzo);
+    const capaDeHaces = buscar('#haces-de-luz');
+    if (capaDeHaces) capaDeHaces.style.display = 'none';
+  }
 
 
   /* ─── 2. EL BUCLE ──────────────────────────────────────────────────
@@ -96,8 +157,20 @@
      transición del CSS, no la frecuencia de cálculo.
      ---------------------------------------------------------------- */
 
-  /** Cada cuánto se recalcula, en milisegundos. */
-  const CADA_CUANTO = 50;
+  /* Cada cuánto se recalcula, en milisegundos. Ya de por sí es lento a
+     propósito (ver arriba); en calidad más baja se espacia todavía más:
+     el movimiento es tan pausado que la diferencia no se nota, y se ahorra
+     ese cálculo. CALIDAD_GRAFICA y nivelDeCalidad() están en
+     02-utilidades.js. Se lee UNA vez al cargar (no hace falta re-leerlo en
+     vivo: es un ritmo, no una cantidad de elementos). */
+  /* En calidad ALTA la luz se recalcula más seguido (32 ms): la deriva de
+     los haces y el latido de las motas se mueven de forma más continua, sin
+     apoyarse tanto en la transición del CSS para disimular los saltos. */
+  const CADA_CUANTO_POR_CALIDAD = { 0: 32, 1: 65, 2: 90 };
+  let cadaCuanto = CADA_CUANTO_POR_CALIDAD[nivelDeCalidad()] ?? 50;
+  document.addEventListener('calidad-cambio', evento => {
+    cadaCuanto = CADA_CUANTO_POR_CALIDAD[evento.detail && evento.detail.calidad] ?? 50;
+  });
 
   let momentoDeInicio = performance.now();
   let animacionActiva = true;
@@ -170,7 +243,7 @@
        reanudar al instante si se encienden, sin recargar. */
     if (prefiereMenosMovimiento()) { requestAnimationFrame(animarLosHaces); return; }
 
-    if (momentoActual - ultimoCalculo >= CADA_CUANTO) {
+    if (momentoActual - ultimoCalculo >= cadaCuanto) {
       ultimoCalculo = momentoActual;
       const segundos = (momentoActual - momentoDeInicio) / 1000;
 
@@ -183,10 +256,21 @@
          el fondo cae hasta apenas un 15 %. La caída se reparte en algo más
          de una pantalla y media, para que el hundimiento se sienta gradual.
          Así los haces "pierden poder" en las secciones de abajo. */
-      const profundidad = limitar(
-        1 - window.scrollY / (window.innerHeight * 1.6),
-        0.15, 1
+      /* scrollActual() y no window.scrollY: dentro del bucle, preguntarle el
+         scroll al navegador lo obliga a recalcular estilos (02-utilidades.js). */
+      /* ⚠️ LA LUZ NATURAL NO DEBE LLEGAR AL FONDO. Antes caía de forma
+         lineal y con un suelo del 15 %: al bajar del todo seguía entrando un
+         resto de sol por los ventanales, y eso rompía la escena —abajo la
+         sala tiene que estar iluminada SOLO por las velas—.
+
+         Ahora la caída es al cuadrado: se mantiene plena en la portada, se
+         desploma a media pantalla de bajada y llega a CERO. Los candelabros
+         se quedan solos con el trabajo, que es de lo que trata la
+         profundidad de esta invitación. */
+      const cuantoSeBajo = limitar(
+        scrollActualY() / (window.innerHeight * 1.35), 0, 1
       );
+      const profundidad = (1 - cuantoSeBajo) * (1 - cuantoSeBajo);
 
       /* RESPIRACIÓN DE VELA: un latido lentísimo de toda la luz ambiente,
          como la llama de una vela que sube y baja. Es apenas ±8 %, y con
@@ -204,6 +288,13 @@
          estos dos números para moverse EN SINCRONÍA con los haces. */
       let sumaDeDeriva = 0;
       let sumaDeBrillo = 0;
+
+      /* La posición del sol de esta hora. Se lee UNA vez por cuadro —no por
+         haz— y trae valores de reserva por si el módulo de la hora no
+         llegara a cargar: 18° y largo normal, la luz de tarde de siempre. */
+      const hora = window.LuzDeLaHora;
+      const anguloDelSol = hora ? hora.anguloDelSol : 18;
+      const largoDelHaz  = hora ? hora.largoDelHaz  : 1;
 
       for (const haz of estadoDeLosHaces) {
         // GROSOR: el haz se abre y se cierra, como al pasar una nube.
@@ -223,10 +314,37 @@
         const ondaDeDeriva = ondaSuave(segundos, haz.periodoDeDeriva, haz.faseDeDeriva);
         const deriva = (ondaDeDeriva - 0.5) * 9;
 
-        haz.elemento.style.width = grosor.toFixed(2) + 'vw';
-        haz.elemento.style.opacity = brillo.toFixed(4);
-        haz.elemento.style.transform =
-          `translateX(${deriva.toFixed(2)}vw) rotate(${haz.inclinacion.toFixed(1)}deg)`;
+        /* ⚡ CON EL LIENZO ACTIVO, EL HAZ NO ES UN DIV: ES UN NÚMERO.
+           Su capa llevaba `mix-blend-mode: screen` a pantalla completa, que
+           es de lo más caro que se le puede pedir al compositor —lo obliga a
+           leer de vuelta el fondo y le impide fusionar nada de lo que hay
+           debajo—. Dibujado en el lienzo, el mismo rayo no cuesta ninguna
+           capa. Ver codigo/23-lienzo-de-luz.js. */
+        if (usaElLienzo) {
+          const anchoVentana = window.innerWidth;
+          const altoVentana  = window.innerHeight;
+
+          /* Las mismas medidas que tenía el CSS, pasadas a píxeles:
+             left: X% · width: grosor vw · top: -45% · height: 190%
+             y el giro sobre el borde de arriba (transform-origin: 50% 0). */
+          const anchoPx = (grosor / 100) * anchoVentana;
+          const centroX = ((haz.izquierda + grosor / 2) / 100) * anchoVentana
+                        + (deriva / 100) * anchoVentana;
+
+          haz.enElLienzo.x     = centroX;
+          haz.enElLienzo.y     = -0.45 * altoVentana;
+          haz.enElLienzo.ancho = anchoPx;
+          /* Un sol bajo alarga el rayo; uno alto lo acorta. */
+          haz.enElLienzo.alto  = 1.9 * altoVentana * largoDelHaz;
+          haz.enElLienzo.giro  = (anguloDelSol + haz.desvio) * Math.PI / 180;
+          haz.enElLienzo.alfa  = brillo;
+        } else {
+          haz.elemento.style.width = grosor.toFixed(2) + 'vw';
+          haz.elemento.style.opacity = brillo.toFixed(4);
+          haz.elemento.style.height = (190 * largoDelHaz).toFixed(0) + '%';
+          haz.elemento.style.transform =
+            `translateX(${deriva.toFixed(2)}vw) rotate(${(anguloDelSol + haz.desvio).toFixed(1)}deg)`;
+        }
 
         sumaDeDeriva += ondaDeDeriva;
         sumaDeBrillo += ondaDeBrillo;
@@ -240,8 +358,20 @@
       const cuantos = estadoDeLosHaces.length;
       const luzX = sumaDeDeriva / cuantos;
       const luzIntensidad = (sumaDeBrillo / cuantos) * luzAmbiente;
-      raiz.style.setProperty('--luz-x', luzX.toFixed(4));
-      raiz.style.setProperty('--luz-intensidad', luzIntensidad.toFixed(4));
+
+      /* Se escribe en los tres elementos que las usan, NO en el <html>
+         (ver la nota larga arriba: escribirlas en la raíz obligaba a
+         recalcular el estilo del documento entero). */
+      /* El polvo, dibujado en el lienzo, ya no puede colgarse de la
+         variable CSS: necesita el número. Es el mismo valor. */
+      if (usaElLienzo) window.LienzoDeLuz.intensidadAmbiente = luzIntensidad;
+
+      const textoLuzX = luzX.toFixed(4);
+      const textoLuzIntensidad = luzIntensidad.toFixed(4);
+      for (const destino of destinosDeLaLuz) {
+        destino.style.setProperty('--luz-x', textoLuzX);
+        destino.style.setProperty('--luz-intensidad', textoLuzIntensidad);
+      }
     }
 
     requestAnimationFrame(animarLosHaces);
