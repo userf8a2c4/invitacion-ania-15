@@ -52,22 +52,42 @@
      ---------------------------------------------------------------- */
 
   /* CUÁNTOS PÉTALOS Y EN QUÉ PLANO.
-     El total es el mismo de antes: la idea NO es llenar la pantalla, sino
-     repartir los que ya había en tres profundidades. Saturar arruinaría
-     el efecto; lo que da riqueza es la separación entre planos, no la
-     cantidad. */
+     La idea NO es llenar la pantalla, sino repartirlos en tres
+     profundidades. Saturar arruinaría el efecto; lo que da riqueza es la
+     separación entre planos, no la cantidad.
+
+     Este reparto es el de CALIDAD ALTA, y se crea SIEMPRE, en todos los
+     niveles. Cuántos están ACTIVOS lo decide después el nivel de calidad
+     (ver ajustarCantidadDePetalos): en media se mueve un 60 % y en baja un
+     35 %, y los demás quedan escondidos sin calcularse.
+
+     Se crean todos de entrada a propósito: crear un pétalo cuesta una sola
+     vez, pero si solo se creara la cantidad del nivel inicial, un equipo que
+     MEJORA de media a alta nunca vería los pétalos extra —tendría que
+     recargar la página—. Así, subir de nivel se nota en el acto. */
   const esPantallaChica = window.innerWidth < 700;
+
   const REPARTO_POR_PLANO = esPantallaChica
-    ? { fondo: 5, medio: 3, frente: 4 }
-    : { fondo: 8, medio: 6, frente: 8 };
+    ? { fondo: 8,  medio: 5,  frente: 6 }
+    : { fondo: 14, medio: 10, frente: 12 };
 
   /* Cada plano tiene su propio tamaño y su propia transparencia. Eso es
      lo que hace que se lean como distancias distintas y no como tres
      grupos del mismo tamaño superpuestos. */
+  /* ⚠️ LOS TAMAÑOS SUBIERON, Y NO ES CAPRICHO.
+     Eran [7,15] / [12,22] / [20,34] y en una pantalla grande se leían como
+     MIGAJAS, no como pétalos: a 7 px un pétalo de rosa es un punto. Los
+     dibujos tienen forma y nervadura, y a ese tamaño no se veía ninguna de
+     las dos cosas.
+
+     Se subieron alrededor de un 75 %, conservando la proporción entre los
+     tres planos: el de frente sigue siendo casi el triple que el del fondo,
+     que es lo que crea la sensación de profundidad. No cuesta rendimiento:
+     son la misma cantidad de elementos, solo más grandes. */
   const RASGOS_DEL_PLANO = {
-    fondo:  { contenedor: '#petalos-fondo',  tamaño: [7, 15],  opacidad: [.30, .55], caida: [14, 30] },
-    medio:  { contenedor: '#petalos-medio',  tamaño: [12, 22], opacidad: [.60, .90], caida: [18, 40] },
-    frente: { contenedor: '#petalos-frente', tamaño: [20, 34], opacidad: [.70, 1],   caida: [26, 54] },
+    fondo:  { contenedor: '#petalos-fondo',  tamaño: [13, 26], opacidad: [.30, .55], caida: [14, 30] },
+    medio:  { contenedor: '#petalos-medio',  tamaño: [22, 40], opacidad: [.60, .90], caida: [18, 40] },
+    frente: { contenedor: '#petalos-frente', tamaño: [36, 62], opacidad: [.70, 1],   caida: [26, 54] },
   };
 
   /** Cuánto tira la gravedad hacia abajo (píxeles por segundo, al cuadrado). */
@@ -104,6 +124,10 @@
      cantidad de elementos y la web no se pone lenta.
      ---------------------------------------------------------------- */
 
+  /** ¿Dibuja el lienzo de pétalos? (ver codigo/24-lienzo-de-petalos.js).
+   *  Se decide una vez, al cargar. */
+  const usaElLienzo = !!(window.LienzoDePetalos && window.LienzoDePetalos.activo);
+
   let anchoDePantalla = window.innerWidth;
   let altoDePantalla  = window.innerHeight;
 
@@ -120,19 +144,32 @@
    */
   function crearPetalo(empezarArriba, plano) {
     const rasgos = RASGOS_DEL_PLANO[plano];
-    const elemento = document.createElement('div');
-    elemento.className = 'petalo';
-
     const tamaño = numeroAlAzar(rasgos.tamaño[0], rasgos.tamaño[1]);
-    elemento.style.width  = tamaño + 'px';
-    elemento.style.height = tamaño + 'px';
-    elemento.style.backgroundImage = 'url(' + elegirAlAzar(IMAGENES_DE_PETALO) + ')';
-    elemento.style.opacity = numeroAlAzar(rasgos.opacidad[0], rasgos.opacidad[1]).toFixed(2);
+    const opacidad = numeroAlAzar(rasgos.opacidad[0], rasgos.opacidad[1]);
 
-    buscar(rasgos.contenedor).appendChild(elemento);
+    let elemento = null;
+    let imagen = null;
+
+    if (usaElLienzo) {
+      /* ⚡ SIN ELEMENTO. El pétalo pasa a ser solo números que dibuja
+         codigo/24-lienzo-de-petalos.js. Así deja de costar una capa de
+         compositor (Layerize) o un repintado por cuadro (Paint), que era el
+         intercambio del que no se podía salir mientras fuera un div. */
+      imagen = elegirAlAzar(window.LienzoDePetalos.imagenes);
+    } else {
+      elemento = document.createElement('div');
+      elemento.className = 'petalo';
+      elemento.style.width  = tamaño + 'px';
+      elemento.style.height = tamaño + 'px';
+      elemento.style.backgroundImage = 'url(' + elegirAlAzar(IMAGENES_DE_PETALO) + ')';
+      elemento.style.opacity = opacidad.toFixed(2);
+      buscar(rasgos.contenedor).appendChild(elemento);
+    }
 
     return {
       elemento,
+      imagen,
+      opacidad,
       tamaño,
       plano,
       rasgos,
@@ -156,37 +193,57 @@
 
   for (const plano of Object.keys(REPARTO_POR_PLANO)) {
     for (let i = 0; i < REPARTO_POR_PLANO[plano]; i++) {
-      petalos.push(crearPetalo(false, plano));
+      const petalo = crearPetalo(false, plano);
+      petalos.push(petalo);
+      // El lienzo dibuja cada plano por separado, para respetar la profundidad.
+      if (usaElLienzo) window.LienzoDePetalos.planos[plano].push(petalo);
     }
   }
 
 
-  /* ─── RENDIMIENTO ADAPTATIVO (POR NIVELES) ──────────────────────────
-     El gobernador de FPS (codigo/21-monitor-de-rendimiento.js) avisa por
-     NIVELES cuánto sufre el equipo. Los pétalos reaccionan así:
-        · nivel 0 o 1 → todos (en nivel 1 solo se apagan las motas).
-        · nivel 2     → la mitad.
-        · nivel 3     → ninguno (se apagan del todo).
-     Los que se apagan se esconden y el bucle los saltea, así se dibuja y se
-     calcula menos. Cuando el equipo se recupera, vuelven. El invitado no ve
-     el recorte —solo una web que sigue fluida—.
-     ---------------------------------------------------------------- */
-  function ajustarCantidadDePetalos(nivel) {
-    let cuantosActivos;
-    if (nivel >= 3)      cuantosActivos = 0;
-    else if (nivel === 2) cuantosActivos = Math.ceil(petalos.length / 2);
-    else                  cuantosActivos = petalos.length;   // niveles 0 y 1
+  /* ─── CALIDAD GRÁFICA ADAPTATIVA ─────────────────────────────────────
+     Se crean SIEMPRE todos los pétalos (el reparto de arriba, que es el
+     de calidad ALTA): la cantidad de elementos en el DOM no cambia nunca,
+     así no hay que crear ni destruir nada en vivo. Lo que cambia por nivel
+     es cuántos quedan ACTIVOS:
+        · alta  → el 100 %.
+        · media → un 65 % (se ve casi tan poblado, cuesta bastante menos).
+        · baja  → un 35 % (el resto se esconde y el bucle los saltea, así
+          ni se dibujan ni se calculan).
+     codigo/21-monitor-de-rendimiento.js manda el nivel —el de arranque
+     (para no empezar de más y tener que recortar a los dos segundos) y
+     cada vez que lo corrige en vivo—. El invitado no ve el recorte: ve
+     una web que se mantiene fluida. ---------------------------------- */
+  /* Fracciones sobre el total creado (que es el de calidad ALTA). En una
+     pantalla de escritorio son 36 pétalos: alta los mueve todos, media 22 y
+     baja 13 — o sea, media y baja quedan en la MISMA cantidad de siempre, y
+     lo que cambia es que alta ahora tiene bastante más. */
+  /* Fracciones sobre el total creado (36 en escritorio, el de calidad alta):
+     alta los mueve todos, media 28 y baja 18. Media y baja SUBIERON respecto
+     de antes (eran 22 y 13) porque se liberó mucho margen: los pétalos ya no
+     piden capa de GPU en esos niveles y se recuperaron las 24 capas que
+     gastaban los SVG de las plantas. */
+  const FRACCION_ACTIVA_POR_CALIDAD = { 0: 1, 1: 0.78, 2: 0.5 };
+
+  function ajustarCantidadDePetalos(calidad) {
+    const fraccion = FRACCION_ACTIVA_POR_CALIDAD[calidad] ?? 1;
+    const cuantosActivos = Math.ceil(petalos.length * fraccion);
 
     petalos.forEach((petalo, i) => {
       const activo = i < cuantosActivos;
       if (petalo.activo !== activo) {
         petalo.activo = activo;
-        petalo.elemento.style.display = activo ? '' : 'none';
+        // Con el lienzo alcanza con la marca: el canvas saltea los apagados.
+        if (petalo.elemento) petalo.elemento.style.display = activo ? '' : 'none';
       }
     });
   }
-  document.addEventListener('rendimiento-cambio', evento => {
-    ajustarCantidadDePetalos((evento.detail && evento.detail.nivel) || 0);
+
+  // Se aplica YA, con la estimación de arranque: nada de flash de más.
+  ajustarCantidadDePetalos(nivelDeCalidad());
+
+  document.addEventListener('calidad-cambio', evento => {
+    ajustarCantidadDePetalos((evento.detail && evento.detail.calidad) ?? 0);
   });
 
 
@@ -239,9 +296,12 @@
   /**
    * Anota dónde está el relicario ahora mismo.
    *
-   * Se llama UNA vez por cuadro, no una por pétalo: preguntar la posición
-   * de un elemento obliga al navegador a recalcular la página, y hacerlo
-   * 22 veces por cuadro la dejaría pegada.
+   * ⚡ YA NO TOCA EL DOM. Antes esto llamaba getBoundingClientRect() en
+   * CADA cuadro sobre el SVG más grande de la página —y 17-joyas-
+   * colgantes.js hacía exactamente lo mismo por su cuenta, así que era el
+   * doble de lecturas de las que hacían falta—. Ahora ambos leen
+   * medidaDelRelicario() (02-utilidades.js), que mide una sola vez —al
+   * cargar y en cada resize— y acá solo se hace una resta con el scroll.
    *
    * Los semiejes salen de la geometría del dibujo: el anillo exterior
    * mide rx 302 y ry 268 sobre un lienzo de 860 × 816.
@@ -249,13 +309,11 @@
    * @returns {void}
    */
   function medirElRelicario() {
-    const marco = buscar('.portada__marco');
-    if (!marco) { relicario = null; return; }
-
-    const caja = marco.getBoundingClientRect();
+    const caja = medidaDelRelicario();
+    if (!caja) { relicario = null; return; }
 
     // Si ya no se ve, no hay nada contra qué chocar: ahorramos el cálculo
-    if (caja.width < 10 || caja.bottom < -150 || caja.top > altoDePantalla + 150) {
+    if (caja.width < 10 || caja.top + caja.height < -150 || caja.top > altoDePantalla + 150) {
       relicario = null;
       return;
     }
@@ -455,6 +513,12 @@
     // Si se fue por un costado, reaparece por el otro
     if (petalo.x < -60) petalo.x = anchoDePantalla + 40;
     if (petalo.x > anchoDePantalla + 60) petalo.x = -40;
+
+    /* ⚡ CON EL LIENZO NO SE ESCRIBE NADA ACÁ.
+       La posición y el giro ya quedaron en petalo.x / .y / .angulo, y el
+       canvas los lee cuando pinta. Esas dos líneas de abajo eran 29
+       escrituras de estilo por cuadro; ahora son cero. */
+    if (usaElLienzo) return;
 
     // DIBUJAR: una sola instrucción de transform, que es lo más barato
     // que existe para el navegador.

@@ -112,6 +112,7 @@
       elemento, pivote: p,
       angulo: 0, velocidad: 0,
       faseDeRespiracion: Math.random() * Math.PI * 2,
+      cacheDeEnvionMouse: 0,   // ver "CALIDAD GRÁFICA" más abajo
     };
   });
 
@@ -132,10 +133,31 @@
     });
     /* faseDeRespiracion: cada cadena arranca su vaivén de reposo en un punto
        distinto, para que no todas se mezan iguales. */
-    return { eslabones, faseDeRespiracion: Math.random() * Math.PI * 2 };
+    return {
+      eslabones, faseDeRespiracion: Math.random() * Math.PI * 2,
+      cacheDeEnvionMouse: 0,   // solo lo usa la cima, ver más abajo
+    };
   });
 
   if (borlas.length === 0 && cadenas.length === 0) return;
+
+
+  /* ─── CALIDAD GRÁFICA ─────────────────────────────────────────────────
+     Este módulo mueve pocas piezas (2 borlas + los eslabones de 1 cadena),
+     así que el resorte en sí es barato. Lo único con un costo real es la
+     RAÍZ CUADRADA de "¿está el mouse cerca?" en envionExterno. En calidad
+     media/baja esa cuenta se recalcula cada 2 o 3 cuadros —el mouse no
+     teletransporta— y se reusa el último valor en los cuadros de en medio;
+     el resorte (lo que de verdad se ve) se sigue integrando siempre,
+     cuadro a cuadro, así que nunca se ve a los saltos. */
+  let calidad = nivelDeCalidad();
+  const SALTO_DEL_MOUSE_POR_CALIDAD = { 0: 1, 1: 2, 2: 3 };
+  let saltoDelMouse = SALTO_DEL_MOUSE_POR_CALIDAD[calidad] ?? 1;
+  let contadorDeCuadro = 0;
+  document.addEventListener('calidad-cambio', evento => {
+    calidad = (evento.detail && evento.detail.calidad) ?? 0;
+    saltoDelMouse = SALTO_DEL_MOUSE_POR_CALIDAD[calidad] ?? 1;
+  });
 
 
   /* ─── 3. ENTRADAS: SCROLL Y MOUSE ──────────────────────────────────── */
@@ -159,37 +181,93 @@
   /* ─── 4. EL BUCLE ──────────────────────────────────────────────────── */
 
   /**
-   * Calcula el empujón que el scroll y el mouse le dan a un amarre
-   * concreto (el gancho de una borla o la cima de una cadena).
+   * Recalcula "¿está el mouse cerca de este amarre?" y guarda el envión en
+   * la pieza misma (pieza.cacheDeEnvionMouse). Es la parte con costo real
+   * (una raíz cuadrada); por eso se llama menos seguido en calidad media/baja
+   * (ver "CALIDAD GRÁFICA" más arriba), reusando el último valor mientras
+   * tanto.
+   * @param {{cacheDeEnvionMouse:number}} pieza - Borla o cima de cadena.
    * @param {{vbX:number, vbY:number}} pivote - En coordenadas del viewBox.
    * @param {DOMRect} caja - Caja del relicario en pantalla.
    * @param {number} escala - Px de pantalla por unidad del viewBox.
-   * @returns {number} El envión total (scroll + mouse).
+   * @returns {void}
    */
-  function envionExterno(pivote, caja, escala) {
-    // Scroll: la joya se queda atrás cuando el gancho sube o baja.
-    const envionScroll = limitar(velocidadDeScroll, -60, 60) * 0.02;
-
-    // Mouse: solo si pasa cerca del amarre en pantalla.
-    let envionMouse = 0;
+  function recalcularEnvionMouse(pieza, pivote, caja, escala) {
     const px = caja.left + pivote.vbX * escala;
     const py = caja.top  + pivote.vbY * escala;
     const dx = px - mouseX;
     const dy = py - mouseY;
     const distancia = Math.hypot(dx, dy);
+
+    let envionMouse = 0;
     if (distancia < RADIO_DEL_MOUSE) {
       const influencia = 1 - distancia / RADIO_DEL_MOUSE;
       // Signo negativo: la joya se aleja del cursor, como si la empujara.
       envionMouse = -(dx / (distancia || 1)) * FUERZA_DEL_MOUSE * influencia * influencia;
     }
-    return envionScroll + envionMouse;
+    pieza.cacheDeEnvionMouse = envionMouse;
   }
 
+  /**
+   * El empujón total (scroll + el último mouse calculado) para un amarre.
+   * El de scroll SIEMPRE se recalcula (es barato y cambia rápido); el de
+   * mouse viene de la caché que llena recalcularEnvionMouse().
+   * @param {{cacheDeEnvionMouse:number}} pieza - Borla o cima de cadena.
+   * @returns {number} El envión total.
+   */
+  function envionExterno(pieza) {
+    const envionScroll = limitar(velocidadDeScroll, -60, 60) * 0.02;
+    return envionScroll + pieza.cacheDeEnvionMouse;
+  }
+
+  /**
+   * Gira una pieza… pero solo si de verdad se movió.
+   *
+   * ⚡ ESTE `if` VALE MÁS DE LO QUE PARECE. Era el bucle más caro de toda la
+   * web (30,4 ms en el perfil), y no por la física —son cuatro sumas por
+   * eslabón— sino por las escrituras: entre eslabones, gemas y borlas se
+   * reescribían decenas de atributos `transform` en CADA cuadro.
+   *
+   * Cambiar el atributo `transform` de un nodo SVG es de las cosas más caras
+   * que se le puede pedir al navegador: a diferencia de un `transform` de
+   * CSS —que resuelve el compositor sin tocar nada más—, en SVG pasa por el
+   * camino de LAYOUT, porque los nodos SVG tienen objetos de layout propios.
+   * Ahí estaba buena parte del 17,7 % de "Layout" del perfil.
+   *
+   * Y encima cada escritura fabricaba un string nuevo: cientos por segundo,
+   * que después el recolector de basura tenía que limpiar (5,9 % del perfil
+   * en "C++ GC").
+   *
+   * Como los péndulos están amortiguados, la mayor parte del tiempo el
+   * ángulo redondeado a dos decimales es EXACTAMENTE el mismo que el del
+   * cuadro anterior. Comparando antes de escribir no se pierde ni un grado
+   * de movimiento y desaparece casi todo el trabajo.
+   *
+   * @param {Object} pieza - Borla, eslabón o gema con su ángulo actual.
+   * @returns {void}
+   */
   function aplicarRotacion(pieza) {
-    pieza.elemento.setAttribute(
-      'transform',
-      `rotate(${pieza.angulo.toFixed(2)} ${pieza.pivote.localX} ${pieza.pivote.localY})`
-    );
+    /* ⚡ SE COMPARA CON UN ENTERO, NO CON UNA CADENA.
+       Antes esto hacía `angulo.toFixed(2)` para comparar, y toFixed() crea
+       un string CADA VEZ que se llama, incluso cuando después no se escribe
+       nada. Entre eslabones, gemas y borlas eran decenas de cadenas por
+       cuadro que iban derechas al recolector de basura; sumadas a las de las
+       enredaderas, "Major GC" llegó al 23 % del perfil.
+
+       Math.round(x * 100) da un entero: comparar enteros no reserva memoria.
+       El texto se arma solo cuando de verdad hay algo nuevo que escribir. */
+    const giro = Math.round(pieza.angulo * 100);
+    if (giro === pieza.ultimoGiroEscrito) return;
+    pieza.ultimoGiroEscrito = giro;
+
+    /* La cola del atributo (el pivote) no cambia nunca: se arma una sola vez
+       la primera vez y se reutiliza. */
+    if (!pieza.textoDelPivote) {
+      pieza.textoDelPivote = ' ' + pieza.pivote.localX + ' ' + pieza.pivote.localY + ')';
+    }
+
+    pieza.elemento.setAttribute('transform',
+      'rotate(' + (giro / 100) + pieza.textoDelPivote);
   }
 
   function dibujarCuadro(momentoActual) {
@@ -198,15 +276,26 @@
        encienden las animaciones con el botón, sin recargar la página. */
     if (document.hidden || prefiereMenosMovimiento()) { requestAnimationFrame(dibujarCuadro); return; }
 
-    const caja = relicario.getBoundingClientRect();
+    /* ⚡ YA NO TOCA EL DOM: medidaDelRelicario() (02-utilidades.js) mide una
+       sola vez —al cargar y en cada resize— y acá solo se hace una resta con
+       el scroll. Antes esto llamaba getBoundingClientRect() en CADA cuadro
+       sobre el SVG más grande de la página, y 06-petalos-con-fisica.js hacía
+       exactamente lo mismo por su cuenta: el doble de lecturas de las que
+       hacían falta. */
+    const caja = medidaDelRelicario();
+    if (!caja) { requestAnimationFrame(dibujarCuadro); return; }
     const escala = caja.width / ANCHO_DEL_VIEWBOX;
 
     // El scroll pierde fuerza solo: el envión es un golpe, no un empuje fijo.
     velocidadDeScroll *= 0.85;
 
+    contadorDeCuadro++;
+    const tocaRecalcularElMouse = (contadorDeCuadro % saltoDelMouse === 0);
+
     /* ── a) BORLAS: péndulo rígido ── */
     for (const borla of borlas) {
-      const externo = envionExterno(borla.pivote, caja, escala);
+      if (tocaRecalcularElMouse) recalcularEnvionMouse(borla, borla.pivote, caja, escala);
+      const externo = envionExterno(borla);
       /* Respiración de reposo (subida a .06 para que el balanceo se NOTE aun
          sin scroll ni mouse: antes era tan sutil que parecían quietas). */
       const respiracion = Math.sin(momentoActual / 1600 + borla.faseDeRespiracion) * 0.06;
@@ -228,7 +317,8 @@
        curve y la gema quede atrás. */
     for (const cadena of cadenas) {
       const cima = cadena.eslabones[0];
-      const externo = envionExterno(cima.pivote, caja, escala);
+      if (tocaRecalcularElMouse) recalcularEnvionMouse(cadena, cima.pivote, caja, escala);
+      const externo = envionExterno(cadena);
 
       /* BRISA DE REPOSO: un vaivén lentísimo que entra por la CIMA de la
          cadena aunque no haya scroll ni mouse. El acople lo va bajando por

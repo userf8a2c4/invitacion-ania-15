@@ -36,6 +36,19 @@
    */
   const VELOCIDAD_DEL_PARALLAX = 0.15;
 
+  /* CALIDAD GRÁFICA: el parallax mueve una capa de fondo grande en CADA
+     cuadro de scroll —un transform barato en sí, pero sobre una capa
+     enorme, en un equipo débil suma—. En calidad baja el fondo queda fijo:
+     casi no se nota (es solo profundidad extra), y se ahorra ese cálculo
+     y esa escritura en cada scroll. */
+  let calidad = nivelDeCalidad();
+  document.addEventListener('calidad-cambio', evento => {
+    calidad = (evento.detail && evento.detail.calidad) ?? 0;
+    // Al degradar, se devuelve el fondo a su lugar natural (sin quedar
+    // congelado a mitad de un desplazamiento de parallax).
+    if (calidad === CALIDAD_GRAFICA.BAJA && capaDeFondo) capaDeFondo.style.transform = '';
+  });
+
   /** Evita hacer cuentas de más: solo una por cuadro de animación. */
   let hayUnCuadroPendiente = false;
 
@@ -47,10 +60,15 @@
     const posicionDelScroll = window.scrollY;
 
     /* ── Parallax del fondo ──────────────────────────────────────────
-       El fondo mide 160vh, o sea que tiene 60vh de sobra para
-       desplazarse. Nunca lo movemos más que ese sobrante, porque
-       entonces se vería el borde de abajo. */
-    if (capaDeFondo) {
+       El fondo mide 125vh, o sea que tiene 25vh de sobra para desplazarse.
+       Nunca lo movemos más que ese sobrante, porque entonces se vería el
+       borde de abajo.
+
+       El sobrante se lee del elemento, no de un número escrito acá: si
+       algún día cambia el alto en el CSS, esto se adapta solo. (Medía 160vh
+       y se bajó a 125 para aligerar la textura; ver la nota en
+       estilos/01-fundamentos.css.) */
+    if (capaDeFondo && calidad !== CALIDAD_GRAFICA.BAJA) {
       const sobranteDisponible = capaDeFondo.offsetHeight - window.innerHeight;
       const cuantoSeMueve = Math.min(posicionDelScroll * VELOCIDAD_DEL_PARALLAX, sobranteDisponible);
       capaDeFondo.style.transform = `translateY(-${cuantoSeMueve.toFixed(1)}px)`;

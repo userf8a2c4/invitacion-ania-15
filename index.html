@@ -37,39 +37,65 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- ANIMACIONES ON/OFF + DETECCIÓN DE EQUIPOS LENTOS (sin parpadeo).
-       Este script minúsculo corre ANTES de dibujar la página y decide si
-       arranca con el movimiento apagado, poniendo la clase de una vez (así
-       no hay "flash" de animación que se corta medio segundo después).
+  <!-- ANIMACIONES ON/OFF + CALIDAD GRÁFICA (sin parpadeo).
+       Este script minúsculo corre ANTES de dibujar la página y decide (a)
+       si arranca con el movimiento apagado del todo, y (b) con QUÉ nivel de
+       calidad gráfica arranca. Pone las clases de una vez, así no hay
+       "flash" de un estado que se corrige medio segundo después.
 
-       LA REGLA, en orden:
-         1. Si la persona YA eligió con el botón (guardado en memoria), se
-            respeta siempre: 'off' apaga, 'on' enciende.
-         2. Si NUNCA eligió, se mira el equipo: en celulares viejos o de poca
-            memoria/núcleos (o con el "ahorro de datos" puesto) se arranca
-            liviano solo. Así un invitado con un teléfono lento entra bien
-            sin tener que tocar nada.
+       SON DOS EJES DISTINTOS:
+         · animaciones-off  → interruptor MAESTRO (todo o nada). Elección
+           del botón (codigo/20-boton-de-animaciones.js), guardada en
+           memoria; si nunca se eligió, se mira el equipo.
+         · calidad-media / calidad-baja → CUÁNTO efecto se muestra a la vez
+           con las animaciones ENCENDIDAS (ver codigo/02-utilidades.js,
+           nivelDeCalidad). Ninguna de las dos clases = calidad alta.
 
-       La auto-decisión NO se guarda como elección: se recalcula en cada
-       visita y en cada equipo, y el botón siempre puede cambiarla.
-       El botón vive en codigo/20-boton-de-animaciones.js. -->
+       ESTA es la estimación de ARRANQUE, para no empezar a ciegas en el
+       nivel más exigente y sufrir el primer segundo. Es a propósito
+       CONSERVADORA (arranca en MEDIA si no hay señales claras de equipo
+       potente): un procesador de escritorio de hace varios años con pocos
+       núcleos reporta memoria/núcleos muy parecido a los de un celular
+       decente, así que no conviene asumir lo mejor.
+
+       Después, codigo/21-monitor-de-rendimiento.js CORRIGE esta estimación
+       en vivo, midiendo de verdad cómo rinde el equipo cuadro a cuadro: si
+       esta estimación se quedó corta o se pasó, en un par de segundos queda
+       en el nivel que corresponde de verdad. -->
   <script>
     (function () {
       try {
         var elegido = localStorage.getItem('invitacion-ania:animaciones'); // 'on' | 'off' | null
-        var apagar;
-        if (elegido === 'off') { apagar = true; }
-        else if (elegido === 'on') { apagar = false; }
-        else {
-          var mem    = navigator.deviceMemory;        // GB (puede no existir)
-          var nucleos = navigator.hardwareConcurrency; // núcleos (puede no existir)
-          var ahorro = navigator.connection && navigator.connection.saveData;
+        var apagar = (elegido === 'off') ? true
+                   : (elegido === 'on')  ? false
+                   : null;   // se decide abajo, según el equipo
+
+        var mem     = navigator.deviceMemory;         // GB (puede no existir)
+        var nucleos = navigator.hardwareConcurrency;   // núcleos (puede no existir)
+        var ahorro  = navigator.connection && navigator.connection.saveData;
+
+        if (apagar === null) {
           apagar = !!ahorro
             || (typeof mem === 'number' && mem <= 3)
             || (typeof nucleos === 'number' && nucleos <= 2)
             || (typeof mem === 'number' && mem <= 4 && typeof nucleos === 'number' && nucleos <= 4);
         }
         if (apagar) document.documentElement.classList.add('animaciones-off');
+
+        // Calidad gráfica: 0 alta, 1 media, 2 baja (ver la explicación arriba).
+        var calidad;
+        if (!!ahorro
+            || (typeof mem === 'number' && mem <= 2)
+            || (typeof nucleos === 'number' && nucleos <= 2)) {
+          calidad = 2;   // señales claras de equipo débil o red limitada
+        } else if (typeof nucleos === 'number' && nucleos >= 6
+                   && (typeof mem !== 'number' || mem >= 8)) {
+          calidad = 0;   // bastantes núcleos y memoria de sobra: se anima entero
+        } else {
+          calidad = 1;   // el caso más común y el más seguro por defecto
+        }
+        if (calidad === 1) document.documentElement.classList.add('calidad-media');
+        if (calidad === 2) document.documentElement.classList.add('calidad-baja');
       } catch (e) {}
     })();
   </script>
@@ -133,9 +159,24 @@
   <link rel="stylesheet" href="estilos/12-haces-de-luz.css">
   <link rel="stylesheet" href="estilos/11-responsivo.css">
 
-  <!-- Bibliotecas externas: envío de correos y generación del código QR -->
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- Bibliotecas externas: envío de correos y generación del código QR.
+
+       ⚠️ CON "defer" Y NO BLOQUEANDO. Antes estos dos <script> iban acá SIN
+       defer: son de un CDN externo, así que si la conexión tarda en
+       llegar a ellos (o algún bloqueador de anuncios los frena), el
+       navegador se queda esperando ANTES de poder dibujar el <body>
+       —nada de música, nada de animaciones, nada de nada— aunque el resto
+       de la web no tenga ninguna culpa. Con "defer" se descargan en
+       segundo plano mientras el resto de la página sigue su curso, y
+       recién se ejecutan cuando el HTML ya terminó de parsearse (en el
+       mismo orden en que están escritos). Sale ganando siempre: ninguno de
+       los dos se usa al cargar la página —emailjs.send() se llama al
+       confirmar el formulario (11-formulario-confirmacion.js) y
+       new QRCode() al mostrar el pase (12-pase-de-acceso.js), los dos bien
+       después de que la persona ya interactuó—, así que no hay apuro por
+       tenerlos ANTES que el resto. -->
+  <script defer src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 
 <body>
@@ -211,6 +252,113 @@
       </linearGradient>
 
       <!-- ══════════════════════════════════════════════════════════════
+           VARIANTES DE TONO · lo que antes hacía filter: brightness()
+           ══════════════════════════════════════════════════════════════
+           Una rosa lejana o en penumbra tiene que verse más apagada que
+           una cercana e iluminada. Antes eso se lograba poniéndole a cada
+           flor  style="filter: brightness(x) saturate(y)".
+
+           ⚠️ POR QUÉ SE DEJÓ DE HACER ASÍ (el problema de rendimiento más
+           grande que tuvo esta web). Un `filter` de CSS obliga al navegador
+           a darle a ese elemento su PROPIA capa de pintura. Con ~350 flores
+           en pantalla eran ~350 capas, y como además cada flor se mueve, el
+           navegador reconstruía el árbol de capas en cada cuadro: la fase
+           "Layerize" se comía el 38,9 % del tiempo total. Todo el
+           JavaScript de la web junto era el 1,2 %.
+
+           LA SOLUCIÓN, SIN PERDER NADA DE CALIDAD. El color final que
+           producía el filtro se puede calcular de antemano y hornearlo en
+           el gradiente. Estos 12 juegos de gradientes son exactamente los
+           mismos colores que salían del filtro —se calcularon aplicando la
+           fórmula del spec, brillo × matriz de saturación en sRGB—, pero
+           ya resueltos. El resultado se ve idéntico y no crea ninguna capa.
+
+           Doce escalones cubren todo el rango que usaban las flores
+           (brillo de .407 a 1.0): son saltos del 5 %, unos 6 niveles de
+           color, imperceptibles incluso entre dos rosas vecinas.
+
+           Cada flor elige su juego con una clase .tono-0 … .tono-11, que
+           define las variables --pet-cara, --pet-media, etc. Los pétalos
+           de adentro de cada rosa se pintan con  fill: var(--pet-cara),
+           y las variables CSS SÍ atraviesan el <use>, así que la flor
+           entera se tiñe sola. Las clases están en
+           estilos/02-marco-victoriano.css y los colores los genera el
+           mismo cálculo, no están escritos a mano.
+           ══════════════════════════════════════════════════════════════ -->
+      <!-- tono 0: brillo 0.432 · saturación 0.592 -->
+      <linearGradient id="rosa-pet-cara-t0" x1="0" y1="1" x2=".18" y2="0"><stop offset="0%" stop-color="#0e0406"/><stop offset="38%" stop-color="#1e0b0e"/><stop offset="78%" stop-color="#291014"/><stop offset="100%" stop-color="#331419"/></linearGradient>
+      <linearGradient id="rosa-pet-media-t0" x1="0" y1="1" x2=".12" y2="0"><stop offset="0%" stop-color="#0c0406"/><stop offset="48%" stop-color="#19090c"/><stop offset="100%" stop-color="#270f12"/></linearGradient>
+      <linearGradient id="rosa-pet-interior-t0" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#070204"/><stop offset="55%" stop-color="#140709"/><stop offset="100%" stop-color="#1e0c0f"/></linearGradient>
+      <linearGradient id="rosa-pet-dorso-t0" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#090305"/><stop offset="58%" stop-color="#15080b"/><stop offset="100%" stop-color="#221014"/></linearGradient>
+      <linearGradient id="rosa-caliz-t0" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#0c0f0a"/><stop offset="55%" stop-color="#191c12"/><stop offset="100%" stop-color="#292d1d"/></linearGradient>
+      <!-- tono 1: brillo 0.481 · saturación 0.627 -->
+      <linearGradient id="rosa-pet-cara-t1" x1="0" y1="1" x2=".18" y2="0"><stop offset="0%" stop-color="#100507"/><stop offset="38%" stop-color="#220c10"/><stop offset="78%" stop-color="#2f1116"/><stop offset="100%" stop-color="#3a161c"/></linearGradient>
+      <linearGradient id="rosa-pet-media-t1" x1="0" y1="1" x2=".12" y2="0"><stop offset="0%" stop-color="#0d0407"/><stop offset="48%" stop-color="#1d0a0e"/><stop offset="100%" stop-color="#2d1014"/></linearGradient>
+      <linearGradient id="rosa-pet-interior-t1" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#080204"/><stop offset="55%" stop-color="#16070a"/><stop offset="100%" stop-color="#230d11"/></linearGradient>
+      <linearGradient id="rosa-pet-dorso-t1" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#0a0305"/><stop offset="58%" stop-color="#18090c"/><stop offset="100%" stop-color="#261216"/></linearGradient>
+      <linearGradient id="rosa-caliz-t1" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#0e110b"/><stop offset="55%" stop-color="#1c2013"/><stop offset="100%" stop-color="#2e321f"/></linearGradient>
+      <!-- tono 2: brillo 0.531 · saturación 0.663 -->
+      <linearGradient id="rosa-pet-cara-t2" x1="0" y1="1" x2=".18" y2="0"><stop offset="0%" stop-color="#120508"/><stop offset="38%" stop-color="#270d11"/><stop offset="78%" stop-color="#351218"/><stop offset="100%" stop-color="#42181e"/></linearGradient>
+      <linearGradient id="rosa-pet-media-t2" x1="0" y1="1" x2=".12" y2="0"><stop offset="0%" stop-color="#0f0408"/><stop offset="48%" stop-color="#210b0f"/><stop offset="100%" stop-color="#331116"/></linearGradient>
+      <linearGradient id="rosa-pet-interior-t2" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#090205"/><stop offset="55%" stop-color="#19080b"/><stop offset="100%" stop-color="#280e13"/></linearGradient>
+      <linearGradient id="rosa-pet-dorso-t2" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#0c0406"/><stop offset="58%" stop-color="#1b0a0d"/><stop offset="100%" stop-color="#2b1418"/></linearGradient>
+      <linearGradient id="rosa-caliz-t2" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#0f120b"/><stop offset="55%" stop-color="#1f2314"/><stop offset="100%" stop-color="#333721"/></linearGradient>
+      <!-- tono 3: brillo 0.580 · saturación 0.698 -->
+      <linearGradient id="rosa-pet-cara-t3" x1="0" y1="1" x2=".18" y2="0"><stop offset="0%" stop-color="#150608"/><stop offset="38%" stop-color="#2b0d13"/><stop offset="78%" stop-color="#3c141a"/><stop offset="100%" stop-color="#4a1a21"/></linearGradient>
+      <linearGradient id="rosa-pet-media-t3" x1="0" y1="1" x2=".12" y2="0"><stop offset="0%" stop-color="#110509"/><stop offset="48%" stop-color="#250b10"/><stop offset="100%" stop-color="#3a1218"/></linearGradient>
+      <linearGradient id="rosa-pet-interior-t3" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#0b0305"/><stop offset="55%" stop-color="#1d080c"/><stop offset="100%" stop-color="#2d0f14"/></linearGradient>
+      <linearGradient id="rosa-pet-dorso-t3" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#0d0406"/><stop offset="58%" stop-color="#1e0b0f"/><stop offset="100%" stop-color="#30151a"/></linearGradient>
+      <linearGradient id="rosa-caliz-t3" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#10140c"/><stop offset="55%" stop-color="#222615"/><stop offset="100%" stop-color="#373d23"/></linearGradient>
+      <!-- tono 4: brillo 0.629 · saturación 0.734 -->
+      <linearGradient id="rosa-pet-cara-t4" x1="0" y1="1" x2=".18" y2="0"><stop offset="0%" stop-color="#170609"/><stop offset="38%" stop-color="#300e15"/><stop offset="78%" stop-color="#42151d"/><stop offset="100%" stop-color="#531b23"/></linearGradient>
+      <linearGradient id="rosa-pet-media-t4" x1="0" y1="1" x2=".12" y2="0"><stop offset="0%" stop-color="#13050a"/><stop offset="48%" stop-color="#290c12"/><stop offset="100%" stop-color="#40131a"/></linearGradient>
+      <linearGradient id="rosa-pet-interior-t4" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#0c0305"/><stop offset="55%" stop-color="#20090d"/><stop offset="100%" stop-color="#320f16"/></linearGradient>
+      <linearGradient id="rosa-pet-dorso-t4" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#0f0407"/><stop offset="58%" stop-color="#210b10"/><stop offset="100%" stop-color="#36171c"/></linearGradient>
+      <linearGradient id="rosa-caliz-t4" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#11160d"/><stop offset="55%" stop-color="#242a16"/><stop offset="100%" stop-color="#3c4225"/></linearGradient>
+      <!-- tono 5: brillo 0.679 · saturación 0.769 -->
+      <linearGradient id="rosa-pet-cara-t5" x1="0" y1="1" x2=".18" y2="0"><stop offset="0%" stop-color="#19060a"/><stop offset="38%" stop-color="#350f16"/><stop offset="78%" stop-color="#4a161f"/><stop offset="100%" stop-color="#5b1d26"/></linearGradient>
+      <linearGradient id="rosa-pet-media-t5" x1="0" y1="1" x2=".12" y2="0"><stop offset="0%" stop-color="#15050a"/><stop offset="48%" stop-color="#2d0c13"/><stop offset="100%" stop-color="#47141c"/></linearGradient>
+      <linearGradient id="rosa-pet-interior-t5" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#0d0306"/><stop offset="55%" stop-color="#23090e"/><stop offset="100%" stop-color="#371018"/></linearGradient>
+      <linearGradient id="rosa-pet-dorso-t5" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#100407"/><stop offset="58%" stop-color="#250c11"/><stop offset="100%" stop-color="#3b181e"/></linearGradient>
+      <linearGradient id="rosa-caliz-t5" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#13180d"/><stop offset="55%" stop-color="#272d17"/><stop offset="100%" stop-color="#404727"/></linearGradient>
+      <!-- tono 6: brillo 0.728 · saturación 0.805 -->
+      <linearGradient id="rosa-pet-cara-t6" x1="0" y1="1" x2=".18" y2="0"><stop offset="0%" stop-color="#1c060a"/><stop offset="38%" stop-color="#3b0f18"/><stop offset="78%" stop-color="#511721"/><stop offset="100%" stop-color="#641e29"/></linearGradient>
+      <linearGradient id="rosa-pet-media-t6" x1="0" y1="1" x2=".12" y2="0"><stop offset="0%" stop-color="#17050b"/><stop offset="48%" stop-color="#320d15"/><stop offset="100%" stop-color="#4e151e"/></linearGradient>
+      <linearGradient id="rosa-pet-interior-t6" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#0f0306"/><stop offset="55%" stop-color="#270a0f"/><stop offset="100%" stop-color="#3c1119"/></linearGradient>
+      <linearGradient id="rosa-pet-dorso-t6" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#120408"/><stop offset="58%" stop-color="#290c12"/><stop offset="100%" stop-color="#411920"/></linearGradient>
+      <linearGradient id="rosa-caliz-t6" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#141a0e"/><stop offset="55%" stop-color="#2a3118"/><stop offset="100%" stop-color="#454d28"/></linearGradient>
+      <!-- tono 7: brillo 0.778 · saturación 0.840 -->
+      <linearGradient id="rosa-pet-cara-t7" x1="0" y1="1" x2=".18" y2="0"><stop offset="0%" stop-color="#1f060b"/><stop offset="38%" stop-color="#401019"/><stop offset="78%" stop-color="#581823"/><stop offset="100%" stop-color="#6e1f2b"/></linearGradient>
+      <linearGradient id="rosa-pet-media-t7" x1="0" y1="1" x2=".12" y2="0"><stop offset="0%" stop-color="#19060c"/><stop offset="48%" stop-color="#370d16"/><stop offset="100%" stop-color="#561620"/></linearGradient>
+      <linearGradient id="rosa-pet-interior-t7" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#100307"/><stop offset="55%" stop-color="#2b0a11"/><stop offset="100%" stop-color="#42121b"/></linearGradient>
+      <linearGradient id="rosa-pet-dorso-t7" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#140508"/><stop offset="58%" stop-color="#2c0d14"/><stop offset="100%" stop-color="#471b23"/></linearGradient>
+      <linearGradient id="rosa-caliz-t7" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#151c0e"/><stop offset="55%" stop-color="#2c3419"/><stop offset="100%" stop-color="#495229"/></linearGradient>
+      <!-- tono 8: brillo 0.827 · saturación 0.876 -->
+      <linearGradient id="rosa-pet-cara-t8" x1="0" y1="1" x2=".18" y2="0"><stop offset="0%" stop-color="#21070c"/><stop offset="38%" stop-color="#46111b"/><stop offset="78%" stop-color="#601925"/><stop offset="100%" stop-color="#77212e"/></linearGradient>
+      <linearGradient id="rosa-pet-media-t8" x1="0" y1="1" x2=".12" y2="0"><stop offset="0%" stop-color="#1b060d"/><stop offset="48%" stop-color="#3c0e17"/><stop offset="100%" stop-color="#5d1722"/></linearGradient>
+      <linearGradient id="rosa-pet-interior-t8" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#110307"/><stop offset="55%" stop-color="#2e0a12"/><stop offset="100%" stop-color="#48121c"/></linearGradient>
+      <linearGradient id="rosa-pet-dorso-t8" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#150509"/><stop offset="58%" stop-color="#300e15"/><stop offset="100%" stop-color="#4d1c25"/></linearGradient>
+      <linearGradient id="rosa-caliz-t8" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#161d0f"/><stop offset="55%" stop-color="#2f3819"/><stop offset="100%" stop-color="#4e582a"/></linearGradient>
+      <!-- tono 9: brillo 0.876 · saturación 0.911 -->
+      <linearGradient id="rosa-pet-cara-t9" x1="0" y1="1" x2=".18" y2="0"><stop offset="0%" stop-color="#24070c"/><stop offset="38%" stop-color="#4c111c"/><stop offset="78%" stop-color="#681927"/><stop offset="100%" stop-color="#812230"/></linearGradient>
+      <linearGradient id="rosa-pet-media-t9" x1="0" y1="1" x2=".12" y2="0"><stop offset="0%" stop-color="#1e060e"/><stop offset="48%" stop-color="#410e19"/><stop offset="100%" stop-color="#651824"/></linearGradient>
+      <linearGradient id="rosa-pet-interior-t9" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#130308"/><stop offset="55%" stop-color="#320b13"/><stop offset="100%" stop-color="#4e131e"/></linearGradient>
+      <linearGradient id="rosa-pet-dorso-t9" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#17050a"/><stop offset="58%" stop-color="#340e16"/><stop offset="100%" stop-color="#531d27"/></linearGradient>
+      <linearGradient id="rosa-caliz-t9" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#171f0f"/><stop offset="55%" stop-color="#323b1a"/><stop offset="100%" stop-color="#525d2b"/></linearGradient>
+      <!-- tono 10: brillo 0.926 · saturación 0.947 -->
+      <linearGradient id="rosa-pet-cara-t10" x1="0" y1="1" x2=".18" y2="0"><stop offset="0%" stop-color="#27070d"/><stop offset="38%" stop-color="#52111e"/><stop offset="78%" stop-color="#711a29"/><stop offset="100%" stop-color="#8c2332"/></linearGradient>
+      <linearGradient id="rosa-pet-media-t10" x1="0" y1="1" x2=".12" y2="0"><stop offset="0%" stop-color="#20060f"/><stop offset="48%" stop-color="#460f1a"/><stop offset="100%" stop-color="#6d1825"/></linearGradient>
+      <linearGradient id="rosa-pet-interior-t10" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#150308"/><stop offset="55%" stop-color="#370b14"/><stop offset="100%" stop-color="#541320"/></linearGradient>
+      <linearGradient id="rosa-pet-dorso-t10" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#19050a"/><stop offset="58%" stop-color="#390e17"/><stop offset="100%" stop-color="#591e29"/></linearGradient>
+      <linearGradient id="rosa-caliz-t10" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#182110"/><stop offset="55%" stop-color="#343f1a"/><stop offset="100%" stop-color="#56632b"/></linearGradient>
+      <!-- tono 11: brillo 0.975 · saturación 0.982 -->
+      <linearGradient id="rosa-pet-cara-t11" x1="0" y1="1" x2=".18" y2="0"><stop offset="0%" stop-color="#2a070e"/><stop offset="38%" stop-color="#59121f"/><stop offset="78%" stop-color="#7a1b2b"/><stop offset="100%" stop-color="#972435"/></linearGradient>
+      <linearGradient id="rosa-pet-media-t11" x1="0" y1="1" x2=".12" y2="0"><stop offset="0%" stop-color="#230610"/><stop offset="48%" stop-color="#4b0f1b"/><stop offset="100%" stop-color="#761927"/></linearGradient>
+      <linearGradient id="rosa-pet-interior-t11" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#160309"/><stop offset="55%" stop-color="#3b0b15"/><stop offset="100%" stop-color="#5b1421"/></linearGradient>
+      <linearGradient id="rosa-pet-dorso-t11" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#1b050b"/><stop offset="58%" stop-color="#3d0f18"/><stop offset="100%" stop-color="#601f2b"/></linearGradient>
+      <linearGradient id="rosa-caliz-t11" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#192310"/><stop offset="55%" stop-color="#37421a"/><stop offset="100%" stop-color="#5b682c"/></linearGradient>
+
+      <!-- ══════════════════════════════════════════════════════════════
            LAS ROSAS
            ══════════════════════════════════════════════════════════════
            DOS REGLAS QUE SE SIGUEN EN TODAS:
@@ -242,7 +390,7 @@
            ve el degradado claro del borde de cada pétalo (la luz que lo
            atraviesa) y la flor pasa a tener carne, no contorno. -->
       <g id="rosa-frente">
-        <g fill="url(#rosa-pet-cara)" stroke="#2c0b13" stroke-width=".5" stroke-opacity=".5">
+        <g style="fill:var(--pet-cara,url(#rosa-pet-cara))" stroke="#2c0b13" stroke-width=".5" stroke-opacity=".5">
           <path d="M0 -3 C -12 -6,-23 -14,-26 -24 C -28 -31,-25 -36,-20 -36
                    C -16 -36,-15 -32,-11 -33 C -7 -35,-6 -31,-2 -32
                    C 2 -33,4 -30,8 -32 C 13 -34,18 -31,20 -26
@@ -265,7 +413,7 @@
                    C 23 -18,13 -7,0 -3 Z" transform="rotate(291)"/>
         </g>
 
-        <g fill="url(#rosa-pet-media)" stroke="#2c0b13" stroke-width=".45" stroke-opacity=".45">
+        <g style="fill:var(--pet-media,url(#rosa-pet-media))" stroke="#2c0b13" stroke-width=".45" stroke-opacity=".45">
           <path d="M0 -2 C -9 -5,-16 -11,-18 -18 C -19 -23,-17 -27,-13 -27
                    C -10 -27,-9 -24,-6 -25 C -3 -26,-2 -23,1 -24
                    C 4 -25,6 -23,9 -24 C 13 -25,16 -22,16 -18
@@ -286,7 +434,7 @@
 
         <!-- LA ESPIRAL: seis pétalos enrollados, cada uno más chico y
              girado ~65°, de modo que se envuelven unos a otros. -->
-        <g fill="url(#rosa-pet-interior)" stroke="#2c0b13" stroke-width=".4" stroke-opacity=".45">
+        <g style="fill:var(--pet-interior,url(#rosa-pet-interior))" stroke="#2c0b13" stroke-width=".4" stroke-opacity=".45">
           <path d="M0 0 C -2 -7,3 -13,9 -13 C 15 -13,18 -8,16 -3
                    C 14 2,7 5,2 4 C 1 3,0 2,0 0 Z"/>
           <path d="M0 0 C -2 -7,3 -13,9 -13 C 15 -13,18 -8,16 -3
@@ -326,8 +474,8 @@
       <g id="rosa-tres-cuartos">
         <!-- tallo y receptáculo asomando abajo -->
         <path d="M-4 16 C -5 24,-2 30,1 32 C 4 30,6 24,5 16 Z"
-              fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".45" stroke-opacity=".5"/>
-        <g fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".4" stroke-opacity=".5">
+              style="fill:var(--caliz,url(#rosa-caliz))" stroke="#2b3512" stroke-width=".45" stroke-opacity=".5"/>
+        <g style="fill:var(--caliz,url(#rosa-caliz))" stroke="#2b3512" stroke-width=".4" stroke-opacity=".5">
           <path d="M-6 14 C -14 13,-19 6,-19 -1 C -14 4,-9 8,-5 10 Z"/>
           <path d="M7 14 C 15 13,20 6,20 -1 C 15 4,10 8,6 10 Z"/>
         </g>
@@ -335,7 +483,7 @@
         <!-- cuerpo de la copa, visto en escorzo -->
         <path d="M-21 -2 C -22 7,-13 16,0 17 C 13 16,22 7,21 -2
                  C 19 -9,11 -13,0 -13 C -11 -13,-19 -9,-21 -2 Z"
-              fill="url(#rosa-pet-dorso)" stroke="#2c0b13" stroke-width=".55" stroke-opacity=".5"/>
+              style="fill:var(--pet-dorso,url(#rosa-pet-dorso))" stroke="#2c0b13" stroke-width=".55" stroke-opacity=".5"/>
 
         <!-- la flor, comprimida por la perspectiva -->
         <g transform="translate(0 -4) scale(1 .66)">
@@ -345,8 +493,8 @@
 
       <g id="rosa-perfil">
         <path d="M-4 20 C -5 28,-2 34,1 36 C 4 34,6 28,5 20 Z"
-              fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".45" stroke-opacity=".5"/>
-        <g fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".4" stroke-opacity=".5">
+              style="fill:var(--caliz,url(#rosa-caliz))" stroke="#2b3512" stroke-width=".45" stroke-opacity=".5"/>
+        <g style="fill:var(--caliz,url(#rosa-caliz))" stroke="#2b3512" stroke-width=".4" stroke-opacity=".5">
           <path d="M-6 18 C -15 17,-21 9,-21 1 C -15 7,-10 12,-5 14 Z"/>
           <path d="M7 18 C 16 17,22 9,22 1 C 16 7,11 12,6 14 Z"/>
           <path d="M0 20 C -3 27,-2 34,2 37 C 3 30,3 24,2 20 Z"/>
@@ -355,7 +503,7 @@
         <!-- la copa se ve casi entera: es lo que domina de perfil -->
         <path d="M-22 -1 C -23 10,-14 20,0 22 C 14 20,23 10,22 -1
                  C 20 -9,12 -14,0 -14 C -12 -14,-20 -9,-22 -1 Z"
-              fill="url(#rosa-pet-dorso)" stroke="#2c0b13" stroke-width=".55" stroke-opacity=".5"/>
+              style="fill:var(--pet-dorso,url(#rosa-pet-dorso))" stroke="#2c0b13" stroke-width=".55" stroke-opacity=".5"/>
         <!-- luz en la panza de la copa -->
         <path d="M-15 -4 C -13 4,-7 10,1 12" fill="none"
               stroke="#a15361" stroke-width="1.4" stroke-opacity=".22" stroke-linecap="round"/>
@@ -371,8 +519,8 @@
            por arriba, todavía muy comprimida. -->
       <g id="rosa-media">
         <path d="M-4 16 C -5 24,-2 30,1 32 C 4 30,6 24,5 16 Z"
-              fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".45" stroke-opacity=".5"/>
-        <g fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".4" stroke-opacity=".5">
+              style="fill:var(--caliz,url(#rosa-caliz))" stroke="#2b3512" stroke-width=".45" stroke-opacity=".5"/>
+        <g style="fill:var(--caliz,url(#rosa-caliz))" stroke="#2b3512" stroke-width=".4" stroke-opacity=".5">
           <path d="M-6 14 C -14 12,-19 4,-18 -3 C -13 3,-9 7,-5 9 Z"/>
           <path d="M7 14 C 15 12,20 4,19 -3 C 14 3,10 7,6 9 Z"/>
         </g>
@@ -381,7 +529,7 @@
         <path d="M-16 -3 C -17 6,-10 15,0 17 C 10 15,17 6,16 -3
                  C 15 -10,12 -15,7 -17 C 4 -19,2 -15,-1 -16
                  C -5 -17,-9 -19,-12 -17 C -15 -15,-16 -9,-16 -3 Z"
-              fill="url(#rosa-pet-media)" stroke="#2c0b13" stroke-width=".55" stroke-opacity=".5"/>
+              style="fill:var(--pet-media,url(#rosa-pet-media))" stroke="#2c0b13" stroke-width=".55" stroke-opacity=".5"/>
         <path d="M-11 -6 C -9 1,-4 7,2 9" fill="none"
               stroke="#a15361" stroke-width="1.3" stroke-opacity=".2" stroke-linecap="round"/>
 
@@ -397,7 +545,7 @@
            apagado y frío que la cara. Aporta profundidad, porque no todas
            las flores de una planta miran para el mismo lado. -->
       <g id="rosa-dorso">
-        <g fill="url(#rosa-pet-dorso)" stroke="#2c0b13" stroke-width=".55" stroke-opacity=".5">
+        <g style="fill:var(--pet-dorso,url(#rosa-pet-dorso))" stroke="#2c0b13" stroke-width=".55" stroke-opacity=".5">
           <path d="M0 -1 C -12 -5,-21 -14,-21 -23 C -21 -31,-13 -34,-7 -30
                    C -2 -27,3 -30,8 -28 C 15 -25,17 -16,13 -9
                    C 9 -3,5 0,0 -1 Z" transform="rotate(24)"/>
@@ -409,14 +557,14 @@
                    C 9 -3,5 0,0 -1 Z" transform="rotate(268) scale(1.02)"/>
         </g>
         <!-- estrella de sépalos -->
-        <g fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".5" stroke-opacity=".5">
+        <g style="fill:var(--caliz,url(#rosa-caliz))" stroke="#2b3512" stroke-width=".5" stroke-opacity=".5">
           <path d="M0 2 C -5 -8,-4 -20,1 -28 C 5 -20,6 -8,2 2 Z"/>
           <path d="M0 2 C -5 -8,-4 -20,1 -28 C 5 -20,6 -8,2 2 Z" transform="rotate(72)"/>
           <path d="M0 2 C -5 -8,-4 -20,1 -28 C 5 -20,6 -8,2 2 Z" transform="rotate(144)"/>
           <path d="M0 2 C -5 -8,-4 -20,1 -28 C 5 -20,6 -8,2 2 Z" transform="rotate(216)"/>
           <path d="M0 2 C -5 -8,-4 -20,1 -28 C 5 -20,6 -8,2 2 Z" transform="rotate(288)"/>
         </g>
-        <circle r="4.6" fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".5" stroke-opacity=".5"/>
+        <circle r="4.6" style="fill:var(--caliz,url(#rosa-caliz))" stroke="#2b3512" stroke-width=".5" stroke-opacity=".5"/>
       </g>
 
       <!-- ─── CAPULLO ───
@@ -425,14 +573,14 @@
       <g id="rosa-capullo">
         <path d="M0 -30 C -7 -23,-11 -12,-10 -1 C -9 8,-5 14,-1 16
                  C -2 8,-3 -2,-2 -10 C -1 -18,-1 -25,0 -30 Z"
-              fill="url(#rosa-pet-dorso)" stroke="#2c0b13" stroke-width=".6" stroke-opacity=".5"/>
+              style="fill:var(--pet-dorso,url(#rosa-pet-dorso))" stroke="#2c0b13" stroke-width=".6" stroke-opacity=".5"/>
         <path d="M0 -30 C 7 -23,11 -12,10 -1 C 9 8,5 14,1 16
                  C 0 8,1 -2,0 -10 C -1 -18,-1 -25,0 -30 Z"
-              fill="url(#rosa-pet-cara)" stroke="#2c0b13" stroke-width=".6" stroke-opacity=".5"/>
+              style="fill:var(--pet-cara,url(#rosa-pet-cara))" stroke="#2c0b13" stroke-width=".6" stroke-opacity=".5"/>
         <path d="M0 -28 C 5 -21,8 -11,7 -1 C 6 6,3 11,1 13"
               fill="none" stroke="#a15361" stroke-width="1" stroke-opacity=".32" stroke-linecap="round"/>
 
-        <g fill="url(#rosa-caliz)" stroke="#2b3512" stroke-width=".55" stroke-opacity=".5">
+        <g style="fill:var(--caliz,url(#rosa-caliz))" stroke="#2b3512" stroke-width=".55" stroke-opacity=".5">
           <path d="M-9 2 C -16 5,-21 14,-20 23 C -14 16,-10 9,-7 4 Z"/>
           <path d="M9 2 C 16 5,21 14,20 23 C 14 16,10 9,7 4 Z"/>
           <path d="M-5 11 C -8 18,-8 26,-4 31 C -2 24,-2 17,-2 12 Z"/>
@@ -1001,8 +1149,26 @@
         <filter id="mo-relieve" x="-40%" y="-40%" width="180%" height="180%">
           <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#000" flood-opacity=".62"/>
         </filter>
-        <filter id="mo-resplandor" x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur stdDeviation="9" result="b"/>
+        <!-- ⚠️ EL CUADRADO DEL REMATE: POR QUÉ ESTA REGIÓN ES TAN GRANDE.
+             Este filtro le da el halo a la bolita de arriba del pináculo, que
+             tiene radio 4,6 (o sea, una caja de 9,2 × 9,2).
+
+             Todo filtro de SVG se calcula dentro de una REGIÓN, y lo que se
+             sale de ahí el navegador lo CORTA EN SECO. Los porcentajes se
+             miden sobre la caja del objeto, así que con la región vieja
+             (-60 % / 220 %) el margen alrededor de la bolita era de apenas
+             5,5 unidades… mientras que un desenfoque de stdDeviation 9 se
+             extiende unas 27. El halo llegaba al borde de la región todavía
+             bien visible y ahí se cortaba de golpe: por eso aparecía un
+             CUADRADO nítido alrededor del remate.
+
+             La regla: la región tiene que dar al menos 3 × stdDeviation de
+             margen. Acá el margen es 3,5 veces la caja (unas 32 unidades)
+             para un desenfoque de 5, que le sobra. Y el desenfoque se bajó
+             de 9 a 5, que es lo proporcionado para un punto de radio 4,6:
+             antes el halo era más ancho que el pináculo entero. -->
+        <filter id="mo-resplandor" x="-350%" y="-350%" width="800%" height="800%">
+          <feGaussianBlur stdDeviation="5" result="b"/>
           <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
 
@@ -1766,6 +1932,11 @@
 <script src="codigo/03-sobre-de-apertura.js"></script>
 <script src="codigo/04-invitado-personalizado.js"></script>
 <script src="codigo/05-cursor-personalizado.js"></script>
+<!-- EL LIENZO DE PÉTALOS. Tres <canvas>, uno por plano de profundidad, en
+     vez de 29 divs. Va ANTES que 06-petalos-con-fisica.js porque ese
+     archivo le pregunta al arrancar si debe crear elementos o solo números.
+     Con  ?petalos=dom  vuelve el sistema de divs. -->
+<script src="codigo/24-lienzo-de-petalos.js"></script>
 <script src="codigo/06-petalos-con-fisica.js"></script>
 <script src="codigo/07-marco-y-enredaderas.js"></script>
 <script src="codigo/08-efectos-de-scroll.js"></script>
@@ -1774,6 +1945,17 @@
 <script src="codigo/11-formulario-confirmacion.js"></script>
 <script src="codigo/12-pase-de-acceso.js"></script>
 <script src="codigo/13-agregar-al-calendario.js"></script>
+<!-- EL LIENZO DE LUZ. Dibuja los tres sistemas de luz —velas, haces y polvo—
+     en un solo <canvas>, en vez de en ~140 elementos repartidos en 10 capas
+     con `mix-blend-mode`, que era lo que se llevaba la mitad de cada cuadro.
+
+     ⚠️ VA ANTES QUE 14, 18 Y 19 A PROPÓSITO: los tres le preguntan al
+     arrancar si deben crear elementos o solo publicar números. Si cargara
+     después, ya habrían decidido y la escena quedaría a oscuras.
+
+     Con  ?luz=dom  en la dirección, este módulo se queda dormido y vuelve el
+     sistema anterior completo, sin tocar código. -->
+<script src="codigo/23-lienzo-de-luz.js"></script>
 <script src="codigo/14-haces-de-luz.js"></script>
 <script src="codigo/15-registro-de-confirmaciones.js"></script>
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda).
@@ -1796,6 +1978,9 @@
 <script src="codigo/19-velas.js"></script>
 <script src="codigo/20-boton-de-animaciones.js"></script>
 <script src="codigo/21-monitor-de-rendimiento.js"></script>
+<!-- Tiñe la luz que entra por los ventanales según la hora del día. Va
+     después de los haces y las motas, porque escribe sobre sus capas. -->
+<script src="codigo/22-luz-de-la-hora.js"></script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
      internet y se pueda instalar. Va al final y falla en silencio si el

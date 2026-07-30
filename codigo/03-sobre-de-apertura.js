@@ -240,6 +240,17 @@
        estilos/12-haces-de-luz.css. */
     document.body.classList.add('revelando');
 
+    /* ⚡ Y SE APAGA CUANDO TERMINA. La animación del velo dura 2,9 s; antes
+       la clase no se quitaba nunca, así que el velo se quedaba en el árbol
+       de por vida: una capa de MEZCLA del tamaño de toda la pantalla, con
+       opacidad 0, sin dibujar nada y costando igual. Y una capa de mezcla no
+       es cualquier capa: obliga al compositor a leer de vuelta el fondo y le
+       impide fusionar nada de lo que hay debajo.
+
+       Se le da un respiro extra sobre los 2,9 s por si el equipo va lento y
+       la animación termina un poco más tarde. */
+    setTimeout(() => document.body.classList.remove('revelando'), 3400);
+
     /*
        Este es el momento clave: estamos dentro de un clic de la persona,
        así que el navegador SÍ nos va a dejar reproducir la música.

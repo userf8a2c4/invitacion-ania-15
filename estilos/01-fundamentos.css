@@ -237,12 +237,42 @@ h2 {
   left: 0;
   width: 100%;      /* 100% y NO 100vw: 100vw incluiría la barra de
                        desplazamiento y el fondo quedaría corrido */
-  height: 160vh;
+  /* ⚡ BAJADO DE 160vh A 125vh. Esta es la capa más grande de toda la web y
+     además tiene `will-change: transform`, o sea textura propia en la GPU.
+     En una pantalla ultrapanorámica de 3305 px, 160vh son 4,2 megapíxeles
+     de textura que hay que mantener y componer; 125vh son 3,3.
+
+     Importa porque esta página está limitada por TASA DE RELLENO: se midió
+     que el tiempo por cuadro escala con el ancho de pantalla (1546 px →
+     31 ms; 3305 px → 59 ms), no con el DOM ni con el JavaScript.
+
+     El parallax sigue funcionando: 08-efectos-de-scroll.js calcula el
+     recorrido como `offsetHeight - innerHeight`, así que se adapta solo.
+     Solo se acorta el desplazamiento, que era muy generoso. */
+  height: 125vh;
   z-index: -1;      /* detrás de absolutamente todo */
 
-  /* Dos capas superpuestas: primero un velo negro al 20 % que oscurece
-     el dibujo para que el texto resalte, y debajo el dibujo. */
+  /* TRES capas superpuestas, de arriba abajo:
+
+       1. LA LUZ DE LA HORA, y ojo con cómo se hace.
+          ⛔ EL PRIMER INTENTO FUE UN TINTE PLANO —el mismo color con la
+          misma opacidad sobre toda la pantalla— y quedó fatal: se veía
+          exactamente como lo que era, un filtro de color pegado encima. La
+          luz no funciona así. La luz VIENE DE ALGÚN LADO y se apaga con la
+          distancia.
+          Por eso ahora es un degradado vertical: fuerte arriba —de donde
+          entra, igual que los haces de los ventanales— y desvanecido antes
+          de la mitad, donde ya mandan las velas. Así el frío de la luna
+          ocupa la parte alta y abajo la escena sigue siendo cálida de
+          fuego, que es como se ve una sala de verdad iluminada a velas de
+          noche.
+          El degradado entero lo escribe codigo/22-luz-de-la-hora.js una vez
+          cada diez minutos: no se anima, no cuesta nada por cuadro.
+       2. Un velo negro al 20 % que oscurece el dibujo para que el texto
+          resalte.
+       3. El dibujo del fondo. */
   background-image:
+    var(--velo-de-la-hora, linear-gradient(transparent, transparent)),
     linear-gradient(rgba(0, 0, 0, .2), rgba(0, 0, 0, .2)),
     url('../recursos/fondo-ornamental.svg');
   background-size: cover;
@@ -259,8 +289,21 @@ body::before {
   inset: 0;
   z-index: 0;
   pointer-events: none;     /* no bloquea clics */
-  opacity: .5;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23r)' opacity='0.04'/%3E%3C/svg%3E");
+
+  /* ⚡ SIN `opacity: .5`, Y LA TRANSPARENCIA VA HORNEADA EN EL DIBUJO.
+     Un `opacity` menor que 1 sobre un elemento `position: fixed` que cubre
+     toda la pantalla hace que el navegador le reserve su PROPIA capa de
+     compositor y la mezcle entera en cada cuadro.
+
+     En la pantalla ultrapanorámica de la máquina objetivo eso son 2,6
+     millones de píxeles mezclados por cuadro… para un grano que se ve al
+     2 %. Y esta página está limitada por TASA DE RELLENO: se comprobó que
+     el tiempo por cuadro escala con el ancho de pantalla (1546 px → 31 ms;
+     3305 px → 59 ms).
+
+     La opacidad se pasa al propio SVG (0.04 × 0.5 = 0.02), así el resultado
+     es idéntico y el elemento deja de necesitar capa propia. */
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23r)' opacity='0.02'/%3E%3C/svg%3E");
 }
 
 

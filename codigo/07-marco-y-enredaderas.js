@@ -82,7 +82,19 @@
 
   /* ─── 1. NÚMEROS QUE SE PUEDEN AJUSTAR ─────────────────────────── */
 
-  /** Cada cuántos píxeles de alto nace una planta nueva. */
+  /** Cada cuántos píxeles de alto nace una planta nueva.
+   *
+   *  ⛔ NO ATAR ESTO AL NIVEL DE CALIDAD. Se intentó (separación y densidad
+   *  escalando por nivel, más una reconstrucción al cambiar de nivel) y salió
+   *  caro: la reconstrucción disparada por el gobernador se solapaba con la
+   *  construcción que todavía estaba en vuelo —esta función arma las plantas
+   *  y los ramilletes a lo largo de decenas de cuadros—, las dos corridas se
+   *  pisaban el innerHTML de los mismos huecos, y el resultado fue un
+   *  ramillete de esquina desaparecido y plantas mal dibujadas.
+   *
+   *  Si algún día se quiere volver a intentar, hace falta primero el guardia
+   *  de reentrada que ahora sí tiene repartirPlantas() — pero el beneficio
+   *  era chico (menos plantas en equipos flojos) y el riesgo visual, alto. */
   const SEPARACION_ENTRE_PLANTAS = 460;
 
   /** Ancho del "lienzo" de cada planta, en unidades del dibujo. */
@@ -135,6 +147,23 @@
   /** Tope por nudo. Con 6 nudos, la punta puede llegar a unos 42°. */
   const FLEXION_MAXIMA_DEL_NUDO = 7;
 
+  /** Vaivén de reposo del nudo, en grados.
+   *
+   *  Subió de .35 a .55 a propósito. Antes cada flor tenía además su
+   *  propia respiración, pero eso obligaba a las ~350 flores a reescribir
+   *  su transform para siempre y era carísimo (ver el bloque del bucle).
+   *  Ahora el vaivén lo carga entero el tallo, y como el doblado se acumula
+   *  nudo a nudo y las flores cuelgan adentro, la punta se mece lo mismo
+   *  que antes —con seis escrituras por planta en vez de quince—. */
+  const VAIVEN_DEL_NUDO = 0.55;
+
+  /* Umbrales para dar por acomodada a una flor y dejar de escribirla.
+     Medio centésimo de grado por cuadro y medio décimo de grado de
+     inclinación: por debajo de eso no hay movimiento que un ojo distinga,
+     solo trabajo para el navegador. */
+  const VELOCIDAD_DESPRECIABLE = 0.02;
+  const FLEXION_DESPRECIABLE   = 0.05;
+
 
   /* ─── 2. LOS DIBUJOS DE LAS ROSAS ──────────────────────────────
      Las rosas, hojas y capullos NO se dibujan acá: están en el index.html,
@@ -143,6 +172,54 @@
      tuviera sus propias flores, se notaría la disonancia.
      Acá solo se las invoca con <use href="#rosa-frente">, etc.
      ---------------------------------------------------------------- */
+
+  /* ── EL APAGADO DE UNA FLOR, Y POR QUÉ YA NO ES UN FILTRO ──
+     Una rosa lejana o en penumbra tiene que verse más oscura y menos
+     saturada que una cercana e iluminada. Eso es profundidad, y no se
+     negocia.
+
+     Antes se conseguía con  style="filter: brightness() saturate()"  en
+     cada flor. Funcionaba, pero resultó ser el problema de rendimiento
+     más grande que tuvo esta web: un `filter` de CSS obliga al navegador
+     a darle a ese elemento su PROPIA capa de pintura. Con ~350 flores
+     eran ~350 capas, y como cada flor además se mueve, el árbol de capas
+     se reconstruía en cada cuadro. La fase "Layerize" se llevaba el
+     38,9 % del tiempo total; todo el JavaScript junto, el 1,2 %.
+
+     La salida NO fue bajar la calidad —se probó con `opacity` y se
+     revirtió, porque deja ver el fondo a través de la flor y pierde la
+     desaturación—. Fue calcular de antemano el color que producía el
+     filtro y hornearlo en el gradiente. Hay doce juegos de gradientes ya
+     apagados en index.html, y cada flor elige el suyo con una clase
+     .tono-N. Mismo color exacto, cero capas.
+
+     Doce escalones cubren todo el rango de brillo que usan las flores
+     (de .407 a 1.0): saltos del 5 %, unos 6 niveles de color, que no se
+     distinguen ni entre dos rosas vecinas. */
+
+  /** Extremos del rango de apagado que producen las fórmulas de abajo. */
+  const BRILLO_MAS_APAGADO = 0.407;
+  const BRILLO_MAS_VIVO    = 1.0;
+  const CUANTOS_TONOS      = 12;
+
+  /**
+   * Elige la clase de tono que corresponde al apagado de una flor.
+   *
+   * La saturación no necesita su propio eje: en las fórmulas que la usan
+   * sube y baja junto con el brillo (ambas cuelgan de la cercanía y de la
+   * luz), y los doce juegos de gradientes ya vienen con el par brillo +
+   * saturación resuelto. Verificado: derivar una de la otra desvía la
+   * saturación como mucho 0,02 en el peor caso.
+   *
+   * @param {number} brillo - Factor de brillo ya calculado (0..1).
+   * @returns {string} La clase, lista para sumar al <g> de la flor.
+   */
+  function tonoDeLaFlor(brillo) {
+    const proporcion = (brillo - BRILLO_MAS_APAGADO) /
+                       (BRILLO_MAS_VIVO - BRILLO_MAS_APAGADO);
+    const indice = limitar(Math.floor(proporcion * CUANTOS_TONOS), 0, CUANTOS_TONOS - 1);
+    return `tono-${indice}`;
+  }
 
 
   /* ─── 3. HACER CRECER UN TALLO ─────────────────────────────────── */
@@ -539,16 +616,16 @@
          rosas y no manchas negras (el resto de la oscuridad la aporta el
          velo de profundidad, no el dibujo). */
       const apagadoPorLuz = 0.55 + luz * 0.45;
-      const brillo    = ((0.74 + cercania * 0.26) * apagadoPorLuz).toFixed(3);
-      const saturacion = ((0.82 + cercania * 0.18) * (0.7 + luz * 0.3)).toFixed(3);
+      const brillo = (0.74 + cercania * 0.26) * apagadoPorLuz;
 
       partesPorNudo[flor.nudo].push(
-        `<g class="flor-de-enredadera" data-escala="${flor.escala.toFixed(2)}"
+        `<g class="flor-de-enredadera ${tonoDeLaFlor(brillo)}"
+             data-escala="${flor.escala.toFixed(2)}"
+             data-x="${flor.x.toFixed(1)}" data-y="${flor.y.toFixed(1)}"
              transform="translate(${flor.x.toFixed(1)} ${flor.y.toFixed(1)})">
            <g class="flor-de-enredadera__movil">
              <use href="#${flor.tipo}"
-                  transform="rotate(${flor.giro.toFixed(1)}) scale(${flor.escala.toFixed(2)})"
-                  style="filter: brightness(${brillo}) saturate(${saturacion})"/>
+                  transform="rotate(${flor.giro.toFixed(1)}) scale(${flor.escala.toFixed(2)})"/>
            </g>
          </g>`
       );
@@ -713,9 +790,18 @@
         atraccion: azar.entre(0.0006, 0.0018),
       });
 
+      /* ⚠️ RELLENO DE RESERVA: el degradado #rosa-tallo vive en un <svg> de
+         0×0 aparte (la biblioteca de rosas compartida). Ese patrón —un
+         degradado referenciado desde OTRO <svg>— a veces se lee distinto
+         entre navegadores. Por eso se dibuja el mismo contorno DOS veces:
+         primero un color sólido de reserva, y el degradado justo encima.
+         Si el degradado resuelve bien (lo normal), tapa al sólido entero y
+         no cambia nada; si no resolviera, el sólido de abajo salva la
+         rama en vez de dejarla como un hilo casi invisible. */
+      const dDelTallo = siluetaDelTallo(tallo, azar, azar.entre(3.4, 5.2), 1);
       piezas.push(
-        `<path d="${siluetaDelTallo(tallo, azar, azar.entre(3.4, 5.2), 1)}"
-               fill="url(#rosa-tallo)" stroke="#241d0d" stroke-width=".6"/>`
+        `<path d="${dDelTallo}" fill="#6a5322"/>` +
+        `<path d="${dDelTallo}" fill="url(#rosa-tallo)" stroke="#241d0d" stroke-width=".6"/>`
       );
 
       /* Hojas repartidas por el tallo, siempre levantadas hacia afuera.
@@ -753,9 +839,11 @@
           atraccion: 0.001,
         });
 
+        // Mismo relleno de reserva que el tallo principal (ver la nota de arriba).
+        const dDeLaRama = siluetaDelTallo(rama, azar, azar.entre(1.8, 2.8), 0.8);
         piezas.push(
-          `<path d="${siluetaDelTallo(rama, azar, azar.entre(1.8, 2.8), 0.8)}"
-                 fill="url(#rosa-tallo)" stroke="#241d0d" stroke-width=".5"/>`
+          `<path d="${dDeLaRama}" fill="#6a5322"/>` +
+          `<path d="${dDeLaRama}" fill="url(#rosa-tallo)" stroke="#241d0d" stroke-width=".5"/>`
         );
 
         const puntaDeLaRama = rama[rama.length - 1];
@@ -870,16 +958,16 @@
       );
       // Mismo piso de brillo subido que en las enredaderas (.74), para
       // que las flores chicas de las esquinas no se ennegrezcan.
-      const brillo     = (0.74 + cercania * 0.26).toFixed(3);
-      const saturacion = (0.82 + cercania * 0.18).toFixed(3);
+      const brillo = 0.74 + cercania * 0.26;
 
       piezas.push(
-        `<g class="flor-de-enredadera" data-escala="${flor.escala.toFixed(2)}"
+        `<g class="flor-de-enredadera ${tonoDeLaFlor(brillo)}"
+             data-escala="${flor.escala.toFixed(2)}"
+             data-x="${flor.x.toFixed(1)}" data-y="${flor.y.toFixed(1)}"
              transform="translate(${flor.x.toFixed(1)} ${flor.y.toFixed(1)})">
            <g class="flor-de-enredadera__movil">
              <use href="#${flor.tipo}"
-                  transform="rotate(${flor.giro.toFixed(1)}) scale(${flor.escala.toFixed(2)})"
-                  style="filter: brightness(${brillo}) saturate(${saturacion})"/>
+                  transform="rotate(${flor.giro.toFixed(1)}) scale(${flor.escala.toFixed(2)})"/>
            </g>
          </g>`
       );
@@ -897,8 +985,10 @@
    *
    * @returns {void}
    */
-  function colocarLosRamilletesDeEsquina() {
+  function colocarLosRamilletesDeEsquina(alTerminar, sigoVigente) {
     let semilla = 9100;
+    // Si no se pasa control de corrida, se asume que siempre es vigente.
+    const vigente = (typeof sigoVigente === 'function') ? sigoVigente : () => true;
 
     /* ── CUÁN TUPIDOS VAN, SEGÚN LA PANTALLA ──
        En una pantalla grande, un ramillete con pocas rosas se pierde en
@@ -914,12 +1004,116 @@
        Esto se recalcula solo al cambiar el tamaño de la ventana, porque
        repartirPlantas() —que llama acá— se vuelve a ejecutar con cada
        redimensión (ver el listener de 'resize' al final del archivo). */
+    /* ⛔ Acá NO se multiplica por el nivel de calidad. Se probó y rompió los
+       ramilletes (ver la nota de SEPARACION_ENTRE_PLANTAS arriba). */
     const densidad = limitar(window.innerWidth / 1250, 0.55, 1.9);
 
-    [buscar('.marco__ramillete--izquierdo'),
-     buscar('.marco__ramillete--derecho')].forEach((hueco, indice) => {
-      if (!hueco) return;
+    /* ⚡ UN RAMILLETE POR CUADRO. Cada uno lleva entre 50 y 80 rosas con sus
+       tallos: los dos juntos, de una sola vez, era el bloque de construcción
+       más grande de toda la web. Hacer uno, dejar respirar al navegador y
+       hacer el otro da EXACTAMENTE el mismo resultado (mismas semillas,
+       mismo dibujo) sin congelar nada. */
+    const huecos = [buscar('.marco__ramillete--izquierdo'),
+                    buscar('.marco__ramillete--derecho')];
+    let indiceDeHueco = 0;
 
+    /**
+     * Arma los ramilletes, UNO POR CUADRO.
+     *
+     * ⚠️ ESTO VOLVIÓ A SER UNO POR CUADRO, Y HAY UNA LECCIÓN.
+     * Cuando el ramillete derecho desaparecía, culpé al troceado y los junté
+     * en una sola pasada. Me equivoqué: la causa real era una LLAVE DE CIERRE
+     * que falta en el CSS (ver .marco__ramillete en
+     * estilos/02-marco-victoriano.css). El troceado nunca tuvo la culpa.
+     *
+     * Y juntarlos costaba caro: cada ramillete lleva entre 50 y 80 rosas con
+     * sus tallos, y los dos de corrido —más las plantas y las mediciones que
+     * vienen encadenadas— producían una tarea de más de un segundo. El
+     * medidor la cazó: «peor 1101 ms». Eso es la página congelada.
+     *
+     * Ahora vuelven a ir de a uno, con el guardia de reentrada puesto: si
+     * entra una construcción más nueva, esta se apaga sola.
+     *
+     * @returns {void}
+     */
+    function armarLosRamilletes() {
+      if (!vigente()) return;
+
+      const hueco = huecos[indiceDeHueco];
+      const indice = indiceDeHueco;
+      indiceDeHueco++;
+
+      if (hueco) crearRamillete(hueco, indice);
+
+      if (indiceDeHueco < huecos.length) { cederYSeguir(armarLosRamilletes); return; }
+
+      revisarQueEstenLosDos();
+      if (typeof alTerminar === 'function') alTerminar();
+    }
+
+    /**
+     * Comprueba que los DOS ramilletes hayan quedado dibujados y rehace el
+     * que falte.
+     *
+     * ⚠️ POR QUÉ EXISTE ESTA FUNCIÓN. El ramillete de la esquina derecha
+     * desapareció tres veces seguidas y cada intento de diagnosticarlo por
+     * lectura de código falló. En vez de seguir adivinando, el código
+     * comprueba su propio resultado: si un hueco quedó sin SVG, lo vuelve a
+     * armar en el acto.
+     *
+     * No es un parche que tape el problema: si hiciera falta, deja dicho en
+     * consola cuál falló, y eso es información que hasta ahora no teníamos.
+     *
+     * @returns {void}
+     */
+    function revisarQueEstenLosDos() {
+      huecos.forEach((hueco, indice) => {
+        if (!hueco) return;
+
+        if (!hueco.querySelector('.racimo-de-rosas')) {
+          /* Se rehace con la MISMA semilla que le tocaba, para que el dibujo
+             sea el que corresponde a esa esquina y no uno distinto. */
+          const semillaGuardada = semilla;
+          semilla = 9100 + indice;
+          crearRamillete(hueco, indice);
+          semilla = semillaGuardada;
+        }
+      });
+
+      /* ⚠️ Y AHORA SE COMPRUEBA QUE ADEMÁS SE VEAN, no solo que existan.
+         El ramillete derecho desapareció cinco veces y ya descarté, con
+         medición, que sea el markup, el generador, la semilla o una carrera
+         de construcción. Comprobé en Node que las semillas 9100 y 9101
+         producen ramilletes equivalentes (25 y 23 tallos, misma dispersión),
+         así que el SVG se genera bien: el problema es que no se RENDERIZA.
+
+         Estas medidas se publican en el cartel de ?fps=1 para poder verlo de
+         un vistazo, sin abrir las herramientas del navegador. Si el derecho
+         sale con ancho o alto 0, o con una posición fuera de la pantalla,
+         ahí está la respuesta que llevo días sin poder ver. */
+      window.EstadoDeLosRamilletes = huecos.map((hueco, indice) => {
+        if (!hueco) return { lado: indice ? 'der' : 'izq', existe: false };
+        const svg = hueco.querySelector('.racimo-de-rosas');
+        const caja = hueco.getBoundingClientRect();
+        return {
+          lado: indice ? 'der' : 'izq',
+          existe: !!svg,
+          rosas: svg ? svg.querySelectorAll('.flor-de-enredadera').length : 0,
+          x: Math.round(caja.left),
+          y: Math.round(caja.top),
+          ancho: Math.round(caja.width),
+          alto: Math.round(caja.height),
+        };
+      });
+    }
+
+    /**
+     * Crea UN ramillete de esquina y lo suma a la lista de plantas.
+     * @param {Element} hueco
+     * @param {number} indice - 0 izquierdo, 1 derecho (el derecho va espejado).
+     * @returns {void}
+     */
+    function crearRamillete(hueco, indice) {
       hueco.innerHTML = dibujarRamilleteDeEsquina(semilla++, densidad);
 
       const azarDeMovimiento = crearAzarConSemilla(semilla * 7919);
@@ -929,6 +1123,9 @@
         flores: Array.from(hueco.querySelectorAll('.flor-de-enredadera')),
         nudos: [],              // no se articula: es un ramo, no una trepadora
         espejada: indice === 1,
+        /* Ancho del viewBox de ESTE dibujo. Sirve para pasar coordenadas del
+           dibujo a píxeles de pantalla sin medir elemento por elemento. */
+        anchoDelLienzo: ANCHO_DEL_RAMILLETE,
         alturaEnLaPagina: 0,    // viven arriba de todo
 
         inclinacion: 0,
@@ -947,122 +1144,246 @@
 
         estadoDeLasFlores: null,
       });
-    });
+    }
+
+    armarLosRamilletes();
   }
 
 
   /* ─── 5. REPARTIR LAS PLANTAS ──────────────────────────────────── */
 
+  /**
+   * Cede el hilo principal y sigue en el próximo momento libre.
+   *
+   * ⚠️ POR QUÉ NO ALCANZA requestAnimationFrame. Los troceados de acá abajo
+   * (construir plantas, armar ramilletes, medir flores) se cortan en tandas
+   * para no congelar el navegador. Pero requestAnimationFrame **no se
+   * ejecuta si la pestaña no está visible**: si alguien abre la invitación
+   * en una pestaña de fondo —cosa habitual: "abrir en pestaña nueva"— el
+   * troceado quedaba a mitad de camino y las enredaderas aparecían vacías.
+   *
+   * Con la pestaña oculta se usa setTimeout, que sí corre (más lento, pero
+   * corre) y termina el trabajo. Cuando está visible se sigue usando rAF,
+   * que es lo correcto: se sincroniza con el dibujado.
+   *
+   * @param {Function} seguir - Qué ejecutar en el próximo hueco.
+   * @returns {void}
+   */
+  function cederYSeguir(seguir) {
+    if (document.hidden) setTimeout(seguir, 0);
+    else requestAnimationFrame(seguir);
+  }
+
   /** @type {Array<Object>} Todas las plantas con su estado de movimiento. */
   const plantas = [];
 
+  /** Cuántas plantas entraban la última vez que se construyó todo, para no
+   *  reconstruir si un resize no cambia ese número (el caso más común: solo
+   *  cambiar el ANCHO no cambia cuántas plantas entran a lo ALTO). -1 =
+   *  todavía no se construyó nada. */
+  let ultimaCuantasEntran = -1;
+
   /**
    * Reparte plantas a lo largo de los dos laterales del marco.
-   * Se vuelve a llamar si cambia la altura del documento.
+   * Se vuelve a llamar si cambia el tamaño de la ventana.
    * @returns {void}
    */
+  /** Número de la corrida de construcción vigente.
+   *
+   *  ⚠️ ESTO EXISTE POR UN BUG REAL. repartirPlantas() NO termina cuando
+   *  retorna: arma las ~20 plantas en tandas de 4 y después los dos
+   *  ramilletes de esquina de a uno por cuadro, o sea que sigue trabajando
+   *  durante decenas de cuadros. Si alguien la vuelve a llamar mientras
+   *  tanto (un resize, o el gobernador de calidad), la corrida nueva vacía
+   *  los contenedores y el array… pero las tandas pendientes de la corrida
+   *  vieja SIGUEN EJECUTÁNDOSE, escribiendo sobre los mismos huecos. El
+   *  resultado fue un ramillete de esquina que desaparecía.
+   *
+   *  Con esto, cada tanda comprueba si sigue siendo la corrida vigente
+   *  antes de tocar nada; si no lo es, se apaga sola. */
+  let corridaVigente = 0;
+
   function repartirPlantas() {
-    enredaderaIzquierda.innerHTML = '';
-    enredaderaDerecha.innerHTML = '';
-    plantas.length = 0;
+    const miCorrida = ++corridaVigente;
+    const sigoVigente = () => miCorrida === corridaVigente;
 
     const altoDelDocumento = document.body.scrollHeight;
     const cuantasEntran = Math.max(3, Math.floor(altoDelDocumento / SEPARACION_ENTRE_PLANTAS));
 
+    /* ⚡ NO RECONSTRUIR SI NO HACE FALTA. Tirar todo y rehacer es la
+       operación más cara de toda la web (ver la nota de troceado, abajo).
+       Si la cantidad de plantas que entran no cambió, alcanza con volver a
+       medir dónde quedó cada una —el ancho sí pudo cambiar—, sin recrear
+       ningún SVG. */
+    if (cuantasEntran === ultimaCuantasEntran) {
+      medirLasFlores();
+      return;
+    }
+    ultimaCuantasEntran = cuantasEntran;
+
+    enredaderaIzquierda.innerHTML = '';
+    enredaderaDerecha.innerHTML = '';
+    plantas.length = 0;
+
+    /* Lista plana de qué crear, con la MISMA semilla que le tocaría en el
+       viejo bucle anidado (i por fuera, lado por dentro): así el resultado
+       —qué planta sale en cada lugar— es idéntico, solo que ahora se puede
+       trocear en tandas sin desarmar el orden. */
+    const tareas = [];
     let semilla = 1;
-
     for (let i = 0; i < cuantasEntran; i++) {
-      [enredaderaIzquierda, enredaderaDerecha].forEach(lado => {
+      tareas.push({ i, lado: enredaderaIzquierda, semilla: semilla++ });
+      tareas.push({ i, lado: enredaderaDerecha,   semilla: semilla++ });
+    }
 
-        /* La altura donde nace también varía un poco, para que las dos
-           columnas no queden como espejo la una de la otra. */
-        const desfase = crearAzarConSemilla(semilla).entre(-90, 90);
-        const dondeNace = 240 + i * SEPARACION_ENTRE_PLANTAS + desfase;
+    /**
+     * Crea UNA planta (rama + nudos + flores) y la suma a `plantas`.
+     * @param {{i:number, lado:Element, semilla:number}} tarea
+     * @returns {void}
+     */
+    function crearUnaPlanta(tarea) {
+      const { i, lado, semilla } = tarea;
 
-        /* CUÁNTA LUZ RECIBE ESTA PLANTA, según lo hondo que esté en la
-           página. Arriba (cerca de la portada) ~1: pleno sol. En el fondo
-           ~0.15: penumbra. Con eso la planta se dibuja abierta y encendida
-           arriba, o cerrada y apagada abajo (ver dibujarPlanta). Es la
-           misma metáfora del océano que apaga los haces de luz. */
-        const luz = limitar(1 - dondeNace / altoDelDocumento, 0.15, 1);
+      /* La altura donde nace también varía un poco, para que las dos
+         columnas no queden como espejo la una de la otra. */
+      const desfase = crearAzarConSemilla(semilla).entre(-90, 90);
+      const dondeNace = 240 + i * SEPARACION_ENTRE_PLANTAS + desfase;
 
-        const planta = dibujarPlanta(semilla, luz);
+      /* CUÁNTA LUZ RECIBE ESTA PLANTA, según lo hondo que esté en la
+         página. Arriba (cerca de la portada) ~1: pleno sol. En el fondo
+         ~0.15: penumbra. Con eso la planta se dibuja abierta y encendida
+         arriba, o cerrada y apagada abajo (ver dibujarPlanta). Es la
+         misma metáfora del océano que apaga los haces de luz. */
+      const luz = limitar(1 - dondeNace / altoDelDocumento, 0.15, 1);
 
-        const contenedor = document.createElement('div');
-        contenedor.style.position = 'absolute';
-        contenedor.style.left = '0';
-        contenedor.style.width = '100%';
+      const planta = dibujarPlanta(semilla, luz);
 
-        /* La planta crece hacia ARRIBA desde su raíz, así que anclamos su
-           borde inferior en el punto donde queremos que esté plantada.
+      const contenedor = document.createElement('div');
+      contenedor.className = 'marco__planta';
+      contenedor.style.position = 'absolute';
+      contenedor.style.left = '0';
+      contenedor.style.width = '100%';
 
-           translateY(-100%) sube el bloque exactamente su propia altura,
-           sea cual sea. Es importante hacerlo así y no con una cuenta:
-           el alto del dibujo está en unidades del SVG, no en píxeles, y
-           mezclarlos daría posiciones distintas en cada pantalla. */
-        contenedor.style.top = dondeNace + 'px';
-        contenedor.style.transform = 'translateY(-100%)';
-        contenedor.innerHTML = planta.svg;
-        lado.appendChild(contenedor);
+      /* (Acá hubo un aspect-ratio para sostener un content-visibility que se
+         revirtió: recortaba tallos y flores. El alto vuelve a salir del
+         contenido, como siempre. Ver la nota de .marco__planta en
+         estilos/02-marco-victoriano.css.) */
 
-        const azarDeMovimiento = crearAzarConSemilla(semilla * 7919);
+      /* La planta crece hacia ARRIBA desde su raíz, así que anclamos su
+         borde inferior en el punto donde queremos que esté plantada.
 
-        /* Los nudos del tallo, con su propio resorte cada uno.
-           El de más abajo es el más rígido (es la parte leñosa) y se van
-           ablandando hacia la punta, igual que una rama de verdad. */
-        const nudos = Array.from(contenedor.querySelectorAll('.nudo-del-tallo'));
-        const estadoDeLosNudos = nudos.map((nudo, k) => {
-          const dureza = 1.9 - 1.25 * (k / Math.max(1, nudos.length - 1));
-          return {
-            elemento: nudo,
-            pivoteX: parseFloat(nudo.dataset.pivoteX) || 0,
-            pivoteY: parseFloat(nudo.dataset.pivoteY) || 0,
-            flexion: 0,
-            velocidadDeLaFlexion: 0,
-            rigidez: RIGIDEZ_DEL_NUDO * dureza,
-            amortiguacion: AMORTIGUACION_DEL_NUDO * azarDeMovimiento.entre(0.85, 1.2),
-            faseDeRespiracion: azarDeMovimiento.entre(0, Math.PI * 2),
-            // Posición en pantalla; se recalcula al medir
-            xEnPantalla: 0,
-            yEnPantalla: 0,
-          };
-        });
+         translateY(-100%) sube el bloque exactamente su propia altura,
+         sea cual sea. Es importante hacerlo así y no con una cuenta:
+         el alto del dibujo está en unidades del SVG, no en píxeles, y
+         mezclarlos daría posiciones distintas en cada pantalla. */
+      contenedor.style.top = dondeNace + 'px';
+      contenedor.style.transform = 'translateY(-100%)';
+      contenedor.innerHTML = planta.svg;
+      lado.appendChild(contenedor);
 
-        plantas.push({
-          elemento: contenedor.querySelector('.racimo-de-rosas'),
-          flores: Array.from(contenedor.querySelectorAll('.flor-de-enredadera')),
-          nudos: estadoDeLosNudos,
-          /* Las plantas del lado derecho están reflejadas por CSS, así que
-             lo que en el dibujo va hacia la derecha, en pantalla va hacia
-             la izquierda. Hay que saberlo para que el empujón del mouse
-             doble el tallo hacia el lado correcto. */
-          espejada: lado === enredaderaDerecha,
-          alturaEnLaPagina: dondeNace,
+      const azarDeMovimiento = crearAzarConSemilla(semilla * 7919);
 
-          /* Estado del resorte de la planta entera */
-          inclinacion: 0,
-          velocidadDeLaInclinacion: 0,
+      /* Los nudos del tallo, con su propio resorte cada uno.
+         El de más abajo es el más rígido (es la parte leñosa) y se van
+         ablandando hacia la punta, igual que una rama de verdad. */
+      const nudos = Array.from(contenedor.querySelectorAll('.nudo-del-tallo'));
+      const estadoDeLosNudos = nudos.map((nudo, k) => {
+        const dureza = 1.9 - 1.25 * (k / Math.max(1, nudos.length - 1));
+        return {
+          elemento: nudo,
+          pivoteX: parseFloat(nudo.dataset.pivoteX) || 0,
+          pivoteY: parseFloat(nudo.dataset.pivoteY) || 0,
 
-          /* Personalidad propia: nunca dos plantas iguales */
-          sensibilidad: azarDeMovimiento.entre(0.6, 1.35),
-          rigidez: RIGIDEZ_DE_LA_PLANTA * azarDeMovimiento.entre(0.7, 1.4),
-          amortiguacion: AMORTIGUACION_DE_LA_PLANTA * azarDeMovimiento.entre(0.8, 1.3),
-
-          /* Respiración de reposo: para que nunca queden congeladas */
-          amplitudDeRespiracion: azarDeMovimiento.entre(0.5, 1.6),
-          velocidadDeRespiracion: azarDeMovimiento.entre(0.25, 0.6),
+          /* El pivote va como `transform-origin` de CSS, escrito UNA sola
+             vez acá. Antes se re-formateaba en cada escritura del atributo
+             (240 cadenas de más por cuadro para decir siempre lo mismo), y
+             además obligaba a usar el atributo `transform`, que pasa por
+             layout. Con esto el giro es puro compositor. */
+          _origenFijado: (function () {
+            nudo.style.transformBox = 'view-box';
+            nudo.style.transformOrigin =
+              (parseFloat(nudo.dataset.pivoteX) || 0) + 'px ' +
+              (parseFloat(nudo.dataset.pivoteY) || 0) + 'px';
+            return true;
+          })(),
+          flexion: 0,
+          velocidadDeLaFlexion: 0,
+          rigidez: RIGIDEZ_DEL_NUDO * dureza,
+          amortiguacion: AMORTIGUACION_DEL_NUDO * azarDeMovimiento.entre(0.85, 1.2),
           faseDeRespiracion: azarDeMovimiento.entre(0, Math.PI * 2),
+          // Posición en pantalla; se recalcula al medir
+          xEnPantalla: 0,
+          yEnPantalla: 0,
+        };
+      });
 
-          /* Estado de cada flor */
-          estadoDeLasFlores: null,
-        });
+      plantas.push({
+        elemento: contenedor.querySelector('.racimo-de-rosas'),
+        flores: Array.from(contenedor.querySelectorAll('.flor-de-enredadera')),
+        nudos: estadoDeLosNudos,
+        /* Las plantas del lado derecho están reflejadas por CSS, así que
+           lo que en el dibujo va hacia la derecha, en pantalla va hacia
+           la izquierda. Hay que saberlo para que el empujón del mouse
+           doble el tallo hacia el lado correcto. */
+        espejada: lado === enredaderaDerecha,
+        // Ancho del viewBox de la trepadora (ver anchoDelLienzo en el ramillete).
+        anchoDelLienzo: ANCHO_DEL_LIENZO,
+        alturaEnLaPagina: dondeNace,
 
-        semilla++;
+        /* Estado del resorte de la planta entera */
+        inclinacion: 0,
+        velocidadDeLaInclinacion: 0,
+
+        /* Personalidad propia: nunca dos plantas iguales */
+        sensibilidad: azarDeMovimiento.entre(0.6, 1.35),
+        rigidez: RIGIDEZ_DE_LA_PLANTA * azarDeMovimiento.entre(0.7, 1.4),
+        amortiguacion: AMORTIGUACION_DE_LA_PLANTA * azarDeMovimiento.entre(0.8, 1.3),
+
+        /* Respiración de reposo: para que nunca queden congeladas */
+        amplitudDeRespiracion: azarDeMovimiento.entre(0.5, 1.6),
+        velocidadDeRespiracion: azarDeMovimiento.entre(0.25, 0.6),
+        faseDeRespiracion: azarDeMovimiento.entre(0, Math.PI * 2),
+
+        /* Estado de cada flor */
+        estadoDeLasFlores: null,
       });
     }
 
-    colocarLosRamilletesDeEsquina();
-    prepararLasFlores();
+    /* ⚡ TROCEADO EN TANDAS. Crear las ~22 plantas de una sola vez —cada
+       una con su propio SVG de rama, nudos y flores, más leer su
+       geometría después— podía bloquear el hilo principal casi medio
+       segundo DE UNA SOLA VEZ (una "tarea larga" bien gorda, detectable
+       con codigo/21-monitor-de-rendimiento.js). El resultado final es
+       IDÉNTICO se haga de una vez o de a poco; lo único que cambia es que,
+       de a poco, el navegador puede respirar entre tanda y tanda —pintar,
+       atender un clic— en vez de quedar congelado. */
+    /* Bajado de 4 a 2. Con 4, cada tanda construía cuatro SVG completos
+       —rama, nudos y hasta 60 rosas cada uno— y eso solo ya pasaba de los
+       16 ms que dura un cuadro. En la máquina objetivo (i5-4590T de 2 GHz)
+       el medidor llegó a marcar una tarea de 1101 ms encadenando tandas,
+       ramilletes y mediciones: un segundo entero de página congelada.
+       De a dos, ninguna tanda se pasa del presupuesto de un cuadro. */
+    const PLANTAS_POR_TANDA = 2;
+    let indice = 0;
+
+    function crearUnaTanda() {
+      // Entró una construcción más nueva: esta se apaga sin tocar nada.
+      if (!sigoVigente()) return;
+
+      const limite = Math.min(indice + PLANTAS_POR_TANDA, tareas.length);
+      for (; indice < limite; indice++) crearUnaPlanta(tareas[indice]);
+
+      if (indice < tareas.length) {
+        cederYSeguir(crearUnaTanda);
+      } else {
+        /* Recién cuando TODAS las plantas de la enredadera existen se pasa a
+           los ramilletes de esquina (uno por cuadro), y cuando ESOS terminan
+           —de ahí el callback— se prepara el estado de las flores, que
+           necesita que ya estén todas en la página. */
+        colocarLosRamilletesDeEsquina(prepararLasFlores, sigoVigente);
+      }
+    }
+    crearUnaTanda();
   }
 
   /**
@@ -1072,7 +1393,21 @@
   function prepararLasFlores() {
     let semilla = 5000;
 
-    for (const planta of plantas) {
+    /* ⚡ TAMBIÉN TROCEADO, POR EL MISMO MOTIVO QUE LAS PLANTAS.
+       Esto recorre las ~256 flores y hace un querySelector en cada una para
+       encontrar su grupo móvil. Todo de golpe, encadenado detrás de la
+       construcción de las plantas y de los dos ramilletes, era parte de la
+       tarea de 1101 ms que marcó el medidor.
+
+       Se hace planta por planta, cediendo el hilo entre una y otra: el
+       resultado es idéntico, pero el navegador puede pintar y atender clics
+       mientras tanto. */
+    let cualPlanta = 0;
+
+    function prepararUnaPlanta() {
+      if (cualPlanta >= plantas.length) { medirLasFlores(); return; }
+
+      const planta = plantas[cualPlanta++];
       planta.estadoDeLasFlores = planta.flores.map(flor => {
         const azar = crearAzarConSemilla(semilla++);
         const escala = parseFloat(flor.dataset.escala) || 0.5;
@@ -1082,6 +1417,13 @@
           // Posición en el documento; se calcula al medir
           xEnElDocumento: 0,
           yEnElDocumento: 0,
+
+          /* Dónde está esta flor DENTRO del dibujo (coordenadas del viewBox).
+             Con esto y la caja del dibujo entero se puede calcular su lugar
+             en pantalla sin preguntárselo al navegador flor por flor: ver
+             medirUnaPlanta. */
+          xEnElDibujo: parseFloat(flor.dataset.x) || 0,
+          yEnElDibujo: parseFloat(flor.dataset.y) || 0,
 
           /* Estado del doblado. Es UN SOLO número: cuántos grados está
              inclinada la flor sobre su pedúnculo. No hay desplazamiento
@@ -1094,16 +1436,23 @@
              cuanto más grande sea la flor. */
           largoDelPeduculo: 6 + 34 * escala,
 
+          /* La cola del atributo `transform`, armada una sola vez: el cuello
+             de la flor no se mueve nunca. Ver la nota de textoDelPivote. */
+          textoDelCuello: ' 0 ' + (6 + 34 * escala).toFixed(1) + ')',
+
+          /* No hay amplitud, velocidad ni fase propias: la flor ya no
+             respira por su cuenta. El vaivén de reposo lo carga el tallo
+             (ver VAIVEN_DEL_NUDO) y la flor solo se mueve cuando el mouse
+             la empuja, para no reescribir su transform eternamente. */
           rigidez: RIGIDEZ_DE_LA_FLOR * azar.entre(0.7, 1.4),
           amortiguacion: AMORTIGUACION_DE_LA_FLOR * azar.entre(0.8, 1.25),
-          amplitud: azar.entre(0.6, 1.5),
-          velocidadPropia: azar.entre(0.4, 1.1),
-          fase: azar.entre(0, Math.PI * 2),
         };
       });
+
+      cederYSeguir(prepararUnaPlanta);
     }
 
-    medirLasFlores();
+    prepararUnaPlanta();
   }
 
   /**
@@ -1115,31 +1464,99 @@
    * flores dejaría la web pegada. Como la posición en el documento no
    * cambia al hacer scroll, alcanza con restarle después cuánto se bajó.
    *
+   * ⚡ SE MIDE DE A TANDAS, NO TODO DE UNA. Entre las enredaderas y los dos
+   * ramilletes de las esquinas hay unas 300 flores, y cada
+   * getBoundingClientRect() obliga al navegador a recalcular la página. Las
+   * 300 seguidas, en un solo bloque, congelaban el hilo principal casi un
+   * segundo (una "tarea larga" medible con 21-monitor-de-rendimiento.js) —
+   * justo al cargar, que es cuando peor se siente.
+   *
+   * Trocearlo NO cambia NADA de lo que se ve: estas medidas solo sirven
+   * para saber si el mouse está cerca de una flor, y hasta que la persona
+   * no mueva el mouse hasta ahí, da igual que se hayan terminado de medir
+   * en el cuadro 1 o en el cuadro 6. El dibujo es idéntico.
+   *
    * @returns {void}
    */
+  const PLANTAS_MEDIDAS_POR_TANDA = 3;
+  let medicionEnCurso = false;
+  let hayOtraMedicionPedida = false;
+
   function medirLasFlores() {
-    const desplazamientoDelScroll = window.scrollY;
+    /* Si ya hay una medición troceada corriendo, no se arrancan dos a la vez
+       pisándose (pasa cuando 'load', 'resize' e 'invitacion-visible' caen
+       casi juntos), pero SÍ se anota que hay que repetirla al terminar: si el
+       pedido llegó por un resize, las posiciones que se están midiendo ahora
+       ya quedaron viejas y hay que rehacerlas. */
+    if (medicionEnCurso) { hayOtraMedicionPedida = true; return; }
+    medicionEnCurso = true;
 
-    for (const planta of plantas) {
-      if (!planta.estadoDeLasFlores) continue;
+    let indiceDePlanta = 0;
 
-      planta.estadoDeLasFlores.forEach((estado, indice) => {
-        const caja = planta.flores[indice].getBoundingClientRect();
-        estado.xEnElDocumento = caja.left + caja.width / 2;
-        estado.yEnElDocumento = caja.top + caja.height / 2 + desplazamientoDelScroll;
-      });
+    function medirUnaTanda() {
+      const desplazamientoDelScroll = window.scrollY;
+      const limite = Math.min(indiceDePlanta + PLANTAS_MEDIDAS_POR_TANDA, plantas.length);
 
-      /* Los nudos del tallo se ubican con una sola medición por planta.
-         Preguntar la posición de cada nudo por separado sería carísimo, y
-         además su caja cambia al doblarse. En cambio, con la caja del
+      for (; indiceDePlanta < limite; indiceDePlanta++) {
+        medirUnaPlanta(plantas[indiceDePlanta], desplazamientoDelScroll);
+      }
+
+      if (indiceDePlanta < plantas.length) {
+        cederYSeguir(medirUnaTanda);
+        return;
+      }
+
+      medicionEnCurso = false;
+      if (hayOtraMedicionPedida) {
+        hayOtraMedicionPedida = false;
+        cederYSeguir(medirLasFlores);
+      }
+    }
+    medirUnaTanda();
+  }
+
+  /**
+   * Mide una sola planta (sus flores y sus nudos).
+   * @param {Object} planta
+   * @param {number} desplazamientoDelScroll
+   * @returns {void}
+   */
+  function medirUnaPlanta(planta, desplazamientoDelScroll) {
+    {
+      if (!planta.estadoDeLasFlores) return;
+
+      /* UNA SOLA MEDICIÓN POR PLANTA, para las flores y para los nudos.
+         Preguntar la posición de cada elemento por separado sería carísimo,
+         y además su caja cambia al doblarse. En cambio, con la caja del
          dibujo entero se puede convertir cualquier coordenada del SVG a
          píxeles de pantalla con una regla de tres:
 
              píxeles = borde del dibujo + coordenada × escala
 
-         donde escala = ancho en pantalla ÷ ancho del lienzo (120). */
+         donde escala = ancho en pantalla ÷ ancho del lienzo. */
       const cajaDelDibujo = planta.elemento.getBoundingClientRect();
-      const escalaEnPantalla = cajaDelDibujo.width / ANCHO_DEL_LIENZO;
+      const escalaEnPantalla = cajaDelDibujo.width / planta.anchoDelLienzo;
+
+      /* ⚡ ANTES ACÁ HABÍA UN getBoundingClientRect() POR FLOR.
+         Con ~256 flores en pantalla eso eran 256 layouts forzados cada vez
+         que se medía: el perfil lo mostraba como el 7,4 % de "Recalculate
+         style" y 2 % de "Layout", todo bajo medirUnaTanda. La posición de
+         una flor ya la sabemos sin preguntar: quedó guardada en data-x/data-y
+         al dibujarla (son sus coordenadas dentro del viewBox), así que se
+         deriva con la MISMA regla de tres que los nudos.
+
+         Nota: se usa el punto de anclaje de la flor (su cuello) en vez del
+         centro de su caja. Es la referencia correcta —es el punto que no se
+         mueve cuando la flor cabecea— y encima es más estable que un centro
+         que cambiaba con cada inclinación. */
+      for (const estado of planta.estadoDeLasFlores) {
+        estado.xEnElDocumento = planta.espejada
+          ? cajaDelDibujo.right - estado.xEnElDibujo * escalaEnPantalla
+          : cajaDelDibujo.left  + estado.xEnElDibujo * escalaEnPantalla;
+        estado.yEnElDocumento = cajaDelDibujo.top +
+                                estado.yEnElDibujo * escalaEnPantalla +
+                                desplazamientoDelScroll;
+      }
 
       for (const nudo of planta.nudos) {
         /* En el lado derecho el dibujo está reflejado, así que el eje X va
@@ -1153,7 +1570,37 @@
     }
   }
 
-  repartirPlantas();
+  /* ⚡ LA CONSTRUCCIÓN NO ARRANCA HASTA QUE LA PÁGINA YA PINTÓ.
+     Antes esta línea era `repartirPlantas()` a secas, ejecutándose en medio
+     de la evaluación del script. Y esta función construye ~24 plantas y los
+     dos ramilletes: miles de nodos SVG, con su parseo de innerHTML incluido.
+     Todo eso caía DENTRO de "Evaluate script" —1.653 ms, el 40,7 % del
+     perfil— y bloqueaba el primer pintado: el LCP se iba a 12,4 segundos.
+
+     Nada de esto se ve antes de abrir el sobre, así que no hay ninguna razón
+     para que retrase la portada. Arranca con lo que ocurra primero:
+
+       · el sobre se abre (`invitacion-visible`), que es cuando de verdad
+         hacen falta las enredaderas; o
+       · dos segundos después del primer pintado, como red de seguridad por
+         si alguien llega con las animaciones apagadas o el sobre salteado.
+
+     `unaSolaVez` garantiza que las dos vías no la lancen dos veces. */
+  let yaSeConstruyo = false;
+  function construirUnaSolaVez() {
+    if (yaSeConstruyo) return;
+    yaSeConstruyo = true;
+    repartirPlantas();
+  }
+
+  document.addEventListener('invitacion-visible', construirUnaSolaVez);
+
+  /* Doble rAF = "después del primer pintado de verdad". El setTimeout de
+     dentro le da aire al navegador para asentar la portada antes de ponerse
+     a construir el marco. */
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    setTimeout(construirUnaSolaVez, 2000);
+  }));
 
 
   /* ─── 6. MOVIMIENTO ────────────────────────────────────────────── */
@@ -1178,6 +1625,32 @@
   let momentoAnterior = performance.now();
   let tiempoTranscurrido = 0;
 
+  /* ─── CALIDAD GRÁFICA: ALIGERAR SIN EMPOBRECER ──────────────────────
+     Esta es la parte más cara de toda la web para la CPU: por cada nudo del
+     tallo y por cada flor CERCA de la pantalla, cada cuadro calcula la
+     distancia al mouse (una raíz cuadrada), integra un resorte y ESCRIBE el
+     SVG (setAttribute, más caro que un style.transform de HTML). En un
+     equipo sin placa de video, con decenas de nudos y flores a la vez,
+     todo eso repetido 60 veces por segundo es el mayor costo de la web.
+
+     En calidad media/baja, ese bloque entero —cercanía al mouse, resorte y
+     escritura— se ejecuta cada 2 o 3 cuadros en vez de todos. El empujón
+     del mouse no se diluye: se guarda cuánto tiempo real pasó desde la
+     última vez (dtAcumulado) y se usa ESE valor al calcular el torque, así
+     que un manotazo sigue empujando con la misma fuerza total, solo que la
+     rama tarda un poquito más en reaccionar y se repinta con menos
+     frecuencia —el mismo criterio que ya se usa para el titileo de las
+     velas: una rama de verdad tampoco responde con precisión de cuadro. */
+  let calidad = nivelDeCalidad();
+  const SALTO_DEL_RESORTE_POR_CALIDAD = { 0: 1, 1: 2, 2: 3 };
+  let saltoDelResorte = SALTO_DEL_RESORTE_POR_CALIDAD[calidad] ?? 1;
+  let contadorDeCuadro = 0;
+  let dtAcumulado = 0;
+  document.addEventListener('calidad-cambio', evento => {
+    calidad = (evento.detail && evento.detail.calidad) ?? 0;
+    saltoDelResorte = SALTO_DEL_RESORTE_POR_CALIDAD[calidad] ?? 1;
+  });
+
   /**
    * Un cuadro de animación: mece las plantas según el scroll y aparta
    * las flores que estén cerca del mouse.
@@ -1201,12 +1674,24 @@
     momentoAnterior = momentoActual;
     tiempoTranscurrido += dt;
 
-    const posicionActual = window.scrollY;
+    /* scrollActual() y no window.scrollY: preguntarle el scroll al navegador
+       dentro del bucle lo obliga a recalcular estilos (ver 02-utilidades.js). */
+    const posicionActual = scrollActualY();
     const velocidadDelScroll = posicionActual - posicionDeScrollAnterior;
     posicionDeScrollAnterior = posicionActual;
 
     const arribaDeLaVentana = posicionActual;
     const abajoDeLaVentana = posicionActual + window.innerHeight;
+
+    /* Cada cuántos cuadros toca actualizar de verdad el resorte de nudos y
+       flores (ver la nota de más arriba). Mientras tanto se acumula el dt
+       real, para que el torque del cuadro que sí corre represente el
+       tiempo completo transcurrido y no se diluya. */
+    contadorDeCuadro++;
+    dtAcumulado += dt;
+    const tocaActualizarElResorte = (contadorDeCuadro % saltoDelResorte === 0);
+    const dtParaElTorque = dtAcumulado;
+    if (tocaActualizarElResorte) dtAcumulado = 0;
 
     for (const planta of plantas) {
       /* Si la planta está lejísimos de la pantalla no perdemos tiempo.
@@ -1233,7 +1718,22 @@
       planta.velocidadDeLaInclinacion += aceleracion;
       planta.inclinacion += planta.velocidadDeLaInclinacion;
 
-      planta.elemento.style.transform = `rotate(${planta.inclinacion.toFixed(2)}deg)`;
+      /* ⚡ Solo se escribe si el ángulo cambió, Y SE COMPARA CON ENTEROS.
+         Antes esto hacía `inclinacion.toFixed(2)` para comparar, y ahí
+         estaba un error grande: toFixed() FABRICA UN STRING cada vez que se
+         llama, incluso cuando después no se escribe nada. Entre plantas,
+         nudos, flores y el relicario eran ~200 cadenas por cuadro —unas
+         12.000 por segundo— que iban derechas al recolector de basura. En el
+         perfil, "Major GC" figuraba con el 23 % del tiempo.
+
+         Redondear a centésimas de grado con Math.round da un ENTERO, que se
+         compara sin reservar memoria. El string se arma solo cuando de
+         verdad hay algo nuevo que escribir. Mismo resultado en pantalla. */
+      const giroDeLaPlanta = Math.round(planta.inclinacion * 100);
+      if (giroDeLaPlanta !== planta.ultimoGiroEscrito) {
+        planta.ultimoGiroEscrito = giroDeLaPlanta;
+        planta.elemento.style.transform = `rotate(${giroDeLaPlanta / 100}deg)`;
+      }
 
       /* ── b) EL TALLO SE DOBLA ──
          Cada nudo se dobla por su cuenta según lo cerca que tenga el
@@ -1244,6 +1744,14 @@
          Y como las hojas y las flores viven DENTRO de los nudos, todo se
          mueve junto: nada se despega del tallo. */
       for (const nudo of planta.nudos) {
+        /* En calidad media/baja, todo este bloque —cercanía al mouse,
+           resorte y escritura del SVG— se salta en los cuadros de en medio
+           y se ejecuta entero cada 2 o 3 cuadros (ver la nota más arriba).
+           El torque usa dtParaElTorque (el tiempo real acumulado desde la
+           última vez), así que el empujón no se diluye por saltarse
+           cuadros: un manotazo sigue empujando con la misma fuerza total. */
+        if (!tocaActualizarElResorte) continue;
+
         const nudoX = nudo.xEnPantalla;
         const nudoY = nudo.yEnPantalla - posicionActual;
 
@@ -1261,13 +1769,13 @@
              reflejado, hay que invertir el signo o el tallo se doblaría
              justo para el lado contrario. */
           const empujeHorizontal = (distanciaX / distancia) * (planta.espejada ? -1 : 1);
-          torque = empujeHorizontal * FUERZA_DEL_MOUSE_EN_EL_TALLO * influenciaSuave * dt;
+          torque = empujeHorizontal * FUERZA_DEL_MOUSE_EN_EL_TALLO * influenciaSuave * dtParaElTorque;
         }
 
         // Respiración: un vaivén mínimo para que nunca quede congelado
         const vaivenDelNudo = Math.sin(
           tiempoTranscurrido * 0.5 + nudo.faseDeRespiracion
-        ) * 0.35;
+        ) * VAIVEN_DEL_NUDO;
 
         nudo.velocidadDeLaFlexion += (vaivenDelNudo - nudo.flexion) * nudo.rigidez -
                                      nudo.velocidadDeLaFlexion * nudo.amortiguacion +
@@ -1278,10 +1786,26 @@
           -FLEXION_MAXIMA_DEL_NUDO, FLEXION_MAXIMA_DEL_NUDO
         );
 
-        nudo.elemento.setAttribute(
-          'transform',
-          `rotate(${nudo.flexion.toFixed(2)} ${nudo.pivoteX.toFixed(1)} ${nudo.pivoteY.toFixed(1)})`
-        );
+        /* ⚡ Comparación con ENTEROS, no con cadenas (ver la nota de la
+           planta): son ~120 nudos por cuadro, y hacer toFixed() en cada uno
+           solo para comparar fabricaba 120 strings por cuadro que nadie
+           usaba. El pivote además se precalcula una vez al crear el nudo, en
+           vez de formatearlo en cada escritura. */
+        const giroDelNudo = Math.round(nudo.flexion * 100);
+        if (giroDelNudo !== nudo.ultimoGiroEscrito) {
+          nudo.ultimoGiroEscrito = giroDelNudo;
+
+          /* ⚡ `style.transform` Y NO `setAttribute('transform')`.
+             Parece lo mismo y no lo es: cambiar el ATRIBUTO transform de un
+             nodo SVG pasa por el camino de LAYOUT en Blink, porque los nodos
+             SVG tienen objetos de layout propios. El transform de CSS, en
+             cambio, lo resuelve el compositor sin tocar layout.
+
+             Son ~120 nudos por cuadro, y "Layout" figuraba con el 13 % del
+             perfil. El pivote va en `transform-origin`, fijado una sola vez
+             al crear el nudo (ver estilos/02-marco-victoriano.css). */
+          nudo.elemento.style.transform = 'rotate(' + (giroDelNudo / 100) + 'deg)';
+        }
       }
 
       /* ── c) Cada flor reacciona al mouse por su cuenta ── */
@@ -1289,10 +1813,6 @@
 
       for (const flor of planta.estadoDeLasFlores) {
         if (!flor.movil) continue;
-
-        // Dónde está esta flor en la pantalla ahora mismo
-        const florX = flor.xEnElDocumento;
-        const florY = flor.yEnElDocumento - posicionActual;
 
         /* ── CÓMO REACCIONA UNA FLOR AL MOUSE ──
            Una flor está pegada al tallo: NO se traslada ni sale volando.
@@ -1304,29 +1824,57 @@
            solo cuenta la parte HORIZONTAL, porque es la que la dobla de
            costado; empujar de frente no la mueve, la aplastaría contra el
            tallo, y eso no se ve en un dibujo plano. */
-        const distanciaX = florX - mouseX;
-        const distanciaY = florY - mouseY;
+        /* Igual que con los nudos: en calidad media/baja este bloque entero
+           se salta en los cuadros de en medio y se ejecuta cada 2 o 3
+           cuadros, con el torque escalado por el tiempo real acumulado
+           (dtParaElTorque) para que el empujón no se diluya. */
+        if (!tocaActualizarElResorte) continue;
+
+        // Dónde está esta flor en la pantalla ahora mismo
+        const distanciaX = flor.xEnElDocumento - mouseX;
+        const distanciaY = (flor.yEnElDocumento - posicionActual) - mouseY;
         const distancia = Math.hypot(distanciaX, distanciaY);
+        const laTocaElMouse = distancia < RADIO_DEL_MOUSE && distancia > 0.01;
+
+        /* ⚡ UNA FLOR QUIETA NO ESCRIBE NADA. Este es el otro medio arreglo
+           del problema de rendimiento (el primero fue sacarle el `filter`,
+           ver tonoDeLaFlor).
+
+           Antes cada flor tenía su propia respiración de reposo, así que
+           las ~350 flores escribían un `transform` nuevo para siempre,
+           aunque nadie las tocara. Cada una de esas escrituras ensucia el
+           árbol de propiedades de pintura del navegador, y con 350 por
+           cuadro el árbol se rearmaba entero sesenta veces por segundo.
+
+           Ahora una flor solo escribe si el mouse la está tocando o si
+           todavía se está acomodando después de un empujón. En reposo son
+           una decena, no trescientas cincuenta.
+
+           EL MOVIMIENTO NO SE PERDIÓ: lo carga el tallo. Los nudos
+           respiran y se mecen con el scroll, y las flores viven DENTRO de
+           los nudos, así que siguen cabeceando igual —solo que ahora las
+           mueve el tallo del que cuelgan, que es además como pasa de
+           verdad—. La amplitud del vaivén del nudo se subió para
+           compensar exactamente lo que aportaba cada flor por su cuenta
+           (ver VAIVEN_DEL_NUDO). */
+        const yaSeAcomodo = Math.abs(flor.velocidadDeLaFlexion) < VELOCIDAD_DESPRECIABLE &&
+                            Math.abs(flor.flexion) < FLEXION_DESPRECIABLE;
+        if (!laTocaElMouse && yaSeAcomodo) continue;
 
         let torque = 0;
-
-        if (distancia < RADIO_DEL_MOUSE && distancia > 0.01) {
+        if (laTocaElMouse) {
           // Cae al cuadrado: casi nulo en el borde, fuerte en el centro
           const influencia = 1 - distancia / RADIO_DEL_MOUSE;
           const influenciaSuave = influencia * influencia;
 
-          torque = (distanciaX / distancia) * FUERZA_DEL_MOUSE * influenciaSuave * dt;
+          torque = (distanciaX / distancia) * FUERZA_DEL_MOUSE * influenciaSuave * dtParaElTorque;
         }
-
-        // Respiración de reposo: un cabeceo lento, propio de cada flor
-        const reposo = Math.sin(
-          tiempoTranscurrido * flor.velocidadPropia + flor.fase
-        ) * flor.amplitud;
 
         /* Resorte amortiguado sobre el ÁNGULO (no sobre la posición):
            el tallo tiende a enderezarse, y el roce del aire va frenando
-           el vaivén hasta que se detiene. */
-        flor.velocidadDeLaFlexion += (reposo - flor.flexion) * flor.rigidez -
+           el vaivén hasta que se detiene. El reposo es cero: la flor
+           quiere volver a estar derecha sobre su pedúnculo. */
+        flor.velocidadDeLaFlexion += -flor.flexion * flor.rigidez -
                                      flor.velocidadDeLaFlexion * flor.amortiguacion +
                                      torque;
 
@@ -1336,14 +1884,28 @@
           -FLEXION_MAXIMA, FLEXION_MAXIMA
         );
 
+        /* Al terminar de acomodarse se la endereza EXACTO y se escribe una
+           última vez. Sin esto quedaría temblando en la milésima de grado
+           y nunca se la podría saltear. */
+        if (!laTocaElMouse &&
+            Math.abs(flor.velocidadDeLaFlexion) < VELOCIDAD_DESPRECIABLE &&
+            Math.abs(flor.flexion) < FLEXION_DESPRECIABLE) {
+          flor.flexion = 0;
+          flor.velocidadDeLaFlexion = 0;
+        }
+
         /* Se gira alrededor del CUELLO, que está por debajo de la flor.
            Ese punto de pivote es lo que convierte el giro en un cabeceo
            creíble: la flor describe un arco corto, como colgada de su
            tallo, en lugar de orbitar por el aire. */
-        flor.movil.setAttribute(
-          'transform',
-          `rotate(${flor.flexion.toFixed(2)} 0 ${flor.largoDelPeduculo.toFixed(1)})`
-        );
+        /* Mismo criterio que en los nudos: entero para comparar, y el resto
+           del atributo precalculado. Acá hay hasta ~255 flores. */
+        const giroDeLaFlor = Math.round(flor.flexion * 100);
+        if (giroDeLaFlor !== flor.ultimoGiroEscrito) {
+          flor.ultimoGiroEscrito = giroDeLaFlor;
+          flor.movil.setAttribute('transform',
+            'rotate(' + (giroDeLaFlor / 100) + flor.textoDelCuello);
+        }
       }
     }
 
@@ -1364,9 +1926,22 @@
     temporizadorDeRedimension = setTimeout(repartirPlantas, 350);
   });
 
+  /* ⛔ ACÁ NO VA UN LISTENER DE 'calidad-cambio' QUE RECONSTRUYA.
+     Se probó y fue el bug que hizo desaparecer el ramillete de la esquina
+     derecha: el gobernador cambia de nivel en los primeros segundos, o sea
+     justo cuando la construcción inicial todavía está en vuelo, y dos
+     corridas simultáneas se pisan el innerHTML de los mismos huecos.
+     Ver la nota de SEPARACION_ENTRE_PLANTAS al principio del archivo. */
+
   /* Las posiciones se vuelven a medir cuando la página termina de cargar
      (las imágenes pueden haber corrido el contenido). */
   window.addEventListener('load', medirLasFlores);
   document.addEventListener('invitacion-visible', () => setTimeout(medirLasFlores, 400));
+
+  /* (Acá hubo un IntersectionObserver que volvía a medir las flores cuando
+     una planta o un ramillete reaparecía en pantalla. Existía para sostener
+     el `content-visibility` que se revirtió —recortaba tallos y flores—, así
+     que ya no hace falta: nada se saltea, y las posiciones medidas al cargar
+     y en cada resize siguen siendo válidas todo el tiempo.) */
 
 })();

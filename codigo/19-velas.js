@@ -266,17 +266,64 @@
   /* ─── CIRIOS DE PISO ────────────────────────────────────────────────────
      Un cúmulo sobrio de cirios derretidos, a distinta altura, apoyados en el
      "piso" (la base de la sección). Pocos: mansión antigua, no fiesta. */
-  const PISO_VB_W = 240;
+  /* ── CUÁNTOS CIRIOS, SEGÚN LA PANTALLA ──
+     Eran cuatro fijos. En un monitor ultrapanorámico ese puñadito quedaba
+     perdido en la esquina; en un celular, cuatro ya llenaban. Ahora la
+     cantidad se ata al ancho de la ventana y el cúmulo se lee siempre con
+     el mismo peso visual.
+
+     El lienzo los dibuja a todos con un solo `drawImage` por resplandor, así
+     que duplicarlos no duplica el costo de compositing: son más estampas
+     sobre el MISMO canvas, no más capas. */
+  /* ⚠️ TOPE BAJO, Y APRENDIDO A GOLPES. Se pidió "el doble" de cuatro y yo
+     puse hasta quince: el medidor pasó de 52 velas a 96, y cada vela son dos
+     resplandores que el lienzo estampa en cada repintado. Duplicar está
+     bien; cuadruplicar hunde el rendimiento en un equipo con gráfica
+     integrada. Ocho es el doble de cuatro. */
+  const CUANTOS_CIRIOS = (() => {
+    const ancho = window.innerWidth;
+    if (ancho < 700)  return 5;
+    if (ancho < 1500) return 7;
+    return 8;
+  })();
+
+  /* El lienzo se ensancha con la cantidad, para que los cirios no se
+     apelotonen: ~30 unidades de viewBox por cirio más un margen. */
+  const PISO_VB_W = 110 + CUANTOS_CIRIOS * 30;
   const PISO_VB_H = 210;
   const PISO_SUELO = 196;                 // línea del piso en el viewBox
-  /* ⚠️ EN EL MISMO ORDEN en que se dibujan los cirios abajo (svgCirios), para
-     que cada fuego se enlace con su llama por índice. */
-  const PISO_LLAMAS = [
-    { x: 160, y: 76  - 6 },
-    { x: 66,  y: 46  - 6 },
-    { x: 120, y: 100 - 6 },
-    { x: 100, y: 136 - 6 },
-  ];
+
+  /* ── EL CÚMULO, GENERADO ──
+     Antes las cuatro posiciones estaban escritas a mano y había que
+     mantener a la par la lista de llamas: cualquier cambio en una y no en
+     la otra desenlazaba los fuegos de sus mechas. Ahora salen de la misma
+     fuente, así que no pueden desincronizarse.
+
+     Con semilla fija: el cúmulo es siempre el mismo dibujo, no cambia entre
+     recargas. */
+  const CIRIOS = (() => {
+    const azar = crearAzarConSemilla(4242);
+    const lista = [];
+    const paso = (PISO_VB_W - 70) / Math.max(1, CUANTOS_CIRIOS - 1);
+
+    for (let i = 0; i < CUANTOS_CIRIOS; i++) {
+      lista.push({
+        x: 35 + i * paso + azar.entre(-10, 10),
+        /* Alturas muy dispares: un cúmulo de cirios consumidos de forma
+           pareja parece de fábrica. Los hay recién puestos y casi extintos. */
+        topY: azar.entre(38, 150),
+        w: azar.entre(8.5, 16),
+      });
+    }
+
+    /* De atrás hacia adelante: los más altos se dibujan primero para que los
+       de delante los tapen y el cúmulo tenga profundidad. */
+    lista.sort((a, b) => a.topY - b.topY);
+    return lista;
+  })();
+
+  /** Las llamas, derivadas del MISMO cúmulo: enlace por índice garantizado. */
+  const PISO_LLAMAS = CIRIOS.map(c => ({ x: c.x, y: c.topY - 6 }));
 
   /**
    * Un cirio de piso derretido: base de cera escurrida + cuerpo + goterones
@@ -313,19 +360,28 @@
       ${llamaEn(cx, topY - 4, 1.05)}`;
   }
 
+  /* Un par de tocones derretidos SIN llama, repartidos entre los cirios
+     encendidos. Son los que ya se consumieron: pueblan el cúmulo y cuentan
+     que esto lleva años encendiéndose, sin sumar un fuego más que animar. */
+  function toconEn(cx, altura) {
+    const cima = PISO_SUELO - altura;
+    return `
+      <path d="M${cx - 10} ${PISO_SUELO} C ${cx - 12} ${cima + 6}, ${cx - 6} ${cima}, ${cx} ${cima}
+               C ${cx + 6} ${cima}, ${cx + 12} ${cima + 6}, ${cx + 10} ${PISO_SUELO} Z"
+            fill="url(#apl-cera)" opacity=".9"/>
+      <ellipse cx="${cx}" cy="${cima}" rx="10" ry="3" fill="#efe2c4" opacity=".9"/>`;
+  }
+
   const svgCirios =
     `<svg class="aplique-svg" viewBox="0 0 ${PISO_VB_W} ${PISO_VB_H}" width="100%" aria-hidden="true">
-      <!-- sombra del cúmulo sobre el piso -->
-      <ellipse cx="115" cy="${PISO_SUELO + 4}" rx="96" ry="9" fill="url(#apl-sombra)" opacity=".45"/>
-      <!-- de atrás hacia adelante, para que se solapen con orden -->
-      ${cirioEn(160, 76, 11)}
-      ${cirioEn(66,  46, 15)}
-      ${cirioEn(120, 100, 13)}
-      ${cirioEn(100, 136, 10)}
-      <!-- un tocón derretido sin llama, para poblar sin recargar -->
-      <path d="M186 ${PISO_SUELO} C 184 178, 190 172, 196 172 C 202 172, 208 178, 206 ${PISO_SUELO} Z"
-            fill="url(#apl-cera)" opacity=".9"/>
-      <ellipse cx="196" cy="172" rx="10" ry="3" fill="#efe2c4" opacity=".9"/>`;
+      <!-- sombra del cúmulo sobre el piso, del ancho que le toque -->
+      <ellipse cx="${PISO_VB_W / 2}" cy="${PISO_SUELO + 4}"
+               rx="${PISO_VB_W * 0.42}" ry="9" fill="url(#apl-sombra)" opacity=".45"/>
+      <!-- los cirios, ya ordenados de atrás hacia adelante -->
+      ${CIRIOS.map(c => cirioEn(c.x, c.topY, c.w)).join('')}
+      <!-- tocones consumidos, en los huecos de los extremos -->
+      ${toconEn(PISO_VB_W - 26, 24)}
+      ${toconEn(18, 18)}`;
   // (el SVG de cirios se cierra abajo, al insertarlo, con </svg>)
 
 
@@ -349,7 +405,16 @@
   /** Descriptor de cada tipo de pieza: su dibujo, su viewBox y sus llamas. */
   const TIPOS = {
     pared: { svg: svgCandelabro,          vbW: PARED_VB_W, vbH: PARED_VB_H, llamas: PARED_LLAMAS, factor: 1,    apoyo: 'centro' },
-    piso:  { svg: svgCirios + '</svg>',   vbW: PISO_VB_W,  vbH: PISO_VB_H,  llamas: PISO_LLAMAS,  factor: 0.72, apoyo: 'piso' },
+    /* El `factor` crece con el lienzo: si el viewBox se ensanchó para meter
+       más cirios, la pieza tiene que ocupar más ancho en pantalla o cada
+       cirio saldría más chico. 240 era el ancho del cúmulo de cuatro. */
+    piso:  { svg: svgCirios + '</svg>',   vbW: PISO_VB_W,  vbH: PISO_VB_H,  llamas: PISO_LLAMAS,  factor: 0.72 * (PISO_VB_W / 240), apoyo: 'piso',
+             /* Devuelve el halo a su tamaño por vela pese a que la pieza se
+                ensanchó, y lo baja un poco más según cuántos cirios haya: la
+                luz se SUMA, así que quince halos al mismo brillo que cuatro
+                queman la esquina. La raíz cuadrada mantiene el conjunto con
+                el mismo peso luminoso sin apagar cada vela por separado. */
+             escalaDelResplandor: (240 / PISO_VB_W) * Math.pow(4 / CUANTOS_CIRIOS, 0.4) },
   };
 
   /**
@@ -385,6 +450,26 @@
     cont.innerHTML = t.svg;
     capaApliques.appendChild(cont);
 
+    /* ⚡ UN CONTENEDOR DE MEZCLA POR PIEZA (ni uno gigante, ni uno por luz).
+       La mezcla "screen" es lo que hace que estas luces SUMEN claridad sobre
+       lo que tienen debajo en vez de taparlo. Dónde se aplica esa mezcla es
+       una decisión de rendimiento, y se probaron los dos extremos midiendo:
+
+         · En la capa que cubre TODO el documento: una sola capa, pero de
+           millones de píxeles que hay que releer y remezclar cada vez que una
+           llama titila → "Commit" se disparaba al 25,6 %.
+         · En cada .vela por separado: áreas chiquitas, pero el navegador
+           arma UNA CAPA POR ELEMENTO, y son 52 → "Layerize" saltó de 5,8 % a
+           22,3 %, y "Pre-paint" de 4,1 % a 18,1 %. Peor todavía.
+
+       El punto medio correcto es este: una capa de mezcla POR PIEZA (los 6
+       candelabros y los 2 cúmulos de cirios). Son 8 capas, cada una del
+       tamaño de su candelabro y no del documento. Las luces se cuelgan de
+       acá y se ubican en coordenadas RELATIVAS a este contenedor. */
+    const luzDeLaPieza = document.createElement('div');
+    luzDeLaPieza.className = 'luz-de-pieza';
+    capaLuz.appendChild(luzDeLaPieza);
+
     /* Cada .llama del dibujo se enlaza por índice con su fuego (por eso las
        listas de llamas están en el mismo orden en que se dibujan). */
     const llamaNodes = Array.from(cont.querySelectorAll('.llama'));
@@ -397,8 +482,8 @@
       nucleo.className = 'vela vela--nucleo';
       const derrame = document.createElement('div');
       derrame.className = 'vela vela--derrame';
-      capaLuz.appendChild(derrame);   // el derrame va debajo del núcleo
-      capaLuz.appendChild(nucleo);
+      luzDeLaPieza.appendChild(derrame);   // el derrame va debajo del núcleo
+      luzDeLaPieza.appendChild(nucleo);
 
       const base = 0.62 + Math.random() * 0.22;
       nucleo.style.opacity  = base.toFixed(3);
@@ -415,7 +500,7 @@
       };
     });
 
-    return { cont, lado: a.lado, tipo: a.tipo, seccion, fuegos, t, caja: null };
+    return { cont, luzDeLaPieza, lado: a.lado, tipo: a.tipo, seccion, fuegos, t, caja: null };
   }).filter(Boolean);
 
 
@@ -449,10 +534,56 @@
     return document.documentElement.scrollHeight - grosor * 0.65;
   }
 
-  function acomodarTodo() {
+  /**
+   * Acomoda las 8 piezas… DE A UNA POR CUADRO.
+   *
+   * ⚠️ ERA LA ÚLTIMA CONSTRUCCIÓN GRANDE SIN TROCEAR, y se notaba: el
+   * medidor marcaba tareas largas de más de un segundo. Cada pieza lee la
+   * geometría de la caja de texto de su sección (`getBoundingClientRect`,
+   * que obliga al navegador a resolver el layout) y coloca hasta ocho
+   * fuegos. Las ocho de corrido, encadenadas detrás de la construcción de
+   * las enredaderas, congelaban la página justo al abrir el sobre.
+   *
+   * Un promedio de 29 ms por cuadro con un parón de 1.200 ms se siente PEOR
+   * que 40 ms constantes: lo que se percibe como pesadez es el tirón, no la
+   * media. De a una, ninguna pasada se sale del presupuesto de un cuadro.
+   *
+   * @param {Function} [alTerminar] - Se llama cuando están todas colocadas.
+   * @returns {void}
+   */
+  function acomodarTodo(alTerminar) {
     const anchoRef = anchoBase();
+    let cual = 0;
 
-    for (const c of piezas) {
+    function acomodarUna() {
+      if (cual >= piezas.length) {
+        if (window.LienzoDeLuz && window.LienzoDeLuz.activo) rearmarLasFuentesDeLuz();
+        if (typeof alTerminar === 'function') alTerminar();
+        return;
+      }
+
+      const c = piezas[cual++];
+      colocarPieza(c, anchoRef);
+      cederElHilo(acomodarUna);
+    }
+
+    acomodarUna();
+  }
+
+  /** Cede el hilo al navegador; con la pestaña oculta rAF no corre. */
+  function cederElHilo(seguir) {
+    if (document.hidden) setTimeout(seguir, 0);
+    else requestAnimationFrame(seguir);
+  }
+
+  /**
+   * Coloca UNA pieza: el candelabro y todos sus fuegos.
+   * @param {Object} c
+   * @param {number} anchoRef
+   * @returns {void}
+   */
+  function colocarPieza(c, anchoRef) {
+    {
       const t = c.t;
       const ancho  = anchoRef * t.factor;
       const alto   = ancho * (t.vbH / t.vbW);
@@ -491,9 +622,61 @@
         hayCaja = true;
       }
 
-      const tamNucleo  = ancho * 0.85;
-      const tamDerrameMax = ancho * 2.2;
+      /* ⚠️ EL RESPLANDOR ES DE CADA VELA, NO DE LA PIEZA ENTERA.
+         Esto causó un desastre: al ensanchar el cúmulo de cirios para meter
+         más, `ancho` creció 2,3 veces… y como el tamaño del halo salía de
+         `ancho`, cada halo creció 2,3 veces TAMBIÉN. Con 15 cirios en vez de
+         4, y sumándose de forma aditiva, la esquina se convertía en una
+         mancha blanca.
+
+         `escalaDelResplandor` devuelve el halo a su tamaño por vela: la
+         pieza puede ser todo lo ancha que haga falta, que cada llama sigue
+         iluminando lo mismo. */
+      const escalaDelResplandor = t.escalaDelResplandor ?? 1;
+      const tamNucleo  = ancho * 0.85 * escalaDelResplandor;
+      const tamDerrameMax = ancho * 2.2 * escalaDelResplandor;
       const radioMax = tamDerrameMax / 2;
+
+      /* ⚡ EL CONTENEDOR DE MEZCLA SE AJUSTA A LA LUZ, NO AL CANDELABRO.
+         Antes cubría el candelabro ENTERO más un margen: pero las llamas
+         están todas arriba, en los brazos, y el cuerpo del candelabro no
+         emite nada. Medido en la página viva, cuatro de estas cajas tenían
+         el 87 % de su área vacía.
+
+         Y no es área cualquiera: `mix-blend-mode` obliga al compositor a
+         LEER DE VUELTA el fondo de toda la caja antes de dibujar, aunque
+         esté vacía. Entre las 8 piezas se leían 1,7 millones de píxeles de
+         más en cada cuadro; en el perfil, "Layerize" + "Commit" juntos eran
+         el 50 % del tiempo.
+
+         Ahora la caja es exactamente la unión de los resplandores: el centro
+         de cada llama más el radio máximo del derrame en las cuatro
+         direcciones. NO PUEDE RECORTAR NADA, porque ese radio es por
+         definición lo más lejos que llega la luz de esa llama. */
+      let luzX0 = Infinity, luzY0 = Infinity, luzX1 = -Infinity, luzY1 = -Infinity;
+      for (const fuego of c.fuegos) {
+        const xL = (c.lado === 'izq')
+          ? fuego.puntoSvg.x * escala
+          : (t.vbW - fuego.puntoSvg.x) * escala;
+        const cxf = izquierdaPieza + xL;
+        const cyf = topPieza + fuego.puntoSvg.y * escala;
+        luzX0 = Math.min(luzX0, cxf - radioMax); luzX1 = Math.max(luzX1, cxf + radioMax);
+        luzY0 = Math.min(luzY0, cyf - radioMax); luzY1 = Math.max(luzY1, cyf + radioMax);
+      }
+      // Si la pieza no tuviera llamas, se cae al comportamiento de antes.
+      if (!isFinite(luzX0)) {
+        luzX0 = izquierdaPieza - radioMax;
+        luzY0 = topPieza - radioMax;
+        luzX1 = izquierdaPieza + ancho + radioMax;
+        luzY1 = topPieza + alto + radioMax;
+      }
+
+      const origenX = luzX0;
+      const origenY = luzY0;
+      c.luzDeLaPieza.style.left   = origenX + 'px';
+      c.luzDeLaPieza.style.top    = origenY + 'px';
+      c.luzDeLaPieza.style.width  = (luzX1 - luzX0) + 'px';
+      c.luzDeLaPieza.style.height = (luzY1 - luzY0) + 'px';
 
       for (const fuego of c.fuegos) {
         const xLocal = (c.lado === 'izq')
@@ -521,31 +704,88 @@
         }
         fuego.atenua = atenua;
 
-        /* Núcleo: siempre en la capa de luz, sobre la llama (no se atenúa). */
+        /* El derrame cambia de capa ANTES de ubicarlo, porque de eso depende
+           en qué sistema de coordenadas hay que escribirlo: dentro del
+           contenedor de la pieza van relativas a su origen; si se lo manda
+           detrás del texto vive en #apliques, que va en coordenadas del
+           documento. */
+        if (detras !== fuego.detras) {
+          fuego.detras = detras;
+          const capaObjetivo = detras ? capaApliques : c.luzDeLaPieza;
+          if (fuego.derrame.parentNode !== capaObjetivo) capaObjetivo.appendChild(fuego.derrame);
+          fuego.derrame.classList.toggle('vela--detras', detras);
+        }
+
+        /* Núcleo: siempre dentro del contenedor de mezcla de su pieza, así
+           que sus coordenadas van relativas a ese origen. */
         fuego.nucleo.style.width  = tamNucleo + 'px';
         fuego.nucleo.style.height = tamNucleo + 'px';
-        fuego.nucleo.style.left   = (cx - tamNucleo / 2) + 'px';
-        fuego.nucleo.style.top    = (cy - tamNucleo / 2) + 'px';
+        fuego.nucleo.style.left   = (cx - origenX - tamNucleo / 2) + 'px';
+        fuego.nucleo.style.top    = (cy - origenY - tamNucleo / 2) + 'px';
 
         /* Derrame: se encoge un poco al acercarse a la caja, y si queda muy
            encima se muda a #apliques (bajo el velo) para no lavar el texto. */
         const tamDerrame = tamDerrameMax * (0.62 + 0.38 * atenua);
+        const desdeX = detras ? 0 : origenX;   // #apliques usa coords del documento
+        const desdeY = detras ? 0 : origenY;
         fuego.derrame.style.width  = tamDerrame + 'px';
         fuego.derrame.style.height = tamDerrame + 'px';
-        fuego.derrame.style.left   = (cx - tamDerrame / 2) + 'px';
-        fuego.derrame.style.top    = (cy - tamDerrame / 2) + 'px';
+        fuego.derrame.style.left   = (cx - desdeX - tamDerrame / 2) + 'px';
+        fuego.derrame.style.top    = (cy - desdeY - tamDerrame / 2) + 'px';
         fuego.derrame.style.opacity = (fuego.base * 0.85 * atenua).toFixed(3);
 
-        if (detras !== fuego.detras) {
-          fuego.detras = detras;
-          const capaObjetivo = detras ? capaApliques : capaLuz;
-          if (fuego.derrame.parentNode !== capaObjetivo) capaObjetivo.appendChild(fuego.derrame);
-          fuego.derrame.classList.toggle('vela--detras', detras);
-        }
+        /* ⚡ Y LO MISMO, EN NÚMEROS, PARA EL LIENZO DE LUZ.
+           Cuando dibuja el canvas (codigo/23-lienzo-de-luz.js) no hacen
+           falta los divs, pero sí sus medidas: centro y radio en
+           coordenadas del DOCUMENTO. Se guardan siempre —cuesta nada— así
+           el cambio entre un sistema y otro es instantáneo. */
+        fuego.cx = cx;
+        fuego.radioNucleo  = tamNucleo  / 2;
+        fuego.radioDerrame = tamDerrame / 2;
       }
     }
   }
-  acomodarTodo();
+
+  /* ─── PUENTE CON EL LIENZO DE LUZ ───────────────────────────────────
+     El canvas no sabe nada de velas: solo recibe una lista plana de
+     manchas de luz (centro, radio, opacidad). Acá se arma esa lista, una
+     vez por acomodada, y después el bucle solo le actualiza la opacidad.
+     ---------------------------------------------------------------- */
+
+  /** Cada fuego aporta dos manchas: su núcleo y su derrame. */
+  function rearmarLasFuentesDeLuz() {
+    const fuentes = [];
+    for (const c of piezas) {
+      for (const fuego of c.fuegos) {
+        fuego.fuenteNucleo  = { x: fuego.cx, y: fuego.cy, radio: fuego.radioNucleo,  alfa: 0, derrame: false };
+        fuego.fuenteDerrame = { x: fuego.cx, y: fuego.cy, radio: fuego.radioDerrame, alfa: 0, derrame: true };
+        fuentes.push(fuego.fuenteDerrame, fuego.fuenteNucleo);   // el derrame va debajo
+      }
+    }
+    window.LienzoDeLuz.fuentes = fuentes;
+
+    /* Los contenedores de mezcla dejan de existir para el compositor: son
+       las 8 capas de `mix-blend-mode` que costaban la mitad del perfil. */
+    for (const c of piezas) c.luzDeLaPieza.style.display = 'none';
+  }
+
+  /* ⚡ TAMPOCO ACÁ SE ACOMODA NADA DURANTE LA CARGA.
+     acomodarTodo() mide y ubica los 8 candelabros con sus 52 fuegos, y
+     hacerlo dentro de la evaluación del script retrasaba el primer pintado
+     (ver la nota equivalente en 07-marco-y-enredaderas.js). Los candelabros
+     viven en la penumbra, detrás del sobre: nadie los ve hasta que la
+     invitación se revela. */
+  let yaSeAcomodo = false;
+  function acomodarUnaSolaVez() {
+    if (yaSeAcomodo) return;
+    yaSeAcomodo = true;
+    acomodarTodo();
+  }
+
+  document.addEventListener('invitacion-visible', acomodarUnaSolaVez);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    setTimeout(acomodarUnaSolaVez, 1600);
+  }));
 
   /* Rehacer si cambia el tamaño de la ventana (con un respiro). */
   let temporizador = null;
@@ -569,23 +809,70 @@
 
 
   /* ─── 4. EL TITILEO ────────────────────────────────────────────────────
-     Las velas quedan ENCENDIDAS siempre. Este bucle solo agrega el titileo.
-     Si las animaciones están apagadas, queda en reposo (prendidas, quietas).
+     Las velas quedan ENCENDIDAS siempre EN LOS TRES NIVELES: son la fuente
+     de luz de la profundidad, no un adorno de movimiento (a diferencia de
+     los haces o las motas, nunca se apagan por calidad). Este bucle solo
+     agrega el titileo. Si las animaciones están apagadas, queda en reposo
+     (prendidas, quietas).
      ⚡ RENDIMIENTO: se recalcula cada ~45 ms (~22 fps) y solo las velas
-     cercanas a la pantalla. El derrame respeta su tope de atenuación. */
-  const CADA_CUANTO = 45;
+     cercanas a la pantalla. En calidad más baja se espacia más el
+     recálculo: una llama real no titila con un ritmo perfecto, así que
+     aun más lento se sigue leyendo vivo —el "algoritmo más liviano" que
+     no resigna la sensación de la escena—. El derrame respeta su tope de
+     atenuación. */
+  /* En calidad ALTA el titileo se recalcula bastante más seguido (30 ms,
+     ~33 veces por segundo): la llama respira más fina y viva, que es
+     justamente el detalle que se aprecia cuando el equipo tiene margen. */
+  /* Media y baja también titilan más fino que antes (eran 65 y 110 ms): con
+     el margen recuperado, la llama respira mejor en todos los niveles. */
+  const CADA_CUANTO_POR_CALIDAD = { 0: 30, 1: 50, 2: 90 };
+  let calidadDelTitileo = nivelDeCalidad();
+  let cadaCuanto = CADA_CUANTO_POR_CALIDAD[calidadDelTitileo] ?? 45;
+  document.addEventListener('calidad-cambio', evento => {
+    calidadDelTitileo = (evento.detail && evento.detail.calidad) ?? 0;
+    cadaCuanto = CADA_CUANTO_POR_CALIDAD[calidadDelTitileo] ?? 45;
+  });
   let ultimoCalculo = 0;
+
+  /** ¿Está pintando el canvas? Se consulta una vez por cuadro, no por vela. */
+  function usaElLienzoAhora() {
+    return !!(window.LienzoDeLuz && window.LienzoDeLuz.activo);
+  }
+
+  /* En calidad baja, la llama deja de "respirar" en tamaño (solo titila en
+     opacidad): un style.transform menos por llama por cuadro. La luz sigue
+     viva —tiembla igual—, se resigna únicamente el leve crecer/encoger. */
+  function debeAnimarLaEscala() {
+    return calidadDelTitileo !== CALIDAD_GRAFICA.BAJA;
+  }
+
+  /* Ventana de "está cerca de la pantalla": en calidad baja se angosta, así
+     que al estar frente a UNA sección no se siguen actualizando de fondo
+     los candelabros de la sección vecina (menos llamas titilando a la vez).
+     Los candelabros y cirios NUNCA se apagan por esto —siguen encendidos,
+     dibujados con su último brillo—, solo dejan de recalcularse. */
+  const VENTANA_POR_CALIDAD = {
+    0: { arriba: 0.4, abajo: 1.4 },
+    1: { arriba: 0.4, abajo: 1.4 },
+    2: { arriba: 0.15, abajo: 1.15 },
+  };
 
   function dibujarCuadro(t) {
     if (document.hidden || prefiereMenosMovimiento()) {
       requestAnimationFrame(dibujarCuadro);
       return;
     }
-    if (t - ultimoCalculo < CADA_CUANTO) { requestAnimationFrame(dibujarCuadro); return; }
+    if (t - ultimoCalculo < cadaCuanto) { requestAnimationFrame(dibujarCuadro); return; }
     ultimoCalculo = t;
 
-    const arriba = window.scrollY - window.innerHeight * 0.4;
-    const abajo  = window.scrollY + window.innerHeight * 1.4;
+    const usaElLienzo = usaElLienzoAhora();
+    const ventana = VENTANA_POR_CALIDAD[calidadDelTitileo] ?? VENTANA_POR_CALIDAD[0];
+    /* scrollActual() y no window.scrollY: dentro de un bucle de animación,
+       preguntarle el scroll al navegador lo obliga a recalcular estilos
+       (ver la nota larga en 02-utilidades.js). */
+    const desplazamiento = scrollActualY();
+    const arriba = desplazamiento - window.innerHeight * ventana.arriba;
+    const abajo  = desplazamiento + window.innerHeight * ventana.abajo;
 
     for (const c of piezas) {
       for (const fuego of c.fuegos) {
@@ -600,18 +887,57 @@
         const temblor = 1 + Math.sin(t / 60 + fuego.fase) * 0.05;
         const brillo = fuego.nivel * temblor;
 
-        // La llama del SVG crece y encoge desde la mecha (cada una con SU brillo).
+        /* La llama del SVG crece y encoge desde la mecha (cada una con SU
+           brillo).
+
+           ⚡ Se compara con un ENTERO antes de escribir. toFixed() fabrica un
+           string cada vez que se llama, aunque el valor no haya cambiado;
+           entre las 26 llamas eran decenas de cadenas por cuadro tiradas a
+           la basura. Con milésimas en entero, comparar no reserva nada. */
         if (fuego.llama) {
-          fuego.llama.style.opacity = (0.75 + brillo * 0.25).toFixed(3);
-          fuego.llama.style.transform =
-            `scaleY(${(0.92 + brillo * 0.13).toFixed(3)}) scaleX(${(0.98 + brillo * 0.04).toFixed(3)})`;
+          const nivelDeLlama = Math.round(brillo * 1000);
+          if (nivelDeLlama !== fuego.ultimoNivelDeLlama) {
+            fuego.ultimoNivelDeLlama = nivelDeLlama;
+            fuego.llama.style.opacity = 0.75 + brillo * 0.25;
+            if (debeAnimarLaEscala()) {
+              fuego.llama.style.transform =
+                'scaleY(' + (0.92 + brillo * 0.13) + ') scaleX(' + (0.98 + brillo * 0.04) + ')';
+            }
+          }
         }
 
         /* Los resplandores laten con el mismo valor; el derrame además
            respeta su tope por cercanía a la caja (fuego.atenua). Solo se
            anima la OPACIDAD (nunca la escala de una capa grande). */
-        fuego.nucleo.style.opacity  = (fuego.base * brillo).toFixed(3);
-        fuego.derrame.style.opacity = (fuego.base * brillo * 0.85 * fuego.atenua).toFixed(3);
+        const brilloNucleo  = fuego.base * brillo;
+        const brilloDerrame = fuego.base * brillo * 0.85 * fuego.atenua;
+
+        /* ⚡ CON EL LIENZO ACTIVO SE ESCRIBEN NÚMEROS, NO ESTILOS.
+           Antes esto eran 104 escrituras de `style.opacity` por cuadro, y
+           cada una obliga al navegador a recalcular estilo y rehacer el
+           árbol de capas. Ahora se guardan dos números que el canvas lee
+           cuando pinta: cero trabajo para el motor de CSS. */
+        if (usaElLienzo) {
+          if (fuego.fuenteNucleo)  fuego.fuenteNucleo.alfa  = brilloNucleo;
+          if (fuego.fuenteDerrame) {
+            /* ⚠️ EL DERRAME "DETRÁS" NECESITA UN AJUSTE.
+               En el sistema de divs, cuando un derrame queda muy encima de
+               una caja de texto se lo muda a #apliques, que vive DEBAJO del
+               velo de penumbra: ahí la propia penumbra lo apaga y el texto
+               se sigue leyendo. El lienzo, en cambio, pinta todo por encima
+               del velo, así que ese apagado no ocurre solo.
+
+               Se replica bajando su brillo. No es capricho: es exactamente
+               el trabajo que hacía el velo, aplicado a mano. Sin esto, los
+               textos cercanos a un candelabro quedarían lavados. */
+            fuego.fuenteDerrame.alfa = fuego.detras ? brilloDerrame * 0.4 : brilloDerrame;
+          }
+        } else {
+          /* Sin toFixed: el navegador acepta el número directo y así no se
+             fabrica una cadena por vela y por cuadro. */
+          fuego.nucleo.style.opacity  = brilloNucleo;
+          fuego.derrame.style.opacity = brilloDerrame;
+        }
       }
     }
     requestAnimationFrame(dibujarCuadro);

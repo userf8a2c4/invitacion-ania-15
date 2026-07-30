@@ -321,12 +321,8 @@
   <ellipse cx="1240" cy="1520" rx="420" ry="600" fill="url(#bloodPool)" opacity=".45"/>
   <ellipse cx="700" cy="1980" rx="620" ry="380" fill="url(#warmPool)" opacity=".7"/>
 
-  <!-- 3 · craquelado: las grietas del óleo viejo.
-       Primero las grandes y abiertas, después la red fina con su sombra
-       y su luz. Todo a muy baja opacidad: se tiene que intuir, no ver. -->
-  <rect width="1400" height="2100" filter="url(#craquelado-amplio)" opacity=".55"/>
-  <rect width="1400" height="2100" filter="url(#craquelado-sombra)" opacity=".42"/>
-  <rect width="1400" height="2100" filter="url(#craquelado-luz)"    opacity=".16"/>
+  <!-- 3 · (El craquelado ESTABA acá y era un error de orden: ver la capa 10,
+       al final del archivo.) -->
 
   <!-- 4 · CAPA LEJANA — ramas desenfocadas (profundidad de campo) -->
   <g filter="url(#farBlur)" opacity=".5">
@@ -390,4 +386,25 @@
   <!-- 9 · viñeta y grano -->
   <rect width="1400" height="2100" fill="url(#vignette)"/>
   <rect width="1400" height="2100" filter="url(#grain)" opacity=".9"/>
+
+  <!-- 10 · CRAQUELADO: las grietas del óleo viejo.
+       ⚠️ ESTO ESTABA MAL COLOCADO Y SE NOTABA. El craquelado se dibujaba
+       en la capa 3, o sea DEBAJO de las ramas y las rosas. Encima de él se
+       pintaban las capas desenfocadas, y el resultado era que las grietas
+       quedaban tapadas y emborronadas: parecían parte de la pintura, no de
+       su superficie.
+
+       Un craquelado de verdad son grietas en el BARNIZ y en la capa
+       pictórica: están en la superficie del cuadro, por delante de todo lo
+       pintado, y están NÍTIDAS aunque lo que hay debajo esté fuera de foco.
+       Eso es justamente lo que da la sensación de óleo antiguo — y lo que
+       distingue un cuadro viejo de una foto desenfocada.
+
+       Por eso ahora va al final: rosas del fondo borrosas, grietas encima
+       perfectamente definidas. Primero las grandes y abiertas, después la
+       red fina con su sombra y su luz. Todo a baja opacidad: se tiene que
+       intuir, no ver. -->
+  <rect width="1400" height="2100" filter="url(#craquelado-amplio)" opacity=".55"/>
+  <rect width="1400" height="2100" filter="url(#craquelado-sombra)" opacity=".42"/>
+  <rect width="1400" height="2100" filter="url(#craquelado-luz)"    opacity=".16"/>
 </svg>

@@ -119,10 +119,37 @@
 
     const tiempo = repartirElTiempo(faltanMilisegundos);
 
-    if (casilleroDias)     casilleroDias.textContent     = tiempo.dias;
-    if (casilleroHoras)    casilleroHoras.textContent    = conDosDigitos(tiempo.horas);
-    if (casilleroMinutos)  casilleroMinutos.textContent  = conDosDigitos(tiempo.minutos);
-    if (casilleroSegundos) casilleroSegundos.textContent = conDosDigitos(tiempo.segundos);
+    /* ⚡ SOLO SE ESCRIBE LO QUE DE VERDAD CAMBIÓ.
+       Parece una tontería para cuatro numeritos, pero el perfil la señaló:
+       `actualizarLaCuenta` figuraba con 110 ms, el 11,4 % del total. No es
+       que la cuenta sea cara —son cuatro restas—: es que CADA escritura de
+       texto obliga al navegador a revisar el layout, y esta página tiene
+       más de 4.000 nodos.
+
+       De los cuatro casilleros, tres cambian una vez por hora, por minuto o
+       por día. El único que cambia de verdad cada segundo es el de los
+       segundos. Comparando antes de escribir, se pasa de 4 escrituras por
+       segundo a 1.
+
+       (La otra mitad del arreglo está en el CSS: los casilleros llevan
+       `contain`, que encierra ese trabajo y le impide contagiar al resto de
+       la página. Ver estilos/06-secciones.css.) */
+    escribirSiCambio(casilleroDias,     String(tiempo.dias));
+    escribirSiCambio(casilleroHoras,    conDosDigitos(tiempo.horas));
+    escribirSiCambio(casilleroMinutos,  conDosDigitos(tiempo.minutos));
+    escribirSiCambio(casilleroSegundos, conDosDigitos(tiempo.segundos));
+  }
+
+  /**
+   * Escribe un texto en una cartela, pero solo si es distinto del que ya
+   * tiene. Leer `textContent` es barato; escribirlo no.
+   *
+   * @param {Element|null} casillero
+   * @param {string} texto
+   * @returns {void}
+   */
+  function escribirSiCambio(casillero, texto) {
+    if (casillero && casillero.textContent !== texto) casillero.textContent = texto;
   }
 
   // Se dibuja una vez enseguida (para que no aparezca vacío) y después

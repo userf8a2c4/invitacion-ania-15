@@ -145,6 +145,18 @@
   pointer-events: none;
   overflow: hidden;
 }
+/* Los tres canvas que dibujan los pétalos (codigo/24-lienzo-de-petalos.js),
+   uno dentro de cada plano para conservar la profundidad. Cada uno cubre la
+   ventana entera; el JS los redimensiona.
+
+   Son 3 capas en total, en vez de las 29 que costaban los pétalos como
+   divs: ahí estaba clavado "Layerize" en el 27,6 % del perfil. */
+.lienzo-de-petalos {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .lluvia-de-petalos--fondo  { z-index: 1;  }
 .lluvia-de-petalos--medio  { z-index: 3;  }
 .lluvia-de-petalos--frente { z-index: 50; }
@@ -170,5 +182,24 @@
   background-repeat: no-repeat;
   background-size: contain;
   background-position: center;
+  /* ⚡ CON `will-change`, Y ACÁ SÍ CORRESPONDE.
+     Se lo quité en la poda de las 179 capas y fue un error medido: en el
+     perfil siguiente, "Paint" saltó del 8,9 % al 44,7 % y pasó a ser el
+     primer costo de la web.
+
+     POR QUÉ ACÁ SÍ Y EN LAS VELAS NO. El criterio no es "will-change malo",
+     es si la capa que reserva SE PUEDE APROVECHAR:
+
+       · Una .vela vive dentro de un contenedor con mix-blend-mode. Un
+         elemento que se mezcla necesita el fondo para calcularse, así que
+         su capa hay que volver a fundirla igual: trabajo perdido.
+       · Un pétalo NO está dentro de ninguna mezcla, es chico, y se mueve
+         solo con traslación. Esa es exactamente la situación para la que
+         existe el compositor: se rasteriza una vez y después solo se
+         desplaza la textura, sin repintar.
+
+     Sin capa, cada pétalo se REPINTA entero en cada cuadro — y ahora son
+     casi el doble de grandes que antes (ver RASGOS_DEL_PLANO en
+     codigo/06-petalos-con-fisica.js), o sea unas cuatro veces más área. */
   will-change: transform;
 }
