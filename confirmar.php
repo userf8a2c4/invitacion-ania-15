@@ -1,18 +1,17 @@
 <?php
 /* ══════════════════════════════════════════════════════════════════════
-   CONFIRMAR.PHP
-   Recibe los datos del formulario de Ania XV vía POST (JSON),
-   los guarda en MySQL y manda dos correos:
-     1. Al invitado (comprobante)
-     2. A Lucila (aviso de administrador)
+   CONFIRMAR.PHP - VERSIÓN FINAL
    
-   ✅ Usa variables de entorno (.env) en lugar de hardcodear credenciales
+   Flujo:
+   1. Recibe datos del formulario (JSON POST)
+   2. Guarda en MySQL (tabla confirmaciones)
+   3. Manda correo al INVITADO (su correo personal)
+   4. Manda correo a LUCILA (noreply@aniaxv.com)
+   
+   Todo vía SMTP (confiable y robusto)
    ══════════════════════════════════════════════════════════════════════ */
 
-/* ─── CARGAR VARIABLES DE ENTORNO ────────────────────────────────────
-   Si existe .env en la raíz del proyecto, lo carga. En producción,
-   Hostinger carga el .env automáticamente. */
-
+/* ─── CARGAR VARIABLES DE ENTORNO ────────────────────────────────────── */
 $rutaEnv = __DIR__ . '/.env';
 if (file_exists($rutaEnv)) {
     $lineas = file($rutaEnv, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
@@ -28,7 +27,7 @@ if (file_exists($rutaEnv)) {
     }
 }
 
-/* ─── CORS: permite que el JS del sitio llame a este archivo ────────── */
+/* ─── HEADERS CORS Y CONTENT-TYPE ────────────────────────────────────── */
 header('Access-Control-Allow-Origin: https://aniaxv.com');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
@@ -39,27 +38,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-/* ─── LEER CONFIGURACIÓN DE VARIABLES DE ENTORNO ──────────────────── */
+/* ─── CONFIGURACIÓN DESDE .ENV ───────────────────────────────────────── */
+$DB_HOST           = getenv('DB_HOST') ?: 'localhost';
+$DB_NAME           = getenv('DB_NAME') ?: 'u164808416_invitadosxv';
+$DB_USER           = getenv('DB_USER') ?: 'u164808416_lucila';
+$DB_PASSWORD       = getenv('DB_PASSWORD') ?: '';
 
-$DB_HOST     = getenv('DB_HOST')     ?: 'localhost';
-$DB_NAME     = getenv('DB_NAME')     ?: 'u164808416_invitadosxv';
-$DB_USER     = getenv('DB_USER')     ?: 'u164808416_lucila';
-$DB_PASSWORD = getenv('DB_PASSWORD') ?: '';
+$CORREO_REMITENTE  = getenv('CORREO_REMITENTE') ?: 'noreply@aniaxv.com';
+$CORREO_ADMIN      = getenv('CORREO_ADMINISTRADORA') ?: 'noreply@aniaxv.com';
 
-$CORREO_REMITENTE      = getenv('CORREO_REMITENTE')      ?: 'noreply@aniaxv.com';
-$NOMBRE_REMITENTE      = 'Ania XV';
-$CORREO_ADMINISTRADORA = getenv('CORREO_ADMINISTRADORA') ?: 'blucila699@gmail.com';
+$SMTP_HOST         = getenv('SMTP_HOST') ?: 'mail.aniaxv.com';
+$SMTP_PORT         = (int)(getenv('SMTP_PORT') ?: 587);
+$SMTP_USER         = getenv('SMTP_USER') ?: '';
+$SMTP_PASSWORD     = getenv('SMTP_PASSWORD') ?: '';
 
-/* ─── VALIDACIÓN: ¿Está todo configurado? ───────────────────────────── */
-if (!$DB_PASSWORD) {
+/* ─── VALIDACIÓN: ¿Está configurado? ────────────────────────────────── */
+if (!$DB_PASSWORD || !$SMTP_USER || !$SMTP_PASSWORD) {
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => 'Servidor no configurado (falta .env).']);
+    error_log('[Ania XV] Error: Falta configuración en .env');
     exit;
 }
 
-/* ─── LEER EL CUERPO DE LA PETICIÓN ─────────────────────────────────── */
+/* ─── LEER JSON DEL FORMULARIO ───────────────────────────────────────── */
 $cuerpo = file_get_contents('php://input');
-$datos  = json_decode($cuerpo, true);
+$datos = json_decode($cuerpo, true);
 
 if (!$datos) {
     http_response_code(400);
@@ -67,26 +70,24 @@ if (!$datos) {
     exit;
 }
 
-/* ─── SANITIZAR Y EXTRAER CAMPOS ─────────────────────────────────────
-   Todos los campos de texto se limpian con htmlspecialchars para evitar
-   que alguien inyecte HTML malicioso en los correos.                    */
+/* ─── SANITIZAR CAMPOS ───────────────────────────────────────────────── */
 function limpiar($valor) {
     return htmlspecialchars(trim((string)($valor ?? '')), ENT_QUOTES, 'UTF-8');
 }
 
-$nombre        = limpiar($datos['nombre']        ?? '');
-$correo        = limpiar($datos['correo']        ?? '');
+$nombre        = limpiar($datos['nombre'] ?? '');
+$correo        = limpiar($datos['correo'] ?? '');
 $asiste        = isset($datos['asiste']) ? (bool)$datos['asiste'] : false;
-$adultos       = max(0, (int)($datos['adultos']  ?? 0));
-$ninos         = max(0, (int)($datos['ninos']    ?? 0));
+$adultos       = max(0, (int)($datos['adultos'] ?? 0));
+$ninos         = max(0, (int)($datos['ninos'] ?? 0));
 $total         = $adultos + $ninos;
 $menus         = limpiar($datos['detalleDeMenus'] ?? ', ');
 $resumenMenus  = limpiar($datos['resumenDeMenus'] ?? ', ');
-$alergias      = limpiar($datos['alergias']       ?? 'Ninguna');
-$notas         = limpiar($datos['notas']          ?? ', ');
-$codigo        = limpiar($datos['codigo']         ?? '');
+$alergias      = limpiar($datos['alergias'] ?? 'Ninguna');
+$notas         = limpiar($datos['notas'] ?? ', ');
+$codigo        = limpiar($datos['codigo'] ?? '');
 
-/* Validación mínima del correo */
+/* ─── VALIDAR CORREO ─────────────────────────────────────────────────── */
 if (!$nombre || !filter_var($datos['correo'] ?? '', FILTER_VALIDATE_EMAIL)) {
     http_response_code(422);
     echo json_encode(['ok' => false, 'error' => 'Nombre o correo inválido.']);
@@ -95,21 +96,19 @@ if (!$nombre || !filter_var($datos['correo'] ?? '', FILTER_VALIDATE_EMAIL)) {
 
 /* ─── 1. GUARDAR EN MYSQL ────────────────────────────────────────────── */
 try {
-    $conexion = new PDO(
+    $pdo = new PDO(
         "mysql:host=$DB_HOST;dbname=$DB_NAME;charset=utf8mb4",
         $DB_USER,
-        $DB_PASSWORD
+        $DB_PASSWORD,
+        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
-    $conexion->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-    $sql = "INSERT INTO confirmaciones
-              (nombre, correo, asiste, adultos, ninos, total,
-               menus, resumen_menus, alergias, notas, codigo)
-            VALUES
-              (:nombre, :correo, :asiste, :adultos, :ninos, :total,
-               :menus, :resumen_menus, :alergias, :notas, :codigo)";
+    $sql = "INSERT INTO confirmaciones 
+            (nombre, correo, asiste, adultos, ninos, total, menus, resumen_menus, alergias, notas, codigo) 
+            VALUES 
+            (:nombre, :correo, :asiste, :adultos, :ninos, :total, :menus, :resumen_menus, :alergias, :notas, :codigo)";
 
-    $stmt = $conexion->prepare($sql);
+    $stmt = $pdo->prepare($sql);
     $stmt->execute([
         ':nombre'        => $nombre,
         ':correo'        => $correo,
@@ -125,31 +124,106 @@ try {
     ]);
 
 } catch (PDOException $e) {
-    /* Si la base de datos falla, igual intentamos mandar el correo
-       para no dejar al invitado sin respuesta. Avisamos por log.    */
     error_log('[Ania XV] Error BD: ' . $e->getMessage());
 }
 
-/* ─── 2. ARMAR Y MANDAR LOS CORREOS ─────────────────────────────────── */
+/* ─── 2. ENVIAR CORREOS VÍA SMTP ────────────────────────────────────── */
 
 /**
- * Envía un correo usando mail() nativo de PHP.
- * Devuelve true si PHP lo aceptó (no garantiza entrega, pero es suficiente
- * para hosting compartido donde el servidor de correo es de confianza).
+ * Envía un correo vía SMTP (PHPMailer alternativa: raw socket)
+ * Usa STARTTLS + AUTH LOGIN
  */
-function enviarCorreo($para, $asunto, $cuerpoHtml, $remitente, $nombreRemitente) {
-    $cabeceras  = "MIME-Version: 1.0\r\n";
-    $cabeceras .= "Content-Type: text/html; charset=UTF-8\r\n";
-    $cabeceras .= "From: =?UTF-8?B?" . base64_encode($nombreRemitente) . "?= <$remitente>\r\n";
-    $cabeceras .= "Reply-To: $remitente\r\n";
-    $cabeceras .= "X-Mailer: PHP/" . phpversion();
-    return mail($para, '=?UTF-8?B?' . base64_encode($asunto) . '?=', $cuerpoHtml, $cabeceras);
+function enviarPorSMTP($para, $asunto, $html, $remitente, $nombreRemitente, $smtpHost, $smtpPort, $smtpUser, $smtpPass) {
+    try {
+        $socket = fsockopen($smtpHost, $smtpPort, $errno, $errstr, 30);
+        if (!$socket) {
+            error_log("[Ania XV] SMTP conectar falló ($smtpHost:$smtpPort): $errstr");
+            return false;
+        }
+
+        $respuesta = fgets($socket, 512);
+        if (strpos($respuesta, '220') === false) {
+            fclose($socket);
+            return false;
+        }
+
+        // EHLO
+        fwrite($socket, "EHLO aniaxv.com\r\n");
+        fgets($socket, 512);
+
+        // STARTTLS
+        fwrite($socket, "STARTTLS\r\n");
+        $resp = fgets($socket, 512);
+        if (strpos($resp, '220') === false) {
+            fclose($socket);
+            return false;
+        }
+
+        stream_context_set_params($socket, ["ssl" => ["allow_self_signed" => true]]);
+        if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+            error_log('[Ania XV] STARTTLS falló');
+            fclose($socket);
+            return false;
+        }
+
+        // EHLO post-TLS
+        fwrite($socket, "EHLO aniaxv.com\r\n");
+        fgets($socket, 512);
+
+        // AUTH LOGIN
+        fwrite($socket, "AUTH LOGIN\r\n");
+        fgets($socket, 512);
+        fwrite($socket, base64_encode($smtpUser) . "\r\n");
+        fgets($socket, 512);
+        fwrite($socket, base64_encode($smtpPass) . "\r\n");
+        $authResp = fgets($socket, 512);
+        if (strpos($authResp, '235') === false) {
+            error_log('[Ania XV] AUTH falló: ' . trim($authResp));
+            fclose($socket);
+            return false;
+        }
+
+        // MAIL FROM
+        fwrite($socket, "MAIL FROM:<$remitente>\r\n");
+        fgets($socket, 512);
+
+        // RCPT TO
+        fwrite($socket, "RCPT TO:<$para>\r\n");
+        fgets($socket, 512);
+
+        // DATA
+        fwrite($socket, "DATA\r\n");
+        fgets($socket, 512);
+
+        // Construir mensaje
+        $mensaje = "From: =?UTF-8?B?" . base64_encode($nombreRemitente) . "?= <$remitente>\r\n";
+        $mensaje .= "To: <$para>\r\n";
+        $mensaje .= "Subject: =?UTF-8?B?" . base64_encode($asunto) . "?=\r\n";
+        $mensaje .= "MIME-Version: 1.0\r\n";
+        $mensaje .= "Content-Type: text/html; charset=UTF-8\r\n";
+        $mensaje .= "Content-Transfer-Encoding: base64\r\n";
+        $mensaje .= "\r\n";
+        $mensaje .= chunk_split(base64_encode($html));
+
+        fwrite($socket, $mensaje . "\r\n.\r\n");
+        $resp = fgets($socket, 512);
+
+        // QUIT
+        fwrite($socket, "QUIT\r\n");
+        fclose($socket);
+
+        return true;
+
+    } catch (Exception $e) {
+        error_log('[Ania XV] Error SMTP: ' . $e->getMessage());
+        return false;
+    }
 }
 
-/* ── Correo 1: Comprobante para el invitado ────────────────────────── */
+/* ── CORREO 1: Al invitado ──────────────────────────────────────────── */
 $asistiTexto = $asiste ? 'Sí, asistiré con mucho gusto ✦' : 'Lamentablemente no podré asistir';
 
-$correoInvitado = "
+$htmlInvitado = "
 <!DOCTYPE html>
 <html lang='es'>
 <head><meta charset='UTF-8'></head>
@@ -207,16 +281,20 @@ $correoInvitado = "
 </body>
 </html>";
 
-enviarCorreo(
+enviarPorSMTP(
     $correo,
     $asiste ? '¡Tu confirmación está lista, ' . $nombre . '! ✦ Ania XV' : 'Gracias por avisarnos · Ania XV',
-    $correoInvitado,
+    $htmlInvitado,
     $CORREO_REMITENTE,
-    $NOMBRE_REMITENTE
+    'Ania XV',
+    $SMTP_HOST,
+    $SMTP_PORT,
+    $SMTP_USER,
+    $SMTP_PASSWORD
 );
 
-/* ── Correo 2: Aviso a Lucila (siempre, asista o no) ──────────────── */
-$correoLucila = "
+/* ── CORREO 2: A Lucila (administradora) ────────────────────────────── */
+$htmlAdmin = "
 <!DOCTYPE html>
 <html lang='es'>
 <head><meta charset='UTF-8'></head>
@@ -275,19 +353,23 @@ $correoLucila = "
       </table>
     </td></tr>
     <tr><td align='center' style='padding-top:16px; color:#ccc; font-size:11px;'>
-      Sistema de confirmaciones · Ania XV · aniaxv.com
+      Sistema de confirmaciones · Ania XV
     </td></tr>
   </table>
 </body>
 </html>";
 
-enviarCorreo(
-    $CORREO_ADMINISTRADORA,
+enviarPorSMTP(
+    $CORREO_ADMIN,
     ($asiste ? '✅ ' : '❌ ') . 'Nueva confirmación de ' . $nombre . ' · Ania XV',
-    $correoLucila,
+    $htmlAdmin,
     $CORREO_REMITENTE,
-    $NOMBRE_REMITENTE
+    'Ania XV',
+    $SMTP_HOST,
+    $SMTP_PORT,
+    $SMTP_USER,
+    $SMTP_PASSWORD
 );
 
-/* ─── RESPUESTA AL JS ────────────────────────────────────────────────── */
-echo json_encode(['ok' => true, 'mensaje' => 'Confirmación registrada.']);
+/* ─── RESPUESTA AL NAVEGADOR ────────────────────────────────────────── */
+echo json_encode(['ok' => true, 'mensaje' => 'Confirmación registrada y correos enviados.']);
