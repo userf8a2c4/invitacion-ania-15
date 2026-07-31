@@ -159,6 +159,98 @@
   <link rel="stylesheet" href="estilos/12-haces-de-luz.css">
   <link rel="stylesheet" href="estilos/11-responsivo.css">
 
+      <style>
+    /* ══════════════════════════════════════════════════════════════════════
+       ESTILOS DEL CHATBOT
+       ══════════════════════════════════════════════════════════════════════ */
+    #contenedor-chatbot {
+        position: fixed;
+        bottom: 25px;
+        right: 25px;
+        z-index: 10000;
+        font-family: sans-serif;
+    }
+    #btn-chatbot-toggle {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background-color: #ff4081;
+        color: white;
+        border: none;
+        cursor: pointer;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        font-size: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.2s ease;
+    }
+    #btn-chatbot-toggle:hover {
+        transform: scale(1.05);
+    }
+    .chatbot-oculto {
+        display: none !important;
+    }
+    #ventana-chatbot {
+        position: absolute;
+        bottom: 75px;
+        right: 0;
+        width: 320px;
+        height: 450px;
+        background-color: white;
+        border-radius: 12px;
+        box-shadow: 0 5px 25px rgba(0,0,0,0.15);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid #eaeaea;
+    }
+    .chatbot-header {
+        background-color: #ff4081;
+        color: white;
+        padding: 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: bold;
+    }
+    #btn-chatbot-cerrar {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 20px;
+        cursor: pointer;
+    }
+    #chatbot-messages {
+        flex: 1;
+        padding: 15px;
+        overflow-y: auto;
+        background-color: #f9f9f9;
+    }
+    .chatbot-input-area {
+        display: flex;
+        padding: 10px;
+        border-top: 1px solid #eee;
+        background-color: white;
+    }
+    #chatbot-input {
+        flex: 1;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 20px;
+        outline: none;
+    }
+    #btn-chatbot-enviar {
+        background-color: #ff4081;
+        color: white;
+        border: none;
+        padding: 8px 15px;
+        margin-left: 5px;
+        border-radius: 20px;
+        cursor: pointer;
+    }
+    </style>
+
   <!-- Bibliotecas externas: envío de correos y generación del código QR.
 
        ⚠️ CON "defer" Y NO BLOQUEANDO. Antes estos dos <script> iban acá SIN
@@ -2014,9 +2106,8 @@
     </div>
   </div>
 
-  <!-- ═══ CHATBOT / ASISTENTE ═════════════════════════════════════════ -->
-  <script src="codigo/00-conocimiento-chatbot.js" defer></script>
-  <script src="codigo/chatbot.js" defer></script> <!-- Reemplazá "chatbot.js" por el nombre exacto del archivo que maneja la lógica de la interfaz si difiere -->
+<!-- CHATBOT / ASISTENTE -->
+<script src="codigo/00-conocimiento-chatbot.js" defer></script>
 
   
 </body>
