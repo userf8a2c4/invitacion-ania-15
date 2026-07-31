@@ -1,15 +1,12 @@
 <?php
 /* ══════════════════════════════════════════════════════════════════════
-   CONFIRMAR.PHP, Versión PHPMailer SMTP
+   CONFIRMAR.PHP, Versión SMTP SSL (Puerto 465)
    
    Flujo:
    1. Recibe JSON del formulario
    2. Guarda en MySQL
-   3. Manda correo al invitado (su correo personal)
-   4. Manda correo a la administradora (noreply@aniaxv.com)
-   
-   Usa PHPMailer cargado desde CDN de Composer (autoload local).
-   Si PHPMailer no está disponible, usa SMTP raw como fallback.
+   3. Manda correo al invitado
+   4. Manda correo a todos los administradores definidos en .env
    ══════════════════════════════════════════════════════════════════════ */
 
 /* ─── CARGAR .ENV ─────────────────────────────────────────────────────── */
@@ -38,12 +35,12 @@ $DB_USER      = getenv('DB_USER')      ?: 'u164808416_lucila';
 $DB_PASSWORD  = getenv('DB_PASSWORD')  ?: '';
 
 $SMTP_HOST    = getenv('SMTP_HOST')    ?: 'smtp.hostinger.com';
-$SMTP_PORT    = (int)(getenv('SMTP_PORT') ?: 587);
-$SMTP_USER    = getenv('SMTP_USER')    ?: '';   // noreply@aniaxv.com
+$SMTP_PORT    = (int)(getenv('SMTP_PORT') ?: 465); // Forzado a 465 en el código de conexión
+$SMTP_USER    = getenv('SMTP_USER')    ?: '';   
 $SMTP_PASS    = getenv('SMTP_PASSWORD') ?: '';
 
 $CORREO_FROM  = getenv('CORREO_REMITENTE')     ?: 'noreply@aniaxv.com';
-$CORREO_ADMIN = getenv('CORREO_ADMINISTRADORA') ?: 'noreply@aniaxv.com';
+$CORREO_ADMIN = getenv('CORREO_ADMINISTRADORA') ?: 'noreply@aniaxv.com,blucila699@gmail.com';
 
 /* ─── LEER JSON ───────────────────────────────────────────────────────── */
 $datos = json_decode(file_get_contents('php://input'), true);
@@ -90,19 +87,16 @@ try {
     error_log('[Ania XV] ❌ BD: ' . $errorBD);
 }
 
-/* ─── 2. ENVÍO SMTP MANUAL (sin dependencias externas) ───────────────── */
+/* ─── 2. ENVÍO SMTP MANUAL (SSL Directo - Puerto 465) ───────────────── */
 
-/**
- * Envía un correo HTML vía SMTP con STARTTLS + AUTH LOGIN.
- * Devuelve true o un string con el error.
- */
 function smtpEnviar($para, $asunto, $html, $from, $fromNombre, $host, $port, $user, $pass) {
-
     $log = [];
 
-    $sock = @fsockopen($host, $port, $errno, $errstr, 15);
+    // Conexión SSL directa
+    $remoteHost = ($port === 465) ? "ssl://{$host}" : $host;
+    $sock = @fsockopen($remoteHost, $port, $errno, $errstr, 15);
     if (!$sock) {
-        return "No se pudo conectar a $host:$port, $errstr ($errno)";
+        return "No se pudo conectar a $remoteHost:$port, $errstr ($errno)";
     }
 
     $leer = function() use ($sock, &$log) {
@@ -122,32 +116,11 @@ function smtpEnviar($para, $asunto, $html, $from, $fromNombre, $host, $port, $us
         return $leer();
     };
 
-    $r = $leer(); // Bienvenida 220
+    $r = $leer(); 
     if (strpos($r, '220') === false) { fclose($sock); return "220 no recibido: $r"; }
 
     $r = $cmd("EHLO aniaxv.com");
 
-    // STARTTLS
-    $r = $cmd("STARTTLS");
-    if (strpos($r, '220') === false) { fclose($sock); return "STARTTLS rechazado: $r"; }
-
-    $ctx = stream_context_create(['ssl' => [
-        'verify_peer'       => false,
-        'verify_peer_name'  => false,
-        'allow_self_signed' => true,
-    ]]);
-    if (!stream_socket_enable_crypto($sock, true, STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT)) {
-        // Intentar con TLS genérico
-        if (!stream_socket_enable_crypto($sock, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
-            fclose($sock);
-            return "No se pudo activar TLS";
-        }
-    }
-    stream_context_set_params($sock, $ctx);
-
-    $r = $cmd("EHLO aniaxv.com");
-
-    // AUTH LOGIN
     $r = $cmd("AUTH LOGIN");
     if (strpos($r, '334') === false) { fclose($sock); return "AUTH LOGIN no aceptado: $r"; }
 
@@ -157,19 +130,15 @@ function smtpEnviar($para, $asunto, $html, $from, $fromNombre, $host, $port, $us
     $r = $cmd(base64_encode($pass));
     if (strpos($r, '235') === false) { fclose($sock); return "Contraseña rechazada: $r"; }
 
-    // MAIL FROM
     $r = $cmd("MAIL FROM:<$from>");
     if (strpos($r, '250') === false) { fclose($sock); return "MAIL FROM rechazado: $r"; }
 
-    // RCPT TO
     $r = $cmd("RCPT TO:<$para>");
     if (strpos($r, '250') === false) { fclose($sock); return "RCPT TO rechazado: $r"; }
 
-    // DATA
     $r = $cmd("DATA");
     if (strpos($r, '354') === false) { fclose($sock); return "DATA rechazado: $r"; }
 
-    // Mensaje
     $fromEnc    = '=?UTF-8?B?' . base64_encode($fromNombre) . '?=';
     $asuntoEnc  = '=?UTF-8?B?' . base64_encode($asunto) . '?=';
     $cuerpoB64  = chunk_split(base64_encode($html));
@@ -283,19 +252,26 @@ if ($r1 !== true) {
     error_log('[Ania XV] ✅ Correo enviado a: ' . $correo);
 }
 
-// Correo a la administradora
-$r2 = smtpEnviar(
-    $CORREO_ADMIN,
-    ($asiste ? '✅ ' : '❌ ') . "Confirmación de $nombre · Ania XV",
-    $htmlAdmin,
-    $CORREO_FROM, 'Ania XV',
-    $SMTP_HOST, $SMTP_PORT, $SMTP_USER, $SMTP_PASS
-);
-if ($r2 !== true) {
-    $errores[] = "Correo admin: $r2";
-    error_log('[Ania XV] ❌ Correo admin: ' . $r2);
-} else {
-    error_log('[Ania XV] ✅ Correo enviado a admin: ' . $CORREO_ADMIN);
+// Correo a las administradoras (Procesar múltiples correos)
+$listaAdmins = array_map('trim', explode(',', $CORREO_ADMIN));
+
+foreach ($listaAdmins as $adminEmail) {
+    if (empty($adminEmail)) continue;
+
+    $r2 = smtpEnviar(
+        $adminEmail,
+        ($asiste ? '✅ ' : '❌ ') . "Confirmación de $nombre · Ania XV",
+        $htmlAdmin,
+        $CORREO_FROM, 'Ania XV',
+        $SMTP_HOST, $SMTP_PORT, $SMTP_USER, $SMTP_PASS
+    );
+    
+    if ($r2 !== true) {
+        $errores[] = "Correo admin ($adminEmail): $r2";
+        error_log("[Ania XV] ❌ Correo admin ($adminEmail): $r2");
+    } else {
+        error_log("[Ania XV] ✅ Correo enviado a admin: $adminEmail");
+    }
 }
 
 /* ─── 6. RESPUESTA JSON REAL ──────────────────────────────────────────── */
