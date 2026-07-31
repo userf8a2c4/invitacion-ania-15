@@ -391,7 +391,7 @@
        solo sale si asiste, como estaba. */
     const avisos = [anotarEnLaHoja(datosDeLaConfirmacion)];
     if (vieneALaFiesta) {
-      avisos.push(intentarEnviarElCorreo(datosDeLaConfirmacion));
+      avisos.push(enviarAlServidor(datosDeLaConfirmacion));
     }
     await Promise.all(avisos);
 
