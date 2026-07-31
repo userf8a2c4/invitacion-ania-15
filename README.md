@@ -1,6 +1,6 @@
 # Invitación de XV Años · Ania
 
-📖 **Invitación Web: Ania XV**
+**Invitación Web: Ania XV**
 
 Esto es mucho más que una web de invitación a unos quince años; es una carta de amor,
 un lienzo interactivo y una declaración de intenciones volcada en código.
@@ -35,7 +35,7 @@ el envío de correos).
 
 ---
 
-## 📚 Documentación
+## Documentación
 
 **Para editar la invitación o configurarla**, ve a [GUIA.md](GUIA.md).
 
@@ -43,4 +43,4 @@ Esa guía explica cómo cambiar cada cosa sin necesidad de saber programar.
 
 ---
 
-Hecho con mucho cariño para Ania 🌹
+Hecho con mucho cariño para Ania 
