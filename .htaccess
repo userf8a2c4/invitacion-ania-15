@@ -1,0 +1,73 @@
+# ══════════════════════════════════════════════════════════════════════
+# .HTACCESS · COMPRESIÓN Y CACHÉ DEL SERVIDOR (Hostinger / Apache)
+# ══════════════════════════════════════════════════════════════════════
+#
+# QUÉ HACE ESTE ARCHIVO
+# Sin él, el servidor no comprime las respuestas ni les manda al navegador
+# instrucciones de cuánto tiempo puede guardarlas en su caché. Esto es lo
+# que un diagnóstico de PageSpeed marca como "Use efficient cache
+# lifetimes" y también encarece cada visita porque el HTML/CSS/JS viajan
+# sin comprimir.
+#
+# POR QUÉ EL CACHÉ SE REPARTE EN DOS GRUPOS (coherente con sw.js)
+# El Service Worker (sw.js) ya separa los archivos en dos estrategias:
+#   · Código de la app (HTML, CSS, JS) → "primero la red", para que un
+#     cambio se vea con una sola recarga.
+#   · Assets pesados y estables (imágenes, svg, audio, fuentes) → "primero
+#     la copia", porque casi nunca cambian.
+# Si acá le diéramos cache LARGO al HTML/CSS/JS, el propio navegador
+# podría servir una copia vieja sin siquiera llegar a preguntarle al
+# Service Worker, y un cambio de código no se vería aunque subamos VERSION
+# en sw.js. Por eso el código lleva cache corto con revalidación, y los
+# assets estables sí llevan cache largo — un año, porque cuando cambian de
+# verdad (raro) alcanza con renombrarlos o el usuario los ve tras purgar.
+# ══════════════════════════════════════════════════════════════════════
+
+# ─── Compresión (gzip/brotli) ───────────────────────────────────────────
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/plain text/xml
+  AddOutputFilterByType DEFLATE application/javascript application/x-javascript
+  AddOutputFilterByType DEFLATE application/json application/manifest+json
+  AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+<IfModule mod_brotli.c>
+  AddOutputFilterByType BROTLI_COMPRESS text/html text/css text/plain text/xml
+  AddOutputFilterByType BROTLI_COMPRESS application/javascript application/x-javascript
+  AddOutputFilterByType BROTLI_COMPRESS application/json application/manifest+json
+  AddOutputFilterByType BROTLI_COMPRESS image/svg+xml
+</IfModule>
+
+# ─── Cache-Control por tipo de archivo ──────────────────────────────────
+<IfModule mod_expires.c>
+  ExpiresActive On
+
+  # Código de la app: cache corto con revalidación — el Service Worker
+  # es quien decide si sirve de red o de copia, no el navegador.
+  ExpiresByType text/html                  "access plus 0 seconds"
+  ExpiresByType text/css                   "access plus 0 seconds"
+  ExpiresByType application/javascript     "access plus 0 seconds"
+  ExpiresByType application/manifest+json  "access plus 0 seconds"
+
+  # Assets pesados y estables: cache largo, casi nunca cambian.
+  ExpiresByType image/svg+xml   "access plus 1 year"
+  ExpiresByType image/jpeg      "access plus 1 year"
+  ExpiresByType image/png       "access plus 1 year"
+  ExpiresByType image/webp      "access plus 1 year"
+  ExpiresByType image/x-icon    "access plus 1 year"
+  ExpiresByType audio/mpeg      "access plus 1 year"
+  ExpiresByType font/woff       "access plus 1 year"
+  ExpiresByType font/woff2      "access plus 1 year"
+</IfModule>
+
+<IfModule mod_headers.c>
+  # HTML/CSS/JS: que revalide siempre contra el servidor (no cache "duro").
+  <FilesMatch "\.(html|css|js)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+
+  # Assets estables: cache largo e "immutable" (el navegador ni pregunta).
+  <FilesMatch "\.(svg|jpg|jpeg|png|webp|ico|mp3|woff|woff2)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>
