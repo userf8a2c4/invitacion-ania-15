@@ -99,7 +99,61 @@ function bloqueInvitados(invitados) {
       tarjetaDato(invitados.no_asisten, 'No pueden') +
       tarjetaDato(invitados.adultos, 'Adultos') +
       tarjetaDato(invitados.ninos, 'Niños') +
-    '</div>';
+    '</div>' +
+    bloqueMenus(invitados.menus);
+}
+
+/**
+ * Cuántos platos de cada menú hay que pedir.
+ *
+ * Es el dato que pide el banquete, y el que uno necesita tener a mano
+ * cuando llama para cerrar cantidades. Por eso va en el Resumen y no
+ * escondido en la ficha de cada invitado.
+ *
+ * @param {Object} menus - { "estándar": 14, "vegetariano": 5, … }
+ * @returns {string} HTML
+ */
+function bloqueMenus(menus) {
+  if (!menus) return '';
+
+  /* El servidor cuenta lo que la gente escribió en el formulario, que
+     puede venir como "estandar", "estándar" o "Estándar". Se juntan las
+     variantes de lo mismo para no mostrar tres tarjetas del mismo plato.
+
+     Cada renglón es: [cómo se muestra, qué palabras lo identifican]. */
+  const familias = [
+    ['Estándar',    ['estandar', 'normal', 'pollo', 'carne', 'res', 'adulto']],
+    ['Vegetariano', ['vegetarian', 'vegan', 'verdura', 'sin carne']],
+    ['Infantil',    ['infantil', 'nino', 'nene', 'kids']],
+  ];
+
+  const totales = { 'Estándar': 0, 'Vegetariano': 0, 'Infantil': 0, 'Otros': 0 };
+  let hayAlguno = false;
+
+  Object.keys(menus).forEach(nombre => {
+    const cuantos = Number(menus[nombre]) || 0;
+    if (!cuantos) return;
+    hayAlguno = true;
+
+    const limpio = paraBuscar(nombre);
+    const familia = familias.find(f => f[1].some(palabra => limpio.includes(palabra)));
+
+    totales[familia ? familia[0] : 'Otros'] += cuantos;
+  });
+
+  if (!hayAlguno) return '';
+
+  const tarjetas = Object.keys(totales)
+    // "Otros" solo aparece si de verdad hay algo que no encajó.
+    .filter(nombre => totales[nombre] > 0 || nombre !== 'Otros')
+    .map(nombre => tarjetaDato(totales[nombre], nombre))
+    .join('');
+
+  return '' +
+    '<div class="tarjeta__titulo" style="margin:var(--esp-3) 0 var(--esp-2)">' +
+      'Menús a pedir' +
+    '</div>' +
+    '<div class="rejilla-datos">' + tarjetas + '</div>';
 }
 
 /**
@@ -253,7 +307,7 @@ function bloqueAtencion(datos) {
     return '' +
       '<div class="tarjeta">' +
         '<div class="tarjeta__titulo">Pendientes</div>' +
-        '<p class="vacio__texto">Nada urgente por ahora. 🌹</p>' +
+        '<p class="vacio__texto">Nada urgente por ahora.</p>' +
       '</div>';
   }
 

@@ -1,0 +1,378 @@
+/* ══════════════════════════════════════════════════════════════════════
+   14 · ARCHIVOS: SUBIR IMÁGENES Y TOMAR FOTOS
+
+   QUÉ HACE ESTE ARCHIVO
+   Deja adjuntar el contrato de un proveedor, la foto del comprobante de
+   un pago, o cualquier imagen, a cualquier registro del panel.
+
+   CÓMO SE ABRE LA CÁMARA DESDE UNA WEB
+   Con el atributo `capture="environment"` en un <input type="file">. En
+   el teléfono, eso hace que el botón abra directamente la cámara trasera
+   en vez del explorador de archivos. En una computadora se ignora y
+   funciona como un selector normal, así que sirve en los dos lados sin
+   escribir dos caminos distintos.
+
+   POR QUÉ LA FOTO SE ACHICA ANTES DE SUBIRLA
+   Una foto de un teléfono moderno pesa entre 3 y 8 MB. Subirla entera
+   por datos móviles tarda una eternidad y llena el hosting sin sentido:
+   para leer un comprobante alcanza y sobra con 1600 píxeles de ancho.
+   Se redimensiona en el navegador, antes de enviarla.
+
+   ÍNDICE
+     1. Elegir archivo o tomar foto
+     2. Achicar imágenes
+     3. Subir
+     4. Listar y borrar
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/** Ancho máximo al que se achican las fotos antes de subirlas. */
+const ANCHO_MAXIMO_FOTO = 1600;
+
+/** Qué calidad de JPEG usar al recomprimir. 0.82 es indistinguible. */
+const CALIDAD_FOTO = 0.82;
+
+
+/* ─── 1. ELEGIR ARCHIVO O TOMAR FOTO ───────────────────────────────── */
+
+/**
+ * Abre el selector de archivos o la cámara, y sube lo que se elija.
+ *
+ * @param {Object} opciones
+ * @param {string} opciones.tipo - A qué se ata: 'gasto', 'pago', 'proveedor'…
+ * @param {number} opciones.id - El id de ese registro.
+ * @param {boolean} [opciones.camara=false] - true abre la cámara directo.
+ * @param {Function} [opciones.despues] - Se llama al terminar.
+ * @returns {void}
+ */
+function elegirYSubir(opciones) {
+  const entrada = document.createElement('input');
+  entrada.type = 'file';
+
+  /* Los tipos que acepta el servidor. Poner esto acá hace que el
+     selector del teléfono ya filtre y no deje elegir un archivo que
+     después va a rebotar. */
+  entrada.accept = 'image/jpeg,image/png,image/webp,image/heic,application/pdf';
+
+  if (opciones.camara) {
+    // "environment" es la cámara de atrás; "user" sería la selfie.
+    entrada.capture = 'environment';
+    entrada.accept = 'image/*';
+  }
+
+  entrada.addEventListener('change', async () => {
+    const archivo = entrada.files && entrada.files[0];
+    if (!archivo) return;
+
+    await subirArchivo(archivo, opciones);
+  });
+
+  // Hay que agregarlo al documento para que funcione en algunos Android.
+  entrada.style.display = 'none';
+  document.body.appendChild(entrada);
+  entrada.click();
+  setTimeout(() => document.body.removeChild(entrada), 1000);
+}
+
+/**
+ * Muestra los dos botones: subir archivo o tomar foto.
+ *
+ * @param {Object} opciones - Igual que elegirYSubir.
+ * @returns {string} HTML
+ */
+function botonesDeArchivo(opciones) {
+  return '' +
+    '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-2)">' +
+      '<button type="button" class="boton" style="flex:1" data-subir="archivo">' +
+        '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
+          '<path d="M12 16V4M12 4l-4 4M12 4l4 4" fill="none" stroke="currentColor" ' +
+                'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+          '<path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" fill="none" ' +
+                'stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
+        '</svg>Subir' +
+      '</button>' +
+      '<button type="button" class="boton" style="flex:1" data-subir="camara">' +
+        '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
+          '<path d="M3 8a2 2 0 0 1 2-2h2l1.4-2h7.2L17 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" ' +
+                'fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>' +
+          '<circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="2"/>' +
+        '</svg>Tomar foto' +
+      '</button>' +
+    '</div>';
+}
+
+/**
+ * Engancha los botones de subir y de cámara dentro de un contenedor.
+ *
+ * @param {Element} donde
+ * @param {Object} opciones - Igual que elegirYSubir.
+ * @returns {void}
+ */
+function engancharBotonesDeArchivo(donde, opciones) {
+  buscarTodos('[data-subir]', donde).forEach(boton => {
+    boton.addEventListener('click', () => {
+      elegirYSubir(Object.assign({}, opciones, {
+        camara: boton.dataset.subir === 'camara',
+      }));
+    });
+  });
+}
+
+
+/* ─── 2. ACHICAR IMÁGENES ──────────────────────────────────────────── */
+
+/**
+ * Achica una imagen si es más grande de lo necesario.
+ *
+ * Los PDF y los archivos ya chicos pasan de largo sin tocarse.
+ *
+ * @param {File} archivo
+ * @returns {Promise<Blob|File>} La versión achicada, o el original.
+ */
+function achicarImagen(archivo) {
+  return new Promise(resolver => {
+
+    // Los PDF no se tocan, y las imágenes chicas tampoco vale la pena.
+    if (archivo.type === 'application/pdf' || archivo.size < 400000) {
+      resolver(archivo);
+      return;
+    }
+
+    /* Las fotos HEIC del iPhone no se pueden dibujar en un canvas: el
+       navegador no las decodifica. Se suben tal cual y las achica...
+       nadie. Es el único caso en que sube el archivo original. */
+    if (/heic|heif/i.test(archivo.type)) {
+      resolver(archivo);
+      return;
+    }
+
+    const lector = new FileReader();
+
+    lector.onload = () => {
+      const imagen = new Image();
+
+      imagen.onload = () => {
+        // Si ya es chica, no se toca: recomprimirla solo la empeoraría.
+        if (imagen.width <= ANCHO_MAXIMO_FOTO) { resolver(archivo); return; }
+
+        const escala = ANCHO_MAXIMO_FOTO / imagen.width;
+        const lienzo = document.createElement('canvas');
+        lienzo.width  = ANCHO_MAXIMO_FOTO;
+        lienzo.height = Math.round(imagen.height * escala);
+
+        const pincel = lienzo.getContext('2d');
+        pincel.drawImage(imagen, 0, 0, lienzo.width, lienzo.height);
+
+        lienzo.toBlob(
+          blob => resolver(blob || archivo),
+          'image/jpeg',
+          CALIDAD_FOTO
+        );
+      };
+
+      // Si la imagen no se puede leer, se sube el original y que decida
+      // el servidor.
+      imagen.onerror = () => resolver(archivo);
+      imagen.src = lector.result;
+    };
+
+    lector.onerror = () => resolver(archivo);
+    lector.readAsDataURL(archivo);
+  });
+}
+
+
+/* ─── 3. SUBIR ─────────────────────────────────────────────────────── */
+
+/**
+ * Sube un archivo al servidor.
+ *
+ * No usa pedir() de 03-servidor.js porque eso manda JSON, y un archivo
+ * viaja como multipart/form-data. Es la única llamada del panel que no
+ * pasa por ahí, y por eso repite a mano el token y el manejo de errores.
+ *
+ * @param {File|Blob} archivo
+ * @param {Object} opciones - { tipo, id, despues }
+ * @returns {Promise<void>}
+ */
+async function subirArchivo(archivo, opciones) {
+  avisar('Preparando el archivo…');
+
+  const listo = await achicarImagen(archivo);
+
+  const formulario = new FormData();
+  // El nombre se conserva; si el achicado lo convirtió a JPEG, se ajusta.
+  const nombre = (archivo.name || 'foto.jpg')
+    .replace(/\.(png|webp)$/i, listo.type === 'image/jpeg' ? '.jpg' : '$&');
+
+  formulario.append('archivo', listo, nombre);
+  formulario.append('tipo', opciones.tipo || '');
+  formulario.append('id', String(opciones.id || 0));
+
+  const token = tokenGuardado();
+  if (!token) { manejarSesionVencida(); return; }
+
+  try {
+    const respuesta = await fetch(CONFIGURACION.servidor.base + 'archivos.php?accion=subir', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token },
+      body: formulario,
+    });
+
+    const carga = await respuesta.json().catch(() => ({
+      ok: false, error: 'El servidor respondió algo inesperado.',
+    }));
+
+    if (respuesta.status === 401) { manejarSesionVencida(); return; }
+    if (!respuesta.ok || carga.ok === false) {
+      avisar(carga.error || 'No se pudo subir el archivo.', true);
+      return;
+    }
+
+    avisar('Archivo subido.');
+    if (opciones.despues) opciones.despues(carga.datos);
+
+  } catch (error) {
+    avisar('No se pudo subir. Revisá tu conexión.', true);
+  }
+}
+
+
+/* ─── 4. LISTAR Y BORRAR ───────────────────────────────────────────── */
+
+/**
+ * Pinta los archivos de un registro, con sus miniaturas.
+ *
+ * @param {Element} donde
+ * @param {string} tipo
+ * @param {number} id
+ * @returns {Promise<void>}
+ */
+async function pintarArchivosDe(donde, tipo, id) {
+  if (!id) {
+    donde.innerHTML =
+      '<p class="vacio__texto">Guardá primero, y después vas a poder ' +
+      'adjuntar archivos.</p>';
+    return;
+  }
+
+  let archivos;
+  try {
+    archivos = await traer('archivos.php?accion=listar&tipo=' +
+                           encodeURIComponent(tipo) + '&id=' + id);
+  } catch (error) {
+    donde.innerHTML = '<p class="vacio__texto">No se pudieron cargar los archivos.</p>';
+    return;
+  }
+
+  const token = tokenGuardado();
+
+  if (!archivos.length) {
+    donde.innerHTML = '<p class="vacio__texto">Todavía no hay archivos.</p>';
+  } else {
+    /* Las miniaturas se piden con el token en la URL... no: el endpoint
+       exige el token en la cabecera, y una etiqueta <img> no puede
+       mandar cabeceras. Por eso las imágenes se muestran como enlaces
+       con su nombre, y al tocarlos se abren descargándolos con fetch. */
+    donde.innerHTML = archivos.map(a => {
+      const kb = Math.round((Number(a.tamano_bytes) || 0) / 1024);
+      const esImagen = String(a.tipo_mime).indexOf('image/') === 0;
+
+      return '' +
+        '<div class="lista__fila">' +
+          '<button class="lista__cuerpo" style="border:0;background:none;text-align:left" ' +
+                  'data-ver-archivo="' + seguro(a.id) + '">' +
+            '<span class="lista__titulo">' + seguro(a.nombre_real) + '</span>' +
+            '<span class="lista__pie">' +
+              seguro((esImagen ? 'Imagen' : 'PDF') + ' · ' + kb + ' KB') + '</span>' +
+          '</button>' +
+          '<button class="boton-icono" data-borrar-archivo="' + seguro(a.id) + '" ' +
+                  'aria-label="Borrar archivo">' +
+            '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
+              '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" ' +
+                    'stroke-linecap="round"/>' +
+            '</svg>' +
+          '</button>' +
+        '</div>';
+    }).join('');
+  }
+
+  buscarTodos('[data-ver-archivo]', donde).forEach(boton => {
+    boton.addEventListener('click', () => abrirArchivo(boton.dataset.verArchivo));
+  });
+
+  buscarTodos('[data-borrar-archivo]', donde).forEach(boton => {
+    boton.addEventListener('click', async () => {
+      if (!confirmarAccion('¿Borrar este archivo?')) return;
+      try {
+        await mandar('archivos.php?accion=borrar', { id: boton.dataset.borrarArchivo });
+        avisar('Archivo eliminado.');
+        pintarArchivosDe(donde, tipo, id);
+      } catch (error) {
+        avisar(error.message, true);
+      }
+    });
+  });
+}
+
+/**
+ * Abre un archivo protegido.
+ *
+ * El endpoint exige el token en la cabecera, así que no se puede poner
+ * la URL directa en una pestaña nueva: hay que bajarlo con fetch y
+ * abrirlo desde la memoria del navegador.
+ *
+ * @param {number|string} id
+ * @returns {Promise<void>}
+ */
+async function abrirArchivo(id) {
+  const token = tokenGuardado();
+  if (!token) { manejarSesionVencida(); return; }
+
+  avisar('Abriendo…');
+
+  try {
+    const respuesta = await fetch(
+      CONFIGURACION.servidor.base + 'archivos.php?accion=ver&id=' + encodeURIComponent(id),
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+
+    if (!respuesta.ok) { avisar('No se pudo abrir el archivo.', true); return; }
+
+    const bolsa = await respuesta.blob();
+    const url   = URL.createObjectURL(bolsa);
+
+    window.open(url, '_blank');
+
+    // Se libera después, para darle tiempo a la pestaña nueva a leerlo.
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+  } catch (error) {
+    avisar('No se pudo abrir el archivo.', true);
+  }
+}
+
+/**
+ * Abre una hoja con los archivos de un registro y los botones para
+ * agregar más.
+ *
+ * @param {string} titulo
+ * @param {string} tipo
+ * @param {number} id
+ * @returns {void}
+ */
+function abrirHojaDeArchivos(titulo, tipo, id) {
+  const cuerpo = abrirHoja(titulo,
+    '<div id="lista-archivos"></div>' +
+    botonesDeArchivo({ tipo: tipo, id: id })
+  );
+
+  const lista = buscar('#lista-archivos', cuerpo);
+  pintarArchivosDe(lista, tipo, id);
+
+  engancharBotonesDeArchivo(cuerpo, {
+    tipo: tipo,
+    id: id,
+    despues: () => pintarArchivosDe(lista, tipo, id),
+  });
+}

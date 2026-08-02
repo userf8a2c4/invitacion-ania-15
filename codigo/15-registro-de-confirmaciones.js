@@ -36,10 +36,28 @@
  */
 async function enviarAlServidor(datos) {
   try {
+    /* El código QR del pase se genera acá, en el navegador, y viaja
+       junto con los datos para que confirmar.php lo incruste en el
+       correo del invitado.
+
+       Se hace así, y no generándolo en el servidor, porque de esta
+       forma el QR del correo y el de la tarjeta salen del MISMO código y
+       de la misma biblioteca: es imposible que queden distintos.
+
+       Si la biblioteca no cargó (sin internet), queda vacío y el correo
+       sale sin QR pero con el código escrito, que se lee igual. */
+    const carga = Object.assign({}, datos);
+
+    if (datos.asiste && datos.codigo &&
+        typeof generarQrParaElCorreo === 'function') {
+      const qr = generarQrParaElCorreo(datos.codigo);
+      if (qr) carga.qrPng = qr;
+    }
+
     const respuesta = await fetch('/confirmar.php', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body:    JSON.stringify(datos),
+      body:    JSON.stringify(carga),
     });
 
     if (!respuesta.ok) {

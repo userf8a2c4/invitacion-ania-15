@@ -75,50 +75,83 @@ function arrancarLaApp() {
 }
 
 
-/* ─── 3. VISTAS TODAVÍA NO CONSTRUIDAS ─────────────────────────────── */
+/* ─── 3. LO QUE FALTA ──────────────────────────────────────────────── */
 
-/* Estas tres vistas están planificadas pero todavía no escritas. Se
-   dejan estos avisos honestos en lugar de una pantalla en blanco o un
-   error de JavaScript que rompería la navegación entera.
-
-   A medida que se construya cada una, se borra su función de acá y se
-   crea su archivo (09-vista-correo.js, 10-vista-dinero.js, etc.). */
+/* Correo, Presupuesto, Evento y Notas ya tienen su propio archivo:
+   09-vista-dinero.js, 10-planificador.js, 11-vista-evento.js y
+   12-vista-correo.js. Acá solo quedan las dos hojas del menú que
+   todavía no se construyeron. */
 
 /**
- * Aviso de sección en construcción.
+ * Lista de personas con acceso al panel.
  *
- * @param {string} idVista
- * @param {string} queVaAHaber
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function pintarEnConstruccion(idVista, queVaAHaber) {
-  pintarVacio(
-    buscar('#vista-' + idVista),
-    'Todavía no está lista',
-    'Acá va a estar ' + queVaAHaber + '.'
-  );
+async function abrirHojaDeUsuarios() {
+  const cuerpo = abrirHoja('Personas con acceso',
+    '<div id="lista-usuarios"></div>');
+
+  const lista = buscar('#lista-usuarios', cuerpo);
+  pintarCargando(lista, 2);
+
+  try {
+    const usuarios = await traer('usuarios.php?accion=listar');
+
+    lista.innerHTML = usuarios.map(u =>
+      '<div class="lista__fila">' +
+        '<span class="lista__cuerpo">' +
+          '<span class="lista__titulo">' + seguro(u.nombre) + '</span>' +
+          '<span class="lista__pie">' + seguro(u.correo) + '</span>' +
+        '</span>' +
+        '<span class="lista__lado">' +
+          '<span class="etiqueta etiqueta--' +
+            (Number(u.activo) === 1 ? 'bien' : 'tenue') + '">' +
+            seguro(u.rol === 'admin' ? 'Administradora' : 'Entrada') +
+          '</span>' +
+        '</span>' +
+      '</div>'
+    ).join('');
+  } catch (error) {
+    pintarError(lista, error.message, () => abrirHojaDeUsuarios());
+  }
 }
 
-function dibujarCorreo() {
-  pintarEnConstruccion('correo',
-    'la bandeja de info@aniaxv.com, para leer y responder desde el teléfono');
-}
+/**
+ * Historial de cambios: quién tocó qué y cuándo.
+ *
+ * @returns {Promise<void>}
+ */
+async function abrirHojaDeBitacora() {
+  const cuerpo = abrirHoja('Historial de cambios',
+    '<div id="lista-bitacora"></div>');
 
-function dibujarEvento() {
-  pintarEnConstruccion('evento',
-    'las mesas, el corte de honor, la ceremonia, la música y el cronograma');
-}
+  const lista = buscar('#lista-bitacora', cuerpo);
+  pintarCargando(lista, 4);
 
-function abrirHojaDeNota() {
-  avisar('Las notas todavía no están listas.');
-}
+  try {
+    const filas = await traer('bitacora.php?accion=listar');
 
-function abrirHojaDeUsuarios() {
-  avisar('La gestión de personas todavía no está lista.');
-}
+    if (!filas.length) {
+      pintarVacio(lista, 'Todavía no hay movimientos',
+        'Acá va a quedar registrado cada cambio, con quién lo hizo.');
+      return;
+    }
 
-function abrirHojaDeBitacora() {
-  avisar('El historial todavía no está listo.');
+    lista.innerHTML = filas.map(f =>
+      '<div class="lista__fila">' +
+        '<span class="lista__cuerpo">' +
+          '<span class="lista__titulo">' +
+            seguro(f.usuario_nombre + ' ' + f.accion) + '</span>' +
+          '<span class="lista__pie">' +
+            seguro(acortar(f.detalle || f.tabla_afectada, 60)) + '</span>' +
+        '</span>' +
+        '<span class="lista__lado vacio__texto">' +
+          seguro(comoCuando(String(f.cuando).slice(0, 10))) + '</span>' +
+      '</div>'
+    ).join('');
+  } catch (error) {
+    pintarError(lista, error.message, () => abrirHojaDeBitacora());
+  }
 }
 
 

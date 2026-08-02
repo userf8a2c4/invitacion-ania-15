@@ -126,10 +126,14 @@ async function cargarNotas(donde, busca) {
   }
 
   donde.innerHTML = notas.map(nota =>
-    '<button class="lista__fila" data-nota="' + seguro(nota.id) + '">' +
+    '<button class="lista__fila" data-nota="' + seguro(nota.id) + '"' +
+      (Number(nota.fijada) === 1
+        ? ' style="border-left:3px solid var(--oro)"' : '') + '>' +
       '<span class="lista__cuerpo">' +
         '<span class="lista__titulo">' +
-          (Number(nota.fijada) === 1 ? '📌 ' : '') + seguro(nota.titulo) +
+          // Las notas fijadas se marcan con una barra dorada al costado,
+          // no con un emoji: se lee igual y va con el resto del panel.
+          seguro(nota.titulo) +
         '</span>' +
         '<span class="lista__pie">' +
           seguro(acortar(nota.cuerpo || '', 70)) + '</span>' +
