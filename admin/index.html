@@ -205,9 +205,14 @@
 
 <!-- Menú de los tres puntitos. -->
 <div id="menu" class="menu oculto" role="menu">
+  <!-- El de instalar se esconde solo cuando la app ya está instalada,
+       o cuando el navegador no ofrece instalarla. -->
+  <button class="menu__opcion oculto" data-menu="instalar" id="opcion-instalar"
+          role="menuitem">Instalar en la pantalla de inicio</button>
   <button class="menu__opcion" data-menu="cuenta"  role="menuitem">Mi cuenta</button>
   <button class="menu__opcion" data-menu="usuarios" role="menuitem">Personas con acceso</button>
-  <button class="menu__opcion" data-menu="avisos"  role="menuitem">Activar avisos</button>
+  <button class="menu__opcion" data-menu="nuevo-admin" role="menuitem">Agregar administrador</button>
+  <button class="menu__opcion" data-menu="avisos"  role="menuitem">Avisos y recordatorios</button>
   <button class="menu__opcion" data-menu="bitacora" role="menuitem">Historial de cambios</button>
   <button class="menu__opcion menu__opcion--peligro" data-menu="salir" role="menuitem">Cerrar sesión</button>
 </div>
@@ -233,6 +238,7 @@
 <script src="codigo/12-vista-correo.js"></script>
 <script src="codigo/13-exportar.js"></script>
 <script src="codigo/14-archivos.js"></script>
+<script src="codigo/15-instalar-y-avisos.js"></script>
 <script src="codigo/20-arranque.js"></script>
 
 </body>

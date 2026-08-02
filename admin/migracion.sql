@@ -121,6 +121,20 @@ CREATE TABLE IF NOT EXISTS archivos (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+-- Ajustes que el panel necesita guardar y que NO pueden ir al .env.
+--
+-- POR QUÉ EXISTE ESTA TABLA
+-- El sitio se despliega con git y el .env está en .gitignore (bien: tiene
+-- las contraseñas). O sea que agregarle una variable nueva obliga a entrar
+-- a mano por hPanel. Las claves VAPID de las notificaciones se generan
+-- solas la primera vez y se guardan acá, sin tocar ningún archivo.
+CREATE TABLE IF NOT EXISTS ajustes (
+  clave  VARCHAR(60) NOT NULL PRIMARY KEY,
+  valor  TEXT,
+  creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 -- Un renglón por teléfono que aceptó recibir avisos.
 CREATE TABLE IF NOT EXISTS suscripciones_push (
   id          INT AUTO_INCREMENT PRIMARY KEY,

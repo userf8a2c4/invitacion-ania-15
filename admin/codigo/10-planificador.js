@@ -173,14 +173,44 @@ function formularioNota(nota) {
   const area = buscar('#not-cuerpo', cuerpo);
   if (!nota) area.focus();
 
-  buscar('#pie-guardar', cuerpo).addEventListener('click', () => {
-    const carga = {
+  /**
+   * Junta lo escrito en el formulario.
+   *
+   * @returns {Object|null} null si la nota está vacía.
+   */
+  const armarCarga = () => {
+    const datos = {
       titulo:   valorDe('not-titulo', cuerpo),
       cuerpo:   valorDe('not-cuerpo', cuerpo),
       etiqueta: valorDe('not-etiqueta', cuerpo),
       fijada:   !!valorDe('not-fijada', cuerpo),
     };
-    if (!carga.titulo && !carga.cuerpo) { avisar('La nota está vacía.', true); return; }
+    if (!datos.titulo && !datos.cuerpo) {
+      avisar('La nota está vacía.', true);
+      return null;
+    }
+    return datos;
+  };
+
+  /* Una nota también puede llevar adjuntos: la foto del vestido que le
+     gustó, el PDF que mandó el salón, la captura de una idea. */
+  montarAdjuntos({
+    cuerpo: cuerpo,
+    tipo:   'nota',
+    titulo: 'Fotos y documentos',
+    id:     nota ? nota.id : 0,
+    guardarPrimero: async () => {
+      const carga = armarCarga();
+      if (!carga) return 0;
+
+      const r = await mandar('planificador.php?accion=guardar_nota', carga);
+      return r.id;
+    },
+  });
+
+  buscar('#pie-guardar', cuerpo).addEventListener('click', () => {
+    const carga = armarCarga();
+    if (!carga) return;
     if (nota) carga.id = nota.id;
 
     guardarPlan('guardar_nota', carga, () => abrirHojaDeNota());

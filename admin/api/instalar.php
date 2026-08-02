@@ -89,7 +89,7 @@ foreach ($instrucciones as $instruccion) {
 
 $tablasEsperadas = [
     'usuarios', 'sesiones', 'intentos_login', 'bitacora', 'notas', 'archivos',
-    'suscripciones_push', 'categorias_gasto', 'padrinos', 'proveedores',
+    'ajustes', 'suscripciones_push', 'categorias_gasto', 'padrinos', 'proveedores',
     'cotizaciones', 'gastos', 'pagos', 'tareas', 'agenda', 'cronograma',
     'mesas', 'asignacion_mesas', 'corte_honor', 'ensayos', 'asistencia_ensayos',
     'regalos', 'foraneos', 'ceremonia', 'requisitos_ceremonia', 'musica',

@@ -249,10 +249,12 @@ async function subirArchivo(archivo, opciones) {
  * @returns {Promise<void>}
  */
 async function pintarArchivosDe(donde, tipo, id) {
+  /* Sin id el registro todavía no existe, así que no hay archivos que
+     listar. No es un error: montarAdjuntos() lo guarda solo cuando se
+     toca Subir o Tomar foto. */
   if (!id) {
     donde.innerHTML =
-      '<p class="vacio__texto">Guardá primero, y después vas a poder ' +
-      'adjuntar archivos.</p>';
+      '<p class="vacio__texto">Al adjuntar algo se guarda primero, solo.</p>';
     return;
   }
 
@@ -350,6 +352,81 @@ async function abrirArchivo(id) {
   } catch (error) {
     avisar('No se pudo abrir el archivo.', true);
   }
+}
+
+/**
+ * Mete el bloque de adjuntos dentro de un formulario abierto.
+ *
+ * EL PROBLEMA QUE RESUELVE
+ * Un archivo se guarda atado al id de un registro. Pero cuando se está
+ * creando algo nuevo, ese id todavía no existe: la fila no se insertó.
+ * Antes, por eso, el bloque solo aparecía al editar — y quien quería
+ * cargar un gasto CON su factura tenía que guardarlo, cerrarlo, volver a
+ * abrirlo y recién ahí adjuntar.
+ *
+ * Ahora, si no hay id, al tocar "Subir" o "Tomar foto" se guarda primero
+ * el registro (con lo que haya en el formulario), se obtiene su id, y se
+ * sigue con el archivo sin que la persona note el paso intermedio.
+ *
+ * @param {Object} opciones
+ * @param {Element} opciones.cuerpo - La hoja abierta.
+ * @param {string} opciones.tipo - 'gasto', 'nota', 'proveedor'…
+ * @param {string} opciones.titulo - Encabezado del bloque.
+ * @param {number} opciones.id - 0 si el registro es nuevo.
+ * @param {Function} opciones.guardarPrimero - Guarda y devuelve el id.
+ * @returns {void}
+ */
+function montarAdjuntos(opciones) {
+  const bloque = crear('div');
+  bloque.innerHTML =
+    '<div class="tarjeta__titulo" style="margin-top:var(--esp-4)">' +
+      seguro(opciones.titulo) +
+    '</div>' +
+    '<div id="archivos-de-esto"></div>' +
+    botonesDeArchivo({ tipo: opciones.tipo, id: opciones.id });
+
+  /* Va antes del pie de botones, si lo hay, para que Guardar quede
+     siempre al final. Si el formulario no tiene pie, va al final. */
+  const pie = buscar('.acciones', opciones.cuerpo);
+  if (pie) opciones.cuerpo.insertBefore(bloque, pie);
+  else opciones.cuerpo.appendChild(bloque);
+
+  const lista = buscar('#archivos-de-esto', bloque);
+
+  /* El id puede cambiar en mitad de la vida de este bloque: empieza en 0
+     y pasa a ser el real en cuanto se guarda. Por eso se guarda acá y no
+     se lee de opciones cada vez. */
+  let idActual = Number(opciones.id) || 0;
+
+  pintarArchivosDe(lista, opciones.tipo, idActual);
+
+  buscarTodos('[data-subir]', bloque).forEach(boton => {
+    boton.addEventListener('click', async () => {
+
+      if (!idActual) {
+        // Todavía no existe la fila: se crea con lo que haya cargado.
+        avisar('Guardando primero…');
+
+        try {
+          idActual = Number(await opciones.guardarPrimero()) || 0;
+        } catch (error) {
+          avisar(error.message || 'No se pudo guardar.', true);
+          return;
+        }
+
+        if (!idActual) return;   // armarCarga() ya avisó qué falta
+
+        avisar('Guardado. Ahora elegí el archivo.');
+      }
+
+      elegirYSubir({
+        tipo: opciones.tipo,
+        id: idActual,
+        camara: boton.dataset.subir === 'camara',
+        despues: () => pintarArchivosDe(lista, opciones.tipo, idActual),
+      });
+    });
+  });
 }
 
 /**
