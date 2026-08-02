@@ -39,8 +39,10 @@ $SMTP_PORT    = (int)(getenv('SMTP_PORT') ?: 465); // Forzado a 465 en el códig
 $SMTP_USER    = getenv('SMTP_USER')    ?: '';   
 $SMTP_PASS    = getenv('SMTP_PASSWORD') ?: '';
 
-$CORREO_FROM  = getenv('CORREO_REMITENTE')     ?: 'noreply@aniaxv.com';
-$CORREO_ADMIN = getenv('CORREO_ADMINISTRADORA') ?: 'noreply@aniaxv.com,blucila699@gmail.com';
+/* El buzón info@aniaxv.com es el único que existe de verdad en Hostinger,
+   por eso es el que firma los envíos. noreply@aniaxv.com nunca se creó. */
+$CORREO_FROM  = getenv('CORREO_REMITENTE')      ?: 'info@aniaxv.com';
+$CORREO_ADMIN = getenv('CORREO_ADMINISTRADORA') ?: 'info@aniaxv.com,blucila699@gmail.com';
 
 /* ─── LEER JSON ───────────────────────────────────────────────────────── */
 $datos = json_decode(file_get_contents('php://input'), true);

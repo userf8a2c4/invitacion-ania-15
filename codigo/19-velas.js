@@ -437,12 +437,22 @@
     return limitar(w * 0.235, 240, 440);
   }
 
-  capaApliques.insertAdjacentHTML('beforeend', defsCompartidos);
-
+  /* ⚡ LA CONSTRUCCIÓN TAMPOCO OCURRE DURANTE LA CARGA (ver sección 3 bis).
+     Esta lista arranca VACÍA y se llena de a una pieza por cuadro recién
+     cuando la invitación se revela. Todo lo que la recorre (el titileo, el
+     rearmado de fuentes de luz) funciona igual con la lista vacía: no hace
+     nada hasta que hay piezas. */
   /** @type {Array} */
-  const piezas = ANCLAS.map(a => {
+  const piezas = [];
+
+  /**
+   * Construye UNA pieza: su candelabro (o cúmulo de cirios) y sus fuegos.
+   * @param {Object} a - Un ancla de ANCLAS.
+   * @returns {void}
+   */
+  function construirUnaPieza(a) {
     const seccion = buscar(a.seccion);
-    if (!seccion) return null;
+    if (!seccion) return;
     const t = TIPOS[a.tipo];
 
     const cont = document.createElement('div');
@@ -500,8 +510,8 @@
       };
     });
 
-    return { cont, luzDeLaPieza, lado: a.lado, tipo: a.tipo, seccion, fuegos, t, caja: null };
-  }).filter(Boolean);
+    piezas.push({ cont, luzDeLaPieza, lado: a.lado, tipo: a.tipo, seccion, fuegos, t, caja: null });
+  }
 
 
   /* ─── 3. UBICAR PIEZA Y RESPLANDORES (POR CÁLCULO) ─────────────────────
@@ -570,11 +580,9 @@
     acomodarUna();
   }
 
-  /** Cede el hilo al navegador; con la pestaña oculta rAF no corre. */
-  function cederElHilo(seguir) {
-    if (document.hidden) setTimeout(seguir, 0);
-    else requestAnimationFrame(seguir);
-  }
+  /* cederElHilo() y trabajarPorTandas() viven en codigo/02-utilidades.js:
+     los usan también las enredaderas y las motas, así que la copia local
+     que había acá se borró para no mantener tres versiones de lo mismo. */
 
   /**
    * Coloca UNA pieza: el candelabro y todos sus fuegos.
@@ -769,37 +777,70 @@
     for (const c of piezas) c.luzDeLaPieza.style.display = 'none';
   }
 
-  /* ⚡ TAMPOCO ACÁ SE ACOMODA NADA DURANTE LA CARGA.
-     acomodarTodo() mide y ubica los 8 candelabros con sus 52 fuegos, y
-     hacerlo dentro de la evaluación del script retrasaba el primer pintado
-     (ver la nota equivalente en 07-marco-y-enredaderas.js). Los candelabros
-     viven en la penumbra, detrás del sobre: nadie los ve hasta que la
-     invitación se revela. */
-  let yaSeAcomodo = false;
-  function acomodarUnaSolaVez() {
-    if (yaSeAcomodo) return;
-    yaSeAcomodo = true;
-    acomodarTodo();
+  /* ─── 3 bis. NI CONSTRUIR NI ACOMODAR DURANTE LA CARGA ─────────────────
+     Los candelabros viven en la penumbra, detrás del sobre: nadie los ve
+     hasta que la invitación se revela. Así que ni se crean ni se miden
+     antes de ese momento.
+
+     ⚠️ ANTES ACÁ HABÍA DOS PROBLEMAS, Y LOS DOS COSTABAN CAROS:
+
+       1. Solo el ACOMODADO estaba diferido; la CONSTRUCCIÓN (parsear los 8
+          SVG completos y crear 104 divs) ocurría en plena evaluación del
+          script, o sea en el peor momento posible. El comentario que había
+          acá decía "tampoco acá se acomoda nada durante la carga", que era
+          cierto pero incompleto: crear no es acomodar.
+
+       2. Un temporizador de respaldo de 1.600 ms que se disparaba SIEMPRE,
+          aunque el sobre siguiera cerrado — el mismo error que en
+          07-marco-y-enredaderas.js. Y encima `load` llamaba a acomodarTodo()
+          salteándose el guard, así que en una carga normal el layout de las
+          8 piezas corría DOS VECES.
+
+     Ahora es una sola cadena, disparada por un solo evento: construir (de a
+     una pieza por cuadro) → acomodar (de a una pieza por cuadro) → observar
+     cambios de tamaño. El caso "no existe el sobre" lo cubre
+     codigo/03-sobre-de-apertura.js emitiendo el evento él mismo. */
+  let yaSeConstruyo = false;
+
+  function construirYAcomodarUnaSolaVez() {
+    if (yaSeConstruyo) return;
+    yaSeConstruyo = true;
+
+    // Los <defs> compartidos (degradados y filtros) van una sola vez.
+    capaApliques.insertAdjacentHTML('beforeend', defsCompartidos);
+
+    let cual = 0;
+    (function construirUna() {
+      if (cual >= ANCLAS.length) {
+        // Recién con todas las piezas creadas tiene sentido medirlas.
+        acomodarTodo(observarLasSecciones);
+        return;
+      }
+      construirUnaPieza(ANCLAS[cual++]);
+      cederElHilo(construirUna);
+    })();
   }
 
-  document.addEventListener('invitacion-visible', acomodarUnaSolaVez);
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    setTimeout(acomodarUnaSolaVez, 1600);
-  }));
+  document.addEventListener('invitacion-visible', construirYAcomodarUnaSolaVez);
 
-  /* Rehacer si cambia el tamaño de la ventana (con un respiro). */
+  /* Rehacer si cambia el tamaño de la ventana (con un respiro).
+     Si todavía no se construyó nada, no hay nada que acomodar. */
   let temporizador = null;
   function acomodarConRespiro() {
+    if (!piezas.length) return;
     clearTimeout(temporizador);
     temporizador = setTimeout(acomodarTodo, 200);
   }
   window.addEventListener('resize', acomodarConRespiro);
-  window.addEventListener('load', acomodarTodo);
+  window.addEventListener('load', acomodarConRespiro);
 
   /* ⚠️ EL CASO QUE FALLABA: el iframe del mapa carga TARDE y mueve todo lo
      que hay debajo. Un ResizeObserver sobre las secciones ancla reubica en
-     cuanto eso pasa, así la luz nunca queda corrida respecto de su llama. */
-  if ('ResizeObserver' in window) {
+     cuanto eso pasa, así la luz nunca queda corrida respecto de su llama.
+     Se engancha al terminar de construir, porque antes `piezas` está vacía
+     y no habría ninguna sección que observar. */
+  function observarLasSecciones() {
+    if (!('ResizeObserver' in window)) return;
     const observador = new ResizeObserver(acomodarConRespiro);
     const vistas = new Set();
     for (const c of piezas) {

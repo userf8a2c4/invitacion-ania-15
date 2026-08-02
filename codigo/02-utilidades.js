@@ -479,6 +479,76 @@ function rebotar(funcion, espera) {
   };
 }
 
+/**
+ * CEDER EL HILO: le devuelve el control al navegador para que pinte.
+ *
+ * Con la pestaña visible se usa requestAnimationFrame (queda sincronizado
+ * con el dibujo). Con la pestaña oculta rAF NO CORRE —el navegador no dibuja
+ * lo que nadie mira—, así que ahí se usa un temporizador o la construcción
+ * quedaría colgada para siempre.
+ *
+ * @param {Function} seguir - Qué hacer cuando el navegador nos devuelva el turno.
+ * @returns {void}
+ */
+function cederElHilo(seguir) {
+  if (document.hidden) setTimeout(seguir, 0);
+  else requestAnimationFrame(seguir);
+}
+
+/**
+ * TRABAJAR POR TANDAS: recorre una lista larga sin congelar la página.
+ *
+ * EL PROBLEMA QUE RESUELVE, Y POR QUÉ NO ALCANZA CON "DE A N POR VUELTA"
+ * Construir 350 flores de una sola vez congela la web durante segundos. La
+ * solución obvia es cortar en tandas de tamaño fijo ("de a dos plantas"),
+ * y eso es lo que se hacía antes acá. Pero tiene una falla: dos plantas
+ * tardan cosas MUY distintas en una computadora rápida y en una lenta. El
+ * número fijo se elige mirando UNA máquina y no garantiza nada en las demás.
+ *
+ * Acá el corte lo decide el RELOJ, no la cantidad: se hacen todos los
+ * elementos que entren en el presupuesto de milisegundos, y se corta ahí.
+ * En un equipo rápido entran quince; en uno lento, uno. En los dos casos la
+ * página sigue respondiendo, que es lo que de verdad importa.
+ *
+ * POR QUÉ 8 MILISEGUNDOS
+ * El navegador tiene ~16 ms para armar cada cuadro (60 cuadros por segundo).
+ * Ocupando la mitad, queda margen de sobra para que dibuje. Además, las
+ * mediciones de rendimiento (PageSpeed) penalizan toda tarea que pase de
+ * 50 ms, así que 8 deja un colchón enorme incluso si un elemento se pasa.
+ *
+ * @param {number} cuantos - Cuántos elementos hay que procesar en total.
+ * @param {Function} hacerUno - Recibe el índice y procesa ESE elemento.
+ * @param {Function} [alTerminar] - Se llama una vez, al final de todo.
+ * @param {number} [presupuestoMs=8] - Cuánto puede durar una tanda.
+ * @returns {void}
+ *
+ * @example
+ *   trabajarPorTandas(plantas.length, i => crearPlanta(plantas[i]), medirTodo);
+ */
+function trabajarPorTandas(cuantos, hacerUno, alTerminar, presupuestoMs = 8) {
+  let indice = 0;
+
+  function unaTanda() {
+    const arranque = performance.now();
+
+    /* Se hace SIEMPRE al menos uno. Si un solo elemento ya se pasa del
+       presupuesto no se puede partir por la mitad, pero sin esta garantía
+       en un equipo muy lento no avanzaría nunca. */
+    do {
+      hacerUno(indice++);
+    } while (indice < cuantos && performance.now() - arranque < presupuestoMs);
+
+    if (indice < cuantos) {
+      cederElHilo(unaTanda);
+      return;
+    }
+    if (typeof alTerminar === 'function') alTerminar();
+  }
+
+  if (cuantos > 0) unaTanda();
+  else if (typeof alTerminar === 'function') alTerminar();
+}
+
 /* ─── 5. MEDICIÓN COMPARTIDA DEL RELICARIO ─────────────────────────── */
 
 /**

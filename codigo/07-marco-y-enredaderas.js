@@ -1152,27 +1152,13 @@
 
   /* ─── 5. REPARTIR LAS PLANTAS ──────────────────────────────────── */
 
-  /**
-   * Cede el hilo principal y sigue en el próximo momento libre.
-   *
-   * ⚠️ POR QUÉ NO ALCANZA requestAnimationFrame. Los troceados de acá abajo
-   * (construir plantas, armar ramilletes, medir flores) se cortan en tandas
-   * para no congelar el navegador. Pero requestAnimationFrame **no se
-   * ejecuta si la pestaña no está visible**: si alguien abre la invitación
-   * en una pestaña de fondo —cosa habitual: "abrir en pestaña nueva"— el
-   * troceado quedaba a mitad de camino y las enredaderas aparecían vacías.
-   *
-   * Con la pestaña oculta se usa setTimeout, que sí corre (más lento, pero
-   * corre) y termina el trabajo. Cuando está visible se sigue usando rAF,
-   * que es lo correcto: se sincroniza con el dibujado.
-   *
-   * @param {Function} seguir - Qué ejecutar en el próximo hueco.
-   * @returns {void}
-   */
-  function cederYSeguir(seguir) {
-    if (document.hidden) setTimeout(seguir, 0);
-    else requestAnimationFrame(seguir);
-  }
+  /* Los troceados de acá abajo (construir plantas, armar ramilletes, medir
+     flores) usan cederElHilo() y trabajarPorTandas(), que viven en
+     codigo/02-utilidades.js porque los comparten también las velas y las
+     motas. Ahí está explicado en detalle por qué no alcanza con
+     requestAnimationFrame a secas (con la pestaña de fondo rAF no corre, y
+     el troceado quedaba a mitad de camino con las enredaderas vacías). */
+  const cederYSeguir = cederElHilo;
 
   /** @type {Array<Object>} Todas las plantas con su estado de movimiento. */
   const plantas = [];
@@ -1357,33 +1343,30 @@
        IDÉNTICO se haga de una vez o de a poco; lo único que cambia es que,
        de a poco, el navegador puede respirar entre tanda y tanda —pintar,
        atender un clic— en vez de quedar congelado. */
-    /* Bajado de 4 a 2. Con 4, cada tanda construía cuatro SVG completos
-       —rama, nudos y hasta 60 rosas cada uno— y eso solo ya pasaba de los
-       16 ms que dura un cuadro. En la máquina objetivo (i5-4590T de 2 GHz)
-       el medidor llegó a marcar una tarea de 1101 ms encadenando tandas,
-       ramilletes y mediciones: un segundo entero de página congelada.
-       De a dos, ninguna tanda se pasa del presupuesto de un cuadro. */
-    const PLANTAS_POR_TANDA = 2;
-    let indice = 0;
+    /* ⚡ EL CORTE LO DECIDE EL RELOJ, NO UN NÚMERO FIJO.
+       Antes acá había PLANTAS_POR_TANDA = 2, un número elegido a mano
+       midiendo en la máquina objetivo (un i5-4590T de 2 GHz). El problema de
+       un número fijo es que solo vale para la máquina donde se midió: en una
+       más lenta, dos plantas se pasan igual del presupuesto, y en una más
+       rápida se está cediendo el hilo más de lo necesario.
 
-    function crearUnaTanda() {
-      // Entró una construcción más nueva: esta se apaga sin tocar nada.
-      if (!sigoVigente()) return;
-
-      const limite = Math.min(indice + PLANTAS_POR_TANDA, tareas.length);
-      for (; indice < limite; indice++) crearUnaPlanta(tareas[indice]);
-
-      if (indice < tareas.length) {
-        cederYSeguir(crearUnaTanda);
-      } else {
-        /* Recién cuando TODAS las plantas de la enredadera existen se pasa a
-           los ramilletes de esquina (uno por cuadro), y cuando ESOS terminan
-           —de ahí el callback— se prepara el estado de las flores, que
-           necesita que ya estén todas en la página. */
-        colocarLosRamilletesDeEsquina(prepararLasFlores, sigoVigente);
-      }
-    }
-    crearUnaTanda();
+       trabajarPorTandas() (codigo/02-utilidades.js) hace todas las plantas
+       que entren en 8 ms y corta ahí. Se adapta solo a cada equipo, que es
+       justo lo que hace falta: la invitación tiene que ir fluida tanto acá
+       como en el teléfono de cualquier invitado. */
+    trabajarPorTandas(
+      tareas.length,
+      /* sigoVigente(): si entró una construcción más nueva (un resize que
+         cambió cuántas plantas entran), esta se apaga sin tocar nada. Se
+         pregunta por planta y no por tanda porque ahora las tandas no tienen
+         un tamaño fijo; la comprobación es una comparación de enteros. */
+      i => { if (sigoVigente()) crearUnaPlanta(tareas[i]); },
+      /* Recién cuando TODAS las plantas de la enredadera existen se pasa a
+         los ramilletes de esquina (uno por cuadro), y cuando ESOS terminan
+         —de ahí el callback— se prepara el estado de las flores, que
+         necesita que ya estén todas en la página. */
+      () => { if (sigoVigente()) colocarLosRamilletesDeEsquina(prepararLasFlores, sigoVigente); }
+    );
   }
 
   /**
@@ -1578,14 +1561,26 @@
      perfil— y bloqueaba el primer pintado: el LCP se iba a 12,4 segundos.
 
      Nada de esto se ve antes de abrir el sobre, así que no hay ninguna razón
-     para que retrase la portada. Arranca con lo que ocurra primero:
+     para que retrase la portada: se construye al escuchar
+     `invitacion-visible`, que es cuando de verdad hacen falta las
+     enredaderas.
 
-       · el sobre se abre (`invitacion-visible`), que es cuando de verdad
-         hacen falta las enredaderas; o
-       · dos segundos después del primer pintado, como red de seguridad por
-         si alguien llega con las animaciones apagadas o el sobre salteado.
+     ⚠️ ACÁ HABÍA ADEMÁS UN TEMPORIZADOR DE RESPALDO de 2 segundos ("construí
+     igual por si el sobre se salteó"). Se quitó, y vale la pena explicar por
+     qué, porque parecía inofensivo y no lo era:
 
-     `unaSolaVez` garantiza que las dos vías no la lancen dos veces. */
+       · Se disparaba SIEMPRE, no solo en el caso raro que decía cubrir. Con
+         el sobre cerrado y nadie mirando, a los 2 segundos la página se
+         ponía a construir 24 plantas y ~354 flores igual.
+       · Eso es exactamente lo que medía PageSpeed: 2.790 ms de Total
+         Blocking Time, y de paso empujaba el Largest Contentful Paint a 2,9 s
+         porque ese repintado grande pasaba a ser el elemento más grande.
+       · El caso que cubría (que el sobre no exista en el HTML) ahora lo
+         detecta con certeza codigo/03-sobre-de-apertura.js, que emite
+         `invitacion-visible` él mismo cuando no encuentra el sobre.
+
+     Moraleja: un respaldo por cronómetro cubre el caso raro cobrándoselo a
+     TODAS las visitas. Si el caso se puede detectar, se detecta. */
   let yaSeConstruyo = false;
   function construirUnaSolaVez() {
     if (yaSeConstruyo) return;
@@ -1594,13 +1589,6 @@
   }
 
   document.addEventListener('invitacion-visible', construirUnaSolaVez);
-
-  /* Doble rAF = "después del primer pintado de verdad". El setTimeout de
-     dentro le da aire al navegador para asentar la portada antes de ponerse
-     a construir el marco. */
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    setTimeout(construirUnaSolaVez, 2000);
-  }));
 
 
   /* ─── 6. MOVIMIENTO ────────────────────────────────────────────── */

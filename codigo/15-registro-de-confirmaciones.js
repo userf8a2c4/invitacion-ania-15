@@ -6,9 +6,9 @@
 
    CANAL PRINCIPAL, confirmar.php (MySQL + correos)
      enviarAlServidor() manda los datos al servidor PHP.
-     El PHP guarda en MySQL Y manda el correo al invitado Y a la
-     administradora (noreply@aniaxv.com). Funciona para asistencia
-     afirmativa Y negativa.
+     El PHP guarda en MySQL Y manda el correo al invitado Y a las
+     administradoras (info@aniaxv.com y blucila699@gmail.com, definidas
+     en .env). Funciona para asistencia afirmativa Y negativa.
 
    CANAL DE RESPALDO, Google Sheets
      anotarEnLaHoja() sigue funcionando si está configurado en
@@ -27,7 +27,7 @@
  * Manda los datos a confirmar.php en Hostinger.
  * El PHP guarda en MySQL y manda los dos correos:
  *   - Al invitado (su correo personal)
- *   - A la administradora (noreply@aniaxv.com)
+ *   - A cada correo de CORREO_ADMINISTRADORA en .env
  *
  * Se llama SIEMPRE, asista o no el invitado.
  *
