@@ -2010,7 +2010,13 @@
            aria-label="Volumen de la música">
   </div>
 
-  <audio id="audio-de-fondo" loop preload="auto" data-fuente="musica.archivo"></audio>
+  <!-- preload="none": antes era "auto" y el navegador bajaba los 5.3MB de
+       la canción durante la carga inicial, compitiendo con lo que hace
+       falta para mostrar la página. Ahora no descarga nada hasta el primer
+       clic (ver codigo/10-reproductor-de-musica.js), que es cuando de
+       verdad se puede reproducir (el autoplay sin gesto está bloqueado
+       igual por el navegador). -->
+  <audio id="audio-de-fondo" loop preload="none" data-fuente="musica.archivo"></audio>
 </aside>
 
 </div><!-- /#controles-flotantes -->

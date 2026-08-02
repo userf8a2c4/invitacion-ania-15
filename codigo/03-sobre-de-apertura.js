@@ -20,7 +20,7 @@
 
    ÍNDICE
      1. Elementos que vamos a usar
-     2. Precarga de tipografías, fondo y música
+     2. Precarga de tipografías y fondo
      3. Mostrar el sobre cuando todo está listo
      4. Abrir el sobre
    ══════════════════════════════════════════════════════════════════════ */
@@ -42,10 +42,10 @@
 
 
   /* ─── 2. PRECARGA ──────────────────────────────────────────────────
-     Esperamos a que estén listas las tres cosas pesadas de la web. Pero
-     con un límite de tiempo: si alguna tarda demasiado (internet lento),
-     seguimos igual. Es preferible mostrar el sobre que dejar a la
-     persona mirando una pantalla vacía.
+     Esperamos a que estén listas las tipografías y la imagen de fondo.
+     Pero con un límite de tiempo: si alguna tarda demasiado (internet
+     lento), seguimos igual. Es preferible mostrar el sobre que dejar a
+     la persona mirando una pantalla vacía.
      ---------------------------------------------------------------- */
 
   /**
@@ -69,28 +69,20 @@
     });
   }
 
-  /**
-   * Espera a que haya suficiente canción descargada como para sonar sin
-   * cortes.
-   * @returns {Promise} Se cumple cuando el audio está listo (o si falla).
-   */
-  function esperarLaCancion() {
-    return new Promise(resolve => {
-      const audio = buscar('#audio-de-fondo');
-      if (!audio) return resolve();
-
-      /* Le damos la dirección del archivo acá y no en 04, para que el
-         navegador empiece a descargar la canción cuanto antes: mientras
-         la persona mira el sobre, la música ya se está bajando. */
-      if (!audio.getAttribute('src')) {
-        audio.setAttribute('src', CONFIGURACION.musica.archivo);
-      }
-
-      if (audio.readyState >= 3) return resolve();   // ya estaba lista
-      audio.addEventListener('canplaythrough', resolve, { once: true });
-      audio.addEventListener('error', resolve, { once: true });
-    });
-  }
+  /* ⚠️ ANTES había acá una esperarLaCancion() que le ponía src al <audio>
+     y esperaba el evento "canplaythrough" (buffer suficiente) antes de
+     mostrar el sobre, con un tope de 5000ms. Eso frenaba la revelación de
+     TODA la página hasta 5 segundos en cada visita — y Lighthouse lo medía
+     como un LCP de 6 segundos. Se quita por dos motivos:
+       1) No compraba nada: el navegador bloquea el autoplay de audio sin
+          gesto del usuario de todas formas, así que precargar el audio no
+          adelantaba el sonido, solo tapaba el contenido.
+       2) El primer clic de la persona ya dispara la música por su cuenta
+          (ver el listener en codigo/10-reproductor-de-musica.js), así que
+          el audio sigue sonando igual sin haber bloqueado nada acá.
+     El <audio> ahora usa preload="none" (ver index.html) y su src lo pone
+     codigo/04-invitado-personalizado.js cuando corresponda, sin competir
+     por ancho de banda con lo que sí hace falta para mostrar la página. */
 
   /**
    * Corta la espera pase lo que pase después de cierto tiempo.
@@ -103,12 +95,12 @@
 
   /*
      Promise.race("carrera de promesas") devuelve la primera que termine.
-     Acá compiten: "que cargue todo" contra "que pasen 5 segundos".
-     Gana la que ocurra antes, y en cualquier caso mostramos el sobre.
-  */
+     Acá compiten: "que carguen tipografías e imagen de fondo" contra "que
+     pase 1.2 segundos". Gana la que ocurra antes, y en cualquier caso
+     mostramos el sobre — preferible mostrarlo que dejar pantalla vacía. */
   Promise.race([
-    Promise.all([esperarTipografias(), esperarImagenDeFondo(), esperarLaCancion()]),
-    tiempoMaximoDeEspera(5000),
+    Promise.all([esperarTipografias(), esperarImagenDeFondo()]),
+    tiempoMaximoDeEspera(1200),
   ]).then(mostrarElSobre);
 
 
