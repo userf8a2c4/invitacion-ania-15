@@ -1,0 +1,267 @@
+/* ══════════════════════════════════════════════════════════════════════
+   01 · FUNDAMENTOS
+
+   QUÉ HAY EN ESTE ARCHIVO
+   Los colores, los tamaños y las reglas de base que usa todo lo demás.
+   Si querés cambiar el aspecto general del panel, se cambia acá.
+
+   POR QUÉ NO SE VE IGUAL QUE LA INVITACIÓN
+   Comparte la paleta (el oro sobre café oscuro) para que se note que son
+   de la misma casa, pero no la tipografía ni el aire. La invitación usa
+   Georgia con mucho espacio porque se mira una vez y tiene que emocionar.
+   El panel se usa todos los días, con una mano, para buscar un dato
+   rápido: por eso letra de sistema, más chica y todo más junto.
+
+   ÍNDICE
+     1. Variables (colores y medidas)
+     2. Reinicio
+     3. Tipografía base
+     4. Utilidades sueltas
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. VARIABLES ─────────────────────────────────────────────────── */
+
+:root {
+  /* Fondos, del más hondo al más cercano. */
+  --fondo:          #140a04;
+  --fondo-elevado:  #221306;
+  --fondo-tarjeta:  #2a1809;
+  --fondo-hundido:  #0d0603;
+
+  /* Oro: el color de marca. */
+  --oro:        #d4a843;
+  --oro-claro:  #f0dca2;
+  --oro-apagado:#a07830;
+  --borde:      #4a3110;
+
+  /* Texto. */
+  --texto:        #f5e6c8;
+  --texto-suave:  #c9b48c;
+  --texto-tenue:  #8a7550;
+
+  /* Colores con significado. Se usan SOLO para estados, nunca de adorno:
+     si el rojo apareciera decorando, dejaría de leerse como alarma. */
+  --bien:    #5fae6a;
+  --ojo:     #d99a3c;
+  --alerta:  #cf5b52;
+  --info:    #5b93c4;
+
+  /* Medidas. Todo el espaciado sale de estas seis para que nada quede
+     a ojo y el conjunto se vea parejo. */
+  --gota:  4px;
+  --esp-1: 8px;
+  --esp-2: 12px;
+  --esp-3: 16px;
+  --esp-4: 24px;
+  --esp-5: 32px;
+
+  --redondeo:       12px;
+  --redondeo-chico: 8px;
+  --redondeo-hoja:  20px;
+
+  /* Alturas de las barras fijas. Se usan para calcular cuánto espacio
+     dejarle al contenido y que nada quede tapado. */
+  --alto-encabezado: 60px;
+  --alto-navegacion: 60px;
+
+  /* El "notch" y la barra de gestos del iPhone. En un navegador normal
+     valen 0, así que no molestan. */
+  --seguro-arriba: env(safe-area-inset-top, 0px);
+  --seguro-abajo:  env(safe-area-inset-bottom, 0px);
+
+  --sombra:       0 4px 16px rgba(0, 0, 0, .45);
+  --sombra-alta:  0 -6px 28px rgba(0, 0, 0, .6);
+
+  --transicion: 160ms ease;
+}
+
+
+/* ─── 2. REINICIO ──────────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+html {
+  /* Que el rebote del scroll en iOS muestre el color del panel y no
+     blanco, que rompería por completo la sensación de app. */
+  background: var(--fondo);
+
+  /* Sin esto, iOS agranda la letra al girar el teléfono. */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--fondo);
+  color: var(--texto);
+
+  /* Letra del sistema: la que el teléfono ya tiene cargada. Se ve nativa
+     y no cuesta ni un byte de descarga. */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+
+  /* Que no se pueda arrastrar la página entera como si fuera un papel:
+     es lo que delata a una web disfrazada de app. */
+  overscroll-behavior: none;
+
+  -webkit-font-smoothing: antialiased;
+}
+
+/* El destello azul al tocar en Android. Molesta y no aporta nada: cada
+   botón ya tiene su propio efecto al presionarse. */
+* { -webkit-tap-highlight-color: transparent; }
+
+img, svg { max-width: 100%; display: block; }
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button { cursor: pointer; }
+
+/* Los iconos heredan el color del texto de donde estén. */
+.icono {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+
+/* ─── 3. TIPOGRAFÍA BASE ───────────────────────────────────────────── */
+
+h1, h2, h3, h4 {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+h1 { font-size: 19px; }
+h2 { font-size: 17px; }
+h3 { font-size: 15px; }
+
+p { margin: 0 0 var(--esp-2); }
+p:last-child { margin-bottom: 0; }
+
+a { color: var(--oro); }
+
+/* Los números de dinero y las cantidades van con cifras de ancho fijo:
+   así las columnas quedan alineadas y no bailan al actualizarse. */
+.cifra {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+
+/* ─── 4. UTILIDADES SUELTAS ────────────────────────────────────────── */
+
+.oculto { display: none !important; }
+
+/* Esconde algo de la vista pero lo deja para los lectores de pantalla. */
+.solo-lectores {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Marca de foco visible. Solo aparece al navegar con teclado, nunca al
+   tocar con el dedo, gracias a :focus-visible. */
+:focus-visible {
+  outline: 2px solid var(--oro);
+  outline-offset: 2px;
+  border-radius: var(--gota);
+}
+
+/* Respetar a quien pidió menos movimiento en los ajustes del teléfono.
+   Para alguien con vértigo o migrañas esto no es un lujo. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+
+/* ─── PANTALLA DE CARGA ────────────────────────────────────────────── */
+
+.pantalla-carga {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--esp-4);
+  background: var(--fondo);
+  z-index: 100;
+}
+
+.pantalla-carga__marca {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 30px;
+  letter-spacing: 3px;
+  color: var(--oro);
+}
+.pantalla-carga__marca span { color: var(--oro-apagado); }
+
+.girador {
+  width: 28px;
+  height: 28px;
+  border: 2.5px solid var(--borde);
+  border-top-color: var(--oro);
+  border-radius: 50%;
+  animation: girar 700ms linear infinite;
+}
+
+@keyframes girar { to { transform: rotate(360deg); } }
+
+
+/* ─── PANTALLA DE ENTRADA ──────────────────────────────────────────── */
+
+.pantalla-entrada {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--esp-4);
+  padding-top: calc(var(--esp-4) + var(--seguro-arriba));
+}
+
+.tarjeta-entrada {
+  width: 100%;
+  max-width: 360px;
+  background: var(--fondo-tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo);
+  padding: var(--esp-5) var(--esp-4);
+  box-shadow: var(--sombra);
+}
+
+.tarjeta-entrada__titulo {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 28px;
+  letter-spacing: 3px;
+  color: var(--oro);
+  text-align: center;
+  margin-bottom: var(--gota);
+}
+.tarjeta-entrada__titulo span { color: var(--oro-apagado); }
+
+.tarjeta-entrada__bajada {
+  text-align: center;
+  color: var(--texto-tenue);
+  font-size: 13px;
+  margin-bottom: var(--esp-5);
+}

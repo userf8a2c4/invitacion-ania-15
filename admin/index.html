@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ania XV · Administración</title>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     PANEL DE ADMINISTRACIÓN · UNA SOLA PÁGINA
+
+     CÓMO ESTÁ ARMADO ESTE ARCHIVO
+     Toda la app vive acá adentro. No hay páginas separadas: se muestra
+     y se esconde cada vista con JavaScript. Eso es lo que hace que al
+     cambiar de pestaña no parpadee nada, como en una app de verdad.
+
+     ÍNDICE
+       1. Pantalla de carga
+       2. Pantalla de entrada (login)
+       3. La app: encabezado, vistas y navegación de abajo
+       4. Piezas que se reusan: hojas, avisos, botón de notas
+     ══════════════════════════════════════════════════════════════════ -->
+
+<meta name="description" content="Panel de administración de los XV años de Ania">
+<meta name="theme-color" content="#140a04">
+
+<!-- Que iOS lo trate como app al instalarlo desde "Agregar a inicio". -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ania Admin">
+<link rel="apple-touch-icon" href="recursos/icono-admin.svg">
+
+<!-- Esto es un panel privado: que ningún buscador lo indexe jamás. -->
+<meta name="robots" content="noindex, nofollow, noarchive">
+
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="recursos/icono-admin.svg" type="image/svg+xml">
+
+<link rel="stylesheet" href="estilos/01-fundamentos.css">
+<link rel="stylesheet" href="estilos/02-componentes.css">
+<link rel="stylesheet" href="estilos/03-vistas.css">
+</head>
+
+<body>
+
+<!-- ═══ 1. PANTALLA DE CARGA ═══════════════════════════════════════════
+     Se ve el instante que tarda en comprobarse si la sesión guardada
+     sigue sirviendo. Sin esto, parpadearía el login por medio segundo
+     cada vez que se abre la app aunque ya estuvieras dentro. -->
+<div id="pantalla-carga" class="pantalla-carga">
+  <div class="pantalla-carga__marca">Ania <span>XV</span></div>
+  <div class="girador" aria-label="Cargando"></div>
+</div>
+
+
+<!-- ═══ 2. PANTALLA DE ENTRADA ═════════════════════════════════════════ -->
+<div id="pantalla-entrada" class="pantalla-entrada oculto">
+  <form id="forma-entrada" class="tarjeta-entrada" novalidate>
+    <h1 class="tarjeta-entrada__titulo">Ania <span>XV</span></h1>
+    <p class="tarjeta-entrada__bajada">Panel de administración</p>
+
+    <label class="campo">
+      <span class="campo__rotulo">Correo</span>
+      <!-- inputmode y autocomplete hacen que el teléfono muestre el
+           teclado correcto y ofrezca la contraseña guardada. -->
+      <input type="email" id="entrada-correo" class="campo__control"
+             autocomplete="username" inputmode="email"
+             autocapitalize="off" spellcheck="false" required>
+    </label>
+
+    <label class="campo">
+      <span class="campo__rotulo">Contraseña</span>
+      <input type="password" id="entrada-contrasena" class="campo__control"
+             autocomplete="current-password" required>
+    </label>
+
+    <p id="entrada-error" class="aviso-error oculto" role="alert"></p>
+
+    <button type="submit" id="entrada-boton" class="boton boton--principal boton--ancho">
+      Entrar
+    </button>
+  </form>
+</div>
+
+
+<!-- ═══ 3. LA APP ══════════════════════════════════════════════════════ -->
+<div id="app" class="app oculto">
+
+  <!-- ─── Encabezado ─────────────────────────────────────────────────── -->
+  <header class="encabezado">
+    <div class="encabezado__lado">
+      <h1 id="titulo-vista" class="encabezado__titulo">Resumen</h1>
+      <p id="subtitulo-vista" class="encabezado__subtitulo"></p>
+    </div>
+    <button id="boton-menu" class="boton-icono" aria-label="Menú" aria-haspopup="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
+        <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- ─── Las cinco vistas ───────────────────────────────────────────── -->
+  <!-- Solo una tiene la clase "activa" a la vez. El JS las intercambia. -->
+  <main id="contenido" class="contenido">
+
+    <section id="vista-resumen"   class="vista activa" data-vista="resumen"></section>
+    <section id="vista-invitados" class="vista"        data-vista="invitados"></section>
+    <section id="vista-correo"    class="vista"        data-vista="correo"></section>
+    <section id="vista-dinero"    class="vista"        data-vista="dinero"></section>
+    <section id="vista-evento"    class="vista"        data-vista="evento"></section>
+
+  </main>
+
+  <!-- ─── Botón flotante de notas ────────────────────────────────────── -->
+  <!-- Va acá, fuera de las vistas, porque se usa desde cualquiera de
+       ellas: la idea es poder anotar algo sin perder dónde estabas. -->
+  <button id="boton-nota" class="boton-flotante" aria-label="Nota rápida">
+    <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
+      <path d="M4 4h11l5 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M8 12h8M8 16h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  </button>
+
+  <!-- ─── Navegación de abajo ────────────────────────────────────────── -->
+  <!-- Abajo y no arriba a propósito: es donde llega el pulgar cuando se
+       sostiene el teléfono con una mano, que es como se va a usar esto
+       la mayoría de las veces. -->
+  <nav class="navegacion" aria-label="Secciones">
+    <button class="navegacion__boton activa" data-ir="resumen">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
+        <rect x="3" y="3" width="7" height="9" rx="1.5"/>
+        <rect x="14" y="3" width="7" height="5" rx="1.5"/>
+        <rect x="14" y="10" width="7" height="11" rx="1.5"/>
+        <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+      </svg>
+      <span>Resumen</span>
+    </button>
+
+    <button class="navegacion__boton" data-ir="invitados">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
+        <circle cx="9" cy="8" r="3.2"/>
+        <path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5z"/>
+        <circle cx="17" cy="9" r="2.4" opacity=".65"/>
+        <path d="M15.5 20c0-2.5 1.6-4.2 3.7-4.2 1.3 0 2.4.6 3.1 1.6" opacity=".65"/>
+      </svg>
+      <span>Invitados</span>
+    </button>
+
+    <button class="navegacion__boton" data-ir="correo">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
+        <rect x="2.5" y="5" width="19" height="14" rx="2.5" fill="none"
+              stroke="currentColor" stroke-width="2"/>
+        <path d="M3.5 7l8.5 6 8.5-6" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <span>Correo</span>
+      <!-- La burbuja de no leídos. Se muestra sola cuando hay algo. -->
+      <em id="burbuja-correo" class="burbuja oculto"></em>
+    </button>
+
+    <button class="navegacion__boton" data-ir="dinero">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
+        <rect x="2.5" y="6" width="19" height="12" rx="2.5" fill="none"
+              stroke="currentColor" stroke-width="2"/>
+        <circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="2"/>
+      </svg>
+      <span>Dinero</span>
+      <em id="burbuja-dinero" class="burbuja burbuja--alerta oculto"></em>
+    </button>
+
+    <button class="navegacion__boton" data-ir="evento">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
+        <rect x="3" y="5" width="18" height="16" rx="2.5" fill="none"
+              stroke="currentColor" stroke-width="2"/>
+        <path d="M3 10h18M8 3v4M16 3v4" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <span>Evento</span>
+    </button>
+  </nav>
+</div>
+
+
+<!-- ═══ 4. PIEZAS QUE SE REUSAN ════════════════════════════════════════ -->
+
+<!-- Hoja que sube desde abajo. Es UNA sola para toda la app: el JS le
+     cambia el título y el contenido según lo que haya que mostrar. Tener
+     una sola evita que queden diez formularios escondidos en el HTML. -->
+<div id="hoja" class="hoja oculto" role="dialog" aria-modal="true" aria-labelledby="hoja-titulo">
+  <div id="hoja-fondo" class="hoja__fondo"></div>
+  <div class="hoja__panel">
+    <div class="hoja__agarre" aria-hidden="true"></div>
+    <header class="hoja__encabezado">
+      <h2 id="hoja-titulo" class="hoja__titulo"></h2>
+      <button id="hoja-cerrar" class="boton-icono" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
+          <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round"/>
+        </svg>
+      </button>
+    </header>
+    <div id="hoja-cuerpo" class="hoja__cuerpo"></div>
+  </div>
+</div>
+
+<!-- Menú de los tres puntitos. -->
+<div id="menu" class="menu oculto" role="menu">
+  <button class="menu__opcion" data-menu="cuenta"  role="menuitem">Mi cuenta</button>
+  <button class="menu__opcion" data-menu="usuarios" role="menuitem">Personas con acceso</button>
+  <button class="menu__opcion" data-menu="avisos"  role="menuitem">Activar avisos</button>
+  <button class="menu__opcion" data-menu="bitacora" role="menuitem">Historial de cambios</button>
+  <button class="menu__opcion menu__opcion--peligro" data-menu="salir" role="menuitem">Cerrar sesión</button>
+</div>
+
+<!-- Mensajito que aparece abajo y se va solo ("Guardado", "Sin conexión"…). -->
+<div id="tostada" class="tostada oculto" role="status" aria-live="polite"></div>
+
+
+<!-- ═══ CÓDIGO ═════════════════════════════════════════════════════════
+     El orden importa: cada archivo usa cosas de los anteriores. -->
+
+<script src="codigo/01-configuracion.js"></script>
+<script src="codigo/02-utilidades.js"></script>
+<script src="codigo/03-servidor.js"></script>
+<script src="codigo/04-sesion.js"></script>
+<script src="codigo/05-navegacion.js"></script>
+<script src="codigo/06-piezas.js"></script>
+<script src="codigo/07-vista-resumen.js"></script>
+<script src="codigo/08-vista-invitados.js"></script>
+<script src="codigo/20-arranque.js"></script>
+
+</body>
+</html>

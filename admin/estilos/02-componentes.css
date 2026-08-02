@@ -1,0 +1,525 @@
+/* ══════════════════════════════════════════════════════════════════════
+   02 · COMPONENTES
+
+   QUÉ HAY EN ESTE ARCHIVO
+   Las piezas sueltas que se repiten por todo el panel: botones, campos
+   de formulario, tarjetas, etiquetas de estado, la hoja que sube desde
+   abajo, el menú y los avisos.
+
+   LA REGLA DE LOS 44 PÍXELES
+   Todo lo que se toca mide 44 píxeles de alto como mínimo. Es la medida
+   que recomienda Apple y que corresponde más o menos a la yema de un
+   dedo. Por debajo de eso, uno falla el toque y se enoja con la app.
+
+   ÍNDICE
+     1. Botones
+     2. Campos de formulario
+     3. Tarjetas
+     4. Etiquetas de estado y burbujas
+     5. Barras de progreso
+     6. Listas
+     7. Hoja de abajo
+     8. Menú
+     9. Avisos y vacíos
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. BOTONES ───────────────────────────────────────────────────── */
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--esp-1);
+  min-height: 44px;
+  padding: 0 var(--esp-3);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo-chico);
+  background: var(--fondo-elevado);
+  color: var(--texto);
+  font-size: 14px;
+  font-weight: 500;
+  transition: transform var(--transicion), background var(--transicion);
+}
+
+/* Se hunde apenas al presionar. Es la señal de que el toque se registró,
+   y en un teléfono es lo único que confirma que pasó algo. */
+.boton:active { transform: scale(.97); }
+
+.boton--principal {
+  background: var(--oro);
+  border-color: var(--oro);
+  color: #1a0d02;
+  font-weight: 600;
+}
+
+.boton--peligro {
+  color: var(--alerta);
+  border-color: var(--alerta);
+  background: transparent;
+}
+
+.boton--fantasma {
+  background: transparent;
+  border-color: transparent;
+  color: var(--oro);
+}
+
+.boton--ancho { width: 100%; }
+
+.boton--chico {
+  min-height: 34px;
+  padding: 0 var(--esp-2);
+  font-size: 13px;
+}
+
+.boton:disabled {
+  opacity: .5;
+  pointer-events: none;
+}
+
+.boton-icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--texto-suave);
+  border-radius: 50%;
+}
+.boton-icono:active { background: rgba(212, 168, 67, .12); }
+
+/* Botón flotante de notas. Va por encima de la navegación de abajo. */
+.boton-flotante {
+  position: fixed;
+  right: var(--esp-3);
+  bottom: calc(var(--alto-navegacion) + var(--seguro-abajo) + var(--esp-3));
+  width: 52px;
+  height: 52px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--oro);
+  color: #1a0d02;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--sombra);
+  z-index: 40;
+  transition: transform var(--transicion);
+}
+.boton-flotante:active { transform: scale(.92); }
+
+
+/* ─── 2. CAMPOS DE FORMULARIO ──────────────────────────────────────── */
+
+.campo {
+  display: block;
+  margin-bottom: var(--esp-3);
+}
+
+.campo__rotulo {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--oro-apagado);
+  margin-bottom: var(--gota);
+}
+
+.campo__control {
+  width: 100%;
+  min-height: 44px;
+  padding: var(--esp-1) var(--esp-2);
+  background: var(--fondo-hundido);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo-chico);
+  color: var(--texto);
+
+  /* 16px exactos, ni uno menos: por debajo de eso, Safari en iPhone hace
+     zoom automático al tocar el campo y descoloca toda la pantalla. */
+  font-size: 16px;
+
+  transition: border-color var(--transicion);
+}
+
+.campo__control:focus {
+  outline: none;
+  border-color: var(--oro);
+}
+
+.campo__control::placeholder { color: var(--texto-tenue); }
+
+textarea.campo__control {
+  min-height: 96px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+select.campo__control {
+  appearance: none;
+  /* La flechita, dibujada como fondo para no depender de otro archivo. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23a07830' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--esp-2) center;
+  background-size: 12px;
+  padding-right: var(--esp-4);
+}
+
+/* Dos campos lado a lado (por ejemplo, monto y fecha). */
+.campo-par {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--esp-2);
+}
+
+/* Casilla de verificación con su texto, todo tocable. */
+.casilla {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  min-height: 44px;
+  cursor: pointer;
+}
+.casilla input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--oro);
+  flex-shrink: 0;
+}
+
+
+/* ─── 3. TARJETAS ──────────────────────────────────────────────────── */
+
+.tarjeta {
+  background: var(--fondo-tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo);
+  padding: var(--esp-3);
+  margin-bottom: var(--esp-2);
+}
+
+.tarjeta__titulo {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--oro-apagado);
+  margin-bottom: var(--esp-2);
+}
+
+/* Tarjeta de un dato grande y un rótulo chico (las del Resumen). */
+.tarjeta-dato {
+  background: var(--fondo-tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo);
+  padding: var(--esp-3);
+  text-align: center;
+}
+
+.tarjeta-dato__numero {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--oro);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.tarjeta-dato__rotulo {
+  font-size: 11px;
+  color: var(--texto-tenue);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-top: var(--gota);
+}
+
+/* Rejilla de tarjetas de dato. auto-fit hace que se acomoden solas
+   según el ancho, sin escribir un punto de quiebre para cada teléfono. */
+.rejilla-datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: var(--esp-2);
+  margin-bottom: var(--esp-3);
+}
+
+
+/* ─── 4. ETIQUETAS DE ESTADO Y BURBUJAS ────────────────────────────── */
+
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px var(--esp-1);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  background: rgba(212, 168, 67, .14);
+  color: var(--oro);
+  white-space: nowrap;
+}
+
+/* Los estados usan color de fondo tenue y texto fuerte: se distinguen
+   sin gritar, y siguen legibles para quien no diferencia bien los
+   colores porque cada uno lleva además su propio texto. */
+.etiqueta--bien   { background: rgba(95, 174, 106, .16); color: var(--bien); }
+.etiqueta--ojo    { background: rgba(217, 154, 60, .16); color: var(--ojo); }
+.etiqueta--alerta { background: rgba(207, 91, 82, .16);  color: var(--alerta); }
+.etiqueta--info   { background: rgba(91, 147, 196, .16); color: var(--info); }
+.etiqueta--tenue  { background: rgba(138, 117, 80, .14); color: var(--texto-tenue); }
+
+.burbuja {
+  position: absolute;
+  top: 4px;
+  right: calc(50% - 20px);
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--oro);
+  color: #1a0d02;
+  font-size: 10px;
+  font-weight: 700;
+  font-style: normal;
+  line-height: 17px;
+  text-align: center;
+}
+.burbuja--alerta { background: var(--alerta); color: #fff; }
+
+
+/* ─── 5. BARRAS DE PROGRESO ────────────────────────────────────────── */
+
+/* Se usan en el presupuesto: cuánto se lleva gastado de cada categoría. */
+.barra {
+  height: 7px;
+  background: var(--fondo-hundido);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.barra__relleno {
+  height: 100%;
+  background: var(--oro);
+  border-radius: 999px;
+  transition: width 300ms ease;
+}
+
+/* Pasado el techo, la barra se pone roja. Es el aviso de sobregiro. */
+.barra__relleno--pasado { background: var(--alerta); }
+.barra__relleno--cerca  { background: var(--ojo); }
+
+
+/* ─── 6. LISTAS ────────────────────────────────────────────────────── */
+
+.lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lista__fila {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  min-height: 56px;
+  padding: var(--esp-2) var(--esp-3);
+  background: var(--fondo-tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo-chico);
+  margin-bottom: 6px;
+  width: 100%;
+  text-align: left;
+  transition: background var(--transicion);
+}
+.lista__fila:active { background: var(--fondo-elevado); }
+
+.lista__cuerpo { flex: 1; min-width: 0; }
+
+.lista__titulo {
+  font-weight: 500;
+  /* Un nombre largo no debe empujar la etiqueta de estado fuera de la
+     pantalla: se corta con puntos suspensivos. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lista__pie {
+  font-size: 12px;
+  color: var(--texto-tenue);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lista__lado {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+
+/* ─── 7. HOJA DE ABAJO ─────────────────────────────────────────────── */
+
+.hoja {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+}
+
+.hoja__fondo {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, .6);
+  animation: aparecer 160ms ease;
+}
+
+.hoja__panel {
+  position: relative;
+  width: 100%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--fondo-elevado);
+  border-top-left-radius: var(--redondeo-hoja);
+  border-top-right-radius: var(--redondeo-hoja);
+  box-shadow: var(--sombra-alta);
+  animation: subir 220ms cubic-bezier(.2, .8, .3, 1);
+
+  /* El espacio de la barra de gestos del iPhone, para que el último
+     botón del formulario no quede debajo de ella. */
+  padding-bottom: var(--seguro-abajo);
+}
+
+.hoja__agarre {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--borde);
+  margin: var(--esp-1) auto 0;
+}
+
+.hoja__encabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-2);
+  padding: var(--esp-1) var(--esp-2) var(--esp-1) var(--esp-3);
+  border-bottom: 1px solid var(--borde);
+}
+
+.hoja__titulo { font-size: 16px; }
+
+.hoja__cuerpo {
+  padding: var(--esp-3);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  /* Que arrastrar dentro de la hoja no mueva la página de atrás. */
+  overscroll-behavior: contain;
+}
+
+@keyframes subir   { from { transform: translateY(100%); } }
+@keyframes aparecer{ from { opacity: 0; } }
+
+
+/* ─── 8. MENÚ ──────────────────────────────────────────────────────── */
+
+.menu {
+  position: fixed;
+  top: calc(var(--alto-encabezado) + var(--seguro-arriba) - 6px);
+  right: var(--esp-2);
+  z-index: 70;
+  min-width: 210px;
+  padding: var(--gota);
+  background: var(--fondo-elevado);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo);
+  box-shadow: var(--sombra);
+  animation: aparecer 120ms ease;
+}
+
+.menu__opcion {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--esp-2);
+  border: 0;
+  background: transparent;
+  color: var(--texto);
+  text-align: left;
+  font-size: 14px;
+  border-radius: var(--redondeo-chico);
+}
+.menu__opcion:active { background: var(--fondo-tarjeta); }
+.menu__opcion--peligro {
+  color: var(--alerta);
+  border-top: 1px solid var(--borde);
+  margin-top: var(--gota);
+}
+
+
+/* ─── 9. AVISOS Y VACÍOS ───────────────────────────────────────────── */
+
+.aviso-error {
+  padding: var(--esp-1) var(--esp-2);
+  background: rgba(207, 91, 82, .12);
+  border: 1px solid rgba(207, 91, 82, .4);
+  border-radius: var(--redondeo-chico);
+  color: var(--alerta);
+  font-size: 13px;
+  margin-bottom: var(--esp-2);
+}
+
+.tostada {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--alto-navegacion) + var(--seguro-abajo) + var(--esp-4));
+  transform: translateX(-50%);
+  z-index: 80;
+  max-width: calc(100vw - var(--esp-4));
+  padding: var(--esp-1) var(--esp-3);
+  background: var(--fondo-elevado);
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  box-shadow: var(--sombra);
+  font-size: 13px;
+  white-space: nowrap;
+  animation: aparecer 160ms ease;
+}
+.tostada--mal { border-color: var(--alerta); color: var(--alerta); }
+
+/* Lo que se ve cuando una lista todavía no tiene nada. Un vacío bien
+   explicado evita que uno crea que la app se rompió. */
+.vacio {
+  text-align: center;
+  padding: var(--esp-5) var(--esp-3);
+  color: var(--texto-tenue);
+}
+.vacio__titulo {
+  color: var(--texto-suave);
+  font-weight: 500;
+  margin-bottom: var(--gota);
+}
+.vacio__texto { font-size: 13px; }
+
+/* Bloque gris que late mientras se cargan los datos. Sostiene el lugar
+   del contenido para que la pantalla no salte cuando llega. */
+.esqueleto {
+  height: 56px;
+  border-radius: var(--redondeo-chico);
+  background: linear-gradient(90deg,
+              var(--fondo-tarjeta) 0%,
+              var(--fondo-elevado) 50%,
+              var(--fondo-tarjeta) 100%);
+  background-size: 200% 100%;
+  animation: latir 1.2s ease-in-out infinite;
+  margin-bottom: 6px;
+}
+
+@keyframes latir {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

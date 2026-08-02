@@ -1,0 +1,58 @@
+<!--
+  ÍCONO DEL PANEL DE ADMINISTRACIÓN
+
+  POR QUÉ NO ES EL MISMO QUE EL DE LA INVITACIÓN
+  Las dos cosas se instalan como apps y quedan una al lado de la otra en
+  la pantalla de inicio del teléfono. Si compartieran el sello de cera
+  rojo, abrirías la invitación queriendo abrir el panel diez veces al día.
+
+  Este es una TABLILLA de escribano, oscura y con canto dorado, con tres
+  renglones de lista y una corona chiquita arriba: se lee como "la libreta
+  del evento" a simple vista y a 48 píxeles, que es como se ve de verdad.
+
+  La paleta es la misma familia de la invitación (oro #d4a843 sobre café
+  muy oscuro) para que las dos apps se vean de la misma casa.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <defs>
+    <!-- Oro con volumen: claro arriba-izquierda, apagado abajo-derecha. -->
+    <linearGradient id="oro" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#f0dca2"/>
+      <stop offset="45%"  stop-color="#d4a843"/>
+      <stop offset="100%" stop-color="#8a6a2c"/>
+    </linearGradient>
+
+    <!-- Madera oscura de la tablilla. -->
+    <linearGradient id="tabla" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0%"   stop-color="#3a2109"/>
+      <stop offset="60%"  stop-color="#251305"/>
+      <stop offset="100%" stop-color="#160b03"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Cuerpo de la tablilla, con esquinas redondeadas. -->
+  <rect x="11" y="9" width="42" height="48" rx="6"
+        fill="url(#tabla)" stroke="url(#oro)" stroke-width="2.5"/>
+
+  <!-- La pinza de arriba, que es lo que hace que se lea como tablilla
+       y no como una hoja suelta o una pantalla. -->
+  <rect x="24" y="4" width="16" height="9" rx="3" fill="url(#oro)"/>
+
+  <!-- Coronita: son quince años, no un inventario de bodega. Va chica
+       para que no compita con los renglones a tamaño de ícono. -->
+  <path d="M25 20 L28 25 L32 19 L36 25 L39 20 L38 27 L26 27 Z"
+        fill="url(#oro)" opacity="0.95"/>
+
+  <!-- Tres renglones de lista, con su viñeta. El tercero va más corto
+       para que se lea como una lista de verdad y no como rayas. -->
+  <g fill="url(#oro)">
+    <circle cx="21" cy="35" r="2.1"/>
+    <rect x="26" y="33.4" width="21" height="3.2" rx="1.6"/>
+
+    <circle cx="21" cy="43" r="2.1"/>
+    <rect x="26" y="41.4" width="21" height="3.2" rx="1.6"/>
+
+    <circle cx="21" cy="51" r="2.1"/>
+    <rect x="26" y="49.4" width="13" height="3.2" rx="1.6" opacity="0.75"/>
+  </g>
+</svg>
