@@ -1,0 +1,489 @@
+-- ══════════════════════════════════════════════════════════════════════
+-- MIGRACIÓN · TABLAS DEL PANEL DE ADMINISTRACIÓN
+-- ══════════════════════════════════════════════════════════════════════
+--
+-- QUÉ ES ESTE ARCHIVO
+-- Crea todas las tablas que necesita el panel. La tabla `confirmaciones`
+-- que ya existe NO se toca acá: se revisa aparte con diagnostico.php,
+-- porque se creó a mano y no sabemos con qué columnas exactas quedó.
+--
+-- CÓMO SE CORRE
+--   1. hPanel de Hostinger → Bases de datos → phpMyAdmin
+--   2. Elegí la base u164808416_invitadosxv en la columna izquierda
+--   3. Pestaña "SQL", pegá TODO este archivo, botón "Continuar"
+--
+-- SE PUEDE CORRER DOS VECES SIN MIEDO
+-- Todas las tablas usan CREATE TABLE IF NOT EXISTS, así que si ya
+-- existen no se borran ni se pisan los datos: simplemente no hace nada.
+--
+-- POR QUÉ utf8mb4 EN TODAS
+-- Es el único juego de caracteres de MySQL que guarda emojis y acentos
+-- sin romperlos. La tabla vieja usa lo mismo (lo fija confirmar.php al
+-- conectarse), así que todo queda parejo.
+-- ══════════════════════════════════════════════════════════════════════
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 1. CUENTAS Y SISTEMA
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Quiénes pueden entrar al panel.
+CREATE TABLE IF NOT EXISTS usuarios (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  nombre         VARCHAR(100) NOT NULL,
+  correo         VARCHAR(190) NOT NULL,
+  password_hash  VARCHAR(255) NOT NULL,
+  -- 'admin' ve todo. 'entrada' solo escanea pases el día del evento.
+  rol            ENUM('admin','entrada') NOT NULL DEFAULT 'admin',
+  activo         TINYINT(1) NOT NULL DEFAULT 1,
+  creado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Dos cuentas no pueden compartir correo: es con lo que se entra.
+  UNIQUE KEY correo_unico (correo)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Sesiones abiertas. Guarda la HUELLA del token, nunca el token.
+CREATE TABLE IF NOT EXISTS sesiones (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id  INT NOT NULL,
+  token_hash  CHAR(64) NOT NULL,
+  caduca_en   DATETIME NOT NULL,
+  ultimo_uso  DATETIME NOT NULL,
+  creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Índice único: el token es por lo que se busca en cada petición, así
+  -- que sin esto cada llamada al panel recorrería la tabla entera.
+  UNIQUE KEY token_unico (token_hash),
+  KEY por_usuario (usuario_id),
+  -- Si se borra un usuario, sus sesiones se van con él automáticamente.
+  CONSTRAINT sesion_de_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Intentos fallidos de login, para frenar a quien prueba contraseñas.
+CREATE TABLE IF NOT EXISTS intentos_login (
+  id      INT AUTO_INCREMENT PRIMARY KEY,
+  ip      VARCHAR(45) NOT NULL,
+  correo  VARCHAR(190) NOT NULL DEFAULT '',
+  cuando  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_ip_y_fecha (ip, cuando)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Quién cambió qué y cuándo. El nombre se copia además del id para que
+-- el historial siga siendo legible aunque después se borre la cuenta.
+CREATE TABLE IF NOT EXISTS bitacora (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id      INT NOT NULL DEFAULT 0,
+  usuario_nombre  VARCHAR(100) NOT NULL DEFAULT '',
+  accion          VARCHAR(40) NOT NULL,
+  tabla_afectada  VARCHAR(60) NOT NULL,
+  fila_id         INT NOT NULL DEFAULT 0,
+  detalle         VARCHAR(500) NOT NULL DEFAULT '',
+  cuando          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_fecha (cuando)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Notas libres. Se pueden pegar a un proveedor o gasto concreto.
+CREATE TABLE IF NOT EXISTS notas (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  titulo        VARCHAR(200) NOT NULL DEFAULT '',
+  cuerpo        TEXT,
+  etiqueta      VARCHAR(40) NOT NULL DEFAULT '',
+  fijada        TINYINT(1) NOT NULL DEFAULT 0,
+  -- A qué se refiere la nota, si se refiere a algo: 'proveedor', 'gasto'…
+  atada_a_tipo  VARCHAR(30) NOT NULL DEFAULT '',
+  atada_a_id    INT NOT NULL DEFAULT 0,
+  creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  editado_en    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY por_atadura (atada_a_tipo, atada_a_id),
+  -- Índice de texto completo para el buscador de notas.
+  FULLTEXT KEY busqueda (titulo, cuerpo)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Archivos subidos: contratos y comprobantes.
+-- El archivo real vive en admin/archivos/ con el nombre de nombre_disco,
+-- que es aleatorio. El nombre original solo se usa para mostrarlo.
+CREATE TABLE IF NOT EXISTS archivos (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  nombre_real   VARCHAR(255) NOT NULL,
+  nombre_disco  VARCHAR(80) NOT NULL,
+  tipo_mime     VARCHAR(100) NOT NULL DEFAULT '',
+  tamano_bytes  INT NOT NULL DEFAULT 0,
+  atado_a_tipo  VARCHAR(30) NOT NULL DEFAULT '',
+  atado_a_id    INT NOT NULL DEFAULT 0,
+  subido_por    INT NOT NULL DEFAULT 0,
+  creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY disco_unico (nombre_disco),
+  KEY por_atadura (atado_a_tipo, atado_a_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Un renglón por teléfono que aceptó recibir avisos.
+CREATE TABLE IF NOT EXISTS suscripciones_push (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id  INT NOT NULL,
+  endpoint    VARCHAR(500) NOT NULL,
+  clave_p256  VARCHAR(200) NOT NULL,
+  clave_auth  VARCHAR(100) NOT NULL,
+  creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY endpoint_unico (endpoint(191)),
+  KEY por_usuario (usuario_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 2. DINERO
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Categorías con TECHO. De acá salen las alertas de sobregiro.
+CREATE TABLE IF NOT EXISTS categorias_gasto (
+  id      INT AUTO_INCREMENT PRIMARY KEY,
+  nombre  VARCHAR(80) NOT NULL,
+  techo   DECIMAL(12,2) NOT NULL DEFAULT 0,
+  color   VARCHAR(20) NOT NULL DEFAULT '',
+  orden   INT NOT NULL DEFAULT 0,
+  UNIQUE KEY nombre_unico (nombre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Quién apadrina qué. Esta tabla es la que hace honesto al presupuesto.
+CREATE TABLE IF NOT EXISTS padrinos (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  nombre       VARCHAR(150) NOT NULL,
+  telefono     VARCHAR(40) NOT NULL DEFAULT '',
+  correo       VARCHAR(190) NOT NULL DEFAULT '',
+  -- Qué apadrina: 'Vals', 'Pastel', 'Ramo', 'Música', 'Limosina'…
+  apadrina     VARCHAR(120) NOT NULL DEFAULT '',
+  -- 'dinero' = aporta una cantidad. 'especie' = aporta la cosa en sí.
+  tipo_aporte  ENUM('dinero','especie') NOT NULL DEFAULT 'dinero',
+  monto        DECIMAL(12,2) NOT NULL DEFAULT 0,
+  -- 'hablado'   = dijo que sí, nada firme todavía
+  -- 'confirmado'= comprometido en firme
+  -- 'entregado' = ya puso el dinero o la cosa
+  estado       ENUM('hablado','confirmado','entregado') NOT NULL DEFAULT 'hablado',
+  fecha_entrega DATE DEFAULT NULL,
+  notas        TEXT,
+  creado_en    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_estado (estado)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Proveedores contratados.
+CREATE TABLE IF NOT EXISTS proveedores (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  nombre        VARCHAR(150) NOT NULL,
+  servicio      VARCHAR(120) NOT NULL DEFAULT '',
+  contacto      VARCHAR(150) NOT NULL DEFAULT '',
+  telefono      VARCHAR(40) NOT NULL DEFAULT '',
+  correo        VARCHAR(190) NOT NULL DEFAULT '',
+  monto_total   DECIMAL(12,2) NOT NULL DEFAULT 0,
+  anticipo      DECIMAL(12,2) NOT NULL DEFAULT 0,
+  estado        ENUM('candidato','contratado','pagado','cancelado')
+                NOT NULL DEFAULT 'candidato',
+  notas         TEXT,
+  creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_estado (estado)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Cotizaciones para comparar ANTES de contratar.
+CREATE TABLE IF NOT EXISTS cotizaciones (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  servicio     VARCHAR(120) NOT NULL,
+  proveedor    VARCHAR(150) NOT NULL,
+  telefono     VARCHAR(40) NOT NULL DEFAULT '',
+  monto        DECIMAL(12,2) NOT NULL DEFAULT 0,
+  que_incluye  TEXT,
+  vigencia     DATE DEFAULT NULL,
+  elegida      TINYINT(1) NOT NULL DEFAULT 0,
+  notas        TEXT,
+  creado_en    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_servicio (servicio)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Gastos. padrino_id es lo que separa "lo que cuesta" de "lo que pago".
+CREATE TABLE IF NOT EXISTS gastos (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  concepto       VARCHAR(200) NOT NULL,
+  categoria_id   INT DEFAULT NULL,
+  proveedor_id   INT DEFAULT NULL,
+  -- Si tiene padrino, este gasto NO sale del bolsillo de la familia.
+  padrino_id     INT DEFAULT NULL,
+  presupuestado  DECIMAL(12,2) NOT NULL DEFAULT 0,
+  -- Se llama monto_real y no "real" porque REAL es palabra reservada de
+  -- MySQL y obligaría a escribirla con acentos graves en cada consulta.
+  monto_real     DECIMAL(12,2) NOT NULL DEFAULT 0,
+  notas          TEXT,
+  creado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_categoria (categoria_id),
+  KEY por_padrino (padrino_id),
+  -- ON DELETE SET NULL: si se borra una categoría, el gasto sobrevive
+  -- sin categoría. Borrar una categoría no debe borrar dinero.
+  CONSTRAINT gasto_categoria FOREIGN KEY (categoria_id)
+    REFERENCES categorias_gasto(id) ON DELETE SET NULL,
+  CONSTRAINT gasto_proveedor FOREIGN KEY (proveedor_id)
+    REFERENCES proveedores(id) ON DELETE SET NULL,
+  CONSTRAINT gasto_padrino FOREIGN KEY (padrino_id)
+    REFERENCES padrinos(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Pagos concretos contra un gasto. Un gasto puede pagarse en partes.
+CREATE TABLE IF NOT EXISTS pagos (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  gasto_id       INT DEFAULT NULL,
+  concepto       VARCHAR(200) NOT NULL DEFAULT '',
+  monto          DECIMAL(12,2) NOT NULL DEFAULT 0,
+  fecha_limite   DATE DEFAULT NULL,
+  fecha_pagado   DATE DEFAULT NULL,
+  estado         ENUM('pendiente','pagado') NOT NULL DEFAULT 'pendiente',
+  metodo         VARCHAR(60) NOT NULL DEFAULT '',
+  comprobante_id INT DEFAULT NULL,
+  notas          TEXT,
+  creado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_gasto (gasto_id),
+  -- Los recordatorios buscan por estado + fecha límite: este índice es
+  -- el que hace que el cron diario no tenga que leer la tabla entera.
+  KEY por_vencimiento (estado, fecha_limite),
+  CONSTRAINT pago_gasto FOREIGN KEY (gasto_id)
+    REFERENCES gastos(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 3. ORGANIZACIÓN
+-- ══════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS tareas (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  titulo        VARCHAR(200) NOT NULL,
+  detalle       TEXT,
+  responsable   VARCHAR(100) NOT NULL DEFAULT '',
+  fecha_limite  DATE DEFAULT NULL,
+  prioridad     ENUM('baja','media','alta') NOT NULL DEFAULT 'media',
+  estado        ENUM('pendiente','haciendo','hecha') NOT NULL DEFAULT 'pendiente',
+  creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_estado_y_fecha (estado, fecha_limite)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Fechas clave del camino hasta el 24 de octubre de 2026.
+CREATE TABLE IF NOT EXISTS agenda (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  titulo        VARCHAR(200) NOT NULL,
+  detalle       TEXT,
+  fecha         DATE NOT NULL,
+  hora          TIME DEFAULT NULL,
+  lugar         VARCHAR(200) NOT NULL DEFAULT '',
+  -- Cuántos días antes avisar por notificación. 0 = no avisar.
+  avisar_dias   INT NOT NULL DEFAULT 0,
+  avisado_en    DATE DEFAULT NULL,
+  creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_fecha (fecha)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- El minuto a minuto del día del evento.
+CREATE TABLE IF NOT EXISTS cronograma (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  hora         TIME NOT NULL,
+  momento      VARCHAR(200) NOT NULL,
+  detalle      TEXT,
+  responsable  VARCHAR(100) NOT NULL DEFAULT '',
+  KEY por_hora (hora)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE IF NOT EXISTS mesas (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  nombre     VARCHAR(60) NOT NULL,
+  capacidad  INT NOT NULL DEFAULT 10,
+  ubicacion  VARCHAR(120) NOT NULL DEFAULT '',
+  notas      TEXT,
+  UNIQUE KEY nombre_unico (nombre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Quién se sienta dónde. Apunta a confirmaciones por id.
+-- No lleva llave foránea a propósito: `confirmaciones` es una tabla que
+-- ya existía y todavía no sabemos si tiene id ni de qué tipo. Se agrega
+-- después, cuando diagnostico.php confirme cómo está hecha.
+CREATE TABLE IF NOT EXISTS asignacion_mesas (
+  id               INT AUTO_INCREMENT PRIMARY KEY,
+  confirmacion_id  INT NOT NULL,
+  mesa_id          INT NOT NULL,
+  -- Cuántos asientos ocupa esta confirmación en la mesa (adultos+niños).
+  lugares          INT NOT NULL DEFAULT 1,
+  notas            VARCHAR(200) NOT NULL DEFAULT '',
+  UNIQUE KEY una_mesa_por_confirmacion (confirmacion_id),
+  KEY por_mesa (mesa_id),
+  CONSTRAINT asignacion_mesa FOREIGN KEY (mesa_id)
+    REFERENCES mesas(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Chambelanes y damas.
+CREATE TABLE IF NOT EXISTS corte_honor (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  nombre     VARCHAR(150) NOT NULL,
+  rol        ENUM('chambelan','dama','pareja_vals','otro') NOT NULL DEFAULT 'chambelan',
+  telefono   VARCHAR(40) NOT NULL DEFAULT '',
+  talla      VARCHAR(30) NOT NULL DEFAULT '',
+  -- Si ya se le entregó o mandó a hacer el traje o vestido.
+  vestuario  ENUM('pendiente','medido','listo') NOT NULL DEFAULT 'pendiente',
+  notas      TEXT,
+  creado_en  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE IF NOT EXISTS ensayos (
+  id       INT AUTO_INCREMENT PRIMARY KEY,
+  fecha    DATE NOT NULL,
+  hora     TIME DEFAULT NULL,
+  lugar    VARCHAR(200) NOT NULL DEFAULT '',
+  notas    TEXT,
+  KEY por_fecha (fecha)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Quién fue a qué ensayo.
+CREATE TABLE IF NOT EXISTS asistencia_ensayos (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  ensayo_id  INT NOT NULL,
+  miembro_id INT NOT NULL,
+  asistio    TINYINT(1) NOT NULL DEFAULT 0,
+  UNIQUE KEY una_vez_por_ensayo (ensayo_id, miembro_id),
+  CONSTRAINT asistencia_ensayo FOREIGN KEY (ensayo_id)
+    REFERENCES ensayos(id) ON DELETE CASCADE,
+  CONSTRAINT asistencia_miembro FOREIGN KEY (miembro_id)
+    REFERENCES corte_honor(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Regalos recibidos. `origen` distingue lo que vino de la lista de
+-- Amazon de lo que llegó por fuera, y `correo_origen` guarda el aviso
+-- de compra que detectó el panel en el buzón, para no dar de alta dos
+-- veces el mismo regalo.
+CREATE TABLE IF NOT EXISTS regalos (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  de_parte_de    VARCHAR(150) NOT NULL DEFAULT '',
+  descripcion    VARCHAR(300) NOT NULL DEFAULT '',
+  origen         ENUM('amazon','directo','efectivo','otro') NOT NULL DEFAULT 'directo',
+  monto          DECIMAL(12,2) NOT NULL DEFAULT 0,
+  recibido_en    DATE DEFAULT NULL,
+  agradecido     TINYINT(1) NOT NULL DEFAULT 0,
+  correo_origen  VARCHAR(190) NOT NULL DEFAULT '',
+  notas          TEXT,
+  creado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_agradecido (agradecido),
+  KEY por_correo_origen (correo_origen)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE IF NOT EXISTS foraneos (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  nombre       VARCHAR(150) NOT NULL,
+  telefono     VARCHAR(40) NOT NULL DEFAULT '',
+  ciudad       VARCHAR(120) NOT NULL DEFAULT '',
+  hospedaje    VARCHAR(200) NOT NULL DEFAULT '',
+  llega        DATE DEFAULT NULL,
+  se_va        DATE DEFAULT NULL,
+  transporte   VARCHAR(200) NOT NULL DEFAULT '',
+  notas        TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 4. CEREMONIA Y DETALLES PERSONALES
+-- ══════════════════════════════════════════════════════════════════════
+
+-- Datos de la misa. Pensada para tener UNA sola fila.
+CREATE TABLE IF NOT EXISTS ceremonia (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  iglesia    VARCHAR(200) NOT NULL DEFAULT '',
+  direccion  VARCHAR(300) NOT NULL DEFAULT '',
+  fecha      DATE DEFAULT NULL,
+  hora       TIME DEFAULT NULL,
+  sacerdote  VARCHAR(150) NOT NULL DEFAULT '',
+  telefono   VARCHAR(40) NOT NULL DEFAULT '',
+  costo      DECIMAL(12,2) NOT NULL DEFAULT 0,
+  notas      TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Los papeles que pide la iglesia, cada uno con su estado.
+CREATE TABLE IF NOT EXISTS requisitos_ceremonia (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  requisito   VARCHAR(200) NOT NULL,
+  estado      ENUM('pendiente','en_tramite','listo') NOT NULL DEFAULT 'pendiente',
+  fecha_limite DATE DEFAULT NULL,
+  notas       TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Canciones por momento, y la lista negra para el DJ.
+CREATE TABLE IF NOT EXISTS musica (
+  id       INT AUTO_INCREMENT PRIMARY KEY,
+  cancion  VARCHAR(200) NOT NULL,
+  artista  VARCHAR(150) NOT NULL DEFAULT '',
+  momento  ENUM('vals','entrada','brindis','pastel','baile','prohibida','otro')
+           NOT NULL DEFAULT 'baile',
+  orden    INT NOT NULL DEFAULT 0,
+  enlace   VARCHAR(400) NOT NULL DEFAULT '',
+  notas    TEXT,
+  KEY por_momento (momento, orden)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Pruebas de vestido, maquillaje y peinado.
+CREATE TABLE IF NOT EXISTS citas_arreglo (
+  id      INT AUTO_INCREMENT PRIMARY KEY,
+  tipo    ENUM('vestido','maquillaje','peinado','zapatos','otro')
+          NOT NULL DEFAULT 'vestido',
+  titulo  VARCHAR(200) NOT NULL DEFAULT '',
+  fecha   DATE DEFAULT NULL,
+  hora    TIME DEFAULT NULL,
+  lugar   VARCHAR(200) NOT NULL DEFAULT '',
+  costo   DECIMAL(12,2) NOT NULL DEFAULT 0,
+  estado  ENUM('pendiente','hecha','cancelada') NOT NULL DEFAULT 'pendiente',
+  notas   TEXT,
+  KEY por_fecha (fecha)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- La lista de tomas imprescindibles para fotógrafo y video.
+CREATE TABLE IF NOT EXISTS tomas_foto (
+  id        INT AUTO_INCREMENT PRIMARY KEY,
+  toma      VARCHAR(300) NOT NULL,
+  momento   VARCHAR(80) NOT NULL DEFAULT '',
+  personas  VARCHAR(300) NOT NULL DEFAULT '',
+  hecha     TINYINT(1) NOT NULL DEFAULT 0,
+  orden     INT NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 5. DATOS INICIALES
+-- ══════════════════════════════════════════════════════════════════════
+--
+-- Categorías de gasto típicas de unos XV, con techo en 0 para que cada
+-- quien ponga el suyo desde el panel. INSERT IGNORE evita duplicarlas si
+-- este archivo se corre dos veces.
+
+INSERT IGNORE INTO categorias_gasto (nombre, techo, orden) VALUES
+  ('Salón y montaje',      0, 1),
+  ('Banquete y bebidas',   0, 2),
+  ('Vestido y arreglo',    0, 3),
+  ('Música y DJ',          0, 4),
+  ('Foto y video',         0, 5),
+  ('Decoración y flores',  0, 6),
+  ('Pastel y mesa dulce',  0, 7),
+  ('Iglesia y ceremonia',  0, 8),
+  ('Invitaciones',         0, 9),
+  ('Recuerdos',            0, 10),
+  ('Transporte',           0, 11),
+  ('Otros',                0, 99);

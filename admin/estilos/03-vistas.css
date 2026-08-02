@@ -1,0 +1,338 @@
+/* ══════════════════════════════════════════════════════════════════════
+   03 · VISTAS
+
+   QUÉ HAY EN ESTE ARCHIVO
+   El armazón de la app: el encabezado de arriba, el área que se
+   desplaza en el medio, la navegación de abajo, y los estilos propios de
+   cada una de las cinco vistas.
+
+   CÓMO ESTÁ RESUELTO EL ARMAZÓN
+   El encabezado y la navegación son fijos, y el contenido del medio es
+   lo único que se desplaza. Eso es lo que hace que se sienta app: las
+   barras no se van al hacer scroll, como sí pasa en una página web.
+
+   ÍNDICE
+     1. Armazón
+     2. Navegación de abajo
+     3. Barra de filtros y búsqueda
+     4. Vista Resumen
+     5. Vista Invitados
+     6. Detalle de un invitado
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. ARMAZÓN ───────────────────────────────────────────────────── */
+
+.app {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.encabezado {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-2);
+  height: calc(var(--alto-encabezado) + var(--seguro-arriba));
+  padding: var(--seguro-arriba) var(--esp-1) 0 var(--esp-3);
+  background: var(--fondo-elevado);
+  border-bottom: 1px solid var(--borde);
+}
+
+.encabezado__lado { min-width: 0; }
+
+.encabezado__titulo {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.encabezado__subtitulo {
+  margin: 0;
+  font-size: 12px;
+  color: var(--texto-tenue);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contenido {
+  flex: 1;
+  /* El padding de arriba y abajo deja libre el espacio de las barras
+     fijas. Sin esto, la primera y la última fila quedarían tapadas. */
+  padding: calc(var(--alto-encabezado) + var(--seguro-arriba) + var(--esp-2))
+           var(--esp-2)
+           calc(var(--alto-navegacion) + var(--seguro-abajo) + var(--esp-5));
+}
+
+.vista { display: none; }
+.vista.activa { display: block; animation: entrar 180ms ease; }
+
+@keyframes entrar {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+
+/* ─── 2. NAVEGACIÓN DE ABAJO ───────────────────────────────────────── */
+
+.navegacion {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  height: calc(var(--alto-navegacion) + var(--seguro-abajo));
+  padding-bottom: var(--seguro-abajo);
+  background: var(--fondo-elevado);
+  border-top: 1px solid var(--borde);
+}
+
+.navegacion__boton {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--texto-tenue);
+  font-size: 10px;
+  letter-spacing: .01em;
+  transition: color var(--transicion);
+}
+
+.navegacion__boton .icono {
+  width: 21px;
+  height: 21px;
+  /* Los iconos van sin relleno por defecto y se rellenan al activarse:
+     así la pestaña actual se distingue por forma, no solo por color. */
+  opacity: .7;
+  transition: opacity var(--transicion);
+}
+
+.navegacion__boton.activa {
+  color: var(--oro);
+}
+.navegacion__boton.activa .icono { opacity: 1; }
+
+/* Rayita de la pestaña activa, arriba del botón. */
+.navegacion__boton.activa::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 22%;
+  right: 22%;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: var(--oro);
+}
+
+
+/* ─── 3. BARRA DE FILTROS Y BÚSQUEDA ───────────────────────────────── */
+
+.buscador {
+  position: relative;
+  margin-bottom: var(--esp-2);
+}
+
+.buscador__control {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 var(--esp-3) 0 38px;
+  background: var(--fondo-hundido);
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  color: var(--texto);
+  font-size: 16px;
+}
+.buscador__control:focus { outline: none; border-color: var(--oro); }
+
+.buscador__lupa {
+  position: absolute;
+  left: var(--esp-2);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 17px;
+  height: 17px;
+  color: var(--texto-tenue);
+  pointer-events: none;
+}
+
+/* Fila de filtros que se desplaza de lado cuando no caben todos. */
+.filtros {
+  display: flex;
+  gap: 6px;
+  margin-bottom: var(--esp-2);
+  overflow-x: auto;
+  /* Que la barra de desplazamiento no se vea: en el teléfono se arrastra
+     con el dedo y una barra visible solo ensucia. */
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+.filtros::-webkit-scrollbar { display: none; }
+
+.filtro {
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 0 var(--esp-2);
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--texto-suave);
+  font-size: 13px;
+  white-space: nowrap;
+  transition: all var(--transicion);
+}
+
+.filtro.activo {
+  background: var(--oro);
+  border-color: var(--oro);
+  color: #1a0d02;
+  font-weight: 600;
+}
+
+
+/* ─── 4. VISTA RESUMEN ─────────────────────────────────────────────── */
+
+/* La cuenta regresiva, arriba de todo. */
+.cuenta-atras {
+  text-align: center;
+  padding: var(--esp-3) var(--esp-2) var(--esp-4);
+}
+
+.cuenta-atras__numero {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 52px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--oro);
+  font-variant-numeric: tabular-nums;
+}
+
+.cuenta-atras__texto {
+  font-size: 13px;
+  color: var(--texto-tenue);
+  margin-top: var(--gota);
+}
+
+/* Bloque de dinero del Resumen: lo que cuesta contra lo que se paga. */
+.dinero-resumen {
+  display: flex;
+  gap: var(--esp-3);
+  margin-bottom: var(--esp-2);
+}
+
+.dinero-resumen__mitad { flex: 1; min-width: 0; }
+
+.dinero-resumen__rotulo {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--texto-tenue);
+}
+
+.dinero-resumen__cifra {
+  font-size: 21px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto);
+  line-height: 1.2;
+}
+
+/* La cifra "de tu bolsillo" va en oro porque es la que de verdad
+   importa cuando se decide si algo se puede o no. */
+.dinero-resumen__cifra--propio { color: var(--oro); }
+
+/* Cada aviso del Resumen: un pago que vence, una tarea atrasada. */
+.alerta-fila {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  padding: var(--esp-2);
+  border-radius: var(--redondeo-chico);
+  background: var(--fondo-tarjeta);
+  border-left: 3px solid var(--ojo);
+  margin-bottom: 6px;
+  width: 100%;
+  text-align: left;
+  border-top: 0; border-right: 0; border-bottom: 0;
+}
+.alerta-fila--urgente { border-left-color: var(--alerta); }
+.alerta-fila--bien    { border-left-color: var(--bien); }
+
+.alerta-fila__texto { flex: 1; min-width: 0; font-size: 14px; }
+.alerta-fila__pie   { font-size: 12px; color: var(--texto-tenue); }
+
+
+/* ─── 5. VISTA INVITADOS ───────────────────────────────────────────── */
+
+/* Punto de color al inicio de cada fila: verde asiste, rojo no asiste.
+   Va acompañado siempre de texto, nunca solo el color. */
+.punto {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--texto-tenue);
+}
+.punto--si { background: var(--bien); }
+.punto--no { background: var(--alerta); }
+
+/* El código de pase, en monoespaciada para que se lea letra por letra
+   al compararlo con el que muestra el invitado en la entrada. */
+.codigo-pase {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  letter-spacing: .08em;
+  color: var(--oro);
+}
+
+/* Resumen de menús de una confirmación. */
+.menus-mini {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: var(--gota);
+}
+
+
+/* ─── 6. DETALLE DE UN INVITADO ────────────────────────────────────── */
+
+/* Lista de "rótulo: valor" que se usa en todas las hojas de detalle. */
+.detalle {
+  display: grid;
+  grid-template-columns: minmax(84px, auto) 1fr;
+  gap: var(--esp-1) var(--esp-2);
+  align-items: baseline;
+}
+
+.detalle__rotulo {
+  font-size: 12px;
+  color: var(--oro-apagado);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+.detalle__valor {
+  /* Un correo largo o una nota sin espacios no debe desbordar la hoja
+     y provocar desplazamiento horizontal. */
+  overflow-wrap: anywhere;
+}
+
+/* Fila de botones al pie de una hoja de detalle. */
+.acciones {
+  display: flex;
+  gap: var(--esp-2);
+  margin-top: var(--esp-4);
+}
+.acciones .boton { flex: 1; }

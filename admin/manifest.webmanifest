@@ -1,0 +1,38 @@
+{
+  "name": "Ania XV · Administración",
+  "short_name": "Ania Admin",
+  "description": "Panel para administrar invitados, correo, presupuesto y planeación de los XV de Ania",
+  "lang": "es",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#140a04",
+  "theme_color": "#140a04",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    { "src": "recursos/icono-admin.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "recursos/icono-admin-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Invitados",
+      "short_name": "Invitados",
+      "description": "Ver quién confirmó",
+      "url": "./?ir=invitados"
+    },
+    {
+      "name": "Presupuesto",
+      "short_name": "Dinero",
+      "description": "Gastos, pagos y padrinos",
+      "url": "./?ir=dinero"
+    },
+    {
+      "name": "Nota rápida",
+      "short_name": "Nota",
+      "description": "Escribir una nota al vuelo",
+      "url": "./?ir=nota"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+<!--
+  VERSIÓN "MASKABLE" DEL ÍCONO DEL PANEL
+
+  QUÉ ES ESTO Y POR QUÉ ESTÁ REPETIDO
+  Android recorta los íconos de las apps con la forma que tenga el
+  teléfono: círculo, cuadrado redondeado, gota. Si le damos el ícono
+  normal, se come la pinza de arriba y los bordes de la tablilla.
+
+  La regla del formato maskable es que solo se puede confiar en el 80%
+  central: todo lo importante tiene que caber en un círculo de radio 40
+  dentro del lienzo de 100×100. Por eso acá el dibujo va MÁS CHICO y
+  centrado, con fondo lleno hasta el borde para que no queden esquinas
+  transparentes al recortar.
+
+  Es el mismo dibujo que icono-admin.svg, solo que reencuadrado.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="oro" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#f0dca2"/>
+      <stop offset="45%"  stop-color="#d4a843"/>
+      <stop offset="100%" stop-color="#8a6a2c"/>
+    </linearGradient>
+    <linearGradient id="tabla" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0%"   stop-color="#3a2109"/>
+      <stop offset="60%"  stop-color="#251305"/>
+      <stop offset="100%" stop-color="#160b03"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Fondo a sangre: llena el lienzo entero. Sin esto, el recorte de
+       Android dejaría ver el fondo del escritorio en las esquinas. -->
+  <rect width="100" height="100" fill="#140a04"/>
+
+  <!-- El dibujo, encogido al 60% y centrado para sobrevivir al recorte. -->
+  <g transform="translate(50 50) scale(0.62) translate(-32 -32)">
+    <rect x="11" y="9" width="42" height="48" rx="6"
+          fill="url(#tabla)" stroke="url(#oro)" stroke-width="2.5"/>
+    <rect x="24" y="4" width="16" height="9" rx="3" fill="url(#oro)"/>
+    <path d="M25 20 L28 25 L32 19 L36 25 L39 20 L38 27 L26 27 Z"
+          fill="url(#oro)" opacity="0.95"/>
+    <g fill="url(#oro)">
+      <circle cx="21" cy="35" r="2.1"/>
+      <rect x="26" y="33.4" width="21" height="3.2" rx="1.6"/>
+      <circle cx="21" cy="43" r="2.1"/>
+      <rect x="26" y="41.4" width="21" height="3.2" rx="1.6"/>
+      <circle cx="21" cy="51" r="2.1"/>
+      <rect x="26" y="49.4" width="13" height="3.2" rx="1.6" opacity="0.75"/>
+    </g>
+  </g>
+</svg>

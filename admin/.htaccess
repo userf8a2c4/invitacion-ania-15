@@ -1,0 +1,82 @@
+# ══════════════════════════════════════════════════════════════════════
+# .HTACCESS DEL PANEL · QUÉ SE PUEDE PEDIR DESDE EL NAVEGADOR
+# ══════════════════════════════════════════════════════════════════════
+#
+# QUÉ HACE ESTE ARCHIVO
+# El .htaccess de la raíz ya protege el .env y comprime todo. Este suma
+# las reglas que solo tienen sentido dentro de /admin/, y que si faltan
+# dejan datos privados al alcance de cualquiera que escriba la URL.
+#
+# LAS TRES COSAS QUE CIERRA
+#   1. Las librerías internas de api/_lib/ (traen las contraseñas).
+#   2. La carpeta archivos/ (contratos y comprobantes escaneados).
+#   3. El migracion.sql, que describe la base entera.
+# ══════════════════════════════════════════════════════════════════════
+
+# ─── Las librerías internas no se piden por URL ────────────────────────
+# api/_lib/bd.php no debe poder abrirse en el navegador: se incluye desde
+# los endpoints y nada más. Sin esta regla, un error de PHP mostrado en
+# pantalla podría filtrar la contraseña de la base de datos.
+RedirectMatch 404 ^/admin/api/_lib/
+
+# ─── Los archivos subidos NO se sirven directo ─────────────────────────
+# Se piden por api/archivos.php?id=… que exige sesión. Si se pudieran
+# bajar por su URL, un contrato con datos personales quedaría público
+# para quien adivinara el nombre.
+RedirectMatch 404 ^/admin/archivos/
+
+# ─── Archivos de trabajo que no tienen por qué servirse ────────────────
+<FilesMatch "\.(sql|md|log|bak|ini)$">
+  Require all denied
+</FilesMatch>
+
+# Cualquier cosa que empiece con punto, igual que en la raíz.
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>
+
+# ─── Las respuestas de la API nunca se cachean ─────────────────────────
+# Es la misma idea que el no-store que manda responder.php, pero puesta
+# también acá por si algún intermediario ignora la cabecera de PHP. Si el
+# panel cacheara la lista de invitados, mostraría datos viejos y parecería
+# que la base de datos no se actualiza.
+<IfModule mod_headers.c>
+  <FilesMatch "\.php$">
+    Header set Cache-Control "no-store, no-cache, must-revalidate"
+  </FilesMatch>
+
+  # El armazón de la app sí revalida contra el servidor, igual que en la
+  # raíz: así un cambio de código se ve con una sola recarga.
+  <FilesMatch "\.(html|css|js|webmanifest)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+
+  # El panel no debe poder incrustarse en un iframe ajeno: eso es lo que
+  # permite engañar a alguien para que haga clic en algo que no ve.
+  Header always set X-Frame-Options "DENY"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "same-origin"
+</IfModule>
+
+# ─── Que Authorization llegue a PHP ────────────────────────────────────
+# En muchos Apache con PHP como CGI, el encabezado Authorization se pierde
+# antes de llegar al script — y como el panel manda ahí el token, TODA
+# petición respondería "tu sesión expiró". Esta regla lo vuelve a poner.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTP:Authorization} .
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+</IfModule>
+
+# ─── Que la app no se caiga al recargar ────────────────────────────────
+# El panel es una sola página. Si alguien recarga estando en una vista
+# interna, Apache buscaría un archivo que no existe y daría 404; esto
+# devuelve siempre el index.html y deja que la app se ubique sola.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /admin/
+  RewriteCond %{REQUEST_URI} !^/admin/api/
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /admin/index.html [L]
+</IfModule>

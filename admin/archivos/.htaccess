@@ -1,0 +1,31 @@
+# ══════════════════════════════════════════════════════════════════════
+# CARPETA DE ARCHIVOS SUBIDOS · ACCESO CERRADO
+# ══════════════════════════════════════════════════════════════════════
+#
+# Acá viven los contratos de proveedores y las fotos de comprobantes de
+# pago. Son documentos con nombres, teléfonos y montos: no pueden quedar
+# al alcance de quien escriba la URL correcta.
+#
+# El panel los entrega por api/archivos.php?id=…, que primero comprueba
+# que haya sesión iniciada. Este .htaccess cierra la puerta de atrás.
+#
+# Está repetido con la regla del .htaccess de admin/ a propósito: si
+# alguien mueve la carpeta o edita aquel archivo, esta protección viaja
+# junto con los datos que protege.
+# ══════════════════════════════════════════════════════════════════════
+
+Require all denied
+
+# Respaldo para Apache 2.2, por si el hosting no está en 2.4.
+<IfModule !mod_authz_core.c>
+  Order allow,deny
+  Deny from all
+</IfModule>
+
+# Y por si alguna configuración ignorara lo de arriba: que PHP nunca
+# ejecute nada de acá. Sin esto, subir un archivo .php disfrazado de PDF
+# sería una forma de tomar control del servidor.
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+AddType text/plain .php .phtml .php5 .php7 .phar
