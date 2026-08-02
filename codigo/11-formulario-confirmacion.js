@@ -233,17 +233,41 @@
        Se manda SIEMPRE, asista o no, porque ambos casos necesitan
        guardarse en BD y avisar a la administradora.
        ══════════════════════════════════════════════════════════════ */
-    const avisos = [
-      enviarAlServidor(datosDeLaConfirmacion),   // PHP: MySQL + correos
-      anotarEnLaHoja(datosDeLaConfirmacion),     // Google Sheets: respaldo
-    ];
+    /* Se pide el envío al servidor y, en paralelo, la anotación de
+       respaldo. Solo el primero decide si la confirmación valió: la hoja
+       de Google es opcional y su fallo no debe frenar a nadie.
 
-    await Promise.all(avisos);
-    await Promise.all([esperaMinima]);
+       Si enviarAlServidor no existiera (por ejemplo, porque el navegador
+       cargó una versión vieja del código desde su caché), la llamada
+       lanzaría una excepción. Se captura acá a propósito: sin esto, el
+       formulario mostraba "confirmado" sin haber mandado nada, que es
+       justo como este problema pasó desapercibido tanto tiempo. */
+    let seGuardoEnElServidor = false;
+    try {
+      const [resultadoDelServidor] = await Promise.all([
+        enviarAlServidor(datosDeLaConfirmacion),  // PHP: MySQL + correos
+        anotarEnLaHoja(datosDeLaConfirmacion),    // Google Sheets: respaldo
+      ]);
+      seGuardoEnElServidor = resultadoDelServidor === true;
+    } catch (error) {
+      console.error('[Ania XV] El envío falló:', error);
+    }
+
+    await esperaMinima;
 
     botonEnviar.classList.remove('esta-enviando');
     botonEnviar.innerHTML = textoOriginalDelBoton;
     botonEnviar.disabled = false;
+
+    /* Si no se guardó, se dice. Nunca un "éxito" que no ocurrió: la
+       persona debe poder reintentar en vez de creer que ya confirmó. */
+    if (!seGuardoEnElServidor) {
+      return mostrarError(
+        'No pudimos registrar tu confirmación. Revisa tu conexión e ' +
+        'inténtalo de nuevo. Si vuelve a fallar, escríbenos a ' +
+        'info@aniaxv.com y te confirmamos a mano.'
+      );
+    }
 
     guardarEnMemoria('pase', datosDeLaConfirmacion);
 
