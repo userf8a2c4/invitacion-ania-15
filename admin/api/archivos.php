@@ -139,7 +139,8 @@ case 'subir':
         'tamano_bytes' => (int) $archivo['size'],
         'atado_a_tipo' => campoOpcion($_POST, 'tipo',
                           ['', 'gasto', 'pago', 'proveedor', 'padrino',
-                           'nota', 'regalo', 'invitado'], ''),
+                           'categoria', 'cotizacion', 'nota', 'tarea',
+                           'regalo', 'invitado'], ''),
         'atado_a_id'   => max(0, (int) ($_POST['id'] ?? 0)),
         'subido_por'   => (int) $yo['id'],
     ]);

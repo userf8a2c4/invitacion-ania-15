@@ -588,31 +588,34 @@ async function guardarDinero(accion, carga, mensaje) {
  */
 function engancharFormularioDinero(cuerpo, armarCarga, nombreAccion, existente) {
 
-  /* Los adjuntos solo tienen sentido sobre algo que ya existe: hace
-     falta un id al que atarlos. Por eso al crear un registro nuevo el
-     bloque no aparece, y sí lo hace al volver a abrirlo para editar. */
-  if (existente && ['gasto', 'pago', 'proveedor'].includes(nombreAccion)) {
-    const bloque = crear('div');
-    bloque.innerHTML =
-      '<div class="tarjeta__titulo" style="margin-top:var(--esp-4)">' +
-        (nombreAccion === 'pago' ? 'Comprobante' : 'Contrato y archivos') +
-      '</div>' +
-      '<div id="archivos-de-esto"></div>' +
-      botonesDeArchivo({ tipo: nombreAccion, id: existente.id });
+  /* TODAS las secciones del presupuesto llevan adjuntos: el contrato del
+     proveedor, la foto del comprobante de un pago, la cotización en PDF,
+     el recibo del padrino. */
+  const rotulos = {
+    gasto:       'Facturas y comprobantes',
+    pago:        'Comprobante del pago',
+    proveedor:   'Contrato y documentos',
+    padrino:     'Comprobante de lo entregado',
+    cotizacion:  'La cotización en PDF o foto',
+    categoria:   'Documentos',
+  };
 
-    // Va antes del pie de botones, para que Guardar quede siempre último.
-    const pie = buscar('.acciones', cuerpo);
-    cuerpo.insertBefore(bloque, pie);
+  montarAdjuntos({
+    cuerpo:  cuerpo,
+    tipo:    nombreAccion,
+    titulo:  rotulos[nombreAccion] || 'Archivos',
+    id:      existente ? existente.id : 0,
+    // Al crear algo nuevo todavía no hay id al que atar el archivo, así
+    // que primero se guarda el registro y recién después se adjunta.
+    guardarPrimero: async () => {
+      const carga = armarCarga();
+      if (!carga) return 0;
 
-    const lista = buscar('#archivos-de-esto', bloque);
-    pintarArchivosDe(lista, nombreAccion, existente.id);
-
-    engancharBotonesDeArchivo(bloque, {
-      tipo: nombreAccion,
-      id: existente.id,
-      despues: () => pintarArchivosDe(lista, nombreAccion, existente.id),
-    });
-  }
+      const r = await mandar('presupuesto.php?accion=guardar_' + nombreAccion, carga);
+      ensuciarVistas('resumen');
+      return r.id;
+    },
+  });
 
   buscar('#pie-guardar', cuerpo).addEventListener('click', () => {
     const carga = armarCarga();

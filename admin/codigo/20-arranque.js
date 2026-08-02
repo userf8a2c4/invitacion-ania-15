@@ -201,34 +201,8 @@ function abrirHojaDeCuenta() {
   });
 }
 
-/**
- * Pide permiso para mandar avisos al teléfono.
- *
- * @returns {Promise<void>}
- */
-async function pedirPermisoDeAvisos() {
-  if (!('Notification' in window)) {
-    avisar('Este teléfono no admite avisos.', true);
-    return;
-  }
-
-  if (Notification.permission === 'granted') {
-    avisar('Los avisos ya están activados.');
-    return;
-  }
-
-  if (Notification.permission === 'denied') {
-    // Una vez denegado, el navegador no vuelve a preguntar: hay que
-    // decirle a la persona dónde cambiarlo a mano.
-    avisar('Los avisos están bloqueados. Se activan desde los ajustes del teléfono.', true);
-    return;
-  }
-
-  const respuesta = await Notification.requestPermission();
-  avisar(respuesta === 'granted'
-    ? 'Avisos activados.'
-    : 'No se activaron los avisos.');
-}
+/* La gestión de avisos y la instalación viven en 15-instalar-y-avisos.js:
+   abrirHojaDeAvisos(), instalarLaApp() y abrirHojaDeNuevoAdministrador(). */
 
 
 /* ─── 5. PUNTO DE ENTRADA ──────────────────────────────────────────── */
@@ -244,6 +218,11 @@ async function encender() {
   prepararEntrada();
   prepararNavegacion();
   prepararHoja();
+
+  /* Va acá y no dentro de la app porque el navegador dispara el aviso de
+     "se puede instalar" muy temprano, a veces antes de que se abra la
+     sesión. Si se enganchara después, ese aviso ya se habría perdido. */
+  prepararInstalacion();
 
   buscar('#boton-nota').addEventListener('click', abrirHojaDeNota);
 

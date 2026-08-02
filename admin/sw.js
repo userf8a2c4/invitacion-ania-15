@@ -26,7 +26,7 @@
 /* ⚠️ SUBÍ ESTE NÚMERO CADA VEZ QUE CAMBIES CÓDIGO DEL PANEL.
    Si no, el teléfono sigue mostrando la copia guardada de la versión
    anterior y parece que el cambio "no se subió". */
-const VERSION = 'ania-admin-v2';
+const VERSION = 'ania-admin-v3';
 
 /* Lo mínimo para que la app arranque sin red. Se guarda al instalar. */
 const ARMAZON = [
@@ -136,28 +136,77 @@ function armazonDesdeLaCopia(pedido) {
    una vez al día (api/cron_recordatorios.php). Acá solo se muestran. */
 
 self.addEventListener('push', evento => {
-  let aviso = { titulo: 'Ania XV', cuerpo: 'Tenés algo pendiente.', ir: './' };
+  /* Los avisos llegan VACÍOS, sin texto adentro. Ver _lib/push.php: eso
+     evita tener que cifrar el contenido, que es la parte del protocolo
+     más fácil de romper sin darse cuenta.
 
+     Así que acá, al despertar, se le pregunta al servidor qué mostrar. */
+  evento.waitUntil(armarYMostrarElAviso(evento));
+});
+
+/**
+ * Pregunta al servidor qué hay pendiente y muestra la notificación.
+ *
+ * @param {PushEvent} evento
+ * @returns {Promise<void>}
+ */
+async function armarYMostrarElAviso(evento) {
+  let titulo = 'Ania XV';
+  let cuerpo = 'Tenés algo pendiente.';
+
+  /* Si el aviso trajera texto (por si alguna vez se agrega), se usa ese
+     y no hace falta preguntar. */
   try {
-    if (evento.data) aviso = Object.assign(aviso, evento.data.json());
+    if (evento.data) {
+      const traido = evento.data.json();
+      if (traido && traido.cuerpo) {
+        titulo = traido.titulo || titulo;
+        cuerpo = traido.cuerpo;
+        return mostrarAviso(titulo, cuerpo);
+      }
+    }
   } catch (error) {
-    // Si el aviso viene mal formado, se muestra el texto por defecto en
-    // lugar de no mostrar nada: es preferible avisar de más.
+    // Venía vacío o mal formado: seguimos al camino normal.
   }
 
-  evento.waitUntil(
-    self.registration.showNotification(aviso.titulo, {
-      body:  aviso.cuerpo,
-      icon:  './recursos/icono-admin.svg',
-      badge: './recursos/icono-admin.svg',
-      // La etiqueta hace que un aviso nuevo del mismo tema reemplace al
-      // anterior en vez de apilarse. Sin esto, cinco días sin abrir la
-      // app significan cinco notificaciones del mismo pago.
-      tag:   aviso.etiqueta || 'ania-admin',
-      data:  { ir: aviso.ir || './' },
-    })
-  );
-});
+  try {
+    const respuesta = await fetch('api/recordatorios.php?accion=pendientes',
+                                  { cache: 'no-store' });
+    const carga = await respuesta.json();
+
+    if (carga && carga.ok && carga.datos) {
+      titulo = carga.datos.titulo || titulo;
+      cuerpo = carga.datos.cuerpo || cuerpo;
+    }
+  } catch (error) {
+    /* Sin conexión o el servidor no contestó. Se muestra igual el aviso
+       genérico: el sistema operativo EXIGE que un push muestre una
+       notificación. Si no se muestra ninguna, el navegador lo considera
+       un abuso y después de unas cuantas veces revoca el permiso. */
+  }
+
+  return mostrarAviso(titulo, cuerpo);
+}
+
+/**
+ * Muestra la notificación.
+ *
+ * @param {string} titulo
+ * @param {string} cuerpo
+ * @returns {Promise<void>}
+ */
+function mostrarAviso(titulo, cuerpo) {
+  return self.registration.showNotification(titulo, {
+    body:  cuerpo,
+    icon:  './recursos/icono-admin.svg',
+    badge: './recursos/icono-admin.svg',
+    // La etiqueta hace que un aviso nuevo reemplace al anterior en vez
+    // de apilarse. Sin esto, cinco días sin abrir la app significan
+    // cinco notificaciones diciendo casi lo mismo.
+    tag:   'ania-admin',
+    data:  { ir: './' },
+  });
+}
 
 self.addEventListener('notificationclick', evento => {
   evento.notification.close();

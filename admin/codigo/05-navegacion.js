@@ -172,6 +172,10 @@ function atenderMenu(opcion) {
       salir();
       break;
 
+    case 'instalar':
+      instalarLaApp();
+      break;
+
     case 'cuenta':
       abrirHojaDeCuenta();
       break;
@@ -180,8 +184,12 @@ function atenderMenu(opcion) {
       abrirHojaDeUsuarios();
       break;
 
+    case 'nuevo-admin':
+      abrirHojaDeNuevoAdministrador();
+      break;
+
     case 'avisos':
-      pedirPermisoDeAvisos();
+      abrirHojaDeAvisos();
       break;
 
     case 'bitacora':
