@@ -23,6 +23,20 @@
 # verdad (raro) alcanza con renombrarlos o el usuario los ve tras purgar.
 # ══════════════════════════════════════════════════════════════════════
 
+# ─── Proteger archivos secretos ─────────────────────────────────────────
+# Sin esto, cualquiera puede escribir aniaxv.com/.env en el navegador y
+# leer la contraseña del correo y la de la base de datos en texto plano.
+# Apache no bloquea esos archivos por su cuenta: hay que decírselo.
+# Cualquier archivo que empiece con punto (.env, .htaccess, .gitignore…)
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>
+
+# Y los archivos de trabajo que tampoco tienen por qué servirse.
+<FilesMatch "\.(env|md|sql|log)$">
+  Require all denied
+</FilesMatch>
+
 # ─── Compresión (gzip/brotli) ───────────────────────────────────────────
 <IfModule mod_deflate.c>
   AddOutputFilterByType DEFLATE text/html text/css text/plain text/xml

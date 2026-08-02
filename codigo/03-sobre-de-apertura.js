@@ -31,9 +31,29 @@
   const sobre       = buscar('#sobre-de-apertura');
   const ilustracion = buscar('#ilustracion-del-sobre');
 
-  // Si por algún motivo el sobre no existe en el HTML, no hacemos nada
-  // (así el resto de la web sigue funcionando igual).
-  if (!sobre) return;
+  /* Si por algún motivo el sobre no existe en el HTML, no hacemos nada acá…
+     pero SÍ avisamos que la invitación ya está a la vista.
+
+     ⚠️ ESTO ES IMPORTANTE Y NO ES UN DETALLE. Los adornos pesados —las
+     enredaderas de 07 y los candelabros de 19— se construyen recién al
+     escuchar 'invitacion-visible', porque viven detrás del sobre y nadie
+     los ve hasta que se abre. Si el sobre no existe, ese evento no llegaría
+     nunca y la web quedaría pelada.
+
+     Antes eso se cubría con temporizadores de respaldo ("construí igual a
+     los 2 segundos, por las dudas"). El problema: se disparaban SIEMPRE,
+     incluso con el sobre cerrado, así que la página se ponía a construir
+     354 flores y 82 velas que nadie estaba mirando. Eso bloqueaba el hilo
+     casi 3 segundos (Total Blocking Time de 2.790 ms en PageSpeed).
+
+     Acá el mismo caso se cubre con CERTEZA en vez de con un cronómetro: si
+     el sobre no está, se avisa; si está, se avisa al abrirlo y no antes. */
+  if (!sobre) {
+    // En el siguiente tick, para que los demás archivos alcancen a
+    // registrar su escucha de este evento (este archivo es el 03 de 24).
+    setTimeout(() => document.dispatchEvent(new CustomEvent('invitacion-visible')), 0);
+    return;
+  }
 
   document.body.classList.add('sobre-visible');
 

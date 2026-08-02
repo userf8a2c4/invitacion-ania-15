@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <!--
   ══════════════════════════════════════════════════════════════════════
   INVITACIÓN DE XV AÑOS · ANIA
@@ -2026,25 +2026,38 @@
      Se cargan en orden numérico, y ese orden importa: por ejemplo,
      01-configuracion.js tiene que estar antes que todos los demás,
      porque el resto lee los datos de ahí.
+
+     TODOS LLEVAN "defer", Y ESO NO ROMPE EL ORDEN.
+     Es la confusión habitual con este atributo: "defer" NO significa "cada
+     uno cuando pueda". Significa "descargalos en paralelo mientras seguís
+     armando la página, y después ejecutalos TODOS EN EL ORDEN EN QUE ESTÁN
+     ESCRITOS". O sea que 01 sigue corriendo antes que 02, y se respetan los
+     dos órdenes críticos que están explicados más abajo (el 24 antes del 06,
+     y el 23 antes del 14, 18 y 19).
+
+     Lo que se gana: sin "defer" el navegador tiene que frenar, bajar y
+     ejecutar cada archivo antes de terminar de armar la página. Son 420 KB
+     de código haciendo esperar al dibujo. Con "defer" la página se pinta
+     primero y el código llega enseguida después.
 ═══════════════════════════════════════════════════════════════════ -->
-<script src="codigo/01-configuracion.js"></script>
-<script src="codigo/02-utilidades.js"></script>
-<script src="codigo/03-sobre-de-apertura.js"></script>
-<script src="codigo/04-invitado-personalizado.js"></script>
-<script src="codigo/05-cursor-personalizado.js"></script>
+<script defer src="codigo/01-configuracion.js"></script>
+<script defer src="codigo/02-utilidades.js"></script>
+<script defer src="codigo/03-sobre-de-apertura.js"></script>
+<script defer src="codigo/04-invitado-personalizado.js"></script>
+<script defer src="codigo/05-cursor-personalizado.js"></script>
 <!-- EL LIENZO DE PÉTALOS. Tres <canvas>, uno por plano de profundidad, en
      vez de 29 divs. Va ANTES que 06-petalos-con-fisica.js porque ese
      archivo le pregunta al arrancar si debe crear elementos o solo números.
      Con  ?petalos=dom  vuelve el sistema de divs. -->
-<script src="codigo/24-lienzo-de-petalos.js"></script>
-<script src="codigo/06-petalos-con-fisica.js"></script>
-<script src="codigo/07-marco-y-enredaderas.js"></script>
-<script src="codigo/08-efectos-de-scroll.js"></script>
-<script src="codigo/09-cuenta-regresiva.js"></script>
-<script src="codigo/10-reproductor-de-musica.js"></script>
-<script src="codigo/11-formulario-confirmacion.js"></script>
-<script src="codigo/12-pase-de-acceso.js"></script>
-<script src="codigo/13-agregar-al-calendario.js"></script>
+<script defer src="codigo/24-lienzo-de-petalos.js"></script>
+<script defer src="codigo/06-petalos-con-fisica.js"></script>
+<script defer src="codigo/07-marco-y-enredaderas.js"></script>
+<script defer src="codigo/08-efectos-de-scroll.js"></script>
+<script defer src="codigo/09-cuenta-regresiva.js"></script>
+<script defer src="codigo/10-reproductor-de-musica.js"></script>
+<script defer src="codigo/11-formulario-confirmacion.js"></script>
+<script defer src="codigo/12-pase-de-acceso.js"></script>
+<script defer src="codigo/13-agregar-al-calendario.js"></script>
 <!-- EL LIENZO DE LUZ. Dibuja los tres sistemas de luz —velas, haces y polvo—
      en un solo <canvas>, en vez de en ~140 elementos repartidos en 10 capas
      con `mix-blend-mode`, que era lo que se llevaba la mitad de cada cuadro.
@@ -2055,9 +2068,9 @@
 
      Con  ?luz=dom  en la dirección, este módulo se queda dormido y vuelve el
      sistema anterior completo, sin tocar código. -->
-<script src="codigo/23-lienzo-de-luz.js"></script>
-<script src="codigo/14-haces-de-luz.js"></script>
-<script src="codigo/15-registro-de-confirmaciones.js"></script>
+<script defer src="codigo/23-lienzo-de-luz.js"></script>
+<script defer src="codigo/14-haces-de-luz.js"></script>
+<script defer src="codigo/15-registro-de-confirmaciones.js"></script>
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda).
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
      —incluso sobre el sobre de entrada— para que quien tenga un equipo
@@ -2072,15 +2085,15 @@
   <span class="boton-animaciones__texto">Animación</span>
 </button>
 
-<script src="codigo/16-volver-arriba.js"></script>
-<script src="codigo/17-joyas-colgantes.js"></script>
-<script src="codigo/18-motas-de-polvo.js"></script>
-<script src="codigo/19-velas.js"></script>
-<script src="codigo/20-boton-de-animaciones.js"></script>
-<script src="codigo/21-monitor-de-rendimiento.js"></script>
+<script defer src="codigo/16-volver-arriba.js"></script>
+<script defer src="codigo/17-joyas-colgantes.js"></script>
+<script defer src="codigo/18-motas-de-polvo.js"></script>
+<script defer src="codigo/19-velas.js"></script>
+<script defer src="codigo/20-boton-de-animaciones.js"></script>
+<script defer src="codigo/21-monitor-de-rendimiento.js"></script>
 <!-- Tiñe la luz que entra por los ventanales según la hora del día. Va
      después de los haces y las motas, porque escribe sobre sus capas. -->
-<script src="codigo/22-luz-de-la-hora.js"></script>
+<script defer src="codigo/22-luz-de-la-hora.js"></script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
      internet y se pueda instalar. Va al final y falla en silencio si el
