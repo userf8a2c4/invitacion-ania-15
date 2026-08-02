@@ -61,3 +61,40 @@ function env($clave, $respaldo = null) {
     $valor = getenv($clave);
     return ($valor === false || $valor === '') ? $respaldo : $valor;
 }
+
+/**
+ * Comprueba la llave de arranque de los endpoints previos al login.
+ *
+ * POR QUÉ EXISTE ESTA FUNCIÓN
+ * diagnostico.php, instalar.php y la creación de la primera cuenta
+ * corren ANTES de que exista ningún usuario, así que no pueden pedir
+ * sesión. Necesitan un secreto, y ese secreto tiene que estar ya en el
+ * servidor.
+ *
+ * El sitio se despliega con GitHub Desktop y el .env está en .gitignore
+ * (bien: tiene las contraseñas). O sea que agregarle una variable nueva
+ * al .env del servidor exige entrar a mano por hPanel. Para no obligar a
+ * eso, se acepta como llave cualquiera de estas dos:
+ *
+ *   · LLAVE_DIAGNOSTICO, si algún día se agrega al .env del servidor.
+ *   · DB_PASSWORD, que YA está ahí porque sin ella no funcionaría nada.
+ *
+ * La contraseña de la base es un secreto tan bueno como cualquier otro
+ * para esto, y no viaja a ningún lado: se compara contra lo que llega
+ * por la URL y se descarta.
+ *
+ * @param string $recibida La llave que mandó quien llama.
+ * @return bool
+ */
+function llaveDeArranqueCorrecta($recibida) {
+    $recibida = (string) $recibida;
+    if ($recibida === '') return false;
+
+    foreach (['LLAVE_DIAGNOSTICO', 'DB_PASSWORD'] as $variable) {
+        $esperada = env($variable, '');
+        // hash_equals tarda lo mismo acierte o no, así que no se puede
+        // adivinar la llave letra por letra midiendo los tiempos.
+        if ($esperada !== '' && hash_equals($esperada, $recibida)) return true;
+    }
+    return false;
+}

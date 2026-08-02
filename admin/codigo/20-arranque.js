@@ -104,11 +104,6 @@ function dibujarCorreo() {
     'la bandeja de info@aniaxv.com, para leer y responder desde el teléfono');
 }
 
-function dibujarDinero() {
-  pintarEnConstruccion('dinero',
-    'el presupuesto con padrinos, pagos, proveedores y cotizaciones');
-}
-
 function dibujarEvento() {
   pintarEnConstruccion('evento',
     'las mesas, el corte de honor, la ceremonia, la música y el cronograma');

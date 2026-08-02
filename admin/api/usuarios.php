@@ -42,13 +42,11 @@ if ($accion === 'primero') {
         );
     }
 
-    // Misma llave que el diagnóstico: quien tiene acceso al .env del
+    // Misma llave que el diagnóstico: quien conoce los secretos del
     // servidor es quien puede arrancar el panel.
-    $llaveEsperada = env('LLAVE_DIAGNOSTICO', '');
-    $datos         = cuerpoJson();
+    $datos = cuerpoJson();
 
-    if ($llaveEsperada === '' ||
-        !hash_equals($llaveEsperada, (string) ($datos['llave'] ?? ''))) {
+    if (!llaveDeArranqueCorrecta($datos['llave'] ?? '')) {
         responderMal('Llave incorrecta.', 403);
     }
 

@@ -33,17 +33,7 @@ exigirMetodo(['GET']);
 
 /* ─── PUERTA ──────────────────────────────────────────────────────────── */
 
-$llaveEsperada = env('LLAVE_DIAGNOSTICO', '');
-$llaveRecibida = (string) ($_GET['llave'] ?? '');
-
-if ($llaveEsperada === '') {
-    responderMal(
-        'Falta definir LLAVE_DIAGNOSTICO en el archivo .env antes de usar esto.',
-        403
-    );
-}
-// hash_equals para que no se pueda adivinar la llave midiendo tiempos.
-if (!hash_equals($llaveEsperada, $llaveRecibida)) {
+if (!llaveDeArranqueCorrecta($_GET['llave'] ?? '')) {
     responderMal('Llave incorrecta.', 403);
 }
 

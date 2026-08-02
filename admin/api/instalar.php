@@ -30,15 +30,7 @@ exigirMetodo(['GET', 'POST']);
 
 /* ─── PUERTA ──────────────────────────────────────────────────────────── */
 
-$llaveEsperada = env('LLAVE_DIAGNOSTICO', '');
-if ($llaveEsperada === '') {
-    responderMal(
-        'Falta definir LLAVE_DIAGNOSTICO en el .env del servidor. ' .
-        'Subí el archivo .env actualizado por FTP y volvé a abrir esta dirección.',
-        403
-    );
-}
-if (!hash_equals($llaveEsperada, (string) ($_GET['llave'] ?? ''))) {
+if (!llaveDeArranqueCorrecta($_GET['llave'] ?? '')) {
     responderMal('Llave incorrecta.', 403);
 }
 
