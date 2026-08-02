@@ -9,16 +9,18 @@
    4. Manda correo a todos los administradores definidos en .env
    ══════════════════════════════════════════════════════════════════════ */
 
-/* ─── CARGAR .ENV ─────────────────────────────────────────────────────── */
-$rutaEnv = __DIR__ . '/.env';
-if (file_exists($rutaEnv)) {
-    foreach (file($rutaEnv, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $linea) {
-        if (strpos($linea, '=') !== false && $linea[0] !== '#') {
-            [$clave, $valor] = explode('=', $linea, 2);
-            putenv(trim($clave) . '=' . trim($valor));
-        }
-    }
-}
+/* ─── LIBRERÍAS COMPARTIDAS CON EL PANEL ──────────────────────────────── */
+/* La lectura del .env y la función smtpEnviar() vivían acá adentro. Se
+   movieron a admin/api/_lib/ para que este archivo y el panel de
+   administración usen exactamente el mismo código: si algún día hay que
+   arreglar el envío de correo, se arregla en un solo lugar.
+
+   El getenv() de más abajo sigue funcionando igual, porque entorno.php
+   carga el .env con putenv() tal como se hacía antes. */
+require_once __DIR__ . '/admin/api/_lib/entorno.php';
+require_once __DIR__ . '/admin/api/_lib/correo.php';
+
+cargarEntorno();
 
 /* ─── CORS ────────────────────────────────────────────────────────────── */
 header('Access-Control-Allow-Origin: https://aniaxv.com');
@@ -89,80 +91,10 @@ try {
     error_log('[Ania XV] ❌ BD: ' . $errorBD);
 }
 
-/* ─── 2. ENVÍO SMTP MANUAL (SSL Directo - Puerto 465) ───────────────── */
-
-function smtpEnviar($para, $asunto, $html, $from, $fromNombre, $host, $port, $user, $pass) {
-    $log = [];
-
-    // Conexión SSL directa
-    $remoteHost = ($port === 465) ? "ssl://{$host}" : $host;
-    $sock = @fsockopen($remoteHost, $port, $errno, $errstr, 15);
-    if (!$sock) {
-        return "No se pudo conectar a $remoteHost:$port, $errstr ($errno)";
-    }
-
-    $leer = function() use ($sock, &$log) {
-        $buf = '';
-        while (!feof($sock)) {
-            $line = fgets($sock, 512);
-            $buf .= $line;
-            $log[] = '< ' . trim($line);
-            if (strlen($line) >= 4 && $line[3] === ' ') break;
-        }
-        return $buf;
-    };
-
-    $cmd = function($texto) use ($sock, $leer, &$log) {
-        $log[] = '> ' . trim($texto);
-        fwrite($sock, $texto . "\r\n");
-        return $leer();
-    };
-
-    $r = $leer(); 
-    if (strpos($r, '220') === false) { fclose($sock); return "220 no recibido: $r"; }
-
-    $r = $cmd("EHLO aniaxv.com");
-
-    $r = $cmd("AUTH LOGIN");
-    if (strpos($r, '334') === false) { fclose($sock); return "AUTH LOGIN no aceptado: $r"; }
-
-    $r = $cmd(base64_encode($user));
-    if (strpos($r, '334') === false) { fclose($sock); return "Usuario no aceptado: $r"; }
-
-    $r = $cmd(base64_encode($pass));
-    if (strpos($r, '235') === false) { fclose($sock); return "Contraseña rechazada: $r"; }
-
-    $r = $cmd("MAIL FROM:<$from>");
-    if (strpos($r, '250') === false) { fclose($sock); return "MAIL FROM rechazado: $r"; }
-
-    $r = $cmd("RCPT TO:<$para>");
-    if (strpos($r, '250') === false) { fclose($sock); return "RCPT TO rechazado: $r"; }
-
-    $r = $cmd("DATA");
-    if (strpos($r, '354') === false) { fclose($sock); return "DATA rechazado: $r"; }
-
-    $fromEnc    = '=?UTF-8?B?' . base64_encode($fromNombre) . '?=';
-    $asuntoEnc  = '=?UTF-8?B?' . base64_encode($asunto) . '?=';
-    $cuerpoB64  = chunk_split(base64_encode($html));
-
-    $msg  = "From: $fromEnc <$from>\r\n";
-    $msg .= "To: <$para>\r\n";
-    $msg .= "Subject: $asuntoEnc\r\n";
-    $msg .= "MIME-Version: 1.0\r\n";
-    $msg .= "Content-Type: text/html; charset=UTF-8\r\n";
-    $msg .= "Content-Transfer-Encoding: base64\r\n";
-    $msg .= "\r\n" . $cuerpoB64;
-
-    fwrite($sock, $msg . "\r\n.\r\n");
-    $r = $leer();
-    if (strpos($r, '250') === false) { fclose($sock); return "Mensaje rechazado: $r"; }
-
-    $cmd("QUIT");
-    fclose($sock);
-
-    error_log('[Ania XV] SMTP log: ' . implode(' | ', $log));
-    return true;
-}
+/* ─── 2. ENVÍO SMTP ──────────────────────────────────────────────────── */
+/* smtpEnviar() ya viene cargada desde admin/api/_lib/correo.php (arriba).
+   Es la misma función de siempre, palabra por palabra; solo cambió de
+   archivo. Sigue conectándose con SSL directo al puerto 465. */
 
 /* ─── 3. HTML: CORREO AL INVITADO ────────────────────────────────────── */
 $asistiTexto = $asiste ? 'Sí, asistiré con mucho gusto ✦' : 'Lamentablemente no podré asistir';
