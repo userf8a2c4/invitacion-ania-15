@@ -528,6 +528,26 @@ function cederElHilo(seguir) {
 function trabajarPorTandas(cuantos, hacerUno, alTerminar, presupuestoMs = 8) {
   let indice = 0;
 
+  /* ⚠️ CON LA PESTAÑA OCULTA SE HACE TODO DE UNA, SIN TROCEAR.
+     Parece al revés de lo que uno esperaría, pero es lo correcto, y viene de
+     un caso real: alguien abre la invitación con "abrir en pestaña nueva" y
+     la deja de fondo mientras termina otra cosa.
+
+     El troceado existe para que la página siga respondiendo MIENTRAS SE LA
+     MIRA. Si nadie la mira, no hay ningún cuadro que proteger — y en cambio
+     el navegador castiga fuerte a las pestañas de fondo: les permite un
+     temporizador por segundo, y después de unos minutos uno por MINUTO. Con
+     22 plantas de a una tanda por turno, las enredaderas tardaban minutos en
+     aparecer, y el invitado volvía a una invitación a medio dibujar.
+
+     Haciéndolo de corrido, cuando vuelve ya está todo listo. La "tarea
+     larga" que eso genera no le molesta a nadie: no hay nada que dibujar. */
+  if (document.hidden) {
+    for (; indice < cuantos; indice++) hacerUno(indice);
+    if (typeof alTerminar === 'function') alTerminar();
+    return;
+  }
+
   function unaTanda() {
     const arranque = performance.now();
 

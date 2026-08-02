@@ -563,21 +563,15 @@
    */
   function acomodarTodo(alTerminar) {
     const anchoRef = anchoBase();
-    let cual = 0;
 
-    function acomodarUna() {
-      if (cual >= piezas.length) {
+    trabajarPorTandas(
+      piezas.length,
+      i => colocarPieza(piezas[i], anchoRef),
+      () => {
         if (window.LienzoDeLuz && window.LienzoDeLuz.activo) rearmarLasFuentesDeLuz();
         if (typeof alTerminar === 'function') alTerminar();
-        return;
       }
-
-      const c = piezas[cual++];
-      colocarPieza(c, anchoRef);
-      cederElHilo(acomodarUna);
-    }
-
-    acomodarUna();
+    );
   }
 
   /* cederElHilo() y trabajarPorTandas() viven en codigo/02-utilidades.js:
@@ -809,16 +803,12 @@
     // Los <defs> compartidos (degradados y filtros) van una sola vez.
     capaApliques.insertAdjacentHTML('beforeend', defsCompartidos);
 
-    let cual = 0;
-    (function construirUna() {
-      if (cual >= ANCLAS.length) {
-        // Recién con todas las piezas creadas tiene sentido medirlas.
-        acomodarTodo(observarLasSecciones);
-        return;
-      }
-      construirUnaPieza(ANCLAS[cual++]);
-      cederElHilo(construirUna);
-    })();
+    trabajarPorTandas(
+      ANCLAS.length,
+      i => construirUnaPieza(ANCLAS[i]),
+      // Recién con todas las piezas creadas tiene sentido medirlas.
+      () => acomodarTodo(observarLasSecciones)
+    );
   }
 
   document.addEventListener('invitacion-visible', construirYAcomodarUnaSolaVez);
