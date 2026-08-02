@@ -62,7 +62,13 @@ async function dibujarInvitados() {
       '<button class="filtro" data-filtro="sin_mesa">Sin mesa</button>' +
     '</div>' +
 
-    '<div id="lista-invitados"></div>';
+    '<div id="lista-invitados"></div>' +
+
+    '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-3)">' +
+      '<button class="boton" style="flex:1" id="inv-descargar">Descargar</button>' +
+      '<button class="boton boton--principal" style="flex:1" id="inv-nuevo">' +
+        'Agregar invitado</button>' +
+    '</div>';
 
   const lista = buscar('#lista-invitados', vista);
   pintarCargando(lista, 6);
@@ -93,6 +99,19 @@ async function dibujarInvitados() {
  * @returns {void}
  */
 function engancharInvitados(vista) {
+
+  buscar('#inv-descargar', vista).addEventListener('click', () => {
+    abrirHojaDeFormatos('Descargar invitados', exportarInvitados);
+  });
+
+  buscar('#inv-nuevo', vista).addEventListener('click', () => {
+    if (!INVITADOS_EDITABLES) {
+      avisar('La tabla no permite agregar invitados.', true);
+      return;
+    }
+    abrirFormularioDeInvitado();
+  });
+
   const buscador = buscar('#buscar-invitado', vista);
 
   buscador.value = BUSQUEDA_INVITADOS;

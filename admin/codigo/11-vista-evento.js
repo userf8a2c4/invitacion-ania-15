@@ -118,7 +118,7 @@ const SECCIONES = {
       { id: 'momento', rotulo: 'Para qué momento', lista: [
           ['entrada', 'Entrada'], ['vals', 'Vals'], ['brindis', 'Brindis'],
           ['pastel', 'Pastel'], ['baile', 'Baile'], ['otro', 'Otro'],
-          ['prohibida', '🚫 Prohibida — que NO suene']] },
+          ['prohibida', 'Prohibida — que NO suene']] },
       { id: 'enlace',  rotulo: 'Enlace' },
       { id: 'notas',   rotulo: 'Notas', largo: true },
     ],

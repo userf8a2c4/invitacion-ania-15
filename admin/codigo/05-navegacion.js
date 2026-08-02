@@ -33,7 +33,10 @@ const VISTAS = {
   resumen:   { titulo: 'Resumen',   dibujar: () => dibujarResumen() },
   invitados: { titulo: 'Invitados', dibujar: () => dibujarInvitados() },
   correo:    { titulo: 'Correo',    dibujar: () => dibujarCorreo() },
-  dinero:    { titulo: 'Dinero',    dibujar: () => dibujarDinero() },
+  /* La clave interna sigue siendo 'dinero' —la usan la URL de los
+     atajos del icono y las llamadas a ensuciarVistas()— pero lo que se
+     lee en pantalla es "Presupuesto". */
+  dinero:    { titulo: 'Presupuesto', dibujar: () => dibujarDinero() },
   evento:    { titulo: 'Evento',    dibujar: () => dibujarEvento() },
 };
 

@@ -67,7 +67,28 @@ async function dibujarDinero() {
     });
   });
 
+  // Cambiar de moneda redibuja todo: los montos se recalculan al pintar.
+  buscarTodos('[data-moneda]', vista).forEach(boton => {
+    boton.addEventListener('click', () => {
+      elegirMoneda(boton.dataset.moneda);
+      ensuciarVistas('resumen');
+      dibujarDinero();
+    });
+  });
+
+  buscar('#exportar-dinero', vista).addEventListener('click', abrirHojaDeDescarga);
+
   pintarSeccionDeDinero();
+}
+
+
+/**
+ * Ofrece descargar el presupuesto en los cuatro formatos.
+ *
+ * @returns {void}
+ */
+function abrirHojaDeDescarga() {
+  abrirHojaDeFormatos('Descargar el presupuesto', exportarPresupuesto);
 }
 
 /**
@@ -94,6 +115,28 @@ function botonSeccion(clave, texto, cuantos) {
 function bloqueTotales(t) {
   let avisos = '';
 
+  /* El selector de moneda. Cambia SOLO cómo se ven los números: en la
+     base de datos todo sigue guardado en pesos. Por eso, cuando está en
+     dólares, se aclara con qué tipo de cambio y de cuándo — para que
+     nadie confunda una conversión aproximada con una cotización de hoy. */
+  const cual = monedaElegida();
+  const selector =
+    '<div class="filtros" style="margin-bottom:var(--esp-2)">' +
+      Object.keys(CONFIGURACION.dinero.monedas).map(clave => {
+        const m = CONFIGURACION.dinero.monedas[clave];
+        return '<button class="filtro' + (clave === cual ? ' activo' : '') +
+               '" data-moneda="' + clave + '">' + seguro(m.nombre) + '</button>';
+      }).join('') +
+    '</div>';
+
+  if (cual !== CONFIGURACION.dinero.monedaBase) {
+    avisos += '<p class="vacio__texto">Convertido a ' +
+              seguro(CONFIGURACION.dinero.pesosPorDolar) + ' pesos por dólar ' +
+              '(actualizado el ' +
+              seguro(comoFecha(CONFIGURACION.dinero.tipoDeCambioActualizado)) +
+              '). Los montos se guardan en pesos.</p>';
+  }
+
   if (t.por_pagar > 0) {
     avisos += '<p class="vacio__texto">Por pagar: <strong>' +
               seguro(comoDinero(t.por_pagar, false)) + '</strong> en ' +
@@ -108,6 +151,7 @@ function bloqueTotales(t) {
   }
 
   return '' +
+    selector +
     '<div class="tarjeta">' +
       '<div class="dinero-resumen">' +
         '<div class="dinero-resumen__mitad">' +
@@ -122,6 +166,8 @@ function bloqueTotales(t) {
         '</div>' +
       '</div>' +
       avisos +
+      '<button class="boton boton--chico boton--ancho" id="exportar-dinero" ' +
+              'style="margin-top:var(--esp-2)">Descargar</button>' +
     '</div>';
 }
 
@@ -541,6 +587,33 @@ async function guardarDinero(accion, carga, mensaje) {
  * @returns {void}
  */
 function engancharFormularioDinero(cuerpo, armarCarga, nombreAccion, existente) {
+
+  /* Los adjuntos solo tienen sentido sobre algo que ya existe: hace
+     falta un id al que atarlos. Por eso al crear un registro nuevo el
+     bloque no aparece, y sí lo hace al volver a abrirlo para editar. */
+  if (existente && ['gasto', 'pago', 'proveedor'].includes(nombreAccion)) {
+    const bloque = crear('div');
+    bloque.innerHTML =
+      '<div class="tarjeta__titulo" style="margin-top:var(--esp-4)">' +
+        (nombreAccion === 'pago' ? 'Comprobante' : 'Contrato y archivos') +
+      '</div>' +
+      '<div id="archivos-de-esto"></div>' +
+      botonesDeArchivo({ tipo: nombreAccion, id: existente.id });
+
+    // Va antes del pie de botones, para que Guardar quede siempre último.
+    const pie = buscar('.acciones', cuerpo);
+    cuerpo.insertBefore(bloque, pie);
+
+    const lista = buscar('#archivos-de-esto', bloque);
+    pintarArchivosDe(lista, nombreAccion, existente.id);
+
+    engancharBotonesDeArchivo(bloque, {
+      tipo: nombreAccion,
+      id: existente.id,
+      despues: () => pintarArchivosDe(lista, nombreAccion, existente.id),
+    });
+  }
+
   buscar('#pie-guardar', cuerpo).addEventListener('click', () => {
     const carga = armarCarga();
     if (!carga) return;
@@ -571,12 +644,115 @@ function opcionesDe(filas, vacio) {
 }
 
 
+/* ─── LISTAS A LAS QUE SE LES PUEDEN AGREGAR OPCIONES ──────────────── */
+
+/**
+ * Devuelve los métodos de pago: los de fábrica más los agregados.
+ *
+ * Los que agrega la persona se guardan en el teléfono. No van a la base
+ * de datos a propósito: son una comodidad para escribir más rápido, no
+ * un dato del evento, y no vale la pena una tabla para eso.
+ *
+ * @returns {string[]}
+ */
+function metodosDePago() {
+  const propios = recordado('metodos-pago', []);
+  return CONFIGURACION.metodosDePago.concat(
+    propios.filter(m => !CONFIGURACION.metodosDePago.includes(m))
+  );
+}
+
+/**
+ * Agrega un método de pago nuevo a la lista guardada.
+ *
+ * @param {string} nombre
+ * @returns {void}
+ */
+function agregarMetodoDePago(nombre) {
+  const limpio = String(nombre || '').trim();
+  if (!limpio) return;
+
+  const propios = recordado('metodos-pago', []);
+  if (!propios.includes(limpio) && !CONFIGURACION.metodosDePago.includes(limpio)) {
+    propios.push(limpio);
+    recordar('metodos-pago', propios);
+  }
+}
+
+/**
+ * Arma una lista desplegable que permite agregar opciones nuevas.
+ *
+ * Al elegir "➕ Agregar otro…" aparece un campo de texto debajo. Se
+ * resuelve así y no con una ventana emergente porque prompt() está
+ * bloqueado en varias PWA instaladas y quedaría sin funcionar justo en
+ * el modo en que se va a usar la app.
+ *
+ * @param {Object} opciones
+ * @param {string} opciones.id
+ * @param {string} opciones.rotulo
+ * @param {Array<{valor:string,texto:string}>} opciones.opciones
+ * @param {string} [opciones.valor]
+ * @param {string} [opciones.textoAgregar]
+ * @returns {string} HTML
+ */
+function campoListaAmpliable(opciones) {
+  const conAgregar = opciones.opciones.concat([
+    { valor: '__nuevo__', texto: opciones.textoAgregar || 'Agregar otro…' },
+  ]);
+
+  return campoLista({
+    id: opciones.id,
+    rotulo: opciones.rotulo,
+    valor: opciones.valor,
+    opciones: conAgregar,
+  }) +
+  '<div id="' + seguro(opciones.id) + '-nuevo-caja" class="oculto" ' +
+       'style="margin-top:calc(var(--esp-3) * -1);margin-bottom:var(--esp-3)">' +
+    '<input type="text" id="' + seguro(opciones.id) + '-nuevo" ' +
+           'class="campo__control" placeholder="Escribí el nombre nuevo">' +
+  '</div>';
+}
+
+/**
+ * Engancha una lista ampliable para que muestre el campo al elegir
+ * "agregar otro".
+ *
+ * @param {string} id
+ * @param {Element} cuerpo
+ * @returns {void}
+ */
+function engancharListaAmpliable(id, cuerpo) {
+  const lista = buscar('#' + id, cuerpo);
+  const caja  = buscar('#' + id + '-nuevo-caja', cuerpo);
+  if (!lista || !caja) return;
+
+  lista.addEventListener('change', () => {
+    const agregando = lista.value === '__nuevo__';
+    caja.classList.toggle('oculto', !agregando);
+    if (agregando) buscar('#' + id + '-nuevo', cuerpo).focus();
+  });
+}
+
+/**
+ * Lee el valor de una lista ampliable, sea de la lista o el escrito.
+ *
+ * @param {string} id
+ * @param {Element} cuerpo
+ * @returns {string}
+ */
+function valorDeListaAmpliable(id, cuerpo) {
+  const elegido = valorDe(id, cuerpo);
+  if (elegido !== '__nuevo__') return elegido;
+  return valorDe(id + '-nuevo', cuerpo);
+}
+
+
 function formularioCategoria(categoria) {
   const d = categoria || {};
   const cuerpo = abrirHoja(categoria ? 'Editar categoría' : 'Nueva categoría',
     campoTexto({ id: 'cat-nombre', rotulo: 'Nombre', valor: d.nombre }) +
     campoTexto({ id: 'cat-techo', rotulo: 'Techo de presupuesto', tipo: 'number',
-                 paso: '0.01', valor: d.techo || '',
+                 paso: '0.01', valor: d.techo ? desdePesos(d.techo) : '',
                  ayuda: 'Dejalo en 0 si no querés poner límite.' }) +
     pieDeFormulario('Guardar', !!categoria)
   );
@@ -584,7 +760,7 @@ function formularioCategoria(categoria) {
   engancharFormularioDinero(cuerpo, () => {
     const nombre = valorDe('cat-nombre', cuerpo);
     if (!nombre) { avisar('Falta el nombre.', true); return null; }
-    return { nombre: nombre, techo: valorDe('cat-techo', cuerpo) };
+    return { nombre: nombre, techo: aPesos(valorDe('cat-techo', cuerpo)) };
   }, 'categoria', categoria);
 }
 
@@ -600,9 +776,9 @@ function formularioGasto(gasto) {
 
     '<div class="campo-par">' +
       campoTexto({ id: 'gas-planeado', rotulo: 'Presupuestado', tipo: 'number',
-                   paso: '0.01', valor: d.presupuestado || '' }) +
+                   paso: '0.01', valor: d.presupuestado ? desdePesos(d.presupuestado) : '' }) +
       campoTexto({ id: 'gas-real', rotulo: 'Costo real', tipo: 'number',
-                   paso: '0.01', valor: d.monto_real || '' }) +
+                   paso: '0.01', valor: d.monto_real ? desdePesos(d.monto_real) : '' }) +
     '</div>' +
 
     campoLista({ id: 'gas-proveedor', rotulo: 'Proveedor',
@@ -625,8 +801,8 @@ function formularioGasto(gasto) {
       categoria_id:  valorDe('gas-categoria', cuerpo),
       proveedor_id:  valorDe('gas-proveedor', cuerpo),
       padrino_id:    valorDe('gas-padrino', cuerpo),
-      presupuestado: valorDe('gas-planeado', cuerpo),
-      monto_real:    valorDe('gas-real', cuerpo),
+      presupuestado: aPesos(valorDe('gas-planeado', cuerpo)),
+      monto_real:    aPesos(valorDe('gas-real', cuerpo)),
       notas:         valorDe('gas-notas', cuerpo),
     };
   }, 'gasto', gasto);
@@ -635,42 +811,90 @@ function formularioGasto(gasto) {
 
 function formularioPago(pago) {
   const d = pago || {};
+  const moneda = CONFIGURACION.dinero.monedas[monedaElegida()];
+
+  /* Si el método guardado no está en la lista (porque se agregó en otro
+     teléfono), se suma para que no se pierda al editar. */
+  const metodos = metodosDePago().slice();
+  if (d.metodo && !metodos.includes(d.metodo)) metodos.unshift(d.metodo);
+
   const cuerpo = abrirHoja(pago ? 'Editar pago' : 'Nuevo pago',
     campoTexto({ id: 'pag-concepto', rotulo: 'Concepto', valor: d.concepto }) +
 
-    campoLista({ id: 'pag-gasto', rotulo: 'Es parte del gasto',
-                 valor: d.gasto_id || '',
-                 opciones: [{ valor: '', texto: 'Suelto' }].concat(
-                   DINERO.gastos.map(g => ({ valor: String(g.id), texto: g.concepto }))) }) +
+    campoListaAmpliable({
+      id: 'pag-gasto',
+      rotulo: 'Es parte del gasto',
+      valor: d.gasto_id ? String(d.gasto_id) : '',
+      textoAgregar: 'Crear un gasto nuevo…',
+      opciones: [{ valor: '', texto: 'Suelto (no pertenece a ningún gasto)' }]
+        .concat(DINERO.gastos.map(g => ({ valor: String(g.id), texto: g.concepto }))),
+    }) +
 
     '<div class="campo-par">' +
-      campoTexto({ id: 'pag-monto', rotulo: 'Monto', tipo: 'number',
-                   paso: '0.01', valor: d.monto || '' }) +
+      campoTexto({ id: 'pag-monto', rotulo: 'Monto en ' + moneda.nombre.toLowerCase(),
+                   tipo: 'number', paso: '0.01',
+                   valor: d.monto ? desdePesos(d.monto) : '' }) +
       campoTexto({ id: 'pag-fecha', rotulo: 'Vence el', tipo: 'date',
                    valor: d.fecha_limite || '' }) +
     '</div>' +
 
-    campoTexto({ id: 'pag-metodo', rotulo: 'Método', valor: d.metodo,
-                 pista: 'Transferencia, efectivo…' }) +
+    campoListaAmpliable({
+      id: 'pag-metodo',
+      rotulo: 'Método de pago',
+      valor: d.metodo || '',
+      textoAgregar: 'Agregar otro método…',
+      opciones: [{ valor: '', texto: 'Sin especificar' }]
+        .concat(metodos.map(m => ({ valor: m, texto: m }))),
+    }) +
+
     campoCasilla({ id: 'pag-pagado', rotulo: 'Ya está pagado',
                    marcado: d.estado === 'pagado' }) +
     campoLargo({ id: 'pag-notas', rotulo: 'Notas', valor: d.notas }) +
     pieDeFormulario('Guardar', !!pago)
   );
 
+  engancharListaAmpliable('pag-metodo', cuerpo);
+  engancharListaAmpliable('pag-gasto', cuerpo);
+
   engancharFormularioDinero(cuerpo, () => {
     const concepto = valorDe('pag-concepto', cuerpo);
-    const gasto    = valorDe('pag-gasto', cuerpo);
-    if (!concepto && !gasto) {
+    const metodo   = valorDeListaAmpliable('pag-metodo', cuerpo);
+
+    /* El gasto es distinto de los demás: si se eligió "crear uno nuevo",
+       lo que se escribió es el NOMBRE de un gasto que todavía no existe.
+       Se avisa y se manda como concepto del pago, en vez de guardar un
+       id inventado que rompería la llave foránea. */
+    const gastoElegido = valorDe('pag-gasto', cuerpo);
+    let gastoId = gastoElegido;
+    let conceptoFinal = concepto;
+
+    if (gastoElegido === '__nuevo__') {
+      const nombreNuevo = valorDe('pag-gasto-nuevo', cuerpo);
+      if (!nombreNuevo) {
+        avisar('Escribí el nombre del gasto nuevo.', true);
+        return null;
+      }
+      gastoId = '';
+      if (!conceptoFinal) conceptoFinal = nombreNuevo;
+      avisar('El pago queda suelto. Creá el gasto desde la pestaña Gastos ' +
+             'si querés vincularlo.');
+    }
+
+    if (!conceptoFinal && !gastoId) {
       avisar('Poné un concepto o elegí a qué gasto pertenece.', true);
       return null;
     }
+
+    // Se guarda el método nuevo para que aparezca la próxima vez.
+    agregarMetodoDePago(metodo);
+
     return {
-      concepto:     concepto,
-      gasto_id:     gasto,
-      monto:        valorDe('pag-monto', cuerpo),
+      concepto:     conceptoFinal,
+      gasto_id:     gastoId,
+      // El campo está en la moneda que se está mirando; la base guarda pesos.
+      monto:        aPesos(valorDe('pag-monto', cuerpo)),
       fecha_limite: valorDe('pag-fecha', cuerpo),
-      metodo:       valorDe('pag-metodo', cuerpo),
+      metodo:       metodo,
       estado:       valorDe('pag-pagado', cuerpo) ? 'pagado' : 'pendiente',
       notas:        valorDe('pag-notas', cuerpo),
     };
@@ -693,7 +917,7 @@ function formularioPadrino(padrino) {
                  ] }) +
 
     campoTexto({ id: 'pad-monto', rotulo: 'Monto', tipo: 'number',
-                 paso: '0.01', valor: d.monto || '',
+                 paso: '0.01', valor: d.monto ? desdePesos(d.monto) : '',
                  ayuda: 'Si aporta en especie, poné el valor aproximado o dejalo en 0.' }) +
 
     campoLista({ id: 'pad-estado', rotulo: 'En qué va',
@@ -720,7 +944,7 @@ function formularioPadrino(padrino) {
       nombre:      nombre,
       apadrina:    valorDe('pad-apadrina', cuerpo),
       tipo_aporte: valorDe('pad-tipo', cuerpo),
-      monto:       valorDe('pad-monto', cuerpo),
+      monto:       aPesos(valorDe('pad-monto', cuerpo)),
       estado:      valorDe('pad-estado', cuerpo),
       telefono:    valorDe('pad-telefono', cuerpo),
       correo:      valorDe('pad-correo', cuerpo),
@@ -739,9 +963,9 @@ function formularioProveedor(proveedor) {
 
     '<div class="campo-par">' +
       campoTexto({ id: 'pro-total', rotulo: 'Monto total', tipo: 'number',
-                   paso: '0.01', valor: d.monto_total || '' }) +
+                   paso: '0.01', valor: d.monto_total ? desdePesos(d.monto_total) : '' }) +
       campoTexto({ id: 'pro-anticipo', rotulo: 'Anticipo pagado', tipo: 'number',
-                   paso: '0.01', valor: d.anticipo || '' }) +
+                   paso: '0.01', valor: d.anticipo ? desdePesos(d.anticipo) : '' }) +
     '</div>' +
 
     campoLista({ id: 'pro-estado', rotulo: 'Estado',
@@ -769,8 +993,8 @@ function formularioProveedor(proveedor) {
     return {
       nombre:      nombre,
       servicio:    valorDe('pro-servicio', cuerpo),
-      monto_total: valorDe('pro-total', cuerpo),
-      anticipo:    valorDe('pro-anticipo', cuerpo),
+      monto_total: aPesos(valorDe('pro-total', cuerpo)),
+      anticipo:    aPesos(valorDe('pro-anticipo', cuerpo)),
       estado:      valorDe('pro-estado', cuerpo),
       contacto:    valorDe('pro-contacto', cuerpo),
       telefono:    valorDe('pro-telefono', cuerpo),
@@ -791,7 +1015,7 @@ function formularioCotizacion(cotizacion) {
 
     '<div class="campo-par">' +
       campoTexto({ id: 'cot-monto', rotulo: 'Monto', tipo: 'number',
-                   paso: '0.01', valor: d.monto || '' }) +
+                   paso: '0.01', valor: d.monto ? desdePesos(d.monto) : '' }) +
       campoTexto({ id: 'cot-vigencia', rotulo: 'Vale hasta', tipo: 'date',
                    valor: d.vigencia || '' }) +
     '</div>' +
@@ -813,7 +1037,7 @@ function formularioCotizacion(cotizacion) {
     return {
       servicio:    servicio,
       proveedor:   proveedor,
-      monto:       valorDe('cot-monto', cuerpo),
+      monto:       aPesos(valorDe('cot-monto', cuerpo)),
       vigencia:    valorDe('cot-vigencia', cuerpo),
       telefono:    valorDe('cot-telefono', cuerpo),
       que_incluye: valorDe('cot-incluye', cuerpo),

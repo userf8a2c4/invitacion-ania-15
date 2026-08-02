@@ -48,10 +48,8 @@ const CONFIGURACION = {
   },
 
 
-  /* ─── 3. MONEDA ───────────────────────────────────────────────────── */
+  /* ─── 3. DINERO ───────────────────────────────────────────────────── */
   dinero: {
-    moneda: 'MXN',
-    simbolo: '$',
     /* Cómo se llama la región para dar formato a los números. Con
        'es-MX' se escribe 1,500.50 (coma para miles, punto decimal). */
     region: 'es-MX',
@@ -59,7 +57,41 @@ const CONFIGURACION = {
     /* A partir de qué porcentaje del techo de una categoría se avisa que
        se está por pasar. 0.85 = cuando lleva gastado el 85 %. */
     avisarDesde: 0.85,
+
+    /* Los montos SIEMPRE se guardan en pesos en la base de datos. El
+       dólar es solo una forma de MIRARLOS, que se cambia con un botón.
+
+       Se hace así a propósito: si se guardaran en la moneda que estaba
+       elegida al cargarlos, el mismo presupuesto tendría unos gastos en
+       pesos y otros en dólares, y sumarlos daría cualquier cosa. */
+    monedaBase: 'MXN',
+
+    monedas: {
+      MXN: { simbolo: '$',   nombre: 'Pesos',   rotulo: 'MXN' },
+      USD: { simbolo: 'US$', nombre: 'Dólares', rotulo: 'USD' },
+    },
+
+    /* Cuántos pesos vale un dólar. Se usa solo para MOSTRAR la
+       conversión; no se guarda nada convertido.
+
+       ⚠️ Este número hay que actualizarlo a mano de vez en cuando. No se
+       consulta un servicio de cambio en vivo porque eso obligaría a que
+       el panel dependa de una web ajena para abrir, y quedaría inservible
+       el día que ese servicio falle o cambie. */
+    pesosPorDolar: 18.50,
+
+    /* Cuándo se actualizó ese tipo de cambio. Se muestra junto a las
+       cifras en dólares para que nadie tome una decisión creyendo que es
+       la cotización de hoy. */
+    tipoDeCambioActualizado: '2026-08-02',
   },
+
+
+  /* ─── 4. MÉTODOS DE PAGO ──────────────────────────────────────────── */
+  /* Los que aparecen en la lista desplegable al cargar un pago. Se
+     pueden agregar más desde la misma app; los que se agreguen quedan
+     guardados en el teléfono y se suman a estos. */
+  metodosDePago: ['Efectivo', 'Transferencia', 'Cheque'],
 
 
   /* ─── 4. AVISOS ───────────────────────────────────────────────────── */

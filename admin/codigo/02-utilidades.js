@@ -90,21 +90,95 @@ function crear(etiqueta, clase, html) {
 /* ─── 3. DINERO ────────────────────────────────────────────────────── */
 
 /**
+ * En qué moneda se están mirando los montos ahora.
+ *
+ * Es solo una preferencia de visualización: en la base de datos SIEMPRE
+ * están en pesos. Se recuerda entre sesiones para no tener que
+ * cambiarla cada vez que se abre la app.
+ *
+ * @returns {string} 'MXN' o 'USD'
+ */
+function monedaElegida() {
+  const guardada = recordado('moneda', CONFIGURACION.dinero.monedaBase);
+  return CONFIGURACION.dinero.monedas[guardada]
+    ? guardada
+    : CONFIGURACION.dinero.monedaBase;
+}
+
+/**
+ * Cambia la moneda en la que se muestran los montos.
+ *
+ * @param {string} cual - 'MXN' o 'USD'
+ * @returns {void}
+ */
+function elegirMoneda(cual) {
+  if (CONFIGURACION.dinero.monedas[cual]) recordar('moneda', cual);
+}
+
+/**
  * Escribe un número como cantidad de dinero: 1500.5 → "$1,500.50"
  *
- * @param {number} cantidad
+ * El número que entra SIEMPRE está en pesos, porque así se guarda todo.
+ * Si la moneda elegida es el dólar, acá se hace la división — en un solo
+ * lugar, para que no haya forma de que una pantalla convierta y otra no.
+ *
+ * @param {number} cantidad - En pesos.
  * @param {boolean} [conDecimales=true] - En false: "$1,501", más corto
  *                                        para cifras grandes del tablero.
  * @returns {string}
  */
 function comoDinero(cantidad, conDecimales) {
-  const numero = Number(cantidad) || 0;
+  let numero = Number(cantidad) || 0;
+
+  const cual  = monedaElegida();
+  const datos = CONFIGURACION.dinero.monedas[cual];
+
+  if (cual === 'USD') {
+    const cambio = Number(CONFIGURACION.dinero.pesosPorDolar) || 1;
+    numero = numero / cambio;
+  }
+
   const decimales = (conDecimales === false) ? 0 : 2;
 
-  return CONFIGURACION.dinero.simbolo + numero.toLocaleString(
+  return datos.simbolo + numero.toLocaleString(
     CONFIGURACION.dinero.region,
     { minimumFractionDigits: decimales, maximumFractionDigits: decimales }
   );
+}
+
+/**
+ * Convierte a pesos lo que se escribió en un campo de monto.
+ *
+ * Es el camino inverso de comoDinero(): si se están viendo dólares, lo
+ * que la persona escribe son dólares, pero lo que hay que guardar son
+ * pesos. Sin esto, cargar "100" mirando dólares guardaría 100 pesos.
+ *
+ * @param {string|number} loEscrito
+ * @returns {number} En pesos.
+ */
+function aPesos(loEscrito) {
+  const numero = Number(String(loEscrito).replace(/[^0-9.\-]/g, '')) || 0;
+
+  if (monedaElegida() === 'USD') {
+    return numero * (Number(CONFIGURACION.dinero.pesosPorDolar) || 1);
+  }
+  return numero;
+}
+
+/**
+ * Convierte pesos a la moneda elegida, para rellenar un campo.
+ *
+ * @param {number} pesos
+ * @returns {number}
+ */
+function desdePesos(pesos) {
+  const numero = Number(pesos) || 0;
+
+  if (monedaElegida() === 'USD') {
+    const cambio = Number(CONFIGURACION.dinero.pesosPorDolar) || 1;
+    return Math.round((numero / cambio) * 100) / 100;
+  }
+  return numero;
 }
 
 /**

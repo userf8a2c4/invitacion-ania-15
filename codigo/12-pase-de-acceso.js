@@ -90,6 +90,54 @@ function dibujarCodigoQR(textoDelCodigo) {
   }
 }
 
+/**
+ * Genera el QR que viaja en el correo de confirmación.
+ *
+ * POR QUÉ NO SE COPIA EL DE LA PANTALLA
+ * El de la tarjeta es dorado sobre fondo oscuro, que se ve precioso pero
+ * los lectores de los teléfonos lo leen mal o no lo leen: un QR necesita
+ * mucho contraste y margen blanco alrededor. Este se genera negro sobre
+ * blanco y al doble de tamaño, que es lo que sí se escanea de una.
+ *
+ * EL CÓDIGO ES EXACTAMENTE EL MISMO: cambia el color, no el contenido.
+ *
+ * @param {string} textoDelCodigo - El mismo que se dibuja en la tarjeta.
+ * @returns {string} Una imagen PNG como texto ("data:image/png;base64,…"),
+ *                   o cadena vacía si no se pudo generar.
+ */
+function generarQrParaElCorreo(textoDelCodigo) {
+  if (typeof QRCode === 'undefined' || !textoDelCodigo) return '';
+
+  // Se dibuja en un contenedor suelto que nunca entra en la página.
+  const cajaInvisible = document.createElement('div');
+
+  try {
+    new QRCode(cajaInvisible, {
+      text: textoDelCodigo,
+      width: 240,
+      height: 240,
+      colorDark:  '#000000',
+      colorLight: '#ffffff',
+      // Corrección alta: el QR sigue leyéndose aunque la pantalla tenga
+      // un reflejo o el papel esté algo arrugado.
+      correctLevel: QRCode.CorrectLevel.H,
+    });
+
+    /* qrcodejs dibuja en un <canvas> y, en navegadores viejos, en un
+       <img>. Se prueban los dos por ese orden. */
+    const lienzo = cajaInvisible.querySelector('canvas');
+    if (lienzo) return lienzo.toDataURL('image/png');
+
+    const imagen = cajaInvisible.querySelector('img');
+    if (imagen && imagen.src.indexOf('data:image/png') === 0) return imagen.src;
+
+    return '';
+  } catch (error) {
+    console.warn('No se pudo generar el QR para el correo:', error);
+    return '';
+  }
+}
+
 
 /* ─── 3. MOSTRAR Y CERRAR EL PASE ──────────────────────────────────── */
 
