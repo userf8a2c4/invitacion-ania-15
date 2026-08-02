@@ -41,10 +41,15 @@ require_once __DIR__ . '/entorno.php';
  * @param string $pass       Contraseña del buzón.
  * @param string $responderA Opcional: a dónde va la respuesta si es
  *                           distinto del remitente.
+ * @param array  $imagenes   Opcional: imágenes incrustadas en el HTML.
+ *                           Cada una: ['cid' => 'qr', 'tipo' => 'image/png',
+ *                           'datos' => contenido binario]. En el HTML se
+ *                           referencian con <img src="cid:qr">.
  * @return true|string true si salió, o el texto del error si falló.
  */
 function smtpEnviar($para, $asunto, $html, $from, $fromNombre,
-                    $host, $port, $user, $pass, $responderA = '') {
+                    $host, $port, $user, $pass, $responderA = '',
+                    $imagenes = []) {
     $log = [];
 
     // Con 465 el cifrado va desde el saludo. Con cualquier otro puerto se
@@ -116,9 +121,58 @@ function smtpEnviar($para, $asunto, $html, $from, $fromNombre,
     $msg .= "Subject: $asuntoEnc\r\n";
     $msg .= "Date: " . date('r') . "\r\n";
     $msg .= "MIME-Version: 1.0\r\n";
-    $msg .= "Content-Type: text/html; charset=UTF-8\r\n";
-    $msg .= "Content-Transfer-Encoding: base64\r\n";
-    $msg .= "\r\n" . $cuerpoB64;
+    // Sin esto, Gmail adivina el idioma por su cuenta y se equivoca: le
+    // ofrece al invitado "Traducir al español" un correo que ya está en
+    // español. Declararlo evita ese cartel.
+    $msg .= "Content-Language: es-MX\r\n";
+
+    if (empty($imagenes)) {
+        // Sin imágenes: un correo simple de una sola parte, como siempre.
+        $msg .= "Content-Type: text/html; charset=UTF-8\r\n";
+        $msg .= "Content-Transfer-Encoding: base64\r\n";
+        $msg .= "\r\n" . $cuerpoB64;
+
+    } else {
+        /* CON IMÁGENES INCRUSTADAS
+
+           El correo pasa a tener varias partes: el HTML y cada imagen,
+           separadas por una "frontera" que es un texto al azar. Se usa
+           multipart/RELATED (y no /mixed) porque las imágenes no son
+           adjuntos sueltos: son parte del HTML, que las llama por su
+           Content-ID. Con /mixed, el QR aparecería como un archivo
+           adjunto abajo en vez de verse dentro del correo.
+
+           La frontera se genera al azar para que no pueda aparecer por
+           casualidad dentro del contenido y partir el mensaje. */
+        $frontera = 'ania' . bin2hex(random_bytes(12));
+
+        $msg .= "Content-Type: multipart/related; boundary=\"$frontera\"\r\n";
+        $msg .= "\r\n";
+        $msg .= "Este mensaje necesita un lector de correo que entienda HTML.\r\n\r\n";
+
+        // Primera parte: el HTML.
+        $msg .= "--$frontera\r\n";
+        $msg .= "Content-Type: text/html; charset=UTF-8\r\n";
+        $msg .= "Content-Transfer-Encoding: base64\r\n";
+        $msg .= "\r\n" . $cuerpoB64 . "\r\n";
+
+        // Después, una parte por imagen.
+        foreach ($imagenes as $imagen) {
+            $cid  = preg_replace('/[^a-zA-Z0-9_.-]/', '', (string) $imagen['cid']);
+            $tipo = (string) ($imagen['tipo'] ?? 'image/png');
+
+            $msg .= "--$frontera\r\n";
+            $msg .= "Content-Type: $tipo\r\n";
+            $msg .= "Content-Transfer-Encoding: base64\r\n";
+            $msg .= "Content-ID: <$cid>\r\n";
+            // inline, para que se vea dentro y no como adjunto aparte.
+            $msg .= "Content-Disposition: inline; filename=\"$cid.png\"\r\n";
+            $msg .= "\r\n" . chunk_split(base64_encode($imagen['datos'])) . "\r\n";
+        }
+
+        // La frontera con dos guiones al final cierra el mensaje.
+        $msg .= "--$frontera--";
+    }
 
     // El punto solo en una línea es lo que le dice al servidor "terminé".
     fwrite($sock, $msg . "\r\n.\r\n");

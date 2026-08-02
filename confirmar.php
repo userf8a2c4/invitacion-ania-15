@@ -71,6 +71,33 @@ if (!$nombre || !filter_var($datos['correo'] ?? '', FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
+/* ─── EL CÓDIGO QR QUE YA DIBUJÓ LA WEB ──────────────────────────────── */
+/* La invitación genera el QR del pase en el navegador y nos lo manda
+   como imagen. Se incrusta tal cual en el correo, así el QR del mail y
+   el de la pantalla son el MISMO por construcción: no hay forma de que
+   queden distintos, que es lo que pasaría si el servidor lo generara
+   por su cuenta con otra biblioteca.
+
+   Se valida con desconfianza porque esto llega de afuera:
+     · solo el formato "data:image/png;base64,…"
+     · solo PNG, comprobando la firma de los primeros bytes
+     · con un tope de tamaño, para que nadie mande un archivo enorme */
+$qrPng = null;
+$qrCrudo = (string) ($datos['qrPng'] ?? '');
+
+if ($qrCrudo !== '' && strlen($qrCrudo) < 200000) {
+    if (preg_match('#^data:image/png;base64,([A-Za-z0-9+/=]+)$#', $qrCrudo, $coincide)) {
+        $binario = base64_decode($coincide[1], true);
+
+        // La firma de todo archivo PNG: \x89PNG\r\n\x1a\n
+        if ($binario !== false && strncmp($binario, "\x89PNG\r\n\x1a\n", 8) === 0) {
+            $qrPng = $binario;
+        } else {
+            error_log('[Ania XV] QR descartado: no es un PNG válido.');
+        }
+    }
+}
+
 /* ─── 1. GUARDAR EN MYSQL ─────────────────────────────────────────────── */
 $errorBD = null;
 try {
@@ -99,7 +126,7 @@ try {
 /* ─── 3. HTML: CORREO AL INVITADO ────────────────────────────────────── */
 $asistiTexto = $asiste ? 'Sí, asistiré con mucho gusto ✦' : 'Lamentablemente no podré asistir';
 
-$htmlInvitado = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'></head>
+$htmlInvitado = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><meta http-equiv='Content-Language' content='es'></head>
 <body style='font-family:Georgia,serif;background:#1a0a00;color:#f5e6c8;margin:0;padding:0;'>
 <table width='100%' cellpadding='0' cellspacing='0' style='max-width:560px;margin:0 auto;padding:40px 20px;'>
   <tr><td align='center' style='padding-bottom:24px;'>
@@ -122,6 +149,28 @@ $htmlInvitado = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'></he
       <tr><td style='color:#a07830;'>Código de pase</td>
           <td style='color:#d4a843;font-weight:bold;letter-spacing:1px;'>$codigo</td></tr>" : "") . "
     </table>" .
+
+    /* El QR, si la web lo mandó. src='cid:qrpase' apunta a la imagen que
+       viaja adjunta dentro de este mismo correo, no a una web: así se ve
+       aunque el lector bloquee las imágenes externas, que es lo que hacen
+       Gmail y Outlook por defecto.
+
+       El fondo blanco con padding no es decoración: un QR dorado sobre
+       fondo oscuro no lo lee ningún teléfono. Necesita contraste alto y
+       un margen en blanco alrededor. */
+    (($asiste && $qrPng) ? "
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-top:28px;'>
+      <tr><td align='center'>
+        <div style='background:#ffffff;padding:14px;border-radius:8px;display:inline-block;'>
+          <img src='cid:qrpase' width='170' height='170' alt='Código QR de tu pase'
+               style='display:block;width:170px;height:170px;'>
+        </div>
+        <p style='margin:10px 0 0;font-size:12px;color:#a07830;'>
+          Mostrá este código en la entrada
+        </p>
+      </td></tr>
+    </table>" : "") .
+
     ($asiste ? "
     <p style='margin:28px 0 0;font-size:13px;color:#a07830;'>
       Presentá este correo o tu código en la entrada.<br>
@@ -133,7 +182,7 @@ $htmlInvitado = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'></he
 </table></body></html>";
 
 /* ─── 4. HTML: CORREO A LA ADMINISTRADORA ────────────────────────────── */
-$htmlAdmin = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'></head>
+$htmlAdmin = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><meta http-equiv='Content-Language' content='es'></head>
 <body style='font-family:Arial,sans-serif;background:#f9f9f9;color:#333;margin:0;padding:0;'>
 <table width='100%' cellpadding='0' cellspacing='0' style='max-width:560px;margin:0 auto;padding:40px 20px;'>
   <tr><td style='background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:32px;'>
@@ -171,13 +220,19 @@ $htmlAdmin = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'></head>
 /* ─── 5. ENVIAR CORREOS Y REGISTRAR RESULTADO ────────────────────────── */
 $errores = [];
 
-// Correo al invitado
+// Correo al invitado. Solo este lleva el QR incrustado: es su pase.
+$imagenesDelInvitado = ($asiste && $qrPng)
+    ? [['cid' => 'qrpase', 'tipo' => 'image/png', 'datos' => $qrPng]]
+    : [];
+
 $r1 = smtpEnviar(
     $correo,
     $asiste ? "¡Tu confirmación está lista! ✦ Ania XV" : "Gracias por avisarnos · Ania XV",
     $htmlInvitado,
     $CORREO_FROM, 'Ania XV',
-    $SMTP_HOST, $SMTP_PORT, $SMTP_USER, $SMTP_PASS
+    $SMTP_HOST, $SMTP_PORT, $SMTP_USER, $SMTP_PASS,
+    '',                      // sin Reply-To distinto
+    $imagenesDelInvitado
 );
 if ($r1 !== true) {
     $errores[] = "Correo al invitado: $r1";
