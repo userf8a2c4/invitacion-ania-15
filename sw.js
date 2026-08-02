@@ -34,7 +34,7 @@
        instantáneo y ahorra datos. Si algún día cambian, se renueva con VERSION.
    ══════════════════════════════════════════════════════════════════════ */
 
-const VERSION = 'ania-xv-v38';
+const VERSION = 'ania-xv-v39';
 
 /** Extensiones de assets pesados/estables: para esos, "primero la copia". */
 const ASSETS_ESTABLES = /\.(?:mp3|ogg|wav|png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf)$/i;
@@ -91,6 +91,17 @@ self.addEventListener('fetch', evento => {
   if (pedido.method !== 'GET') return;
   const url = new URL(pedido.url);
   if (url.origin !== self.location.origin) return;
+
+  /* El panel de administración se maneja solo, con su propio Service
+     Worker en /admin/sw.js. Acá se lo deja pasar de largo sin tocarlo.
+
+     Sin esta línea pasarían dos cosas feas:
+       · Se guardaría copia de las respuestas de /admin/api/, y el panel
+         mostraría invitados o gastos viejos aunque la base ya cambió.
+       · Sin internet, primeroLaRed() devolvería el index.html DE LA
+         INVITACIÓN como respuesta a una llamada a la API, y el panel
+         recibiría una página web donde esperaba datos. */
+  if (url.pathname.startsWith('/admin')) return;
 
   /* Navegaciones (abrir la página) y assets NO estables (HTML, CSS, JS) van
      por red primero, así los cambios se ven con una sola recarga. Los assets
