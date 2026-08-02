@@ -71,8 +71,13 @@ function primeraQueHaya($candidatas) {
    no habría forma de decirle a MySQL "esta y no otra". */
 $TIENE_ID = hay('id');
 
-/* La columna de fecha, se llame como se llame. */
-$COL_FECHA = primeraQueHaya(['creado_en', 'fecha', 'created_at', 'fecha_registro']);
+/* La columna de fecha, se llame como se llame.
+   En esta base es `fecha_hora` (datetime, con CURRENT_TIMESTAMP por
+   defecto), comprobado en phpMyAdmin el 2 de agosto de 2026. Las demás
+   quedan como respaldo por si la tabla se recrea con otro nombre. */
+$COL_FECHA = primeraQueHaya([
+    'fecha_hora', 'creado_en', 'fecha', 'created_at', 'fecha_registro',
+]);
 
 /* Las columnas que el panel deja editar. Solo se tocan las que existen:
    así este archivo funciona igual si la tabla tiene columnas de más o
