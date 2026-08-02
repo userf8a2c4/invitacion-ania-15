@@ -146,18 +146,18 @@
        Se cargan en orden numérico. El orden IMPORTA: si dos archivos
        dicen cosas distintas sobre lo mismo, gana el que va último.
   ═══════════════════════════════════════════════════════════════════ -->
-  <link rel="stylesheet" href="estilos/01-fundamentos.css">
-  <link rel="stylesheet" href="estilos/02-marco-victoriano.css">
-  <link rel="stylesheet" href="estilos/03-sobre-de-apertura.css">
-  <link rel="stylesheet" href="estilos/04-portada.css">
-  <link rel="stylesheet" href="estilos/05-cuenta-regresiva.css">
-  <link rel="stylesheet" href="estilos/06-secciones.css">
-  <link rel="stylesheet" href="estilos/07-formulario.css">
-  <link rel="stylesheet" href="estilos/08-pase-de-acceso.css">
-  <link rel="stylesheet" href="estilos/09-reproductor.css">
-  <link rel="stylesheet" href="estilos/10-cursor-y-petalos.css">
-  <link rel="stylesheet" href="estilos/12-haces-de-luz.css">
-  <link rel="stylesheet" href="estilos/11-responsivo.css">
+  <link rel="stylesheet" href="estilos/01-fundamentos.css?v=38">
+  <link rel="stylesheet" href="estilos/02-marco-victoriano.css?v=38">
+  <link rel="stylesheet" href="estilos/03-sobre-de-apertura.css?v=38">
+  <link rel="stylesheet" href="estilos/04-portada.css?v=38">
+  <link rel="stylesheet" href="estilos/05-cuenta-regresiva.css?v=38">
+  <link rel="stylesheet" href="estilos/06-secciones.css?v=38">
+  <link rel="stylesheet" href="estilos/07-formulario.css?v=38">
+  <link rel="stylesheet" href="estilos/08-pase-de-acceso.css?v=38">
+  <link rel="stylesheet" href="estilos/09-reproductor.css?v=38">
+  <link rel="stylesheet" href="estilos/10-cursor-y-petalos.css?v=38">
+  <link rel="stylesheet" href="estilos/12-haces-de-luz.css?v=38">
+  <link rel="stylesheet" href="estilos/11-responsivo.css?v=38">
 
       <style>
     /* ══════════════════════════════════════════════════════════════════════
@@ -2040,24 +2040,24 @@
      de código haciendo esperar al dibujo. Con "defer" la página se pinta
      primero y el código llega enseguida después.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/01-configuracion.js"></script>
-<script defer src="codigo/02-utilidades.js"></script>
-<script defer src="codigo/03-sobre-de-apertura.js"></script>
-<script defer src="codigo/04-invitado-personalizado.js"></script>
-<script defer src="codigo/05-cursor-personalizado.js"></script>
+<script defer src="codigo/01-configuracion.js?v=38"></script>
+<script defer src="codigo/02-utilidades.js?v=38"></script>
+<script defer src="codigo/03-sobre-de-apertura.js?v=38"></script>
+<script defer src="codigo/04-invitado-personalizado.js?v=38"></script>
+<script defer src="codigo/05-cursor-personalizado.js?v=38"></script>
 <!-- EL LIENZO DE PÉTALOS. Tres <canvas>, uno por plano de profundidad, en
      vez de 29 divs. Va ANTES que 06-petalos-con-fisica.js porque ese
      archivo le pregunta al arrancar si debe crear elementos o solo números.
      Con  ?petalos=dom  vuelve el sistema de divs. -->
-<script defer src="codigo/24-lienzo-de-petalos.js"></script>
-<script defer src="codigo/06-petalos-con-fisica.js"></script>
-<script defer src="codigo/07-marco-y-enredaderas.js"></script>
-<script defer src="codigo/08-efectos-de-scroll.js"></script>
-<script defer src="codigo/09-cuenta-regresiva.js"></script>
-<script defer src="codigo/10-reproductor-de-musica.js"></script>
-<script defer src="codigo/11-formulario-confirmacion.js"></script>
-<script defer src="codigo/12-pase-de-acceso.js"></script>
-<script defer src="codigo/13-agregar-al-calendario.js"></script>
+<script defer src="codigo/24-lienzo-de-petalos.js?v=38"></script>
+<script defer src="codigo/06-petalos-con-fisica.js?v=38"></script>
+<script defer src="codigo/07-marco-y-enredaderas.js?v=38"></script>
+<script defer src="codigo/08-efectos-de-scroll.js?v=38"></script>
+<script defer src="codigo/09-cuenta-regresiva.js?v=38"></script>
+<script defer src="codigo/10-reproductor-de-musica.js?v=38"></script>
+<script defer src="codigo/11-formulario-confirmacion.js?v=38"></script>
+<script defer src="codigo/12-pase-de-acceso.js?v=38"></script>
+<script defer src="codigo/13-agregar-al-calendario.js?v=38"></script>
 <!-- EL LIENZO DE LUZ. Dibuja los tres sistemas de luz —velas, haces y polvo—
      en un solo <canvas>, en vez de en ~140 elementos repartidos en 10 capas
      con `mix-blend-mode`, que era lo que se llevaba la mitad de cada cuadro.
@@ -2068,9 +2068,9 @@
 
      Con  ?luz=dom  en la dirección, este módulo se queda dormido y vuelve el
      sistema anterior completo, sin tocar código. -->
-<script defer src="codigo/23-lienzo-de-luz.js"></script>
-<script defer src="codigo/14-haces-de-luz.js"></script>
-<script defer src="codigo/15-registro-de-confirmaciones.js"></script>
+<script defer src="codigo/23-lienzo-de-luz.js?v=38"></script>
+<script defer src="codigo/14-haces-de-luz.js?v=38"></script>
+<script defer src="codigo/15-registro-de-confirmaciones.js?v=38"></script>
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda).
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
      —incluso sobre el sobre de entrada— para que quien tenga un equipo
@@ -2085,15 +2085,15 @@
   <span class="boton-animaciones__texto">Animación</span>
 </button>
 
-<script defer src="codigo/16-volver-arriba.js"></script>
-<script defer src="codigo/17-joyas-colgantes.js"></script>
-<script defer src="codigo/18-motas-de-polvo.js"></script>
-<script defer src="codigo/19-velas.js"></script>
-<script defer src="codigo/20-boton-de-animaciones.js"></script>
-<script defer src="codigo/21-monitor-de-rendimiento.js"></script>
+<script defer src="codigo/16-volver-arriba.js?v=38"></script>
+<script defer src="codigo/17-joyas-colgantes.js?v=38"></script>
+<script defer src="codigo/18-motas-de-polvo.js?v=38"></script>
+<script defer src="codigo/19-velas.js?v=38"></script>
+<script defer src="codigo/20-boton-de-animaciones.js?v=38"></script>
+<script defer src="codigo/21-monitor-de-rendimiento.js?v=38"></script>
 <!-- Tiñe la luz que entra por los ventanales según la hora del día. Va
      después de los haces y las motas, porque escribe sobre sus capas. -->
-<script defer src="codigo/22-luz-de-la-hora.js"></script>
+<script defer src="codigo/22-luz-de-la-hora.js?v=38"></script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
      internet y se pueda instalar. Va al final y falla en silencio si el
@@ -2128,7 +2128,7 @@
   </div>
 
 <!-- CHATBOT / ASISTENTE -->
-<script src="codigo/00-conocimiento-chatbot.js" defer></script>
+<script src="codigo/00-conocimiento-chatbot.js?v=38" defer></script>
 
   
 </body>
