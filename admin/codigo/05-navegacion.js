@@ -31,7 +31,10 @@ const VISTAS_CARGADAS = {};
  */
 const VISTAS = {
   resumen:   { titulo: 'Resumen',   dibujar: () => dibujarResumen() },
-  invitados: { titulo: 'Invitados', dibujar: () => dibujarInvitados() },
+  /* La clave sigue siendo 'invitados' porque la usan los atajos del
+     icono y ensuciarVistas(). Lo que se ve en pantalla es "Gente", y
+     adentro están las confirmaciones y la agenda de contactos. */
+  invitados: { titulo: 'Gente',     dibujar: () => dibujarGente() },
   correo:    { titulo: 'Correo',    dibujar: () => dibujarCorreo() },
   /* La clave interna sigue siendo 'dinero' —la usan la URL de los
      atajos del icono y las llamadas a ensuciarVistas()— pero lo que se
