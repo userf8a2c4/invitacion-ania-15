@@ -332,11 +332,66 @@ CREATE TABLE IF NOT EXISTS asignacion_mesas (
   mesa_id          INT NOT NULL,
   -- Cuántos asientos ocupa esta confirmación en la mesa (adultos+niños).
   lugares          INT NOT NULL DEFAULT 1,
+  -- Una asignación FIJADA la puso una persona a mano y la autoasignación
+  -- no la toca nunca. Es lo que permite acomodar a mano lo que importa y
+  -- dejar que el resto se ordene solo.
+  fijada           TINYINT(1) NOT NULL DEFAULT 0,
   notas            VARCHAR(200) NOT NULL DEFAULT '',
   UNIQUE KEY una_mesa_por_confirmacion (confirmacion_id),
   KEY por_mesa (mesa_id),
   CONSTRAINT asignacion_mesa FOREIGN KEY (mesa_id)
     REFERENCES mesas(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Grupos de invitados: "Familia Zelaya", "Amigos de Ania", "Trabajo de
+-- papá". La autoasignación intenta sentar juntos a los del mismo grupo,
+-- que es la regla que más importa en una fiesta.
+CREATE TABLE IF NOT EXISTS grupos_invitados (
+  id      INT AUTO_INCREMENT PRIMARY KEY,
+  nombre  VARCHAR(80) NOT NULL,
+  color   VARCHAR(20) NOT NULL DEFAULT '',
+  -- Los de orden más bajo se acomodan primero, o sea que se quedan con
+  -- las mejores mesas. Sirve para "la familia cerca de la pista".
+  orden   INT NOT NULL DEFAULT 50,
+  notas   TEXT,
+  UNIQUE KEY nombre_unico (nombre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Lo que hay que saber de cada invitado para poder sentarlo bien.
+-- Va en tabla aparte y no en `confirmaciones` porque esa tabla la llena
+-- el formulario público y no conviene mezclarle datos de organización.
+CREATE TABLE IF NOT EXISTS preferencias_invitado (
+  confirmacion_id INT NOT NULL PRIMARY KEY,
+  grupo_id        INT DEFAULT NULL,
+  -- Sillas de más: la abuela que necesita lugar para el andador, la
+  -- bebé con su silla alta, alguien que viene con acompañante sin
+  -- confirmar. Se suman a los lugares que ocupa.
+  sillas_extra    INT NOT NULL DEFAULT 0,
+  -- Si está puesto, esta persona va SIEMPRE a esa mesa.
+  mesa_preferida  INT DEFAULT NULL,
+  notas           VARCHAR(300) NOT NULL DEFAULT '',
+  KEY por_grupo (grupo_id),
+  CONSTRAINT preferencia_grupo FOREIGN KEY (grupo_id)
+    REFERENCES grupos_invitados(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Quién NO puede sentarse con quién. Siempre hay un tío.
+--
+-- Se guarda una sola fila por par, con el id más chico primero, para no
+-- terminar con "A no va con B" y "B no va con A" como dos reglas
+-- distintas que después se contradicen.
+CREATE TABLE IF NOT EXISTS incompatibilidades (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  invitado_a INT NOT NULL,
+  invitado_b INT NOT NULL,
+  motivo     VARCHAR(200) NOT NULL DEFAULT '',
+  creado_en  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY un_par (invitado_a, invitado_b),
+  KEY por_a (invitado_a),
+  KEY por_b (invitado_b)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

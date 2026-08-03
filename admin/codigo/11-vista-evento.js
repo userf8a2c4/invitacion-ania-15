@@ -369,6 +369,10 @@ function pintarSeccionDeEvento() {
   if (SECCION_EVENTO === 'agenda')    { pintarAgenda(cuerpo); return; }
   if (SECCION_EVENTO === 'ceremonia') { pintarCeremonia(cuerpo); return; }
 
+  /* Las mesas tienen pantalla propia (17-mesas.js): no son una lista de
+     registros sino un acomodo, con autoasignación y reglas. */
+  if (SECCION_EVENTO === 'mesas') { pintarMesas(cuerpo); return; }
+
   // Los regalos llevan arriba la tarjeta de la lista de Amazon.
   if (SECCION_EVENTO === 'regalos') {
     cuerpo.innerHTML = tarjetaMesaDeRegalos() + '<div id="lista-regalos"></div>';

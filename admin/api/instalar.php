@@ -85,13 +85,41 @@ foreach ($instrucciones as $instruccion) {
     }
 }
 
+/* ─── COLUMNAS QUE LE FALTAN A TABLAS QUE YA EXISTÍAN ─────────────────── */
+
+/* CREATE TABLE IF NOT EXISTS no toca una tabla que ya está: si se le
+   agrega una columna al archivo de migración, las instalaciones viejas
+   nunca la reciben. Por eso acá se revisa columna por columna y se
+   agrega solo la que falte.
+
+   Es idempotente: correrlo diez veces da el mismo resultado que una. */
+
+$columnasQueFaltaban = [];
+
+$agregarColumna = function ($tabla, $columna, $definicion) use (&$columnasQueFaltaban) {
+    if (!existeTabla($tabla)) return;
+    if (in_array($columna, columnasDe($tabla), true)) return;
+
+    try {
+        bd()->exec("ALTER TABLE `$tabla` ADD COLUMN `$columna` $definicion");
+        $columnasQueFaltaban[] = "$tabla.$columna";
+    } catch (PDOException $e) {
+        error_log("[Ania XV · instalar] No se pudo agregar $tabla.$columna: " . $e->getMessage());
+    }
+};
+
+// Fijar una asignación de mesa para que la autoasignación no la toque.
+$agregarColumna('asignacion_mesas', 'fijada', 'TINYINT(1) NOT NULL DEFAULT 0');
+
+
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 
 $tablasEsperadas = [
     'usuarios', 'sesiones', 'intentos_login', 'bitacora', 'notas', 'archivos',
     'ajustes', 'suscripciones_push', 'categorias_gasto', 'padrinos', 'proveedores',
     'cotizaciones', 'gastos', 'pagos', 'tareas', 'agenda', 'cronograma',
-    'mesas', 'asignacion_mesas', 'corte_honor', 'ensayos', 'asistencia_ensayos',
+    'mesas', 'asignacion_mesas', 'grupos_invitados', 'preferencias_invitado',
+    'incompatibilidades', 'corte_honor', 'ensayos', 'asistencia_ensayos',
     'regalos', 'foraneos', 'ceremonia', 'requisitos_ceremonia', 'musica',
     'citas_arreglo', 'tomas_foto',
 ];
@@ -118,6 +146,7 @@ responderBien([
     'instrucciones_ok'  => count($hechas),
     'fallidas'          => $fallidas,
     'tablas_faltantes'  => $faltantes,
+    'columnas_agregadas'=> $columnasQueFaltaban,
     'cuentas_existentes'=> $cuentas,
     'siguiente_paso'    => $listo
         ? ($cuentas > 0
