@@ -22,12 +22,19 @@
 
 /* ─── 0. LA FILA DE CONTROLES FLOTANTES ────────────────────────────────
    El reproductor no flota solo: comparte la esquina con el botón de
-   volver arriba. Los dos van en esta fila, alineados por abajo.
+   volver arriba y con el de preguntas frecuentes. Los tres van en esta
+   fila, alineados por abajo:  [ ? ]  [ ↑ ]  [ reproductor ].
 
-   El ancla está acá y no en cada uno por separado. Así el botón queda
-   siempre pegado al reproductor sin tener que saber cuánto mide —que
-   cambia al minimizarlo y al achicarse en el celular—, y no hay ninguna
-   medida repetida en dos lugares esperando a desincronizarse.
+   El ancla está acá y no en cada uno por separado. Así los botones
+   quedan siempre pegados al reproductor sin tener que saber cuánto mide
+   —que cambia al minimizarlo y al achicarse en el celular—, y no hay
+   ninguna medida repetida en dos lugares esperando a desincronizarse.
+
+   Y hay una segunda razón, más importante: mientras todo lo que flota
+   viva acá adentro, no puede solaparse. El chat viejo se anclaba solo,
+   en la misma esquina y con otro z-index, y se montaba encima del
+   reproductor. Ese problema no se arregló moviendo números: se arregló
+   metiéndolo en esta fila.
    ---------------------------------------------------------------------- */
 #controles-flotantes {
   position: fixed;
@@ -38,6 +45,13 @@
   display: flex;
   align-items: flex-end;   /* pegados por la base, midan lo que midan */
   gap: .65rem;
+
+  /* Cuando no entran los tres a lo ancho, el reproductor se va a su
+     propio renglón en vez de aplastar a los botones. "wrap-reverse"
+     lo manda ARRIBA y deja los botones abajo, al alcance del pulgar. */
+  flex-wrap: wrap-reverse;
+  justify-content: flex-end;
+  row-gap: .65rem;
 
   max-width: calc(100vw - var(--marco-grosor) * 2 - 2rem);
   pointer-events: none;    /* la fila no estorba; sus hijos sí reciben clics */

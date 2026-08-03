@@ -1,21 +1,34 @@
 /* ══════════════════════════════════════════════════════════════════════
    00-conocimiento-chatbot.js
-   BASE DE CONOCIMIENTO DEL ASISTENTE VIRTUAL · ANIA XV
+   BASE DE CONOCIMIENTO DE LAS PREGUNTAS FRECUENTES · ANIA XV
 
-   Este archivo define TODO lo que el chatbot sabe y puede responder.
+   Este archivo define TODO lo que el panel de preguntas puede responder.
    Editá libremente las secciones marcadas con ✏️
    No toques la estructura (llaves, corchetes, comillas), solo el texto.
+
+   ESTE ARCHIVO SOLO TIENE DATOS, NINGUNA LÓGICA.
+   Quien arma el panel en pantalla es codigo/25-preguntas-frecuentes.js.
+   Están separados a propósito: así se puede corregir la dirección del
+   salón o el código de vestimenta sin tocar una sola línea de programa.
+
+   ÍNDICE
+     1. CONOCIMIENTO_CHATBOT · los datos crudos de la fiesta
+     2. PREGUNTAS_FRECUENTES · la lista que se ve en pantalla
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   1. LOS DATOS DE LA FIESTA
    ══════════════════════════════════════════════════════════════════════ */
 
 const CONOCIMIENTO_CHATBOT = {
 
-  /* ── IDENTIDAD DEL ASISTENTE ──────────────────────────────────────────
-     Cómo se presenta y cuál es su límite declarado.                      */
+  /* ── IDENTIDAD ────────────────────────────────────────────────────────
+     Cómo se presenta el panel y cuál es su límite declarado.             */
   identidad: {
-    nombre:      'Asistente de Ania XV',                          // ✏️
-    presentacion: 'Hola 🌹 Soy el asistente de la invitación de Ania. '
-                + 'Puedo ayudarte con dudas sobre la fiesta. ¿En qué te ayudo?', // ✏️
-    limitacion:  'Solo conozco la información de la fiesta de Ania. '
+    nombre:      'Preguntas frecuentes',                          // ✏️
+    presentacion: 'Todo lo que hay que saber sobre la fiesta de Ania.', // ✏️
+    limitacion:  'Acá está la información de la fiesta de Ania. '
                 + 'Para dudas más específicas, contactá directamente a los organizadores.', // ✏️
     contactoOrganizadores: 'noreply@aniaxv.com',                  // ✏️
   },
@@ -81,7 +94,13 @@ const CONOCIMIENTO_CHATBOT = {
   },
 
   /* ── PREGUNTAS FRECUENTES EXTRA ────────────────────────────────────────
-     Preguntas adicionales que querés que el chatbot pueda responder.
+     Preguntas adicionales, además de las ocho fijas de más abajo.
+
+     ⚠️ LAS QUE TIENEN LA RESPUESTA VACÍA NO SE MUESTRAN.
+     Es a propósito: más vale que la pregunta no aparezca a que aparezca
+     y se abra sin nada adentro. En cuanto le escribas una respuesta,
+     aparece sola en el panel.
+
      Agregá todas las que quieras con el mismo formato:
      { pregunta: '...', respuesta: '...' }                                 */
   faqExtra: [
@@ -109,133 +128,120 @@ const CONOCIMIENTO_CHATBOT = {
   ],
 
   /* ── MENSAJES DE SISTEMA ───────────────────────────────────────────────
-     Respuestas automáticas para situaciones especiales.
+     Textos sueltos que usa el panel.
      Modificá el texto, no las claves.                                     */
   mensajes: {
     noSabe:     'Esa información no la tengo disponible. Te recomiendo escribirle directamente a los organizadores.', // ✏️
-    saludo:     '¡Hola! 🌹 ¿En qué puedo ayudarte?',             // ✏️
-    despedida:  '¡Hasta pronto! Que disfrutes la fiesta de Ania. 🌹✨', // ✏️
-    gracias:    '¡De nada! ¿Hay algo más en lo que pueda ayudarte?', // ✏️
+    pie:        '¿Te quedó otra duda? Escribinos a los organizadores.', // ✏️
   },
 
 };
-// ══════════════════════════════════════════════════════════════════════
-// LÓGICA DE INTERFAZ Y PROCESAMIENTO DEL CHATBOT
-// ══════════════════════════════════════════════════════════════════════
 
-document.addEventListener("DOMContentLoaded", () => {
-    const botonToggle = document.getElementById("btn-chatbot-toggle");
-    const ventanaChatbot = document.getElementById("ventana-chatbot");
-    const botonCerrar = document.getElementById("btn-chatbot-cerrar");
-    const botonEnviar = document.getElementById("btn-chatbot-enviar");
-    const inputChatbot = document.getElementById("chatbot-input");
-    const mensajesChatbot = document.getElementById("chatbot-messages");
 
-    // Saludo inicial automático al cargar el chat
-    if (mensajesChatbot) {
-        mensajesChatbot.innerHTML = `<div class="msg-bot" style="margin-bottom: 10px; color: #333;"><b>Asistente:</b> ${CONOCIMIENTO_CHATBOT.identidad.presentacion}</div>`;
-    }
+/* ══════════════════════════════════════════════════════════════════════
+   2. LA LISTA QUE SE VE EN PANTALLA
+   ══════════════════════════════════════════════════════════════════════
 
-    // Alternar visibilidad de la ventana del chatbot
-    if (botonToggle && ventanaChatbot) {
-        botonToggle.addEventListener("click", () => {
-            ventanaChatbot.classList.toggle("chatbot-oculto");
-            const esOculto = ventanaChatbot.classList.contains("chatbot-oculto");
-            ventanaChatbot.setAttribute("aria-hidden", esOculto);
-        });
-    }
+   Cada entrada es una pregunta del acordeón, en el orden en que aparecen.
 
-    if (botonCerrar && ventanaChatbot) {
-        botonCerrar.addEventListener("click", () => {
-            ventanaChatbot.classList.add("chatbot-oculto");
-            ventanaChatbot.setAttribute("aria-hidden", "true");
-        });
-    }
+   La respuesta se arma leyendo del objeto de arriba y NO se escribe a
+   mano: si mañana cambia la hora de entrada, se corrige en un solo lugar
+   (fiesta.horaEntrada) y acá se actualiza sola. Duplicar el dato sería
+   garantizar que un día digan cosas distintas.
 
-    // Escuchar eventos de envío (clic en botón o presionar Enter)
-    if (botonEnviar && inputChatbot) {
-        botonEnviar.addEventListener("click", procesarEntradaUsuario);
-        inputChatbot.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") procesarEntradaUsuario();
-        });
-    }
+   Se permiten <b> y <a> en las respuestas porque este texto es nuestro y
+   no viene de nadie de afuera.
+   ══════════════════════════════════════════════════════════════════════ */
 
-    function procesarEntradaUsuario() {
-        const texto = inputChatbot.value.trim();
-        if (!texto) return;
+const PREGUNTAS_FRECUENTES = [
 
-        // Mostrar mensaje del usuario en la pantalla
-        mensajesChatbot.innerHTML += `<div class="msg-usuario" style="text-align: right; margin-bottom: 10px; color: #555;"><b>Tú:</b> ${texto}</div>`;
-        inputChatbot.value = "";
-        mensajesChatbot.scrollTop = mensajesChatbot.scrollHeight;
+  {
+    pregunta: '¿Cuándo es la fiesta?',
+    respuesta: () => {
+      const f = CONOCIMIENTO_CHATBOT.fiesta;
+      return `Es el <b>${f.fecha}</b>. El acceso comienza a las ${f.horaEntrada} `
+           + `y el evento arranca a las ${f.horaInicio}`
+           + (f.horaFin ? `, hasta las ${f.horaFin}.` : '.');
+    },
+  },
 
-        // Generar respuesta del bot basada en tu objeto de conocimiento
-        setTimeout(() => {
-            const respuesta = buscarRespuesta(texto.toLowerCase());
-            mensajesChatbot.innerHTML += `<div class="msg-bot" style="margin-bottom: 10px; color: #333;"><b>Asistente:</b> ${respuesta}</div>`;
-            mensajesChatbot.scrollTop = mensajesChatbot.scrollHeight;
-        }, 400);
-    }
+  {
+    pregunta: '¿Dónde es y cómo llego?',
+    respuesta: () => {
+      const l = CONOCIMIENTO_CHATBOT.lugar;
+      let texto = `En <b>${l.nombre}</b>.<br>${l.direccion}`;
+      if (l.referencia) texto += `<br>${l.referencia}`;
+      if (l.googleMaps) {
+        texto += `<br><a href="${l.googleMaps}" target="_blank" rel="noopener">Abrir en Google Maps</a>`;
+      }
+      return texto;
+    },
+  },
 
-    // Buscador interactivo por palabras clave
-    function buscarRespuesta(consulta) {
-        if (consulta.includes("hola") || consulta.includes("buenos dias") || consulta.includes("buenas tardes")) {
-            return CONOCIMIENTO_CHATBOT.mensajes.saludo;
-        }
-        if (consulta.includes("gracias")) {
-            return CONOCIMIENTO_CHATBOT.mensajes.gracias;
-        }
-        if (consulta.includes("adios") || consulta.includes("chao") || consulta.includes("bye")) {
-            return CONOCIMIENTO_CHATBOT.mensajes.despedida;
-        }
+  {
+    pregunta: '¿Hay estacionamiento?',
+    // Si algún día no hay, se vacía lugar.estacionamiento y la pregunta
+    // desaparece del panel sin tocar nada más.
+    respuesta: () => CONOCIMIENTO_CHATBOT.lugar.estacionamiento,
+  },
 
-        // Fecha y horarios
-        if (consulta.includes("cuando") || consulta.includes("fecha") || consulta.includes("dia") || consulta.includes("hora")) {
-            return `La fiesta de ${CONOCIMIENTO_CHATBOT.fiesta.festejada} es el <b>${CONOCIMIENTO_CHATBOT.fiesta.fecha}</b>. El acceso comienza a las ${CONOCIMIENTO_CHATBOT.fiesta.horaEntrada} y el evento arranca a las ${CONOCIMIENTO_CHATBOT.fiesta.horaInicio}.`;
-        }
+  {
+    pregunta: '¿Cuál es el código de vestimenta?',
+    respuesta: () => {
+      const v = CONOCIMIENTO_CHATBOT.vestimenta;
+      let texto = `<b>${v.codigo}</b>.`;
+      if (v.restriccion) texto += `<br>Tené en cuenta: <b>${v.restriccion}</b>.`;
+      if (v.notas)       texto += `<br>${v.notas}`;
+      return texto;
+    },
+  },
 
-        // Ubicación y lugar
-        if (consulta.includes("donde") || consulta.includes("lugar") || consulta.includes("salon") || consulta.includes("direccion") || consulta.includes("ubicacion") || consulta.includes("como llegar")) {
-            return `Se celebrará en <b>${CONOCIMIENTO_CHATBOT.lugar.nombre}</b>. Ubicado en: ${CONOCIMIENTO_CHATBOT.lugar.direccion}. Puedes ver el mapa aquí: <a href="${CONOCIMIENTO_CHATBOT.lugar.googleMaps}" target="_blank">Google Maps</a>.`;
-        }
+  {
+    pregunta: '¿Cómo confirmo mi asistencia?',
+    respuesta: () => {
+      const c = CONOCIMIENTO_CHATBOT.confirmacion;
+      return `${c.como}.<br>La fecha límite es el <b>${c.fechaLimite}</b>.`
+           + `<br>${c.pase}. ${c.correoSpam}.`;
+    },
+  },
 
-        // Estacionamiento
-        if (consulta.includes("estacionamiento") || consulta.includes("carro") || consulta.includes("coche") || consulta.includes("valet")) {
-            return `Contamos con: ${CONOCIMIENTO_CHATBOT.lugar.estacionamiento}.`;
-        }
+  {
+    pregunta: '¿Qué se sirve de comer?',
+    respuesta: () => {
+      const m = CONOCIMIENTO_CHATBOT.menus;
+      const adultos = m.adultos.map(o => `<b>${o.nombre}</b> (${o.descripcion})`).join(' o ');
+      return `Para adultos: ${adultos}.<br>${m.ninos.descripcion}.<br>${m.alergias}`;
+    },
+  },
 
-        // Vestimenta / Código de ropa
-        if (consulta.includes("vestir") || consulta.includes("vestimenta") || consulta.includes("ropa") || consulta.includes("codigo") || consulta.includes("color")) {
-            let res = `El código de vestimenta es <b>${CONOCIMIENTO_CHATBOT.vestimenta.codigo}</b>.`;
-            if (CONOCIMIENTO_CHATBOT.vestimenta.restriccion) {
-                res += ` Por favor toma en cuenta la siguiente restricción: <b>${CONOCIMIENTO_CHATBOT.vestimenta.restriccion}</b>.`;
-            }
-            return res;
-        }
+  {
+    pregunta: '¿Hay mesa de regalos?',
+    respuesta: () => {
+      const r = CONOCIMIENTO_CHATBOT.regalos;
+      let texto = r.mensaje;
+      if (r.amazon) {
+        texto += `<br>Si querés obsequiarle algo, esta es su mesa: `
+               + `<a href="${r.amazon}" target="_blank" rel="noopener">Mesa de regalos</a>.`;
+      }
+      if (r.transferencia) texto += `<br>${r.transferencia}.`;
+      return texto;
+    },
+  },
 
-        // Confirmar asistencia
-        if (consulta.includes("confirmar") || consulta.includes("asistencia") || consulta.includes("invitacion") || consulta.includes("pase")) {
-            return `${CONOCIMIENTO_CHATBOT.confirmacion.como}. Recuerda que la fecha límite es el ${CONOCIMIENTO_CHATBOT.confirmacion.fechaLimite}. ${CONOCIMIENTO_CHATBOT.confirmacion.pase}.`;
-        }
+  {
+    pregunta: '¿A quién le pregunto otra cosa?',
+    respuesta: () => {
+      const i = CONOCIMIENTO_CHATBOT.identidad;
+      return `${i.limitacion}<br>`
+           + `<a href="mailto:${i.contactoOrganizadores}">${i.contactoOrganizadores}</a>`;
+    },
+  },
 
-        // Regalos o mesa de regalos
-        if (consulta.includes("regalo") || consulta.includes("mesa") || consulta.includes("amazon") || consulta.includes("dinero") || consulta.includes("transferencia")) {
-            return `${CONOCIMIENTO_CHATBOT.regalos.mensaje} Si deseas obsequiarle algo, puedes revisar su mesa de Amazon aquí: <a href="${CONOCIMIENTO_CHATBOT.regalos.amazon}" target="_blank">Mesa de Regalos</a>. ${CONOCIMIENTO_CHATBOT.regalos.transferencia}.`;
-        }
+  // Las preguntas extra que hayas cargado arriba se suman acá al final.
+  // Las que tengan la respuesta vacía quedan afuera (ver 25-preguntas-frecuentes.js).
+  ...CONOCIMIENTO_CHATBOT.faqExtra.map(faq => ({
+    pregunta:  faq.pregunta,
+    respuesta: () => faq.respuesta,
+  })),
 
-        // Menú y comida
-        if (consulta.includes("menu") || consulta.includes("comida") || consulta.includes("cenar") || consulta.includes("alergia") || consulta.includes("vegetariano")) {
-            return `Para adultos ofrecemos menú ${CONOCIMIENTO_CHATBOT.menus.adultos.map(m => m.nombre).join(' o ')}. ${CONOCIMIENTO_CHATBOT.menus.ninos.descripcion}. ${CONOCIMIENTO_CHATBOT.menus.alergias}`;
-        }
-
-        // Búsqueda en tus FAQs extras de la base de datos
-        for (let faq of CONOCIMIENTO_CHATBOT.faqExtra) {
-            if (faq.respuesta && consulta.includes(faq.pregunta.toLowerCase().replace(/[¿?]/g, ""))) {
-                return faq.respuesta;
-            }
-        }
-
-        // Respuesta por defecto si no entiende la pregunta
-        return CONOCIMIENTO_CHATBOT.mensajes.noSabe;
-    }
-});
+];
