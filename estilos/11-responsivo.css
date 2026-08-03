@@ -42,11 +42,9 @@
 
   .seccion { padding: 3.5rem .75rem; }
 
-  /* El reproductor ocupa el ancho que le deja la fila de controles.
-     Ya no lleva left/right/bottom: desde que dejó de anclarse solo y pasó
-     a ser un hijo de #controles-flotantes (position:relative), esas tres
-     líneas no hacían absolutamente nada. Quien lo ubica es la fila. */
-  #reproductor { width: auto; }
+  /* El reproductor ya no se ajusta acá: en el celular la píldora se
+     despliega hacia arriba y toma el ancho disponible, y eso vive junto
+     al resto de su diseño, en el bloque 5 de 09-reproductor.css. */
 
   /* Los botones del pase se apilan para no quedar apretados */
   .pase__acciones,

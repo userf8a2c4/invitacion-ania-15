@@ -3,9 +3,8 @@
    ══════════════════════════════════════════════════════════════════════
 
    QUÉ HACE ESTE ARCHIVO
-   Controla la canción de fondo: play, pausa, volumen, silencio, y el
-   pliegue automático cuando la persona llega al final de la página para
-   no taparle el texto del pie.
+   Controla la canción de fondo: play, pausa, volumen, silencio, y la
+   píldora que despliega el círculo de música de la columna de controles.
 
    POR QUÉ LA MÚSICA NO ARRANCA SOLA (y cómo lo resolvemos)
    Hace años, las webs con música automática eran una pesadilla, así que
@@ -26,18 +25,18 @@
      1. Elementos y estado inicial
      2. Play, pausa y fundido de entrada
      3. Volumen y silencio
-     4. Plegar y desplegar el panel
-     5. Plegado automático al llegar al pie
+     4. Abrir y cerrar la píldora
    ══════════════════════════════════════════════════════════════════════ */
 
 (function preparaElReproductorDeMusica() {
 
   /* ─── 1. ELEMENTOS Y ESTADO INICIAL ────────────────────────────── */
   const panel            = buscar('#reproductor');
+  const contenedor       = buscar('#musica-flotante');
   const audioDeFondo     = buscar('#audio-de-fondo');
+  const botonMusica      = buscar('#boton-musica');
   const botonPlay        = buscar('#boton-play');
   const botonSilencio    = buscar('#boton-silencio');
-  const botonMinimizar   = buscar('#boton-minimizar-reproductor');
   const deslizadorVolumen = buscar('#deslizador-de-volumen');
 
   if (!panel || !audioDeFondo) return;
@@ -186,14 +185,22 @@
 
   /**
    * Actualiza el icono del botón según si está sonando o no.
+   *
+   * La clase 'sonando' va en el CONTENEDOR, no en la píldora: es lo que
+   * hace latir al círculo. Como la píldora está cerrada casi siempre, el
+   * círculo tiene que poder decir por su cuenta si hay música, sin que
+   * haga falta abrir nada para enterarse.
+   *
    * @returns {void}
    */
   function actualizarBotonPlay() {
-    if (!botonPlay) return;
     const estaSonando = !audioDeFondo.paused;
+
+    if (contenedor) contenedor.classList.toggle('sonando', estaSonando);
+
+    if (!botonPlay) return;
     botonPlay.textContent = estaSonando ? '❚❚' : '▶';
     botonPlay.setAttribute('aria-label', estaSonando ? 'Pausar la música' : 'Reproducir la música');
-    panel.classList.toggle('sonando', estaSonando);
   }
 
   audioDeFondo.addEventListener('play',  actualizarBotonPlay);
@@ -282,28 +289,53 @@
   actualizarBotonPlay();
 
 
-  /* ─── 4. PLEGAR Y DESPLEGAR EL PANEL ───────────────────────────── */
-  if (botonMinimizar) {
-    botonMinimizar.addEventListener('click', () => {
-      const quedaMinimizado = panel.classList.toggle('minimizado');
-      botonMinimizar.textContent = quedaMinimizado ? '▲' : '▼';
-      botonMinimizar.setAttribute(
-        'aria-label',
-        quedaMinimizado ? 'Mostrar el reproductor' : 'Minimizar el reproductor'
-      );
-    });
+  /* ─── 4. ABRIR Y CERRAR LA PÍLDORA ─────────────────────────────────
+     El círculo es el único interruptor. Antes había además una flechita
+     ▼ dentro del panel para plegarlo: dos formas de hacer lo mismo, y
+     una de ellas escondida adentro de lo que quería plegar.
+
+     La columna de controles NO se mueve nunca de lugar. El espacio que
+     necesita ya está reservado por el relleno inferior del pie de
+     página, definido en estilos/02-marco-victoriano.css con la variable
+     --alto-reproductor. Si algún día la columna crece, hay que
+     actualizar esa variable.
+     ---------------------------------------------------------------- */
+
+  let pildoraAbierta = false;
+
+  /**
+   * Abre o cierra la píldora de la música.
+   * @param {boolean} abrir
+   * @returns {void}
+   */
+  function alternarPildora(abrir) {
+    pildoraAbierta = abrir;
+    panel.classList.toggle('abierto', abrir);
+    panel.setAttribute('aria-hidden', String(!abrir));
+
+    if (!botonMusica) return;
+    botonMusica.setAttribute('aria-expanded', String(abrir));
+    botonMusica.setAttribute('aria-label', abrir ? 'Cerrar la música' : 'Música de la fiesta');
   }
 
+  if (botonMusica) {
+    botonMusica.addEventListener('click', () => alternarPildora(!pildoraAbierta));
+  }
 
-  /* ─── 5. EL PANEL NO SE MUEVE ──────────────────────────────────────
-     Antes, al llegar al pie de página, el reproductor se deslizaba hacia
-     abajo para no tapar la firma. Pero al hacerlo se montaba sobre el
-     marco victoriano, y quedaba peor.
+  // Escape cierra, igual que en el panel de preguntas.
+  document.addEventListener('keydown', evento => {
+    if (evento.key === 'Escape' && pildoraAbierta) alternarPildora(false);
+  });
 
-     Ahora se queda SIEMPRE en el mismo lugar. El espacio que necesita ya
-     está reservado por el relleno inferior del pie de página, definido en
-     estilos/02-marco-victoriano.css con la variable --alto-reproductor.
-     Si algún día el panel crece, hay que actualizar esa variable.
-     ---------------------------------------------------------------- */
+  /* Un clic en cualquier otro lado también cierra. Se pregunta por la
+     píldora Y por el círculo: si no, el clic de abrir cerraría en el
+     acto. Y se deja pasar el arrastre del volumen, que termina soltando
+     el dedo fuera de la píldora más veces de las que uno creería. */
+  document.addEventListener('click', evento => {
+    if (!pildoraAbierta) return;
+    if (panel.contains(evento.target)) return;
+    if (botonMusica && botonMusica.contains(evento.target)) return;
+    alternarPildora(false);
+  });
 
 })();
