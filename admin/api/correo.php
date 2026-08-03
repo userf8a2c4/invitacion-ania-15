@@ -101,6 +101,56 @@ case 'escribir':
     break;
 
 
+/* ─── MARCAR, BORRAR, MARCAR COMO NO LEÍDO ────────────────────────────── */
+
+case 'marcar':
+case 'borrar':
+case 'no_leido':
+    exigirMetodo('POST');
+
+    $datos  = cuerpoJson();
+    $numero = campoEntero($datos, 'numero', 1);
+
+    $buzon = new BuzonImap();
+    if (!$buzon->conectar()) responderMal($buzon->error, 502);
+
+    if ($accion === 'marcar') {
+        $marcar = !empty($datos['marcar']);
+        $salio  = $buzon->marcar($numero, $marcar);
+        $buzon->cerrar();
+
+        if (!$salio) responderMal('No se pudo cambiar la marca.', 502);
+        responderBien([
+            'marcado' => $marcar,
+            'mensaje' => $marcar ? 'Marcado como importante.' : 'Marca quitada.',
+        ]);
+    }
+
+    if ($accion === 'no_leido') {
+        $salio = $buzon->marcarNoLeido($numero);
+        $buzon->cerrar();
+
+        if (!$salio) responderMal('No se pudo marcar como no leído.', 502);
+        responderBien(['mensaje' => 'Marcado como no leído.']);
+    }
+
+    // Borrar.
+    $salio = $buzon->borrar($numero);
+    $buzon->cerrar();
+
+    if (!$salio) {
+        responderMal(
+            'No se pudo borrar: el servidor no tiene una carpeta de papelera ' .
+            'donde guardarlo primero.',
+            502
+        );
+    }
+
+    anotarEnBitacora($yo, 'borró un correo', 'correo', $numero);
+    responderBien(['mensaje' => 'Correo movido a la papelera.']);
+    break;
+
+
 /* ─── AVISOS DE COMPRA DE LA LISTA DE AMAZON ──────────────────────────── */
 
 case 'regalos':

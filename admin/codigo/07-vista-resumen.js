@@ -41,11 +41,118 @@ async function dibujarResumen() {
   partes.push(bloqueInvitados(datos.invitados));
   partes.push(bloqueDinero(datos.dinero));
   partes.push(bloqueAtencion(datos));
+  partes.push(bloqueLineaDeTiempo(datos.linea_de_tiempo));
 
   vista.innerHTML = partes.filter(Boolean).join('');
 
   actualizarBurbujas(datos);
   engancharResumen(vista);
+}
+
+
+/* ─── LA LÍNEA DE TIEMPO ───────────────────────────────────────────── */
+
+/**
+ * Todo lo que tiene fecha, en orden, de acá hasta la fiesta.
+ *
+ * POR QUÉ VA APARTE DE "NECESITA ATENCIÓN"
+ * Ese bloque contesta "¿qué está por vencer?" y corta a los 14 días.
+ * Este contesta otra cosa: "¿qué viene y en qué orden?". Sin él, un pago
+ * grande a 40 días no aparece en ningún lado hasta que ya está encima, y
+ * cuando aparece puede ser tarde para juntar la plata.
+ *
+ * @param {Array} hitos
+ * @returns {string} HTML
+ */
+function bloqueLineaDeTiempo(hitos) {
+  if (!hitos || !hitos.length) return '';
+
+  /* Se agrupa por cercanía y no por mes, porque lo que uno necesita
+     saber es "¿esto es urgente o puedo dejarlo para después?", y esa
+     respuesta cambia según cuán cerca esté, no según en qué mes caiga. */
+  const grupos = [
+    { clave: 'atrasado', titulo: 'Atrasado',      hitos: [] },
+    { clave: 'semana',   titulo: 'Esta semana',   hitos: [] },
+    { clave: 'mes',      titulo: 'Este mes',      hitos: [] },
+    { clave: 'despues',  titulo: 'Más adelante',  hitos: [] },
+  ];
+
+  hitos.forEach(hito => {
+    const dias = diasHasta(hito.fecha);
+
+    if (dias < 0)       grupos[0].hitos.push(hito);
+    else if (dias <= 7) grupos[1].hitos.push(hito);
+    else if (dias <= 30) grupos[2].hitos.push(hito);
+    else                grupos[3].hitos.push(hito);
+  });
+
+  /* Un punto de color por tipo. Va siempre acompañado del texto, nunca
+     solo el color: quien no distingue bien los colores lee igual. */
+  const colores = {
+    pago:    'alerta',
+    tarea:   'ojo',
+    agenda:  'info',
+    vestido: 'oro',
+    ensayo:  'info',
+    papeles: 'ojo',
+    fiesta:  'oro',
+  };
+
+  const secciones = grupos.filter(g => g.hitos.length).map(grupo => {
+    const filas = grupo.hitos.map(hito => {
+      const color = colores[hito.tipo] || 'tenue';
+      const tocable = !!hito.ir_a;
+
+      return '' +
+        '<' + (tocable ? 'button' : 'div') + ' class="hito"' +
+          (tocable ? ' data-hito="' + seguro(hito.ir_a) + '|' +
+                     seguro(hito.seccion || '') + '"' : '') + '>' +
+
+          '<span class="hito__fecha">' +
+            seguro(comoFechaCorta(hito.fecha)) +
+          '</span>' +
+
+          '<span class="hito__marca hito__marca--' + color + '"></span>' +
+
+          '<span class="hito__cuerpo">' +
+            '<span class="hito__texto">' + seguro(hito.texto) + '</span>' +
+            (hito.detalle
+              ? '<span class="hito__detalle">' + seguro(hito.detalle) + '</span>'
+              : '') +
+          '</span>' +
+
+          '<span class="hito__cuando">' + seguro(comoCuando(hito.fecha)) + '</span>' +
+        '</' + (tocable ? 'button' : 'div') + '>';
+    }).join('');
+
+    return '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">' +
+           seguro(grupo.titulo) + '</div>' +
+           '<div class="linea-tiempo">' + filas + '</div>';
+  }).join('');
+
+  return '' +
+    '<div class="tarjeta__titulo" style="margin:var(--esp-4) 0 0">' +
+      'Qué viene' +
+    '</div>' +
+    secciones;
+}
+
+/**
+ * Escribe una fecha en dos renglones cortos: "24" y "oct".
+ *
+ * Ocupa poco a la izquierda de cada hito y deja el ancho para el texto,
+ * que es lo que de verdad hay que leer.
+ *
+ * @param {string} fecha
+ * @returns {string}
+ */
+function comoFechaCorta(fecha) {
+  const d = aFecha(fecha);
+  if (!d) return '';
+
+  return d.getDate() + ' ' +
+         d.toLocaleDateString(CONFIGURACION.dinero.region, { month: 'short' })
+          .replace('.', '');
 }
 
 
@@ -350,6 +457,19 @@ function filaDeAtencion(tono, texto, pie, irA) {
 function engancharResumen(vista) {
   buscarTodos('[data-lleva-a]', vista).forEach(fila => {
     fila.addEventListener('click', () => irA(fila.dataset.llevaA));
+  });
+
+  // Los hitos de la línea de tiempo llevan además a su sub-sección.
+  buscarTodos('[data-hito]', vista).forEach(fila => {
+    fila.addEventListener('click', () => {
+      const [destino, seccion] = fila.dataset.hito.split('|');
+      if (!destino) return;
+
+      if (destino === 'dinero' && seccion) SECCION_DINERO = seccion;
+      if (destino === 'evento' && seccion) SECCION_EVENTO = seccion;
+
+      irA(destino, true);
+    });
   });
 }
 

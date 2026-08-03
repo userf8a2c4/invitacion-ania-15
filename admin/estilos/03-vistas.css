@@ -167,22 +167,21 @@
   pointer-events: none;
 }
 
-/* Fila de filtros que se desplaza de lado cuando no caben todos. */
+/* Los filtros bajan de renglón cuando no caben.
+ *
+ * ANTES SE DESPLAZABAN DE LADO Y ESTABA MAL. Una fila que se corta en el
+ * borde de la pantalla no le avisa a nadie que sigue: hay que adivinar
+ * que se puede arrastrar, y los filtros de más a la derecha simplemente
+ * no existían para quien no lo intentara. Con flex-wrap se ven todos de
+ * una, que es lo único que importa en un menú de filtros. */
 .filtros {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-bottom: var(--esp-2);
-  overflow-x: auto;
-  /* Que la barra de desplazamiento no se vea: en el teléfono se arrastra
-     con el dedo y una barra visible solo ensucia. */
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 2px;
 }
-.filtros::-webkit-scrollbar { display: none; }
 
 .filtro {
-  flex-shrink: 0;
   min-height: 34px;
   padding: 0 var(--esp-2);
   border: 1px solid var(--borde);
@@ -190,6 +189,8 @@
   background: transparent;
   color: var(--texto-suave);
   font-size: 13px;
+  /* El texto de un filtro no se parte nunca: "No asisten" en dos
+     renglones se lee como dos filtros distintos. */
   white-space: nowrap;
   transition: all var(--transicion);
 }
@@ -274,6 +275,101 @@
 .alerta-fila__pie   { font-size: 12px; color: var(--texto-tenue); }
 
 
+/* ─── 4b. LÍNEA DE TIEMPO ──────────────────────────────────────────── */
+
+/* La raya vertical que une los hitos. Se dibuja con un pseudo-elemento
+   sobre el contenedor, no con un borde en cada fila: así no se corta
+   entre uno y otro. */
+.linea-tiempo {
+  position: relative;
+  padding-left: 58px;
+}
+
+.linea-tiempo::before {
+  content: "";
+  position: absolute;
+  left: 51px;
+  top: 12px;
+  bottom: 12px;
+  width: 1px;
+  background: var(--borde);
+}
+
+.hito {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  width: 100%;
+  min-height: 52px;
+  padding: var(--esp-1) var(--esp-2);
+  margin-bottom: 4px;
+  background: var(--fondo-tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo-chico);
+  text-align: left;
+  color: inherit;
+}
+.hito:active { background: var(--fondo-elevado); }
+
+/* La fecha va FUERA de la tarjeta, a la izquierda de la raya, para que
+   todas queden alineadas en columna y se puedan leer de un vistazo. */
+.hito__fecha {
+  position: absolute;
+  left: -58px;
+  width: 44px;
+  text-align: right;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-tenue);
+  line-height: 1.2;
+}
+
+/* El punto sobre la raya. */
+.hito__marca {
+  position: absolute;
+  left: -8px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--texto-tenue);
+  /* El anillo del color del fondo tapa la raya justo detrás del punto. */
+  box-shadow: 0 0 0 3px var(--fondo);
+}
+
+.hito__marca--alerta { background: var(--alerta); }
+.hito__marca--ojo    { background: var(--ojo); }
+.hito__marca--info   { background: var(--info); }
+.hito__marca--oro    { background: var(--oro); }
+.hito__marca--tenue  { background: var(--texto-tenue); }
+
+.hito__cuerpo { flex: 1; min-width: 0; }
+
+.hito__texto {
+  display: block;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hito__detalle {
+  display: block;
+  font-size: 12px;
+  color: var(--texto-tenue);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hito__cuando {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--texto-tenue);
+  white-space: nowrap;
+}
+
+
 /* ─── 5. VISTA INVITADOS ───────────────────────────────────────────── */
 
 /* Punto de color al inicio de cada fila: verde asiste, rojo no asiste.
@@ -303,6 +399,116 @@
   flex-wrap: wrap;
   gap: 4px;
   margin-top: var(--gota);
+}
+
+
+/* ─── 5b. BANDEJA DE CORREO ────────────────────────────────────────── */
+
+/* Cada correo es una "tapa" que se desliza sobre unos botones que están
+   detrás. Es el gesto de cualquier bandeja de correo del teléfono.
+
+   El contenedor recorta lo que sobresale, así los botones de atrás solo
+   se ven en la medida en que la tapa se corrió. */
+.correo {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--redondeo-chico);
+  margin-bottom: 6px;
+  /* touch-action limita el gesto al eje vertical para el navegador, así
+     el arrastre horizontal nos lo queda manejando el JavaScript y no se
+     pelea con el desplazamiento de la página. */
+  touch-action: pan-y;
+}
+
+/* Los botones de atrás, quietos, ocupando todo el alto. */
+.correo__acciones {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.correo__accion {
+  width: 72px;
+  border: 0;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.correo__accion .icono { width: 19px; height: 19px; }
+
+.correo__accion--responder { background: var(--info); }
+.correo__accion--marcar    { background: var(--ojo); }
+.correo__accion--borrar    { background: var(--alerta); }
+
+/* La tapa: lo que se mueve. */
+.correo__tapa {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  min-height: 62px;
+  padding: var(--esp-2) var(--esp-3);
+  background: var(--fondo-tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo-chico);
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  /* La transición se apaga desde JavaScript mientras el dedo arrastra,
+     para que siga al dedo sin retraso, y se vuelve a encender al soltar
+     para que el rebote sea suave. */
+  transition: transform 200ms ease;
+}
+
+.correo__cuerpo { flex: 1; min-width: 0; }
+
+/* Asunto y remitente en UN renglón cada uno, cortados con puntos
+   suspensivos.
+
+   ESTO ES LO QUE ARREGLA EL "MONTA TODO EL TEXTO": sin el nowrap, un
+   asunto largo o una dirección de correo sin espacios se desparramaba en
+   cuatro renglones y empujaba la fecha fuera de la pantalla. */
+.correo__asunto,
+.correo__de {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.correo__asunto { font-size: 14px; }
+.correo__de     { font-size: 12px; color: var(--texto-tenue); }
+
+.correo--sin-leer .correo__asunto { font-weight: 600; }
+.correo--sin-leer .correo__de     { color: var(--texto-suave); }
+
+.correo__lado {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--texto-tenue);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* La estrella de los marcados como importantes. */
+.correo__estrella {
+  color: var(--ojo);
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* La pista de que se puede deslizar. Aparece la primera vez y se va. */
+.pista-deslizar {
+  text-align: center;
+  font-size: 12px;
+  color: var(--texto-tenue);
+  padding: var(--esp-1) 0 var(--esp-2);
 }
 
 

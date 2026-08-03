@@ -225,6 +225,122 @@ if (existeTabla('regalos')) {
 }
 
 
+/* ─── 6b. LA LÍNEA DE TIEMPO ──────────────────────────────────────────── */
+
+/* Todo lo que tiene fecha, junto y en orden.
+ *
+ * POR QUÉ ESTO EXISTE APARTE DE LOS BLOQUES DE ARRIBA
+ * Los bloques anteriores contestan "¿qué está por vencer?" y cortan a
+ * los 14 días. Esta lista contesta otra pregunta: "¿qué viene, en qué
+ * orden, de acá hasta la fiesta?". Sin ella, un pago grande a 40 días
+ * no aparece en ningún lado hasta que ya está encima.
+ *
+ * Se junta de seis tablas distintas en una sola lista ordenada por
+ * fecha. La app la agrupa después en atrasado / esta semana / este mes /
+ * más adelante. */
+
+$linea = [];
+
+/**
+ * Agrega un hito a la línea de tiempo.
+ *
+ * @param array  &$linea
+ * @param string $fecha  AAAA-MM-DD
+ * @param string $tipo   Para el color y el ícono.
+ * @param string $texto
+ * @param string $detalle
+ * @param string $vistaDestino  A qué pestaña lleva al tocarlo.
+ * @param string $seccion
+ * @return void
+ */
+function agregarHito(&$linea, $fecha, $tipo, $texto, $detalle, $vistaDestino, $seccion) {
+    if (!$fecha) return;
+    $linea[] = [
+        'fecha'   => substr($fecha, 0, 10),
+        'tipo'    => $tipo,
+        'texto'   => $texto,
+        'detalle' => $detalle,
+        'ir_a'    => $vistaDestino,
+        'seccion' => $seccion,
+    ];
+}
+
+if (existeTabla('pagos')) {
+    foreach (consultarTodo(
+        "SELECT p.concepto, p.monto, p.fecha_limite, g.concepto AS gasto
+         FROM pagos p LEFT JOIN gastos g ON g.id = p.gasto_id
+         WHERE p.estado = 'pendiente' AND p.fecha_limite IS NOT NULL"
+    ) as $p) {
+        agregarHito($linea, $p['fecha_limite'], 'pago',
+            $p['concepto'] ?: ($p['gasto'] ?: 'Pago'),
+            '$' . number_format((float) $p['monto'], 0),
+            'dinero', 'pagos');
+    }
+}
+
+if (existeTabla('tareas')) {
+    foreach (consultarTodo(
+        "SELECT titulo, responsable, fecha_limite FROM tareas
+         WHERE estado <> 'hecha' AND fecha_limite IS NOT NULL"
+    ) as $t) {
+        agregarHito($linea, $t['fecha_limite'], 'tarea',
+            $t['titulo'], $t['responsable'] ?: '', 'evento', 'tareas');
+    }
+}
+
+if (existeTabla('agenda')) {
+    foreach (consultarTodo(
+        'SELECT titulo, fecha, hora, lugar FROM agenda WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)'
+    ) as $a) {
+        $detalle = trim(($a['hora'] ? substr($a['hora'], 0, 5) . ' ' : '') . ($a['lugar'] ?: ''));
+        agregarHito($linea, $a['fecha'], 'agenda', $a['titulo'], $detalle, 'evento', 'agenda');
+    }
+}
+
+if (existeTabla('citas_arreglo')) {
+    foreach (consultarTodo(
+        "SELECT titulo, tipo, fecha, lugar FROM citas_arreglo
+         WHERE estado = 'pendiente' AND fecha IS NOT NULL"
+    ) as $c) {
+        agregarHito($linea, $c['fecha'], 'vestido',
+            $c['titulo'] ?: ucfirst($c['tipo']), $c['lugar'] ?: '',
+            'evento', 'citas_arreglo');
+    }
+}
+
+if (existeTabla('ensayos')) {
+    foreach (consultarTodo(
+        'SELECT fecha, hora, lugar FROM ensayos WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)'
+    ) as $e) {
+        $detalle = trim(($e['hora'] ? substr($e['hora'], 0, 5) . ' ' : '') . ($e['lugar'] ?: ''));
+        agregarHito($linea, $e['fecha'], 'ensayo', 'Ensayo del vals', $detalle,
+            'evento', 'ensayos');
+    }
+}
+
+if (existeTabla('requisitos_ceremonia')) {
+    foreach (consultarTodo(
+        "SELECT requisito, fecha_limite FROM requisitos_ceremonia
+         WHERE estado <> 'listo' AND fecha_limite IS NOT NULL"
+    ) as $r) {
+        agregarHito($linea, $r['fecha_limite'], 'papeles',
+            $r['requisito'], 'Requisito de la iglesia',
+            'evento', 'requisitos_ceremonia');
+    }
+}
+
+// La fiesta misma, que es el hito que ordena todos los demás.
+agregarHito($linea, '2026-10-24', 'fiesta',
+    'Los XV de Ania', 'Salones Alvi · 5:00 PM', '', '');
+
+// Del más cercano al más lejano.
+usort($linea, function ($a, $b) {
+    return strcmp($a['fecha'], $b['fecha']);
+});
+
+$resultado['linea_de_tiempo'] = $linea;
+
+
 /* ─── 7. CUÁNTO FALTA ─────────────────────────────────────────────────── */
 
 /* La fecha vive en el código del panel (codigo/01-configuracion.js) y se
