@@ -33,6 +33,21 @@
 function registrarServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
 
+  /* SALIDA DE EMERGENCIA: abrir el panel con ?sw=no lo carga sin caché.
+   *
+   * Sirve cuando se acaba de subir un cambio y el teléfono sigue
+   * mostrando la versión vieja. En vez de tener que explicar cómo se
+   * borran los datos del sitio desde los ajustes del navegador, se abre
+   *     https://aniaxv.com/admin/?sw=no
+   * y se ve lo último, garantizado. También desregistra el que hubiera,
+   * así la próxima visita normal ya arranca limpia. */
+  if (new URLSearchParams(location.search).get('sw') === 'no') {
+    navigator.serviceWorker.getRegistrations()
+      .then(rs => rs.forEach(r => r.unregister()));
+    if (window.caches) caches.keys().then(cs => cs.forEach(c => caches.delete(c)));
+    return;
+  }
+
   // Se espera al load para no competir por el ancho de banda con los
   // archivos que la app necesita para mostrarse.
   window.addEventListener('load', () => {
@@ -215,9 +230,12 @@ function abrirHojaDeCuenta() {
 async function encender() {
   registrarServiceWorker();
 
+  ponerFraseDeBienvenida();
+
   prepararEntrada();
   prepararNavegacion();
   prepararHoja();
+  prepararBotonFlotante();
 
   /* Va acá y no dentro de la app porque el navegador dispara el aviso de
      "se puede instalar" muy temprano, a veces antes de que se abra la
@@ -226,11 +244,49 @@ async function encender() {
 
   buscar('#boton-nota').addEventListener('click', abrirHojaDeNota);
 
-  if (await haySesionValida()) {
-    arrancarLaApp();
-  } else {
-    mostrarPantallaDeEntrada();
-  }
+  /* Se comprueba la sesión Y se espera la frase al mismo tiempo, no uno
+     después del otro: así la frase no agrega ni un segundo de espera.
+     Cuando la red es lenta, la frase se lee mientras se carga; cuando es
+     rápida, la frase es lo que marca el ritmo. */
+  const [haySesion] = await Promise.all([
+    haySesionValida(),
+    esperarLaFrase(),
+  ]);
+
+  if (haySesion) arrancarLaApp();
+  else mostrarPantallaDeEntrada();
+}
+
+/**
+ * Hace que el botón de notas se aparte al bajar y vuelva al subir.
+ *
+ * Antes tapaba el último botón de cada lista justo cuando uno terminaba
+ * de recorrerla y quería usarlo.
+ *
+ * @returns {void}
+ */
+function prepararBotonFlotante() {
+  const boton = buscar('#boton-nota');
+  const contenido = buscar('#contenido');
+  if (!boton || !contenido) return;
+
+  let ultimoScroll = 0;
+
+  /* Se escucha en window y no en el contenedor porque el que se desplaza
+     de verdad es el documento: el contenido no tiene overflow propio. */
+  window.addEventListener('scroll', () => {
+    const ahora = window.scrollY;
+
+    // Cerca del final se muestra siempre: ahí están los botones de
+    // agregar, y esconderlo justo ahí no serviría de nada.
+    const cercaDelFinal =
+      (window.innerHeight + ahora) >= (document.documentElement.scrollHeight - 80);
+
+    const bajando = ahora > ultimoScroll && ahora > 60;
+
+    boton.classList.toggle('boton-flotante--apartado', bajando && !cercaDelFinal);
+    ultimoScroll = ahora;
+  }, { passive: true });
 }
 
 // Si el HTML todavía se está leyendo, se espera; si ya está listo (que

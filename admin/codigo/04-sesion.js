@@ -35,6 +35,56 @@ function mostrarPantalla(cual) {
 }
 
 /**
+ * Escribe una frase al azar en la pantalla de bienvenida.
+ *
+ * Se llama al arrancar, antes de que se sepa si hay sesión: así la frase
+ * ya está puesta cuando la pantalla se muestra, sin parpadeo.
+ *
+ * @returns {void}
+ */
+function ponerFraseDeBienvenida() {
+  const caja = buscar('#frase-bienvenida');
+  if (!caja) return;
+
+  const frases = (CONFIGURACION.bienvenida && CONFIGURACION.bienvenida.frases) || [];
+  if (!frases.length) return;
+
+  /* Se evita repetir la de la vez anterior. Con doce frases, que salga
+     dos veces seguidas la misma es más probable de lo que uno cree, y
+     rompe la sensación de que la app "te dice algo". */
+  const anterior = recordado('ultima-frase', -1);
+  let elegida = Math.floor(Math.random() * frases.length);
+  if (frases.length > 1 && elegida === anterior) {
+    elegida = (elegida + 1) % frases.length;
+  }
+  recordar('ultima-frase', elegida);
+
+  caja.textContent = frases[elegida];
+}
+
+/**
+ * Espera a que la frase se lea, y la desvanece.
+ *
+ * @returns {Promise<void>}
+ */
+function esperarLaFrase() {
+  const caja = buscar('#frase-bienvenida');
+  const duracion = (CONFIGURACION.bienvenida && CONFIGURACION.bienvenida.duracion) || 2600;
+
+  // Si la persona pidió menos movimiento, no se la hace esperar.
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    return Promise.resolve();
+  }
+
+  return new Promise(resolver => {
+    setTimeout(() => {
+      if (caja) caja.classList.add('pantalla-carga__frase--saliendo');
+      setTimeout(resolver, 400);
+    }, duracion);
+  });
+}
+
+/**
  * Lleva a la pantalla de entrada, con un aviso opcional.
  *
  * @param {string} [aviso] - Por ejemplo, "Tu sesión expiró".

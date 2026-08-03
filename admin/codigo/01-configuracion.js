@@ -102,7 +102,34 @@ const CONFIGURACION = {
   },
 
 
-  /* ─── 5. SERVIDOR ─────────────────────────────────────────────────── */
+  /* ─── 5. FRASES DE BIENVENIDA ─────────────────────────────────────── */
+  /* Se elige una al azar cada vez que se abre la app y se muestra unos
+     segundos. Agregá, quitá o cambiá las que quieras: son solo textos.
+
+     Están escritas para Lucila, que es quien va a abrir esto cien veces
+     mientras organiza la fiesta. */
+  bienvenida: {
+    /** Cuántos milisegundos se queda la frase antes de irse. */
+    duracion: 2600,
+
+    frases: [
+      'Cada detalle que elegís hoy va a ser un recuerdo de ella para siempre.',
+      'Lucila, lo estás haciendo increíble.',
+      'Nadie va a acordarse del presupuesto. Se van a acordar de la noche.',
+      'Un paso por día alcanza. Ya llevás muchos.',
+      'Ania va a mirar todo esto y va a saber cuánto la querés.',
+      'Respirá. Vas bien.',
+      'Organizar también es una forma de amar.',
+      'Falta menos de lo que parece, y llevás más de lo que creés.',
+      'Que la lista no te tape la fiesta: esto también es para disfrutarlo.',
+      'Todo lo difícil de hoy se va a ver hermoso el 24 de octubre.',
+      'Sos la razón de que todo esto esté saliendo bien.',
+      'Los XV son de Ania. El milagro de que ocurran es tuyo.',
+    ],
+  },
+
+
+  /* ─── 6. SERVIDOR ─────────────────────────────────────────────────── */
   servidor: {
     /* De dónde cuelga la API. Se deja relativo a propósito: así funciona
        igual en aniaxv.com y en cualquier prueba local, sin tocar nada. */

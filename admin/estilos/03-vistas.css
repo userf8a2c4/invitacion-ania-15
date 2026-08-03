@@ -25,6 +25,7 @@
 
 .app {
   min-height: 100%;
+  min-height: 100dvh;   /* mismo motivo que en 01-fundamentos.css */
   display: flex;
   flex-direction: column;
 }
@@ -205,15 +206,24 @@
 
 /* ─── 4. VISTA RESUMEN ─────────────────────────────────────────────── */
 
-/* La cuenta regresiva, arriba de todo. */
+/* La cuenta regresiva, arriba de todo.
+ *
+ * COMPACTA A PROPÓSITO. Antes ocupaba casi un tercio de la pantalla y
+ * empujaba el presupuesto y los pendientes fuera de la vista, obligando
+ * a hacer scroll en la pantalla que justamente tiene que responder todo
+ * de un vistazo. El número sigue siendo lo más grande, pero ya no es lo
+ * único que entra. */
 .cuenta-atras {
-  text-align: center;
-  padding: var(--esp-3) var(--esp-2) var(--esp-4);
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: var(--esp-2);
+  padding: var(--esp-1) var(--esp-2) var(--esp-2);
 }
 
 .cuenta-atras__numero {
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 52px;
+  font-size: 34px;
   font-weight: 400;
   line-height: 1;
   color: var(--oro);
@@ -223,14 +233,25 @@
 .cuenta-atras__texto {
   font-size: 13px;
   color: var(--texto-tenue);
-  margin-top: var(--gota);
 }
+
+/* En el Resumen todo va más apretado que en el resto de la app: es la
+   pantalla que tiene que contestar "¿cómo vamos?" sin hacer scroll. */
+#vista-resumen .tarjeta { padding: var(--esp-2); margin-bottom: 6px; }
+#vista-resumen .tarjeta-dato { padding: var(--esp-1) 6px; }
+#vista-resumen .tarjeta-dato__numero { font-size: 21px; }
+#vista-resumen .rejilla-datos {
+  gap: 5px;
+  margin-bottom: var(--esp-2);
+  grid-template-columns: repeat(auto-fit, minmax(66px, 1fr));
+}
+#vista-resumen .alerta-fila { min-height: 44px; margin-bottom: 4px; }
 
 /* Bloque de dinero del Resumen: lo que cuesta contra lo que se paga. */
 .dinero-resumen {
   display: flex;
   gap: var(--esp-3);
-  margin-bottom: var(--esp-2);
+  margin-bottom: var(--esp-1);
 }
 
 .dinero-resumen__mitad { flex: 1; min-width: 0; }

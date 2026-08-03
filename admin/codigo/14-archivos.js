@@ -58,13 +58,46 @@ function elegirYSubir(opciones) {
     // "environment" es la cámara de atrás; "user" sería la selfie.
     entrada.capture = 'environment';
     entrada.accept = 'image/*';
+  } else {
+    /* VARIOS ARCHIVOS DE UNA. Un contrato suele ser tres páginas
+       escaneadas, y obligar a repetir el proceso tres veces era una
+       molestia sin razón. La cámara queda de a una porque saca una foto
+       por vez de todos modos. */
+    entrada.multiple = true;
   }
 
   entrada.addEventListener('change', async () => {
-    const archivo = entrada.files && entrada.files[0];
-    if (!archivo) return;
+    const archivos = Array.from(entrada.files || []);
+    if (!archivos.length) return;
 
-    await subirArchivo(archivo, opciones);
+    if (archivos.length === 1) {
+      await subirArchivo(archivos[0], opciones);
+      return;
+    }
+
+    /* Se suben de a uno y en orden, no todos a la vez: el hosting es
+       compartido y varias subidas simultáneas de fotos pesadas suelen
+       terminar en un tiempo agotado. Así tarda un poco más pero llegan
+       todas. */
+    let subidos = 0;
+
+    for (let i = 0; i < archivos.length; i++) {
+      avisar('Subiendo ' + (i + 1) + ' de ' + archivos.length + '…');
+
+      // Solo el último refresca la lista, para no repintarla N veces.
+      const esElUltimo = (i === archivos.length - 1);
+      const ok = await subirArchivo(archivos[i], Object.assign({}, opciones, {
+        silencioso: true,
+        despues: esElUltimo ? opciones.despues : null,
+      }));
+
+      if (ok) subidos++;
+    }
+
+    avisar(subidos === archivos.length
+      ? 'Se subieron ' + subidos + ' archivos.'
+      : 'Se subieron ' + subidos + ' de ' + archivos.length + '.',
+      subidos !== archivos.length);
   });
 
   // Hay que agregarlo al documento para que funcione en algunos Android.
@@ -196,7 +229,8 @@ function achicarImagen(archivo) {
  * @returns {Promise<void>}
  */
 async function subirArchivo(archivo, opciones) {
-  avisar('Preparando el archivo…');
+  // En una tanda, cada archivo no anuncia lo suyo: avisa el que manda.
+  if (!opciones.silencioso) avisar('Preparando el archivo…');
 
   const listo = await achicarImagen(archivo);
 
@@ -223,17 +257,19 @@ async function subirArchivo(archivo, opciones) {
       ok: false, error: 'El servidor respondió algo inesperado.',
     }));
 
-    if (respuesta.status === 401) { manejarSesionVencida(); return; }
+    if (respuesta.status === 401) { manejarSesionVencida(); return false; }
     if (!respuesta.ok || carga.ok === false) {
       avisar(carga.error || 'No se pudo subir el archivo.', true);
-      return;
+      return false;
     }
 
-    avisar('Archivo subido.');
+    if (!opciones.silencioso) avisar('Archivo subido.');
     if (opciones.despues) opciones.despues(carga.datos);
+    return true;
 
   } catch (error) {
     avisar('No se pudo subir. Revisá tu conexión.', true);
+    return false;
   }
 }
 
