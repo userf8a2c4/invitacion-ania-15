@@ -146,19 +146,19 @@
        Se cargan en orden numérico. El orden IMPORTA: si dos archivos
        dicen cosas distintas sobre lo mismo, gana el que va último.
   ═══════════════════════════════════════════════════════════════════ -->
-  <link rel="stylesheet" href="estilos/01-fundamentos.css?v=40">
-  <link rel="stylesheet" href="estilos/02-marco-victoriano.css?v=40">
-  <link rel="stylesheet" href="estilos/03-sobre-de-apertura.css?v=40">
-  <link rel="stylesheet" href="estilos/04-portada.css?v=40">
-  <link rel="stylesheet" href="estilos/05-cuenta-regresiva.css?v=40">
-  <link rel="stylesheet" href="estilos/06-secciones.css?v=40">
-  <link rel="stylesheet" href="estilos/07-formulario.css?v=40">
-  <link rel="stylesheet" href="estilos/08-pase-de-acceso.css?v=40">
-  <link rel="stylesheet" href="estilos/09-reproductor.css?v=40">
-  <link rel="stylesheet" href="estilos/10-cursor-y-petalos.css?v=40">
-  <link rel="stylesheet" href="estilos/12-haces-de-luz.css?v=40">
-  <link rel="stylesheet" href="estilos/11-responsivo.css?v=40">
-  <link rel="stylesheet" href="estilos/13-preguntas-frecuentes.css?v=40">
+  <link rel="stylesheet" href="estilos/01-fundamentos.css?v=41">
+  <link rel="stylesheet" href="estilos/02-marco-victoriano.css?v=41">
+  <link rel="stylesheet" href="estilos/03-sobre-de-apertura.css?v=41">
+  <link rel="stylesheet" href="estilos/04-portada.css?v=41">
+  <link rel="stylesheet" href="estilos/05-cuenta-regresiva.css?v=41">
+  <link rel="stylesheet" href="estilos/06-secciones.css?v=41">
+  <link rel="stylesheet" href="estilos/07-formulario.css?v=41">
+  <link rel="stylesheet" href="estilos/08-pase-de-acceso.css?v=41">
+  <link rel="stylesheet" href="estilos/09-reproductor.css?v=41">
+  <link rel="stylesheet" href="estilos/10-cursor-y-petalos.css?v=41">
+  <link rel="stylesheet" href="estilos/12-haces-de-luz.css?v=41">
+  <link rel="stylesheet" href="estilos/11-responsivo.css?v=41">
+  <link rel="stylesheet" href="estilos/13-preguntas-frecuentes.css?v=41">
 
   <!-- Bibliotecas externas: envío de correos y generación del código QR.
 
@@ -1864,25 +1864,50 @@
 
 
 <!-- ═══ 13. CONTROLES FLOTANTES ═════════════════════════════════════
-     El reproductor y el botón de volver arriba viven juntos, en una
-     misma fila anclada abajo a la derecha.
+     Los tres controles de la invitación —volver arriba, preguntas
+     frecuentes y música— viven juntos en una COLUMNA anclada abajo a la
+     derecha. Tres círculos idénticos:
 
-     Antes el botón estaba en la esquina opuesta, y eran dos cosas
-     sueltas flotando sobre la invitación. Agrupados se leen como un
-     solo juego de controles, que es lo que son: lo que la persona puede
-     manejar, todo en el mismo lugar.
+              ( ↑ )   volver arriba (aparece al bajar)
+              ( ? )   preguntas frecuentes
+              ( ♪ )   música
+       ─────────────────── borde del marco
 
-     Van en una fila flexible y no con medidas fijas a propósito: así el
-     botón queda siempre pegado al reproductor sin que haya que saber
-     cuánto mide, aunque se lo minimice o se achique en el celular.
+     POR QUÉ UNA COLUMNA DE CÍRCULOS
+     Antes el reproductor era un panel desplegado todo el tiempo, y entre
+     los tres ocupaban 404 × 134 px sobre una invitación cuyo centro es
+     una pieza ilustrada. Así son 46 × 160 px: la séptima parte de la
+     superficie tapada. Lo que estaba en el panel —canción y volumen— se
+     despliega al tocar el círculo de música.
+
+     POR QUÉ ESTE ORDEN Y NO OTRO
+     La música va abajo, que es lo más cómodo para el pulgar y lo que más
+     se toca. La flecha va arriba del todo porque es la única que aparece
+     y desaparece con el scroll: en el medio, movería a las otras dos cada
+     vez que alguien sube o baja.
+
+     Y siguen todos acá adentro por la misma razón de siempre: mientras
+     lo que flota viva en este contenedor, no puede solaparse.
 ═══════════════════════════════════════════════════════════════════ -->
 <div id="controles-flotantes">
+
+  <!-- Sin texto: la flecha se entiende sola, y el nombre para lectores
+       de pantalla va en el aria-label.
+
+       Se oculta con visibility (no con display), así que su lugar queda
+       reservado: al aparecer no empuja a los otros dos. -->
+  <button id="volver-arriba" type="button" aria-label="Volver arriba">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <!-- La punta de flecha y su asta, en dos trazos finos -->
+      <path d="M12 19V7" />
+      <path d="M6.5 12.5 12 6.8l5.5 5.7" />
+    </svg>
+  </button>
 
   <!-- PREGUNTAS FRECUENTES.
        Antes esto era un chat con casilla de texto, flotando por su cuenta
        en la misma esquina pero con otro anclaje y otro z-index: terminaba
-       montado encima del reproductor. Ahora es un botón más de esta fila,
-       así que el solape dejó de ser posible.
+       montado encima del reproductor.
 
        La lista de preguntas la arma codigo/25-preguntas-frecuentes.js
        leyendo codigo/00-conocimiento-chatbot.js. Acá solo va el hueco.
@@ -1904,53 +1929,59 @@
     <div class="qa__lista" id="qa-lista"></div>
   </div>
 
-  <!-- Sin texto: la flecha se entiende sola, y el nombre para lectores
-       de pantalla va en el aria-label. -->
-  <button id="volver-arriba" type="button" aria-label="Volver arriba">
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <!-- La punta de flecha y su asta, en dos trazos finos -->
-      <path d="M12 19V7" />
-      <path d="M6.5 12.5 12 6.8l5.5 5.7" />
-    </svg>
-  </button>
+  <!-- MÚSICA. El círculo abre y cierra la píldora; la píldora tiene lo
+       que antes ocupaba el panel entero, en una sola fila. -->
+  <div id="musica-flotante">
 
-<aside id="reproductor" aria-label="Reproductor de música">
-  <div class="reproductor__aviso">¡Ponle play! · una de mis canciones favoritas</div>
+    <div class="reproductor__aviso">¡Ponle play! · una de mis canciones favoritas</div>
 
-  <div class="reproductor__barra-titulo">
-    <span>Música de la fiesta</span>
-    <button class="reproductor__minimizar" id="boton-minimizar-reproductor"
-            type="button" aria-label="Minimizar el reproductor">▼</button>
+    <!-- La corchea va en un SVG y no como carácter: los emoji y los
+         símbolos musicales los dibuja distinto cada sistema operativo, y
+         acá tiene que verse igual que la flecha y el signo de pregunta.
+
+         El botón va ANTES que la píldora en el HTML aunque se dibuje
+         después: la píldora es absoluta, así que su lugar en pantalla no
+         depende del orden. Y así, al abrir con el círculo, el Tab
+         siguiente cae en el play y no en la nada. -->
+    <button id="boton-musica" type="button"
+            aria-expanded="false" aria-controls="reproductor"
+            aria-label="Música de la fiesta">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 17.5V6.2l9-1.7v11" />
+        <circle cx="6.6" cy="17.6" r="2.4" />
+        <circle cx="15.6" cy="15.6" r="2.4" />
+      </svg>
+    </button>
+
+    <aside id="reproductor" aria-label="Reproductor de música" aria-hidden="true">
+      <button class="reproductor__play" id="boton-play" type="button"
+              aria-label="Reproducir la música">▶</button>
+
+      <div class="reproductor__info">
+        <p class="reproductor__cancion" data-dato="musica.titulo">Hysteria</p>
+        <p class="reproductor__artista">
+          <span data-dato="musica.artista">Muse</span> ·
+          <span data-dato="musica.album">Absolution</span>
+        </p>
+      </div>
+
+      <div class="reproductor__volumen">
+        <button class="reproductor__silencio" id="boton-silencio"
+                type="button" aria-label="Silenciar"><svg class="icono-dorado reproductor__icono-volumen" viewBox="0 0 24 24" aria-hidden="true"><use href="#icono-sonido"/></svg></button>
+        <input class="reproductor__deslizador" id="deslizador-de-volumen"
+               type="range" min="0" max="100" value="70"
+               aria-label="Volumen de la música">
+      </div>
+    </aside>
+
+    <!-- preload="none": antes era "auto" y el navegador bajaba los 5.3MB de
+         la canción durante la carga inicial, compitiendo con lo que hace
+         falta para mostrar la página. Ahora no descarga nada hasta el primer
+         clic (ver codigo/10-reproductor-de-musica.js), que es cuando de
+         verdad se puede reproducir (el autoplay sin gesto está bloqueado
+         igual por el navegador). -->
+    <audio id="audio-de-fondo" loop preload="none" data-fuente="musica.archivo"></audio>
   </div>
-
-  <div class="reproductor__cuerpo">
-    <button class="reproductor__play" id="boton-play" type="button"
-            aria-label="Reproducir la música">▶</button>
-    <div class="reproductor__info">
-      <p class="reproductor__cancion" data-dato="musica.titulo">Hysteria</p>
-      <p class="reproductor__artista">
-        <span data-dato="musica.artista">Muse</span> ·
-        <span data-dato="musica.album">Absolution</span>
-      </p>
-    </div>
-  </div>
-
-  <div class="reproductor__volumen">
-    <button class="reproductor__silencio" id="boton-silencio"
-            type="button" aria-label="Silenciar"><svg class="icono-dorado reproductor__icono-volumen" viewBox="0 0 24 24" aria-hidden="true"><use href="#icono-sonido"/></svg></button>
-    <input class="reproductor__deslizador" id="deslizador-de-volumen"
-           type="range" min="0" max="100" value="70"
-           aria-label="Volumen de la música">
-  </div>
-
-  <!-- preload="none": antes era "auto" y el navegador bajaba los 5.3MB de
-       la canción durante la carga inicial, compitiendo con lo que hace
-       falta para mostrar la página. Ahora no descarga nada hasta el primer
-       clic (ver codigo/10-reproductor-de-musica.js), que es cuando de
-       verdad se puede reproducir (el autoplay sin gesto está bloqueado
-       igual por el navegador). -->
-  <audio id="audio-de-fondo" loop preload="none" data-fuente="musica.archivo"></audio>
-</aside>
 
 </div><!-- /#controles-flotantes -->
 
@@ -1973,24 +2004,24 @@
      de código haciendo esperar al dibujo. Con "defer" la página se pinta
      primero y el código llega enseguida después.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/01-configuracion.js?v=40"></script>
-<script defer src="codigo/02-utilidades.js?v=40"></script>
-<script defer src="codigo/03-sobre-de-apertura.js?v=40"></script>
-<script defer src="codigo/04-invitado-personalizado.js?v=40"></script>
-<script defer src="codigo/05-cursor-personalizado.js?v=40"></script>
+<script defer src="codigo/01-configuracion.js?v=41"></script>
+<script defer src="codigo/02-utilidades.js?v=41"></script>
+<script defer src="codigo/03-sobre-de-apertura.js?v=41"></script>
+<script defer src="codigo/04-invitado-personalizado.js?v=41"></script>
+<script defer src="codigo/05-cursor-personalizado.js?v=41"></script>
 <!-- EL LIENZO DE PÉTALOS. Tres <canvas>, uno por plano de profundidad, en
      vez de 29 divs. Va ANTES que 06-petalos-con-fisica.js porque ese
      archivo le pregunta al arrancar si debe crear elementos o solo números.
      Con  ?petalos=dom  vuelve el sistema de divs. -->
-<script defer src="codigo/24-lienzo-de-petalos.js?v=40"></script>
-<script defer src="codigo/06-petalos-con-fisica.js?v=40"></script>
-<script defer src="codigo/07-marco-y-enredaderas.js?v=40"></script>
-<script defer src="codigo/08-efectos-de-scroll.js?v=40"></script>
-<script defer src="codigo/09-cuenta-regresiva.js?v=40"></script>
-<script defer src="codigo/10-reproductor-de-musica.js?v=40"></script>
-<script defer src="codigo/11-formulario-confirmacion.js?v=40"></script>
-<script defer src="codigo/12-pase-de-acceso.js?v=40"></script>
-<script defer src="codigo/13-agregar-al-calendario.js?v=40"></script>
+<script defer src="codigo/24-lienzo-de-petalos.js?v=41"></script>
+<script defer src="codigo/06-petalos-con-fisica.js?v=41"></script>
+<script defer src="codigo/07-marco-y-enredaderas.js?v=41"></script>
+<script defer src="codigo/08-efectos-de-scroll.js?v=41"></script>
+<script defer src="codigo/09-cuenta-regresiva.js?v=41"></script>
+<script defer src="codigo/10-reproductor-de-musica.js?v=41"></script>
+<script defer src="codigo/11-formulario-confirmacion.js?v=41"></script>
+<script defer src="codigo/12-pase-de-acceso.js?v=41"></script>
+<script defer src="codigo/13-agregar-al-calendario.js?v=41"></script>
 <!-- EL LIENZO DE LUZ. Dibuja los tres sistemas de luz —velas, haces y polvo—
      en un solo <canvas>, en vez de en ~140 elementos repartidos en 10 capas
      con `mix-blend-mode`, que era lo que se llevaba la mitad de cada cuadro.
@@ -2001,9 +2032,9 @@
 
      Con  ?luz=dom  en la dirección, este módulo se queda dormido y vuelve el
      sistema anterior completo, sin tocar código. -->
-<script defer src="codigo/23-lienzo-de-luz.js?v=40"></script>
-<script defer src="codigo/14-haces-de-luz.js?v=40"></script>
-<script defer src="codigo/15-registro-de-confirmaciones.js?v=40"></script>
+<script defer src="codigo/23-lienzo-de-luz.js?v=41"></script>
+<script defer src="codigo/14-haces-de-luz.js?v=41"></script>
+<script defer src="codigo/15-registro-de-confirmaciones.js?v=41"></script>
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda).
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
      —incluso sobre el sobre de entrada— para que quien tenga un equipo
@@ -2018,22 +2049,22 @@
   <span class="boton-animaciones__texto">Animación</span>
 </button>
 
-<script defer src="codigo/16-volver-arriba.js?v=40"></script>
-<script defer src="codigo/17-joyas-colgantes.js?v=40"></script>
-<script defer src="codigo/18-motas-de-polvo.js?v=40"></script>
-<script defer src="codigo/19-velas.js?v=40"></script>
-<script defer src="codigo/20-boton-de-animaciones.js?v=40"></script>
-<script defer src="codigo/21-monitor-de-rendimiento.js?v=40"></script>
+<script defer src="codigo/16-volver-arriba.js?v=41"></script>
+<script defer src="codigo/17-joyas-colgantes.js?v=41"></script>
+<script defer src="codigo/18-motas-de-polvo.js?v=41"></script>
+<script defer src="codigo/19-velas.js?v=41"></script>
+<script defer src="codigo/20-boton-de-animaciones.js?v=41"></script>
+<script defer src="codigo/21-monitor-de-rendimiento.js?v=41"></script>
 <!-- Tiñe la luz que entra por los ventanales según la hora del día. Va
      después de los haces y las motas, porque escribe sobre sus capas. -->
-<script defer src="codigo/22-luz-de-la-hora.js?v=40"></script>
+<script defer src="codigo/22-luz-de-la-hora.js?v=41"></script>
 
 <!-- PREGUNTAS FRECUENTES (el botón "?" de la fila de controles).
      El 00 tiene solo los datos —fecha, lugar, vestimenta, regalos— y el
      25 arma el panel leyéndolos. Ese orden importa: si el 25 corriera
      primero, no encontraría la lista de preguntas y no dibujaría nada. -->
-<script defer src="codigo/00-conocimiento-chatbot.js?v=40"></script>
-<script defer src="codigo/25-preguntas-frecuentes.js?v=40"></script>
+<script defer src="codigo/00-conocimiento-chatbot.js?v=41"></script>
+<script defer src="codigo/25-preguntas-frecuentes.js?v=41"></script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
      internet y se pueda instalar. Va al final y falla en silencio si el

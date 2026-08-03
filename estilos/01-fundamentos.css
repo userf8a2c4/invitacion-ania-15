@@ -80,9 +80,13 @@
   /* Ancho máximo del contenido legible */
   --ancho-contenido: 860px;
 
-  /* Altura que ocupa el reproductor de música abajo a la derecha.
-     Se usa para que el pie de página nunca quede tapado por él. */
-  --alto-reproductor: 132px;
+  /* Altura que ocupa la columna de controles flotantes abajo a la
+     derecha. Se usa para que el pie de página nunca quede tapado.
+
+     Son los tres círculos más los dos huecos entre ellos: en pantalla
+     táctil crecen a 3.2rem, así que se reserva por ese caso, el mayor.
+     El nombre quedó de cuando era solo el reproductor. */
+  --alto-reproductor: 176px;
 
   /* Curva de animación elegante (arranca rápido, frena suave) */
   --curva-elegante: cubic-bezier(.22, .61, .36, 1);

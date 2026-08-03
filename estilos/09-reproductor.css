@@ -1,40 +1,53 @@
 /* ══════════════════════════════════════════════════════════════════════
-   09 · REPRODUCTOR DE MÚSICA
+   09 · CONTROLES FLOTANTES Y REPRODUCTOR DE MÚSICA
    ══════════════════════════════════════════════════════════════════════
 
    QUÉ ES ESTE ARCHIVO
-   Estiliza el panelcito de abajo a la derecha que reproduce la canción
-   (Hysteria, de Muse), con botón de play/pausa, control de volumen y
-   botón de silencio.
+   La columna de tres círculos de abajo a la derecha —volver arriba,
+   preguntas y música— y la píldora que despliega el de música, con la
+   canción (Hysteria, de Muse), el play y el volumen.
 
    DÓNDE SE UBICA
    Queda POR DENTRO del marco victoriano: por eso su separación del borde
    es  var(--marco-grosor) + 1rem  y no simplemente 1rem.
 
    ÍNDICE
-     1. Panel
-     2. Barra de título y botón de minimizar
-     3. Botón de play y datos de la canción
-     4. Control de volumen
-     5. Estados: minimizado y aviso inicial
+     0. La columna de controles flotantes
+     1. El círculo de música
+     2. La píldora
+     3. Play, datos de la canción y volumen
+     4. Estados: sonando y aviso inicial
+     5. Celular: la píldora se despliega hacia arriba
    ══════════════════════════════════════════════════════════════════════ */
 
 
-/* ─── 0. LA FILA DE CONTROLES FLOTANTES ────────────────────────────────
-   El reproductor no flota solo: comparte la esquina con el botón de
-   volver arriba y con el de preguntas frecuentes. Los tres van en esta
-   fila, alineados por abajo:  [ ? ]  [ ↑ ]  [ reproductor ].
+/* ─── 0. LA COLUMNA DE CONTROLES FLOTANTES ─────────────────────────────
+   Los tres controles no flotan sueltos: comparten esta columna, apilados
+   y alineados a la derecha.
 
-   El ancla está acá y no en cada uno por separado. Así los botones
-   quedan siempre pegados al reproductor sin tener que saber cuánto mide
-   —que cambia al minimizarlo y al achicarse en el celular—, y no hay
-   ninguna medida repetida en dos lugares esperando a desincronizarse.
+              ( ↑ )   volver arriba
+              ( ? )   preguntas
+              ( ♪ )   música
 
-   Y hay una segunda razón, más importante: mientras todo lo que flota
-   viva acá adentro, no puede solaparse. El chat viejo se anclaba solo,
-   en la misma esquina y con otro z-index, y se montaba encima del
-   reproductor. Ese problema no se arregló moviendo números: se arregló
-   metiéndolo en esta fila.
+   POR QUÉ TODOS ACÁ ADENTRO
+   Mientras lo que flota viva en este contenedor, no puede solaparse. El
+   chat viejo se anclaba solo, en la misma esquina y con otro z-index, y
+   se montaba encima del reproductor. Eso no se arregló moviendo números:
+   se arregló metiéndolo acá.
+
+   POR QUÉ EL ORDEN ES ↑ · ? · ♪
+   La música va abajo, al alcance del pulgar, que es lo que más se toca.
+   La flecha va arriba del todo porque es la única que aparece y
+   desaparece con el scroll: en el medio movería a las otras dos cada vez.
+   Y como se oculta con visibility —no con display— su lugar queda
+   reservado y no hay ni un salto.
+
+   ⚠️ NADA DE column-reverse NI wrap-reverse.
+   Con el eje del flex invertido, Chrome resuelve mal los offsets de los
+   hijos absolutos: un  bottom: 100%  termina colocando el borde de
+   ARRIBA del panel donde debería ir el de abajo. Costó una tarde
+   encontrarlo. Con el orden natural del HTML se consigue exactamente
+   esta disposición sin pisar ese terreno.
    ---------------------------------------------------------------------- */
 #controles-flotantes {
   position: fixed;
@@ -43,96 +56,139 @@
   z-index: 500;
 
   display: flex;
-  align-items: flex-end;   /* pegados por la base, midan lo que midan */
+  flex-direction: column;
+  align-items: flex-end;   /* pegados a la derecha, midan lo que midan */
   gap: .65rem;
 
-  /* Cuando no entran los tres a lo ancho, el reproductor se va a su
-     propio renglón en vez de aplastar a los botones. "wrap-reverse"
-     lo manda ARRIBA y deja los botones abajo, al alcance del pulgar. */
-  flex-wrap: wrap-reverse;
-  justify-content: flex-end;
-  row-gap: .65rem;
-
-  max-width: calc(100vw - var(--marco-grosor) * 2 - 2rem);
-  pointer-events: none;    /* la fila no estorba; sus hijos sí reciben clics */
+  pointer-events: none;    /* la columna no estorba; sus hijos sí reciben clics */
 }
 #controles-flotantes > * { pointer-events: auto; }
 
 
-/* ─── 1. PANEL ─────────────────────────────────────────────────────── */
-#reproductor {
-  /* Ya no se ancla solo: lo ubica la fila de controles (bloque 0) */
-  position: relative;
-  width: 290px;
-  min-width: 0;            /* deja que se encoja en pantallas chicas */
+/* ─── 1. EL CÍRCULO DE MÚSICA ──────────────────────────────────────────
+   Gemelo de #volver-arriba (06-secciones.css) y de #boton-qa
+   (13-preguntas-frecuentes.css): mismas medidas, mismo fondo carbón,
+   mismo filo dorado. Los tres tienen que leerse como un solo juego.
+   ---------------------------------------------------------------------- */
+#musica-flotante {
+  position: relative;      /* es el ancla de la píldora y del aviso */
+  flex-shrink: 0;
+  line-height: 0;          /* sin este, el <button> deja un hueco debajo */
+}
+
+#boton-musica {
+  display: grid;
+  place-items: center;
+  width: 2.9rem;
+  height: 2.9rem;
+
   background: var(--color-carbon);
   border: 1px solid var(--borde-oro-tenue);
+  border-radius: 50%;
+  color: var(--color-oro-apagado);
   box-shadow: 0 8px 40px rgba(0, 0, 0, .7), 0 0 0 1px rgba(201, 168, 76, .1);
-  transition: transform .4s var(--curva-elegante),
-              box-shadow .3s,
-              opacity .3s;
+  cursor: pointer;
+
+  transition: color .25s, border-color .25s, box-shadow .25s;
 }
-#reproductor:hover {
+
+#boton-musica svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#boton-musica:hover,
+#boton-musica:focus-visible {
+  color: var(--color-oro);
+  border-color: var(--color-oro-apagado);
   box-shadow: 0 12px 50px rgba(0, 0, 0, .8), 0 0 25px rgba(201, 168, 76, .25);
 }
 
+/* Abierto, el círculo queda encendido: se ve de dónde salió la píldora. */
+#boton-musica[aria-expanded="true"] {
+  color: var(--color-oro-claro);
+  border-color: var(--borde-oro-fuerte);
+}
 
-/* ─── 2. BARRA DE TÍTULO ───────────────────────────────────────────── */
-.reproductor__barra-titulo {
+
+/* ─── 2. LA PÍLDORA ────────────────────────────────────────────────────
+   Todo lo que antes era un panel de 290 × 132 px, ahora en una sola fila
+   del alto del círculo, que sale hacia la izquierda.
+   ---------------------------------------------------------------------- */
+#reproductor {
+  position: absolute;
+  right: calc(100% + .6rem);
+  bottom: 0;
+  z-index: 2;              /* por encima del círculo y de lo que venga después */
+
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: .5rem;
-  padding: .4rem .75rem;
-  border-bottom: 1px solid var(--borde-oro-tenue);
-  font-family: var(--tipo-detalle);
-  font-size: .7rem;
-  letter-spacing: .15em;
-  color: var(--color-oro-apagado);
+  gap: .75rem;
+  width: 290px;
+  height: 2.9rem;
+  padding: 0 .8rem;
+
+  background: var(--color-carbon);
+  border: 1px solid var(--borde-oro-tenue);
+  border-radius: 999px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, .7), 0 0 0 1px rgba(201, 168, 76, .1);
+
+  /* Cerrada: no ocupa lugar ni recibe clics. Se usa visibility y no
+     display:none para que la transición tenga de dónde partir. */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(10px);
+  pointer-events: none;
+  transition: opacity .3s var(--curva-elegante),
+              transform .3s var(--curva-elegante),
+              visibility .3s;
 }
 
-.reproductor__minimizar {
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  color: var(--color-oro-apagado);
-  font-size: .85rem;
-  line-height: 1;
-  padding: .2rem;
-  transition: color .2s;
+#reproductor.abierto {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+  pointer-events: auto;
 }
-.reproductor__minimizar:hover { color: var(--color-oro); }
 
 
-/* ─── 3. BOTÓN DE PLAY Y DATOS DE LA CANCIÓN ───────────────────────── */
-.reproductor__cuerpo {
-  display: flex;
-  align-items: center;
-  gap: .9rem;
-  padding: .75rem;
-}
+/* ─── 3. PLAY, DATOS DE LA CANCIÓN Y VOLUMEN ───────────────────────── */
 
 .reproductor__play {
   flex-shrink: 0;
-  width: 44px;
-  height: 44px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   border: 1px solid var(--borde-oro-fuerte);
   background: linear-gradient(135deg, rgba(201, 168, 76, .15), rgba(139, 0, 0, .2));
   color: var(--color-oro-claro);
-  font-size: 1rem;
+  font-size: .7rem;
+  cursor: pointer;
   transition: transform .25s, box-shadow .25s;
 }
 .reproductor__play:hover {
-  transform: scale(1.06);
+  transform: scale(1.08);
   box-shadow: 0 0 18px rgba(201, 168, 76, .35);
 }
 
-.reproductor__info { min-width: 0; }   /* permite recortar textos largos */
+/* Los dos renglones de texto van apretados: en 2.9rem de alto no entran
+   con el interlineado normal, y separados se leen como dos cosas. */
+.reproductor__info {
+  min-width: 0;            /* permite recortar textos largos */
+  flex: 1;
+  line-height: 1.15;
+}
 .reproductor__cancion {
   margin: 0;
   font-family: var(--tipo-texto);
-  font-size: .95rem;
+  font-size: .85rem;
   color: var(--color-marfil);
   white-space: nowrap;
   overflow: hidden;
@@ -141,38 +197,41 @@
 .reproductor__artista {
   margin: 0;
   font-family: var(--tipo-detalle);
-  font-size: .75rem;
-  letter-spacing: .1em;
+  font-size: .62rem;
+  letter-spacing: .09em;
   color: var(--color-oro-apagado);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-
-/* ─── 4. CONTROL DE VOLUMEN ────────────────────────────────────────────
+/* ── Volumen ───────────────────────────────────────────────────────────
    Las barras deslizantes se ven distintas en cada navegador y hay que
    estilarlas por separado: ::-webkit-slider-thumb para Chrome/Edge/Safari
    y ::-moz-range-thumb para Firefox. El "thumb" es la perilla que se
-   arrastra.
-   ---------------------------------------------------------------------- */
+   arrastra. */
 .reproductor__volumen {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: .6rem;
-  padding: 0 .75rem .75rem;
+  gap: .45rem;
 }
 
 .reproductor__silencio {
   flex-shrink: 0;
   background: none;
   border: none;
+  padding: 0;
+  line-height: 0;
   color: var(--color-oro-apagado);
-  font-size: .95rem;
-  line-height: 1;
+  cursor: pointer;
   transition: color .2s;
 }
 .reproductor__silencio:hover { color: var(--color-oro); }
+.reproductor__icono-volumen { width: .9rem; height: .9rem; }
 
 .reproductor__deslizador {
-  flex: 1;
+  width: 62px;
   height: 4px;
   appearance: none;
   background: linear-gradient(90deg,
@@ -182,6 +241,7 @@
               rgba(201, 168, 76, .18) 100%);
   border-radius: 2px;
   outline: none;
+  cursor: pointer;
 }
 
 /* Perilla — Chrome, Edge y Safari */
@@ -191,8 +251,8 @@
    El rombo se logra girando un cuadrado 45°. */
 .reproductor__deslizador::-webkit-slider-thumb {
   appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   border-radius: 2px;
   transform: rotate(45deg);
   background: linear-gradient(135deg, var(--color-oro-brillante), var(--color-oro));
@@ -207,8 +267,8 @@
 
 /* Perilla — Firefox */
 .reproductor__deslizador::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   border-radius: 2px;
   transform: rotate(45deg);
   background: linear-gradient(135deg, var(--color-oro-brillante), var(--color-oro));
@@ -222,24 +282,33 @@
 }
 
 
-/* ─── 5. ESTADOS ───────────────────────────────────────────────────────
-   Un solo estado: "minimizado", que lo pliega el invitado con la flecha.
-
-   El panel NUNCA se mueve de lugar. Antes, al llegar al pie de página se
-   deslizaba hacia abajo y terminaba montándose sobre el marco: se quitó.
-   El espacio del pie ya está reservado en 02-marco-victoriano.css, así
-   que no hace falta apartarlo de ninguna manera.
+/* ─── 4. ESTADOS: SONANDO Y AVISO INICIAL ──────────────────────────────
+   Como la píldora está cerrada casi siempre, el círculo tiene que decir
+   por su cuenta si hay música sonando. Late despacio mientras suena: es
+   lo que hace que pausar en dos toques no moleste, porque nadie necesita
+   abrir nada para saber cómo está.
    ---------------------------------------------------------------------- */
-#reproductor.minimizado .reproductor__cuerpo,
-#reproductor.minimizado .reproductor__volumen { display: none; }
+#musica-flotante.sonando #boton-musica {
+  color: var(--color-oro-claro);
+  border-color: var(--borde-oro-fuerte);
+  animation: latido-musica 2.6s ease-in-out infinite;
+}
+@keyframes latido-musica {
+  0%, 100% { box-shadow: 0 8px 40px rgba(0, 0, 0, .7), 0 0 0 1px rgba(201, 168, 76, .1); }
+  50%      { box-shadow: 0 8px 40px rgba(0, 0, 0, .7), 0 0 18px rgba(201, 168, 76, .45); }
+}
+
+/* Con las animaciones apagadas el círculo se queda encendido y quieto:
+   el estado se sigue viendo, sin movimiento. */
+html.animaciones-off #musica-flotante.sonando #boton-musica { animation: none; }
 
 /* Aviso que invita a dar play si el navegador bloqueó la música.
-   Se desvanece solo a los 8 segundos. */
+   Se desvanece solo a los 8 segundos. Apunta al círculo, que es lo que
+   hay que tocar. */
 .reproductor__aviso {
   position: absolute;
   bottom: calc(100% + .75rem);
-  left: 50%;
-  transform: translateX(-50%);
+  right: 0;
   padding: .4rem .9rem;
   white-space: nowrap;
   background: var(--color-carbon);
@@ -256,8 +325,7 @@
   content: '';
   position: absolute;
   bottom: -.45rem;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 1.15rem;          /* justo sobre el centro del círculo */
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
   border-top: 7px solid var(--color-oro);
@@ -271,4 +339,31 @@
 }
 
 /* Si la música ya está sonando, el aviso sobra */
-#reproductor.sonando .reproductor__aviso { display: none; }
+#musica-flotante.sonando .reproductor__aviso { display: none; }
+
+
+/* ─── 5. CELULAR: LA PÍLDORA SE DESPLIEGA HACIA ARRIBA ─────────────────
+   A 320 px de ancho, 290 de píldora más el círculo más los márgenes del
+   marco no entran. Así que en vez de salir hacia la izquierda, sube por
+   encima del círculo y usa el ancho que haya.
+   ---------------------------------------------------------------------- */
+@media (max-width: 600px) {
+  #reproductor {
+    right: 0;
+    bottom: calc(100% + .6rem);
+    width: calc(100vw - var(--marco-grosor) * 2 - 2rem);
+    transform: translateY(10px);
+  }
+  #reproductor.abierto { transform: translateY(0); }
+}
+
+
+/* ─── 6. PANTALLAS TÁCTILES ────────────────────────────────────────────
+   Un dedo no apunta como un mouse. El círculo crece igual que sus dos
+   hermanos (ver 13-preguntas-frecuentes.css), y la píldora lo acompaña
+   para que sigan alineados por la base. */
+@media (pointer: coarse) {
+  #boton-musica { width: 3.2rem; height: 3.2rem; }
+  #reproductor  { height: 3.2rem; }
+  .reproductor__play { width: 34px; height: 34px; }
+}
