@@ -205,6 +205,8 @@ class BuzonImap {
                     'fecha'  => '',
                     // \Seen en los flags significa que ya se leyó.
                     'leido'  => stripos($linea, '\\Seen') !== false,
+                    // \Flagged es la estrella de "importante".
+                    'marcado'=> stripos($linea, '\\Flagged') !== false,
                 ];
                 continue;
             }
@@ -281,6 +283,79 @@ class BuzonImap {
             'fecha'      => $fecha,
             'texto'      => $texto,
         ];
+    }
+
+
+    /* ─── 3b. MARCAR Y BORRAR ─────────────────────────────────────────── */
+
+    /**
+     * Pone o quita la estrella de "importante".
+     *
+     * @param int  $numero
+     * @param bool $marcar true pone la estrella, false la quita.
+     * @return bool
+     */
+    public function marcar($numero, $marcar) {
+        $this->ordenar('SELECT INBOX');
+
+        $signo = $marcar ? '+' : '-';
+        $r = $this->ordenar("STORE $numero {$signo}FLAGS (\\Flagged)");
+
+        return $this->salioBien($r);
+    }
+
+    /**
+     * Manda un mensaje a la papelera.
+     *
+     * CÓMO SE BORRA EN IMAP, QUE NO ES OBVIO
+     * No hay un comando "DELETE". Se le pone la marca \Deleted al
+     * mensaje y recién EXPUNGE lo elimina de verdad. Pero eso lo borra
+     * para siempre, sin papelera.
+     *
+     * Por eso acá primero se intenta COPIARLO a la carpeta de papelera
+     * y recién después se lo saca de la bandeja. Si algún día alguien
+     * borra un correo importante por error, sigue estando.
+     *
+     * @param int $numero
+     * @return bool
+     */
+    public function borrar($numero) {
+        $this->ordenar('SELECT INBOX');
+
+        /* El nombre de la papelera cambia según el servidor y el idioma.
+           Se prueban los más comunes y se usa el primero que acepte. */
+        $copiado = false;
+        foreach (['Trash', 'INBOX.Trash', 'Papelera', 'INBOX.Papelera',
+                  'Deleted Items', 'Deleted Messages'] as $papelera) {
+            if ($this->salioBien($this->ordenar("COPY $numero \"$papelera\""))) {
+                $copiado = true;
+                break;
+            }
+        }
+
+        if (!$copiado) {
+            /* Ninguna papelera aceptó la copia. Se prefiere NO borrar
+               antes que borrar sin red de seguridad: es mejor que quede
+               un correo de más a perder uno para siempre. */
+            error_log('[Ania XV · correo] No se encontró carpeta de papelera; no se borró.');
+            return false;
+        }
+
+        $this->ordenar("STORE $numero +FLAGS (\\Deleted)");
+        $r = $this->ordenar('EXPUNGE');
+
+        return $this->salioBien($r);
+    }
+
+    /**
+     * Marca un mensaje como no leído.
+     *
+     * @param int $numero
+     * @return bool
+     */
+    public function marcarNoLeido($numero) {
+        $this->ordenar('SELECT INBOX');
+        return $this->salioBien($this->ordenar("STORE $numero -FLAGS (\\Seen)"));
     }
 }
 

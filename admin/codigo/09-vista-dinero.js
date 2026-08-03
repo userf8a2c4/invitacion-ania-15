@@ -47,6 +47,17 @@ async function dibujarDinero() {
 
   vista.innerHTML =
     bloqueTotales(DINERO.totales) +
+
+    '<div class="buscador">' +
+      '<svg class="buscador__lupa" viewBox="0 0 24 24" aria-hidden="true">' +
+        '<circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/>' +
+        '<path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
+      '</svg>' +
+      '<input type="search" id="buscar-dinero" class="buscador__control" ' +
+             'placeholder="Buscar en todo el presupuesto" ' +
+             'autocapitalize="off" spellcheck="false">' +
+    '</div>' +
+
     '<div class="filtros" id="secciones-dinero">' +
       botonSeccion('resumen',      'Resumen') +
       botonSeccion('gastos',       'Gastos',       DINERO.gastos.length) +
@@ -78,7 +89,55 @@ async function dibujarDinero() {
 
   buscar('#exportar-dinero', vista).addEventListener('click', abrirHojaDeDescarga);
 
+  const buscador = buscar('#buscar-dinero', vista);
+  buscador.value = BUSQUEDA_DINERO;
+  buscador.addEventListener('input', () => {
+    BUSQUEDA_DINERO = buscador.value;
+    pintarSeccionDeDinero();
+  });
+
   pintarSeccionDeDinero();
+}
+
+
+/* ─── BÚSQUEDA ─────────────────────────────────────────────────────── */
+
+/** Lo escrito en el buscador del presupuesto. */
+let BUSQUEDA_DINERO = '';
+
+/**
+ * Filtra una lista con lo que se escribió en el buscador.
+ *
+ * Se busca dentro de TODOS los campos de texto de cada fila, no solo el
+ * nombre: así escribir "salón" encuentra el gasto, el proveedor y la
+ * cotización, aunque la palabra esté en el servicio o en las notas.
+ *
+ * @param {Array} filas
+ * @param {string[]} campos - Qué columnas mirar.
+ * @returns {Array}
+ */
+function filtrarPorBusqueda(filas, campos) {
+  const aguja = paraBuscar(BUSQUEDA_DINERO);
+  if (!aguja) return filas;
+
+  return filas.filter(fila =>
+    paraBuscar(campos.map(c => fila[c] || '').join(' ')).includes(aguja)
+  );
+}
+
+/**
+ * El aviso de "nada coincide" cuando la búsqueda vació una sección.
+ *
+ * @param {Element} cuerpo
+ * @returns {boolean} true si se pintó el vacío (o sea, no hay nada).
+ */
+function sinResultadosDeBusqueda(cuerpo) {
+  if (!BUSQUEDA_DINERO.trim()) return false;
+
+  cuerpo.innerHTML = '';
+  pintarVacio(cuerpo, 'Nada coincide con "' + BUSQUEDA_DINERO + '"',
+    'Probá con otra palabra, o mirá en otra sección.');
+  return true;
 }
 
 
@@ -216,7 +275,10 @@ function botonAgregar(texto) {
  * @returns {void}
  */
 function pintarCategorias(cuerpo) {
-  const filas = DINERO.categorias.map(categoria => {
+  const categorias = filtrarPorBusqueda(DINERO.categorias, ['nombre']);
+  if (!categorias.length && sinResultadosDeBusqueda(cuerpo)) return;
+
+  const filas = categorias.map(categoria => {
     const techo   = Number(categoria.techo) || 0;
     const gastado = Number(categoria.gastado) || 0;
 
@@ -268,13 +330,17 @@ function pintarCategorias(cuerpo) {
  * @returns {void}
  */
 function pintarGastos(cuerpo) {
-  if (!DINERO.gastos.length) {
+  const gastos = filtrarPorBusqueda(DINERO.gastos,
+    ['concepto', 'categoria_nombre', 'proveedor_nombre', 'padrino_nombre', 'notas']);
+  if (!gastos.length && sinResultadosDeBusqueda(cuerpo)) return;
+
+  if (!gastos.length) {
     cuerpo.innerHTML = '';
     pintarVacio(cuerpo, 'Todavía no hay gastos',
       'Cargá el primero para empezar a ver el presupuesto.');
     cuerpo.insertAdjacentHTML('beforeend', botonAgregar('Nuevo gasto'));
   } else {
-    cuerpo.innerHTML = DINERO.gastos.map(gasto => {
+    cuerpo.innerHTML = gastos.map(gasto => {
       const pie = [gasto.categoria_nombre, gasto.proveedor_nombre]
         .filter(Boolean).join(' · ');
 
@@ -315,7 +381,11 @@ function pintarGastos(cuerpo) {
  * @returns {void}
  */
 function pintarPagos(cuerpo) {
-  if (!DINERO.pagos.length) {
+  const pagos = filtrarPorBusqueda(DINERO.pagos,
+    ['concepto', 'gasto_concepto', 'metodo', 'notas']);
+  if (!pagos.length && sinResultadosDeBusqueda(cuerpo)) return;
+
+  if (!pagos.length) {
     cuerpo.innerHTML = '';
     pintarVacio(cuerpo, 'Todavía no hay pagos',
       'Cargá los anticipos y las fechas límite para que el panel te avise.');
@@ -324,7 +394,7 @@ function pintarPagos(cuerpo) {
     return;
   }
 
-  cuerpo.innerHTML = DINERO.pagos.map(pago => {
+  cuerpo.innerHTML = pagos.map(pago => {
     const pagado   = pago.estado === 'pagado';
     const atrasado = !pagado && pago.fecha_limite && diasHasta(pago.fecha_limite) < 0;
 
@@ -386,7 +456,11 @@ function pintarPagos(cuerpo) {
  * @returns {void}
  */
 function pintarPadrinos(cuerpo) {
-  if (!DINERO.padrinos.length) {
+  const padrinos = filtrarPorBusqueda(DINERO.padrinos,
+    ['nombre', 'apadrina', 'telefono', 'correo', 'notas']);
+  if (!padrinos.length && sinResultadosDeBusqueda(cuerpo)) return;
+
+  if (!padrinos.length) {
     cuerpo.innerHTML = '';
     pintarVacio(cuerpo, 'Todavía no hay padrinos',
       'Anotá quién apadrina qué para saber cuánto sale de tu bolsillo de verdad.');
@@ -401,7 +475,7 @@ function pintarPadrinos(cuerpo) {
     entregado:  ['bien',   'Entregado'],
   };
 
-  cuerpo.innerHTML = DINERO.padrinos.map(padrino => {
+  cuerpo.innerHTML = padrinos.map(padrino => {
     const estado = estados[padrino.estado] || estados.hablado;
 
     const monto = padrino.tipo_aporte === 'especie'
@@ -437,7 +511,11 @@ function pintarPadrinos(cuerpo) {
  * @returns {void}
  */
 function pintarProveedores(cuerpo) {
-  if (!DINERO.proveedores.length) {
+  const proveedores = filtrarPorBusqueda(DINERO.proveedores,
+    ['nombre', 'servicio', 'contacto', 'telefono', 'correo', 'notas']);
+  if (!proveedores.length && sinResultadosDeBusqueda(cuerpo)) return;
+
+  if (!proveedores.length) {
     cuerpo.innerHTML = '';
     pintarVacio(cuerpo, 'Todavía no hay proveedores',
       'El salón, el DJ, el fotógrafo, el banquete…');
@@ -453,7 +531,7 @@ function pintarProveedores(cuerpo) {
     cancelado:  ['alerta', 'Cancelado'],
   };
 
-  cuerpo.innerHTML = DINERO.proveedores.map(prov => {
+  cuerpo.innerHTML = proveedores.map(prov => {
     const estado = estados[prov.estado] || estados.candidato;
     const falta  = (Number(prov.monto_total) || 0) - (Number(prov.anticipo) || 0);
 
@@ -488,7 +566,11 @@ function pintarProveedores(cuerpo) {
  * @returns {void}
  */
 function pintarCotizaciones(cuerpo) {
-  if (!DINERO.cotizaciones.length) {
+  const cotizaciones = filtrarPorBusqueda(DINERO.cotizaciones,
+    ['servicio', 'proveedor', 'que_incluye', 'notas']);
+  if (!cotizaciones.length && sinResultadosDeBusqueda(cuerpo)) return;
+
+  if (!cotizaciones.length) {
     cuerpo.innerHTML = '';
     pintarVacio(cuerpo, 'Todavía no hay cotizaciones',
       'Cargá las que vayas pidiendo para compararlas lado a lado antes de contratar.');
@@ -501,7 +583,7 @@ function pintarCotizaciones(cuerpo) {
      compararla con las otras del MISMO servicio. Una lista plana
      mezclaría el DJ con el pastel y no serviría para decidir nada. */
   const porServicio = {};
-  DINERO.cotizaciones.forEach(cot => {
+  cotizaciones.forEach(cot => {
     const clave = cot.servicio || 'Sin servicio';
     if (!porServicio[clave]) porServicio[clave] = [];
     porServicio[clave].push(cot);
