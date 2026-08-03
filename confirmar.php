@@ -113,6 +113,38 @@ try {
         ':alergias'=>$alergias, ':notas'=>$notas, ':codigo'=>$codigo,
     ]);
     error_log('[Ania XV] ✅ BD: fila guardada para ' . $nombre);
+
+    /* ─── SENTARLO SOLO EN UNA MESA ──────────────────────────────────
+       Si el panel tiene prendido el acomodo automático, se le busca
+       lugar apenas confirma, respetando su grupo y con quién no puede
+       sentarse.
+
+       ⚠️ TODO ESTO VA DENTRO DE UN try/catch PROPIO Y SILENCIOSO.
+       Este archivo es el que hace que funcione la invitación: si algo
+       del acomodo fallara —falta una tabla, no hay mesas, lo que sea—
+       NO puede impedir que la confirmación se guarde ni que salgan los
+       correos. En el peor caso el invitado queda sin mesa y se lo
+       acomoda después desde el panel, que no es un problema. */
+    if ($asiste) {
+        try {
+            $idNuevo = (int) $pdo->lastInsertId();
+
+            $ajuste = $pdo->query(
+                "SELECT valor FROM ajustes WHERE clave = 'auto_al_confirmar'"
+            )->fetch(PDO::FETCH_ASSOC);
+
+            if ($ajuste && $ajuste['valor'] === '1' && $idNuevo > 0) {
+                require_once __DIR__ . '/admin/api/_lib/mesas.php';
+
+                $donde = sentarAUnoSolo($idNuevo);
+                error_log('[Ania XV] Mesa automática: ' .
+                          json_encode($donde, JSON_UNESCAPED_UNICODE));
+            }
+        } catch (Throwable $e) {
+            error_log('[Ania XV] No se pudo asignar mesa automática: ' . $e->getMessage());
+        }
+    }
+
 } catch (PDOException $e) {
     $errorBD = $e->getMessage();
     error_log('[Ania XV] ❌ BD: ' . $errorBD);
