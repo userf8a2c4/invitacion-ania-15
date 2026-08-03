@@ -34,7 +34,7 @@
        instantáneo y ahorra datos. Si algún día cambian, se renueva con VERSION.
    ══════════════════════════════════════════════════════════════════════ */
 
-const VERSION = 'ania-xv-v40';
+const VERSION = 'ania-xv-v41';
 
 /** Extensiones de assets pesados/estables: para esos, "primero la copia". */
 const ASSETS_ESTABLES = /\.(?:mp3|ogg|wav|png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf)$/i;
