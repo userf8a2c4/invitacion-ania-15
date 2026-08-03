@@ -391,6 +391,244 @@
 }
 
 
+/* ─── 4c. CALENDARIO ───────────────────────────────────────────────── */
+
+/* La cuadrícula del mes.
+ *
+ * Siete columnas iguales con minmax(0,1fr): sin el 0, una celda con
+ * contenido ancho se niega a encogerse y desalinea la semana entera. */
+.cal {
+  background: var(--fondo-tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo);
+  padding: var(--esp-1);
+}
+
+.cal__semana,
+.cal__grilla {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.cal__rotulo {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--oro-apagado);
+  padding-bottom: 4px;
+}
+
+.cal__hueco { min-height: 44px; }
+
+.cal__dia {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 3px;
+  /* 44px es el mínimo que un dedo acierta sin fallar. Con 7 columnas en
+     375px cada celda mide unos 47px, así que entra justo. */
+  min-height: 46px;
+  padding: 4px 2px;
+  border: 1px solid transparent;
+  border-radius: var(--redondeo-chico);
+  background: var(--fondo-hundido);
+  color: var(--texto-suave);
+  font-variant-numeric: tabular-nums;
+}
+
+.cal__dia--vacio { opacity: .45; }
+
+.cal__dia--hoy {
+  border-color: var(--oro);
+  color: var(--oro);
+  font-weight: 700;
+}
+
+/* El día de la fiesta se ve distinto desde lejos: es el punto al que
+   apunta todo lo demás. */
+.cal__dia--fiesta {
+  background: rgba(212, 168, 67, .16);
+  border-color: var(--oro);
+}
+
+.cal__dia--abierto {
+  background: var(--fondo-elevado);
+  border-color: var(--oro-apagado);
+}
+
+.cal__numero { font-size: 13px; line-height: 1; }
+
+.cal__puntos {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+  min-height: 6px;
+}
+
+.cal__punto {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--texto-tenue);
+}
+
+/* Lo ya hecho se ve hueco: sigue estando, pero no reclama atención. */
+.cal__punto--hecho {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--texto-tenue);
+}
+
+.cal__punto--alerta { background: var(--alerta); }
+.cal__punto--ojo    { background: var(--ojo); }
+.cal__punto--info   { background: var(--info); }
+.cal__punto--oro    { background: var(--oro); }
+.cal__punto--tenue  { background: var(--texto-tenue); }
+
+.cal__mas {
+  font-size: 9px;
+  line-height: 1;
+  color: var(--texto-tenue);
+}
+
+
+/* ─── 4d. COMPARADOR DE COTIZACIONES ───────────────────────────────── */
+
+/* Las columnas se desplazan de lado.
+ *
+ * Es la ÚNICA parte de la app donde eso está bien, y vale explicar por
+ * qué: una tabla comparativa necesita el ancho, y acá el desplazamiento
+ * se entiende solo porque las columnas quedan cortadas a propósito en el
+ * borde — se ve que hay más. En una fila de filtros no se veía nada, y
+ * por eso allá se pasó a que bajen de renglón. */
+.comparador {
+  display: flex;
+  gap: var(--esp-2);
+  overflow-x: auto;
+  padding-bottom: var(--esp-1);
+  margin-bottom: var(--esp-2);
+  -webkit-overflow-scrolling: touch;
+  /* El imán hace que las columnas queden siempre alineadas al soltar,
+     en vez de a medio camino. */
+  scroll-snap-type: x mandatory;
+}
+
+.comparador__columna {
+  flex: 0 0 auto;
+  /* 62% deja ver un pedazo de la siguiente: la señal de que hay más. */
+  width: 62%;
+  max-width: 240px;
+  scroll-snap-align: start;
+  padding: var(--esp-2);
+  background: var(--fondo-tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo);
+}
+
+/* La más barata se distingue sin necesidad de leer los números. */
+.comparador__columna--gana {
+  border-color: var(--bien);
+  background: rgba(95, 174, 106, .06);
+}
+
+.comparador__titulo {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: var(--esp-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comparador__total {
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--oro);
+  margin: var(--esp-2) 0 var(--esp-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.comparador__renglon {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--esp-2);
+  font-size: 13px;
+  padding: 3px 0;
+  color: var(--texto-suave);
+}
+
+.comparador__incluye {
+  font-size: 12px;
+  color: var(--bien);
+  margin-top: var(--esp-1);
+}
+
+
+/* ─── 4e. ALARMAS ──────────────────────────────────────────────────── */
+
+.alarma {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  padding: var(--esp-2);
+  background: var(--fondo-tarjeta);
+  border: 1px solid var(--borde);
+  border-left: 3px solid var(--oro);
+  border-radius: var(--redondeo-chico);
+  margin-bottom: 6px;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+}
+
+/* Las que ya sonaron o están apagadas no reclaman atención. */
+.alarma--pasada { opacity: .5; border-left-color: var(--texto-tenue); }
+
+/* La que suena dentro de poco sí. */
+.alarma--pronto { border-left-color: var(--alerta); }
+
+.alarma__hora {
+  flex-shrink: 0;
+  width: 54px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.alarma__hora strong { display: block; font-size: 15px; color: var(--oro); }
+.alarma__hora span   { display: block; font-size: 11px; color: var(--texto-tenue); }
+
+.alarma__cuerpo { flex: 1; min-width: 0; }
+
+
+/* ─── 4f. LIENZO PARA ESCRIBIR A MANO ──────────────────────────────── */
+
+.lienzo-caja {
+  position: relative;
+  width: 100%;
+  /* Alto fijo y no proporcional: en un teléfono acostado, un lienzo
+     cuadrado no entraría en la hoja y habría que desplazarse para
+     escribir, que es justo lo contrario de lo que se busca. */
+  height: 320px;
+  background: var(--fondo-hundido);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo-chico);
+  overflow: hidden;
+}
+
+#lienzo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* none es imprescindible: sin esto, arrastrar el dedo para dibujar
+     desplaza la hoja en vez de dejar trazo. */
+  touch-action: none;
+  cursor: crosshair;
+}
+
+
 /* ─── 5. VISTA INVITADOS ───────────────────────────────────────────── */
 
 /* Punto de color al inicio de cada fila: verde asiste, rojo no asiste.

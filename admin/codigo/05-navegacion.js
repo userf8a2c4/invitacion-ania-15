@@ -191,6 +191,18 @@ function atenderMenu(opcion) {
       abrirHojaDeNuevoAdministrador();
       break;
 
+    case 'importar':
+      abrirImportador();
+      break;
+
+    case 'alarmas':
+      abrirAlarmas();
+      break;
+
+    case 'etiquetas':
+      abrirEtiquetas();
+      break;
+
     case 'avisos':
       abrirHojaDeAvisos();
       break;

@@ -315,6 +315,7 @@ async function dibujarEvento() {
      del año: primero lo que se hace todos los días (tareas, agenda),
      al final lo del día del evento. */
   const pestanas = [
+    ['calendario', 'Calendario'],
     ['tareas',   'Tareas',  (PLAN.tareas || []).filter(t => t.estado !== 'hecha').length],
     ['agenda',   'Agenda',  (PLAN.agenda || []).length],
     ['corte_honor', null],
@@ -334,7 +335,8 @@ async function dibujarEvento() {
     '<div class="filtros" id="pestanas-evento">' +
       pestanas.map(p => {
         const clave  = p[0];
-        const rotulo = p[1] || (SECCIONES[clave] ? SECCIONES[clave].rotulo : clave);
+        const deFabrica = p[1] || (SECCIONES[clave] ? SECCIONES[clave].rotulo : clave);
+        const rotulo = et('evento.' + clave, deFabrica);
         const n      = p[2];
         return '<button class="filtro' +
                (clave === SECCION_EVENTO ? ' activo' : '') +
@@ -365,6 +367,7 @@ function pintarSeccionDeEvento() {
   if (!cuerpo) return;
 
   // Las que no son listas genéricas tienen su propia función.
+  if (SECCION_EVENTO === 'calendario') { pintarCalendario(cuerpo); return; }
   if (SECCION_EVENTO === 'tareas')    { pintarTareas(cuerpo); return; }
   if (SECCION_EVENTO === 'agenda')    { pintarAgenda(cuerpo); return; }
   if (SECCION_EVENTO === 'ceremonia') { pintarCeremonia(cuerpo); return; }

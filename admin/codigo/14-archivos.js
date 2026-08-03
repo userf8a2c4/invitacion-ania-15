@@ -131,6 +131,15 @@ function botonesDeArchivo(opciones) {
           '<circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="2"/>' +
         '</svg>Tomar foto' +
       '</button>' +
+
+      // Escribir a mano: para anotar un número que dictan por teléfono o
+      // hacer un croquis, cuando el teclado sería más lento.
+      '<button type="button" class="boton" style="flex:1" data-subir="dibujo">' +
+        '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
+          '<path d="M4 20l4-1 10-10a2.1 2.1 0 0 0-3-3L5 16z" fill="none" ' +
+                'stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>' +
+        '</svg>A mano' +
+      '</button>' +
     '</div>';
 }
 
@@ -453,6 +462,16 @@ function montarAdjuntos(opciones) {
         if (!idActual) return;   // armarCarga() ya avisó qué falta
 
         avisar('Guardado. Ahora elegí el archivo.');
+      }
+
+      // El dibujo no pasa por el selector de archivos: abre el lienzo.
+      if (boton.dataset.subir === 'dibujo') {
+        abrirLienzo({
+          tipo: opciones.tipo,
+          id: idActual,
+          despues: () => pintarArchivosDe(lista, opciones.tipo, idActual),
+        });
+        return;
       }
 
       elegirYSubir({

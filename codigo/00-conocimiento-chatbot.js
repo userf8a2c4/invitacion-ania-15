@@ -30,7 +30,10 @@ const CONOCIMIENTO_CHATBOT = {
     presentacion: 'Todo lo que hay que saber sobre la fiesta de Ania.', // ✏️
     limitacion:  'Acá está la información de la fiesta de Ania. '
                 + 'Para dudas más específicas, contactá directamente a los organizadores.', // ✏️
-    contactoOrganizadores: 'noreply@aniaxv.com',                  // ✏️
+    /* Tiene que ser un buzón que exista de verdad: acá se le dice a la
+       gente que escriba. info@ es el único creado en Hostinger —ver
+       confirmar.php— y es el mismo que firma los correos de pase. */
+    contactoOrganizadores: 'info@aniaxv.com',                     // ✏️
   },
 
   /* ── DATOS DE LA FIESTA ────────────────────────────────────────────────

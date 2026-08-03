@@ -253,8 +253,16 @@ async function encender() {
     esperarLaFrase(),
   ]);
 
-  if (haySesion) arrancarLaApp();
-  else mostrarPantallaDeEntrada();
+  if (haySesion) {
+    /* Las etiquetas se traen ANTES de dibujar nada: si se pidieran
+       después, las pestañas aparecerían con los nombres de fábrica y
+       cambiarían solas un segundo más tarde. */
+    await cargarEtiquetas();
+    aplicarEtiquetas();
+    arrancarLaApp();
+  } else {
+    mostrarPantallaDeEntrada();
+  }
 }
 
 /**

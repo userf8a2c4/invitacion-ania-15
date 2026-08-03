@@ -60,11 +60,16 @@ async function dibujarDinero() {
 
     '<div class="filtros" id="secciones-dinero">' +
       botonSeccion('resumen',      'Resumen') +
-      botonSeccion('gastos',       'Gastos',       DINERO.gastos.length) +
-      botonSeccion('pagos',        'Pagos',        DINERO.totales.por_pagar_cuantos) +
-      botonSeccion('padrinos',     'Padrinos',     DINERO.padrinos.length) +
-      botonSeccion('proveedores',  'Proveedores',  DINERO.proveedores.length) +
-      botonSeccion('cotizaciones', 'Cotizaciones', DINERO.cotizaciones.length) +
+      botonSeccion('gastos',       et('dinero.gastos', 'Gastos'),
+                   DINERO.gastos.length) +
+      botonSeccion('pagos',        et('dinero.pagos', 'Pagos'),
+                   DINERO.totales.por_pagar_cuantos) +
+      botonSeccion('padrinos',     et('dinero.padrinos', 'Padrinos'),
+                   DINERO.padrinos.length) +
+      botonSeccion('proveedores',  et('dinero.proveedores', 'Proveedores'),
+                   DINERO.proveedores.length) +
+      botonSeccion('cotizaciones', et('dinero.cotizaciones', 'Cotizaciones'),
+                   DINERO.cotizaciones.length) +
     '</div>' +
     '<div id="cuerpo-dinero"></div>';
 
@@ -625,6 +630,17 @@ function pintarCotizaciones(cuerpo) {
              seguro(servicio) + '</div>' + filas;
   }).join('') + botonAgregar('Nueva cotización');
 
+  /* El botón de comparar va ARRIBA de la lista, no al final: comparar
+     es para lo que se cargan las cotizaciones, y dejarlo abajo de veinte
+     renglones lo esconde justo de quien más lo necesita. */
+  cuerpo.insertAdjacentHTML('afterbegin',
+    '<button class="boton boton--principal boton--ancho" id="cot-comparar" ' +
+            'style="margin-bottom:var(--esp-2)">' +
+      'Comparar lado a lado' +
+    '</button>');
+
+  buscar('#cot-comparar', cuerpo).addEventListener('click', abrirComparador);
+
   buscarTodos('[data-cotizacion]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
       formularioCotizacion(
@@ -1098,12 +1114,25 @@ function formularioCotizacion(cotizacion) {
                         'para poder compararlas juntas.' }) +
     campoTexto({ id: 'cot-proveedor', rotulo: 'Quién cotiza', valor: d.proveedor }) +
 
+    /* Casi todos los salones cobran POR PERSONA. Sin esta distinción no
+       se puede comparar nada: $550 por persona y $60,000 cerrados son
+       números que no se pueden mirar uno al lado del otro. */
+    campoLista({ id: 'cot-tipo', rotulo: 'Cómo cobra',
+                 valor: d.tipo_precio || 'fijo',
+                 opciones: [
+                   { valor: 'fijo',        texto: 'Un precio cerrado' },
+                   { valor: 'por_persona', texto: 'Por persona' },
+                 ] }) +
+
     '<div class="campo-par">' +
-      campoTexto({ id: 'cot-monto', rotulo: 'Monto', tipo: 'number',
+      campoTexto({ id: 'cot-monto', rotulo: 'Precio cerrado', tipo: 'number',
                    paso: '0.01', valor: d.monto ? desdePesos(d.monto) : '' }) +
-      campoTexto({ id: 'cot-vigencia', rotulo: 'Vale hasta', tipo: 'date',
-                   valor: d.vigencia || '' }) +
+      campoTexto({ id: 'cot-pp', rotulo: 'Precio por persona', tipo: 'number',
+                   paso: '0.01', valor: d.precio_pp ? desdePesos(d.precio_pp) : '' }) +
     '</div>' +
+
+    campoTexto({ id: 'cot-vigencia', rotulo: 'Vale hasta', tipo: 'date',
+                 valor: d.vigencia || '' }) +
 
     campoTexto({ id: 'cot-telefono', rotulo: 'Teléfono', tipo: 'tel', valor: d.telefono }) +
     campoLargo({ id: 'cot-incluye', rotulo: 'Qué incluye', valor: d.que_incluye }) +
@@ -1122,7 +1151,9 @@ function formularioCotizacion(cotizacion) {
     return {
       servicio:    servicio,
       proveedor:   proveedor,
+      tipo_precio: valorDe('cot-tipo', cuerpo),
       monto:       aPesos(valorDe('cot-monto', cuerpo)),
+      precio_pp:   aPesos(valorDe('cot-pp', cuerpo)),
       vigencia:    valorDe('cot-vigencia', cuerpo),
       telefono:    valorDe('cot-telefono', cuerpo),
       que_incluye: valorDe('cot-incluye', cuerpo),
