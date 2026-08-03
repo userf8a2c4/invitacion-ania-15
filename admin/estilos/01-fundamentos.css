@@ -84,7 +84,20 @@
 html, body {
   margin: 0;
   padding: 0;
+
+  /* ⚠️ EL dvh ARREGLA QUE LA BARRA DE ABAJO SE MUEVA SOLA.
+   *
+   * Con height:100% el alto se mide contra el "viewport de layout", que
+   * en el teléfono NO cambia cuando la barra de direcciones del
+   * navegador se esconde al hacer scroll. Resultado: la navegación
+   * fija quedaba anclada al alto viejo y se veía flotando más arriba de
+   * donde debía, distinto según la pantalla.
+   *
+   * dvh = dynamic viewport height: sigue al alto REAL, barra o no barra.
+   * El 100% de la línea de arriba queda como respaldo para navegadores
+   * viejos que no entienden dvh. */
   height: 100%;
+  height: 100dvh;
 }
 
 html {
@@ -226,6 +239,73 @@ a { color: var(--oro); }
 }
 
 @keyframes girar { to { transform: rotate(360deg); } }
+
+/* ─── LA FRASE DE BIENVENIDA ───────────────────────────────────────── */
+
+/* Aparece unos segundos al abrir la app y se va sola. No hay botón de
+   cerrar a propósito: si hubiera uno, se convertiría en algo que hay
+   que despachar, y la idea es exactamente la contraria. */
+.pantalla-carga__frase {
+  max-width: 300px;
+  margin: 0 auto;
+  padding: 0 var(--esp-3);
+  text-align: center;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--texto-suave);
+  /* Entra despacio: 600ms de espera y 900ms de aparición. El retraso
+     hace que primero se vea la marca y después la frase, en vez de todo
+     de golpe. */
+  opacity: 0;
+  animation: frase-entra 900ms ease 600ms forwards;
+}
+
+.pantalla-carga__frase--saliendo {
+  animation: frase-sale 500ms ease forwards;
+}
+
+@keyframes frase-entra {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes frase-sale {
+  to { opacity: 0; transform: translateY(-8px); }
+}
+
+/* La marca late suavemente mientras se espera. Es lo que hace que la
+   pantalla se sienta viva y no colgada. */
+.pantalla-carga__marca {
+  animation: latido 2.4s ease-in-out infinite;
+}
+
+@keyframes latido {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .72; }
+}
+
+/* Los tres puntitos de "cargando", más discretos que el girador para la
+   espera larga del arranque. */
+.puntos {
+  display: flex;
+  gap: 6px;
+}
+
+.puntos span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--oro-apagado);
+  animation: saltito 1.1s ease-in-out infinite;
+}
+.puntos span:nth-child(2) { animation-delay: .15s; }
+.puntos span:nth-child(3) { animation-delay: .3s; }
+
+@keyframes saltito {
+  0%, 60%, 100% { transform: translateY(0);    opacity: .45; }
+  30%           { transform: translateY(-6px); opacity: 1; }
+}
 
 
 /* ─── PANTALLA DE ENTRADA ──────────────────────────────────────────── */

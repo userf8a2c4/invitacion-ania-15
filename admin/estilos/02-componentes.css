@@ -91,13 +91,19 @@
 }
 .boton-icono:active { background: rgba(212, 168, 67, .12); }
 
-/* Botón flotante de notas. Va por encima de la navegación de abajo. */
+/* Botón flotante de notas.
+ *
+ * SE ESCONDE AL BAJAR Y VUELVE AL SUBIR. Antes tapaba el último botón de
+ * cada lista —"Agregar invitado", "Nuevo gasto"— justo cuando uno
+ * terminaba de recorrerla y quería usarlo. Ahora, al desplazarse hacia
+ * abajo se aparta solo, y reaparece apenas se sube: sigue estando a un
+ * gesto de distancia sin estorbar nunca. */
 .boton-flotante {
   position: fixed;
   right: var(--esp-3);
   bottom: calc(var(--alto-navegacion) + var(--seguro-abajo) + var(--esp-3));
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
   border: 0;
   border-radius: 50%;
   background: var(--oro);
@@ -107,9 +113,16 @@
   justify-content: center;
   box-shadow: var(--sombra);
   z-index: 40;
-  transition: transform var(--transicion);
+  transition: transform 220ms ease, opacity 220ms ease;
 }
 .boton-flotante:active { transform: scale(.92); }
+
+/* Apartado: baja fuera de la pantalla y deja de recibir toques. */
+.boton-flotante--apartado {
+  transform: translateY(90px);
+  opacity: 0;
+  pointer-events: none;
+}
 
 
 /* ─── 2. CAMPOS DE FORMULARIO ──────────────────────────────────────── */
@@ -335,18 +348,31 @@ select.campo__control {
 }
 .lista__fila:active { background: var(--fondo-elevado); }
 
+/* min-width:0 es imprescindible: sin él, un elemento flexible se niega a
+   encogerse por debajo del ancho de su contenido, y el texto largo
+   empuja todo lo demás fuera de la pantalla en vez de cortarse. */
 .lista__cuerpo { flex: 1; min-width: 0; }
 
+/* ⚠️ EL display:block DE ESTAS DOS REGLAS NO ES DECORATIVO.
+ *
+ * Son elementos <span>, o sea inline por defecto. Y en un elemento
+ * inline, overflow, text-overflow y width NO HACEN NADA: el navegador
+ * los ignora por completo.
+ *
+ * Sin este display:block, el nombre, el correo y el código de pase se
+ * desbordaban y se dibujaban unos encima de otros, ilegibles. Con él,
+ * cada uno ocupa su renglón y se corta con puntos suspensivos como
+ * corresponde. */
 .lista__titulo {
+  display: block;
   font-weight: 500;
-  /* Un nombre largo no debe empujar la etiqueta de estado fuera de la
-     pantalla: se corta con puntos suspensivos. */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .lista__pie {
+  display: block;
   font-size: 12px;
   color: var(--texto-tenue);
   overflow: hidden;
@@ -357,6 +383,10 @@ select.campo__control {
 .lista__lado {
   text-align: right;
   flex-shrink: 0;
+  /* El lado nunca se encoge, pero tampoco puede comerse la pantalla: un
+     código de pase largo se corta en vez de invadir el nombre. */
+  max-width: 40%;
+  overflow: hidden;
 }
 
 
