@@ -135,6 +135,41 @@ CREATE TABLE IF NOT EXISTS ajustes (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+-- Alarmas con fecha Y HORA exactas.
+--
+-- EN QUÉ SE DIFERENCIAN DEL RECORDATORIO DIARIO
+-- El cron de las 8 manda un resumen de lo que vence pronto. Esto es otra
+-- cosa: "el jueves a las 15:30 llamar al salón", y que suene el jueves a
+-- las 15:30. Para eso hace falta un cron que corra cada pocos minutos,
+-- no una vez al día.
+CREATE TABLE IF NOT EXISTS alarmas (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  titulo        VARCHAR(200) NOT NULL,
+  detalle       VARCHAR(500) NOT NULL DEFAULT '',
+  -- Cuándo tiene que sonar.
+  cuando        DATETIME NOT NULL,
+  -- 'una_vez' se apaga sola al sonar. Las demás se reprograman.
+  repetir       ENUM('una_vez','diaria','semanal','mensual')
+                NOT NULL DEFAULT 'una_vez',
+  -- Por dónde avisa. El correo siempre llega; la notificación depende
+  -- de que el permiso siga concedido y la app instalada.
+  por_correo    TINYINT(1) NOT NULL DEFAULT 1,
+  por_push      TINYINT(1) NOT NULL DEFAULT 1,
+  -- A qué registro pertenece, si pertenece a alguno: 'pago', 'tarea',
+  -- 'agenda'… Sirve para que la notificación lleve a su ficha.
+  atada_a_tipo  VARCHAR(30) NOT NULL DEFAULT '',
+  atada_a_id    INT NOT NULL DEFAULT 0,
+  -- Cuándo sonó por última vez. NULL = todavía no sonó.
+  sonada_en     DATETIME DEFAULT NULL,
+  activa        TINYINT(1) NOT NULL DEFAULT 1,
+  creada_por    INT NOT NULL DEFAULT 0,
+  creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- El cron busca por "activa y ya pasó su hora": este índice es el que
+  -- hace que revisar cada diez minutos no cueste nada.
+  KEY por_disparar (activa, cuando)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 -- Un renglón por teléfono que aceptó recibir avisos.
 CREATE TABLE IF NOT EXISTS suscripciones_push (
   id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -210,12 +245,53 @@ CREATE TABLE IF NOT EXISTS cotizaciones (
   proveedor    VARCHAR(150) NOT NULL,
   telefono     VARCHAR(40) NOT NULL DEFAULT '',
   monto        DECIMAL(12,2) NOT NULL DEFAULT 0,
+  -- Casi todos los salones cobran POR PERSONA, no un precio cerrado. Sin
+  -- esta distinción no se puede comparar nada: $550 por persona y $60,000
+  -- fijos son números que no se pueden mirar uno al lado del otro.
+  tipo_precio  ENUM('por_persona','fijo') NOT NULL DEFAULT 'fijo',
+  precio_pp    DECIMAL(12,2) NOT NULL DEFAULT 0,
   que_incluye  TEXT,
   vigencia     DATE DEFAULT NULL,
   elegida      TINYINT(1) NOT NULL DEFAULT 0,
   notas        TEXT,
   creado_en    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY por_servicio (servicio)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Cada renglón de una cotización: qué trae incluido y qué se cobra aparte.
+--
+-- POR QUÉ HACE FALTA ESTA TABLA
+-- El paquete más barato por persona casi nunca es el más barato al final.
+-- Uno incluye el DJ y el otro lo cobra $17,900 aparte; uno da la copa de
+-- vino y el otro la cobra $90 por persona. Comparar solo el precio base
+-- lleva a elegir mal. Acá se anota cada cosa con su tipo de costo, y la
+-- calculadora arma el total de verdad.
+CREATE TABLE IF NOT EXISTS cotizacion_items (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  cotizacion_id  INT NOT NULL,
+  concepto       VARCHAR(200) NOT NULL,
+  -- Cómo se cobra:
+  --   por_persona → monto × cantidad de invitados
+  --   fijo        → monto, sin importar cuántos sean
+  --   por_unidad  → monto × unidades (centros de mesa, por ejemplo)
+  --   porcentaje  → monto % sobre el total (la comisión de la tarjeta)
+  tipo           ENUM('por_persona','fijo','por_unidad','porcentaje')
+                 NOT NULL DEFAULT 'fijo',
+  monto          DECIMAL(12,2) NOT NULL DEFAULT 0,
+  unidades       INT NOT NULL DEFAULT 1,
+  -- Incluido = viene en el paquete y no suma. Se guarda igual, porque
+  -- saber QUÉ incluye cada uno es la mitad de la comparación.
+  incluido       TINYINT(1) NOT NULL DEFAULT 0,
+  -- Un extra puede estar disponible pero no quererse: se deja apagado
+  -- sin borrarlo, para poder probar el "¿y si le agrego el mariachi?".
+  activo         TINYINT(1) NOT NULL DEFAULT 1,
+  categoria      VARCHAR(60) NOT NULL DEFAULT '',
+  notas          VARCHAR(300) NOT NULL DEFAULT '',
+  orden          INT NOT NULL DEFAULT 50,
+  KEY por_cotizacion (cotizacion_id),
+  CONSTRAINT item_de_cotizacion FOREIGN KEY (cotizacion_id)
+    REFERENCES cotizaciones(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

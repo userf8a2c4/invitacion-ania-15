@@ -225,13 +225,22 @@ function aFecha(valor) {
 
   const texto = String(valor);
 
-  // ¿Es exactamente AAAA-MM-DD, o AAAA-MM-DD seguido de un espacio?
-  const soloFecha = texto.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T]|$)/);
-  if (soloFecha) {
+  /* Se acepta AAAA-MM-DD con hora opcional. La hora se conserva si
+     viene: MySQL devuelve "2026-08-03 14:30:00" para las alarmas, y
+     descartarla haría que una alarma de las 14:30 se leyera como las
+     00:00 — o sea, como si ya hubiera pasado toda la mañana. */
+  const partes = texto.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/
+  );
+
+  if (partes) {
     const fecha = new Date(
-      Number(soloFecha[1]),
-      Number(soloFecha[2]) - 1,   // los meses van de 0 a 11
-      Number(soloFecha[3])
+      Number(partes[1]),
+      Number(partes[2]) - 1,       // los meses van de 0 a 11
+      Number(partes[3]),
+      Number(partes[4] || 0),
+      Number(partes[5] || 0),
+      Number(partes[6] || 0)
     );
     return isNaN(fecha) ? null : fecha;
   }

@@ -101,15 +101,26 @@ body.sobre-visible #boton-qa { display: none; }
   display: none;
   position: fixed;
   inset: 0;
-  /* Dentro de la fila de controles el orden de pintado lo da el orden del
-     HTML, y el reproductor va después. Sin estos dos z-index el panel
-     queda tapado por el reproductor justo donde se cruzan. */
+  /* Dentro de la columna de controles el orden de pintado lo da el orden
+     del HTML, y la música va después. Sin estos dos z-index el panel
+     queda tapado por la píldora justo donde se cruzan. */
   z-index: 1;
   background: rgba(6, 3, 2, .72);
   backdrop-filter: blur(2px);
   opacity: 0;
+
+  /* ⚠️ IMPRESCINDIBLE, y no es un detalle.
+     En el celular este velo es display:block SIEMPRE —solo cambia la
+     opacidad al abrir—, así que cerrado sigue siendo una lámina
+     invisible que cubre la pantalla entera. Sin esta línea se traga
+     todos los toques y ningún botón de la web responde, aunque se vean
+     perfectos. Se recupera al abrirse, que es cuando sí tiene que
+     capturar el toque de afuera para cerrar. */
+  pointer-events: none;
+
   transition: opacity .3s var(--curva-elegante);
 }
+#velo-qa.qa-abierto { pointer-events: auto; }
 
 
 /* ─── 3. EL PANEL ──────────────────────────────────────────────────────

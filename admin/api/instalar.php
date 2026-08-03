@@ -111,13 +111,20 @@ $agregarColumna = function ($tabla, $columna, $definicion) use (&$columnasQueFal
 // Fijar una asignación de mesa para que la autoasignación no la toque.
 $agregarColumna('asignacion_mesas', 'fijada', 'TINYINT(1) NOT NULL DEFAULT 0');
 
+// Precio por persona en las cotizaciones, para poder compararlas.
+$agregarColumna('cotizaciones', 'tipo_precio',
+                "ENUM('por_persona','fijo') NOT NULL DEFAULT 'fijo'");
+$agregarColumna('cotizaciones', 'precio_pp', 'DECIMAL(12,2) NOT NULL DEFAULT 0');
+
 
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 
 $tablasEsperadas = [
     'usuarios', 'sesiones', 'intentos_login', 'bitacora', 'notas', 'archivos',
-    'ajustes', 'suscripciones_push', 'categorias_gasto', 'padrinos', 'proveedores',
-    'cotizaciones', 'gastos', 'pagos', 'tareas', 'agenda', 'cronograma',
+    'ajustes', 'alarmas', 'suscripciones_push', 'categorias_gasto', 'padrinos',
+    'proveedores',
+    'cotizaciones', 'cotizacion_items', 'gastos', 'pagos', 'tareas', 'agenda',
+    'cronograma',
     'mesas', 'asignacion_mesas', 'grupos_invitados', 'preferencias_invitado',
     'incompatibilidades', 'corte_honor', 'ensayos', 'asistencia_ensayos',
     'regalos', 'foraneos', 'ceremonia', 'requisitos_ceremonia', 'musica',

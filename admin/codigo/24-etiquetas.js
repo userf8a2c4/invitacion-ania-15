@@ -1,0 +1,224 @@
+/* ══════════════════════════════════════════════════════════════════════
+   24 · ETIQUETAS PERSONALIZABLES
+
+   QUÉ HACE ESTE ARCHIVO
+   Deja renombrar las secciones y los estados del panel. Cada familia
+   tiene su vocabulario: donde acá dice "Padrinos", en otra casa dicen
+   "Padrinos y madrinas"; donde dice "Corte", dicen "Chambelanes".
+
+   CÓMO SE USA EN EL CÓDIGO
+   En vez de escribir el texto directo, se llama a et():
+
+       et('nav.dinero', 'Presupuesto')
+
+   Si alguien cambió esa etiqueta, devuelve la suya; si no, la de
+   fábrica. El segundo parámetro NO es opcional a propósito: así el
+   panel funciona igual aunque el servidor no conteste, y leyendo el
+   código se ve qué dice cada cosa sin tener que buscar la traducción.
+
+   QUÉ SE PUEDE RENOMBRAR Y QUÉ NO
+   Las etiquetas que se leen seguido: pestañas, sub-secciones y estados.
+   Los textos de ayuda y los mensajes de error no, porque nadie los lee
+   dos veces y hacerlos configurables sería mucho trabajo para nada.
+
+   ÍNDICE
+     1. Leer y traducir
+     2. Aplicar a la pantalla
+     3. La pantalla de edición
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/** Las etiquetas cambiadas. Vacío = todo con los nombres de fábrica. */
+let ETIQUETAS = {};
+
+/**
+ * Qué se puede renombrar, agrupado como se muestra en pantalla.
+ *
+ * Cada renglón: [clave, nombre de fábrica].
+ */
+const ETIQUETAS_EDITABLES = {
+  'Las pestañas de abajo': [
+    ['nav.resumen',    'Resumen'],
+    ['nav.invitados',  'Gente'],
+    ['nav.correo',     'Correo'],
+    ['nav.dinero',     'Presupuesto'],
+    ['nav.evento',     'Evento'],
+  ],
+  'Dentro de Presupuesto': [
+    ['dinero.gastos',       'Gastos'],
+    ['dinero.pagos',        'Pagos'],
+    ['dinero.padrinos',     'Padrinos'],
+    ['dinero.proveedores',  'Proveedores'],
+    ['dinero.cotizaciones', 'Cotizaciones'],
+  ],
+  'Dentro de Evento': [
+    ['evento.calendario',  'Calendario'],
+    ['evento.tareas',      'Tareas'],
+    ['evento.agenda',      'Agenda'],
+    ['evento.corte_honor', 'Corte'],
+    ['evento.ensayos',     'Ensayos'],
+    ['evento.ceremonia',   'Misa'],
+    ['evento.musica',      'Música'],
+    ['evento.mesas',       'Mesas'],
+    ['evento.regalos',     'Regalos'],
+    ['evento.foraneos',    'Foráneos'],
+  ],
+  'Dentro de Gente': [
+    ['gente.invitados', 'Invitados'],
+    ['gente.contactos', 'Agenda de contactos'],
+  ],
+};
+
+
+/* ─── 1. LEER Y TRADUCIR ───────────────────────────────────────────── */
+
+/**
+ * Devuelve el nombre de una etiqueta.
+ *
+ * @param {string} clave - 'nav.dinero'
+ * @param {string} porDefecto - El nombre de fábrica.
+ * @returns {string}
+ */
+function et(clave, porDefecto) {
+  const propia = ETIQUETAS[clave];
+  return (propia && String(propia).trim()) ? propia : porDefecto;
+}
+
+/**
+ * Trae las etiquetas cambiadas desde el servidor.
+ *
+ * Se llama una vez al arrancar. Si falla, se sigue con las de fábrica:
+ * no poder renombrar una pestaña no es motivo para no abrir la app.
+ *
+ * @returns {Promise<void>}
+ */
+async function cargarEtiquetas() {
+  try {
+    const traidas = await traer('etiquetas.php?accion=leer');
+    ETIQUETAS = (traidas && typeof traidas === 'object') ? traidas : {};
+  } catch (error) {
+    ETIQUETAS = {};
+  }
+}
+
+
+/* ─── 2. APLICAR A LA PANTALLA ─────────────────────────────────────── */
+
+/**
+ * Escribe las etiquetas en las pestañas de abajo y en los títulos.
+ *
+ * Se llama después de cargarlas y cada vez que se guardan cambios.
+ *
+ * @returns {void}
+ */
+function aplicarEtiquetas() {
+  const deFabrica = {
+    resumen: 'Resumen', invitados: 'Gente', correo: 'Correo',
+    dinero: 'Presupuesto', evento: 'Evento',
+  };
+
+  Object.keys(deFabrica).forEach(clave => {
+    const nombre = et('nav.' + clave, deFabrica[clave]);
+
+    const boton = buscar('[data-ir=' + clave + '] span');
+    if (boton) boton.textContent = nombre;
+
+    // El título del encabezado sale de la misma tabla.
+    if (VISTAS[clave]) VISTAS[clave].titulo = nombre;
+  });
+
+  // Si hay una vista abierta, su título ya está escrito: se refresca.
+  if (VISTAS[VISTA_ACTUAL]) {
+    const sub = buscar('#subtitulo-vista');
+    ponerTitulo(VISTAS[VISTA_ACTUAL].titulo, sub ? sub.textContent : '');
+  }
+}
+
+
+/* ─── 3. LA PANTALLA DE EDICIÓN ────────────────────────────────────── */
+
+/**
+ * Abre el editor de etiquetas.
+ *
+ * @returns {void}
+ */
+function abrirEtiquetas() {
+  if (USUARIO.rol !== 'admin') {
+    avisar('Solo una administradora puede cambiar los nombres.', true);
+    return;
+  }
+
+  const grupos = Object.keys(ETIQUETAS_EDITABLES).map(grupo =>
+    '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">' +
+      seguro(grupo) +
+    '</div>' +
+
+    ETIQUETAS_EDITABLES[grupo].map(([clave, porDefecto]) =>
+      '<label class="campo" style="margin-bottom:var(--esp-2)">' +
+        '<span class="campo__rotulo">' + seguro(porDefecto) + '</span>' +
+        '<input type="text" class="campo__control" ' +
+               'data-etiqueta="' + seguro(clave) + '" ' +
+               'value="' + seguro(ETIQUETAS[clave] || '') + '" ' +
+               'placeholder="' + seguro(porDefecto) + '" maxlength="40">' +
+      '</label>'
+    ).join('')
+  ).join('');
+
+  const cuerpo = abrirHoja('Cambiar los nombres',
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+      'Escribí cómo preferís que se llame cada cosa. Lo que dejes vacío ' +
+      'se queda con el nombre de siempre.' +
+    '</p>' +
+
+    grupos +
+
+    '<button class="boton boton--principal boton--ancho" id="et-guardar" ' +
+            'style="margin-top:var(--esp-3)">Guardar los nombres</button>' +
+
+    '<button class="boton boton--ancho boton--peligro" id="et-restaurar" ' +
+            'style="margin-top:var(--esp-1)">Volver a los nombres originales</button>'
+  );
+
+  buscar('#et-guardar', cuerpo).addEventListener('click', async () => {
+    const cambios = {};
+
+    buscarTodos('[data-etiqueta]', cuerpo).forEach(campo => {
+      cambios[campo.dataset.etiqueta] = campo.value.trim();
+    });
+
+    try {
+      const r = await mandar('etiquetas.php?accion=guardar', { etiquetas: cambios });
+      ETIQUETAS = r.etiquetas || {};
+
+      cerrarHoja();
+      avisar(r.mensaje);
+      aplicarEtiquetas();
+
+      /* Las sub-pestañas se dibujan al pintar cada vista, así que hay
+         que redibujarlas para que tomen los nombres nuevos. */
+      ensuciarVistas('resumen', 'invitados', 'correo', 'dinero', 'evento');
+      irA(VISTA_ACTUAL, true);
+
+    } catch (error) {
+      avisar(error.message, true);
+    }
+  });
+
+  buscar('#et-restaurar', cuerpo).addEventListener('click', async () => {
+    if (!confirmarAccion('¿Volver a los nombres originales?')) return;
+
+    try {
+      const r = await mandar('etiquetas.php?accion=restaurar', {});
+      ETIQUETAS = {};
+
+      cerrarHoja();
+      avisar(r.mensaje);
+      aplicarEtiquetas();
+      ensuciarVistas('resumen', 'invitados', 'correo', 'dinero', 'evento');
+      irA(VISTA_ACTUAL, true);
+
+    } catch (error) {
+      avisar(error.message, true);
+    }
+  });
+}

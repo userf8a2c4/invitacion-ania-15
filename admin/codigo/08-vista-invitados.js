@@ -60,9 +60,9 @@ async function dibujarGente() {
   vista.innerHTML =
     '<div class="filtros" style="margin-bottom:var(--esp-2)">' +
       '<button class="filtro' + (SECCION_GENTE === 'invitados' ? ' activo' : '') +
-        '" data-gente="invitados">Invitados</button>' +
+        '" data-gente="invitados">' + seguro(et('gente.invitados','Invitados')) + '</button>' +
       '<button class="filtro' + (SECCION_GENTE === 'contactos' ? ' activo' : '') +
-        '" data-gente="contactos">Agenda de contactos</button>' +
+        '" data-gente="contactos">' + seguro(et('gente.contactos','Agenda de contactos')) + '</button>' +
     '</div>' +
     '<div id="cuerpo-invitados"' +
       (SECCION_GENTE === 'invitados' ? '' : ' class="oculto"') + '></div>' +
