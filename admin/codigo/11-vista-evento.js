@@ -226,6 +226,10 @@ const SECCIONES = {
     vacio: ['Todavía no hay regalos',
             'Anotá lo que llegue para no olvidarte de agradecer.'],
     alternar: 'agradecido',
+    /* Viaja al servidor pero no se muestra: es la huella del correo de
+       Amazon del que salió este regalo, y sirve para no volver a
+       ofrecerlo la próxima vez que se busquen compras. */
+    ocultos: ['correo_origen'],
     campos: [
       { id: 'de_parte_de', rotulo: 'De parte de' },
       { id: 'descripcion', rotulo: 'Qué regaló' },
@@ -360,12 +364,159 @@ function pintarSeccionDeEvento() {
   const cuerpo = buscar('#cuerpo-evento');
   if (!cuerpo) return;
 
-  // Las tres que no son listas genéricas tienen su propia función.
+  // Las que no son listas genéricas tienen su propia función.
   if (SECCION_EVENTO === 'tareas')    { pintarTareas(cuerpo); return; }
   if (SECCION_EVENTO === 'agenda')    { pintarAgenda(cuerpo); return; }
   if (SECCION_EVENTO === 'ceremonia') { pintarCeremonia(cuerpo); return; }
 
+  // Los regalos llevan arriba la tarjeta de la lista de Amazon.
+  if (SECCION_EVENTO === 'regalos') {
+    cuerpo.innerHTML = tarjetaMesaDeRegalos() + '<div id="lista-regalos"></div>';
+    engancharMesaDeRegalos(cuerpo);
+    pintarSeccionGenerica(buscar('#lista-regalos', cuerpo), 'regalos');
+    return;
+  }
+
   pintarSeccionGenerica(cuerpo, SECCION_EVENTO);
+}
+
+
+/* ─── LA MESA DE REGALOS DE AMAZON ─────────────────────────────────── */
+
+/**
+ * La tarjeta con el enlace a la lista y el resumen de lo recibido.
+ *
+ * POR QUÉ NO SE LEE LA LISTA DE AMAZON AUTOMÁTICAMENTE
+ * Amazon no publica esas listas por API salvo que uno sea socio afiliado
+ * aprobado, y raspar la página va contra sus términos además de romperse
+ * sola cada vez que cambian el HTML o salta el anti-bot.
+ *
+ * Lo que sí funciona: Amazon manda un correo cuando alguien compra de la
+ * lista, y el panel ya lee ese buzón. El botón "Buscar compras" revisa
+ * esos avisos y ofrece dar de alta el regalo sin teclear nada.
+ *
+ * @returns {string} HTML
+ */
+function tarjetaMesaDeRegalos() {
+  const regalos = EVENTO.regalos || [];
+
+  const recibidos    = regalos.length;
+  const sinAgradecer = regalos.filter(r => Number(r.agradecido) === 0).length;
+  const deAmazon     = regalos.filter(r => r.origen === 'amazon').length;
+
+  const enlace = CONFIGURACION.regalos.enlaceDeLaLista;
+
+  /* El enlace de la invitación es de tipo "owner-view": la vista de
+     DUEÑO. Amazon suele exigir estar logueado como el dueño para
+     abrirla, así que a un invitado probablemente le dé error. Se avisa
+     acá porque es el lugar donde alguien lo va a mirar. */
+  const esVistaDeDuenio = /owner-view/i.test(enlace);
+
+  return '' +
+    '<div class="tarjeta">' +
+      '<div class="tarjeta__titulo">Mesa de regalos</div>' +
+
+      '<div class="rejilla-datos" style="margin-bottom:var(--esp-2)">' +
+        tarjetaDato(recibidos, 'Recibidos') +
+        tarjetaDato(deAmazon, 'De Amazon') +
+        tarjetaDato(sinAgradecer, 'Sin agradecer') +
+      '</div>' +
+
+      '<a class="boton boton--principal boton--ancho" target="_blank" ' +
+         'rel="noopener" href="' + seguro(enlace) + '">' +
+        'Abrir la lista en Amazon' +
+      '</a>' +
+
+      '<button class="boton boton--ancho" id="buscar-compras" ' +
+              'style="margin-top:var(--esp-1)">' +
+        'Buscar compras en el correo' +
+      '</button>' +
+
+      (esVistaDeDuenio
+        ? '<p class="aviso-error" style="margin-top:var(--esp-2)">' +
+          'Ojo: el enlace que ven los invitados en la invitación es la ' +
+          'vista de <strong>dueño</strong> de la lista. Amazon suele pedir ' +
+          'iniciar sesión como dueño para abrirla, así que a ellos ' +
+          'probablemente les dé error. El correcto se saca desde Amazon ' +
+          'con el botón Compartir o Invitar, y hay que cambiarlo en ' +
+          'codigo/01-configuracion.js de la invitación.</p>'
+        : '') +
+
+      '<p class="vacio__texto" style="margin-top:var(--esp-2)">' +
+        seguro(CONFIGURACION.regalos.aclaracion || '') +
+      '</p>' +
+    '</div>';
+}
+
+/**
+ * Engancha el botón que busca avisos de compra en el buzón.
+ *
+ * @param {Element} donde
+ * @returns {void}
+ */
+function engancharMesaDeRegalos(donde) {
+  const boton = buscar('#buscar-compras', donde);
+  if (!boton) return;
+
+  boton.addEventListener('click', async () => {
+    boton.disabled = true;
+    boton.textContent = 'Revisando el buzón…';
+
+    let datos;
+    try {
+      datos = await traer('correo.php?accion=regalos');
+    } catch (error) {
+      avisar(error.message, true);
+      boton.disabled = false;
+      boton.textContent = 'Buscar compras en el correo';
+      return;
+    }
+
+    boton.disabled = false;
+    boton.textContent = 'Buscar compras en el correo';
+
+    const candidatos = datos.candidatos || [];
+
+    if (!candidatos.length) {
+      avisar('No hay avisos de compra nuevos en el buzón.');
+      return;
+    }
+
+    const cuerpo = abrirHoja('Compras encontradas',
+      '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
+        'Estos correos de Amazon parecen avisos de compra. Tocá uno para ' +
+        'darlo de alta como regalo.' +
+      '</p>' +
+      candidatos.map((c, i) =>
+        '<button class="lista__fila" data-compra="' + i + '">' +
+          '<span class="lista__cuerpo">' +
+            '<span class="lista__titulo">' + seguro(acortar(c.asunto, 50)) + '</span>' +
+            '<span class="lista__pie">' +
+              seguro(c.fecha ? comoFecha(c.fecha.slice(0, 10)) : '') + '</span>' +
+          '</span>' +
+        '</button>'
+      ).join('')
+    );
+
+    buscarTodos('[data-compra]', cuerpo).forEach(fila => {
+      fila.addEventListener('click', () => {
+        const c = candidatos[Number(fila.dataset.compra)];
+
+        /* Se abre el formulario de regalo con lo que se pudo deducir del
+           correo. El asunto de Amazon no dice quién compró —eso queda
+           para completar a mano—, pero sí la fecha y que vino de la
+           lista. La huella del correo se guarda para no volver a
+           ofrecerlo la próxima vez. */
+        formularioEvento('regalos', {
+          origen:        'amazon',
+          descripcion:   acortar(c.asunto, 200),
+          recibido_en:   c.fecha ? c.fecha.slice(0, 10) : '',
+          correo_origen: c.huella,
+          agradecido:    0,
+        });
+      });
+    });
+  });
 }
 
 
@@ -481,8 +632,11 @@ function formularioEvento(clave, registro) {
   }).join('');
 
   const cuerpo = abrirHoja(
-    registro ? 'Editar' : config.titulo,
-    campos + pieDeFormulario('Guardar', !!registro)
+    /* "Editar" solo si la fila ya existe. Un registro precargado sin id
+       —los datos sugeridos de un correo de Amazon— es un alta, y el
+       botón Borrar no tiene qué borrar. */
+    (registro && registro.id) ? 'Editar' : config.titulo,
+    campos + pieDeFormulario('Guardar', !!(registro && registro.id))
   );
 
   buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
@@ -496,7 +650,17 @@ function formularioEvento(clave, registro) {
     if (config.alternar && registro) {
       carga[config.alternar] = Number(registro[config.alternar]) === 1;
     }
-    if (registro) carga.id = registro.id;
+
+    // Y los campos ocultos viajan tal como llegaron.
+    (config.ocultos || []).forEach(campo => {
+      if (d[campo] !== undefined) carga[campo] = d[campo];
+    });
+
+    /* Solo se manda el id si el registro EXISTE en la base. Cuando se
+       precarga un formulario con datos sugeridos —el alta de un regalo
+       a partir de un correo de Amazon, por ejemplo— hay datos pero
+       todavía no hay fila, y mandar un id inventado daría error. */
+    if (registro && registro.id) carga.id = registro.id;
 
     try {
       await mandar('evento.php?accion=guardar&que=' + clave, carga);
