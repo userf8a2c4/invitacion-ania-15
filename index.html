@@ -146,112 +146,19 @@
        Se cargan en orden numérico. El orden IMPORTA: si dos archivos
        dicen cosas distintas sobre lo mismo, gana el que va último.
   ═══════════════════════════════════════════════════════════════════ -->
-  <link rel="stylesheet" href="estilos/01-fundamentos.css?v=38">
-  <link rel="stylesheet" href="estilos/02-marco-victoriano.css?v=38">
-  <link rel="stylesheet" href="estilos/03-sobre-de-apertura.css?v=38">
-  <link rel="stylesheet" href="estilos/04-portada.css?v=38">
-  <link rel="stylesheet" href="estilos/05-cuenta-regresiva.css?v=38">
-  <link rel="stylesheet" href="estilos/06-secciones.css?v=38">
-  <link rel="stylesheet" href="estilos/07-formulario.css?v=38">
-  <link rel="stylesheet" href="estilos/08-pase-de-acceso.css?v=38">
-  <link rel="stylesheet" href="estilos/09-reproductor.css?v=38">
-  <link rel="stylesheet" href="estilos/10-cursor-y-petalos.css?v=38">
-  <link rel="stylesheet" href="estilos/12-haces-de-luz.css?v=38">
-  <link rel="stylesheet" href="estilos/11-responsivo.css?v=38">
-
-      <style>
-    /* ══════════════════════════════════════════════════════════════════════
-       ESTILOS DEL CHATBOT
-       ══════════════════════════════════════════════════════════════════════ */
-    #contenedor-chatbot {
-        position: fixed;
-        bottom: 25px;
-        right: 25px;
-        z-index: 10000;
-        font-family: sans-serif;
-    }
-    #btn-chatbot-toggle {
-        width: 60px;
-        height: 60px;
-        border-radius: 50%;
-        background-color: #1a100d; /* Fondo oscuro elegante */
-        color: #c5a059; /* Icono o texto en dorado */
-        border: 1px solid #c5a059; /* Borde dorado */
-        cursor: pointer;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-        font-size: 24px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: transform 0.2s ease;
-    }
-    #btn-chatbot-toggle:hover {
-        transform: scale(1.05);
-    }
-    .chatbot-oculto {
-        display: none !important;
-    }
-    #ventana-chatbot {
-        position: absolute;
-        bottom: 75px;
-        right: 0;
-        width: 320px;
-        height: 450px;
-        background-color: white;
-        border-radius: 12px;
-        box-shadow: 0 5px 25px rgba(0,0,0,0.15);
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        border: 1px solid #eaeaea;
-    }
-    .chatbot-header {
-        background-color: #1a100d; /* Fondo oscuro */
-        color: #c5a059; /* Texto dorado */
-        padding: 15px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-weight: bold;
-        border-bottom: 1px solid #c5a059;
-    }
-    #btn-chatbot-cerrar {
-        background: none;
-        border: none;
-        color: white;
-        font-size: 20px;
-        cursor: pointer;
-    }
-    #chatbot-messages {
-        flex: 1;
-        padding: 15px;
-        overflow-y: auto;
-        background-color: #f9f9f9;
-    }
-    .chatbot-input-area {
-        display: flex;
-        padding: 10px;
-        border-top: 1px solid #eee;
-        background-color: white;
-    }
-    #chatbot-input {
-        flex: 1;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 20px;
-        outline: none;
-    }
-    #btn-chatbot-enviar {
-        background-color: #c5a059; /* Botón de enviar dorado */
-        color: #1a100d; /* Texto oscuro */
-        border: none;
-        padding: 8px 15px;
-        margin-left: 5px;
-        border-radius: 20px;
-        cursor: pointer;
-        font-weight: bold;
-    }
-    </style>
+  <link rel="stylesheet" href="estilos/01-fundamentos.css?v=40">
+  <link rel="stylesheet" href="estilos/02-marco-victoriano.css?v=40">
+  <link rel="stylesheet" href="estilos/03-sobre-de-apertura.css?v=40">
+  <link rel="stylesheet" href="estilos/04-portada.css?v=40">
+  <link rel="stylesheet" href="estilos/05-cuenta-regresiva.css?v=40">
+  <link rel="stylesheet" href="estilos/06-secciones.css?v=40">
+  <link rel="stylesheet" href="estilos/07-formulario.css?v=40">
+  <link rel="stylesheet" href="estilos/08-pase-de-acceso.css?v=40">
+  <link rel="stylesheet" href="estilos/09-reproductor.css?v=40">
+  <link rel="stylesheet" href="estilos/10-cursor-y-petalos.css?v=40">
+  <link rel="stylesheet" href="estilos/12-haces-de-luz.css?v=40">
+  <link rel="stylesheet" href="estilos/11-responsivo.css?v=40">
+  <link rel="stylesheet" href="estilos/13-preguntas-frecuentes.css?v=40">
 
   <!-- Bibliotecas externas: envío de correos y generación del código QR.
 
@@ -1971,6 +1878,32 @@
 ═══════════════════════════════════════════════════════════════════ -->
 <div id="controles-flotantes">
 
+  <!-- PREGUNTAS FRECUENTES.
+       Antes esto era un chat con casilla de texto, flotando por su cuenta
+       en la misma esquina pero con otro anclaje y otro z-index: terminaba
+       montado encima del reproductor. Ahora es un botón más de esta fila,
+       así que el solape dejó de ser posible.
+
+       La lista de preguntas la arma codigo/25-preguntas-frecuentes.js
+       leyendo codigo/00-conocimiento-chatbot.js. Acá solo va el hueco.
+
+       Nace con "qa-oculto": no se muestra hasta que se abre el sobre. -->
+  <button id="boton-qa" class="qa-oculto" type="button"
+          aria-expanded="false" aria-controls="panel-qa"
+          aria-label="Preguntas frecuentes">?</button>
+
+  <!-- El velo solo se enciende en el celular, donde el panel sube como
+       hoja y tapa la pantalla. En escritorio queda apagado por CSS. -->
+  <div id="velo-qa"></div>
+
+  <div id="panel-qa" role="dialog" aria-labelledby="qa-titulo" aria-hidden="true">
+    <div class="qa__barra-titulo">
+      <span id="qa-titulo">Preguntas frecuentes</span>
+      <button id="boton-cerrar-qa" type="button" aria-label="Cerrar preguntas frecuentes">&times;</button>
+    </div>
+    <div class="qa__lista" id="qa-lista"></div>
+  </div>
+
   <!-- Sin texto: la flecha se entiende sola, y el nombre para lectores
        de pantalla va en el aria-label. -->
   <button id="volver-arriba" type="button" aria-label="Volver arriba">
@@ -2040,24 +1973,24 @@
      de código haciendo esperar al dibujo. Con "defer" la página se pinta
      primero y el código llega enseguida después.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/01-configuracion.js?v=38"></script>
-<script defer src="codigo/02-utilidades.js?v=38"></script>
-<script defer src="codigo/03-sobre-de-apertura.js?v=38"></script>
-<script defer src="codigo/04-invitado-personalizado.js?v=38"></script>
-<script defer src="codigo/05-cursor-personalizado.js?v=38"></script>
+<script defer src="codigo/01-configuracion.js?v=40"></script>
+<script defer src="codigo/02-utilidades.js?v=40"></script>
+<script defer src="codigo/03-sobre-de-apertura.js?v=40"></script>
+<script defer src="codigo/04-invitado-personalizado.js?v=40"></script>
+<script defer src="codigo/05-cursor-personalizado.js?v=40"></script>
 <!-- EL LIENZO DE PÉTALOS. Tres <canvas>, uno por plano de profundidad, en
      vez de 29 divs. Va ANTES que 06-petalos-con-fisica.js porque ese
      archivo le pregunta al arrancar si debe crear elementos o solo números.
      Con  ?petalos=dom  vuelve el sistema de divs. -->
-<script defer src="codigo/24-lienzo-de-petalos.js?v=38"></script>
-<script defer src="codigo/06-petalos-con-fisica.js?v=38"></script>
-<script defer src="codigo/07-marco-y-enredaderas.js?v=38"></script>
-<script defer src="codigo/08-efectos-de-scroll.js?v=38"></script>
-<script defer src="codigo/09-cuenta-regresiva.js?v=38"></script>
-<script defer src="codigo/10-reproductor-de-musica.js?v=38"></script>
-<script defer src="codigo/11-formulario-confirmacion.js?v=38"></script>
-<script defer src="codigo/12-pase-de-acceso.js?v=38"></script>
-<script defer src="codigo/13-agregar-al-calendario.js?v=38"></script>
+<script defer src="codigo/24-lienzo-de-petalos.js?v=40"></script>
+<script defer src="codigo/06-petalos-con-fisica.js?v=40"></script>
+<script defer src="codigo/07-marco-y-enredaderas.js?v=40"></script>
+<script defer src="codigo/08-efectos-de-scroll.js?v=40"></script>
+<script defer src="codigo/09-cuenta-regresiva.js?v=40"></script>
+<script defer src="codigo/10-reproductor-de-musica.js?v=40"></script>
+<script defer src="codigo/11-formulario-confirmacion.js?v=40"></script>
+<script defer src="codigo/12-pase-de-acceso.js?v=40"></script>
+<script defer src="codigo/13-agregar-al-calendario.js?v=40"></script>
 <!-- EL LIENZO DE LUZ. Dibuja los tres sistemas de luz —velas, haces y polvo—
      en un solo <canvas>, en vez de en ~140 elementos repartidos en 10 capas
      con `mix-blend-mode`, que era lo que se llevaba la mitad de cada cuadro.
@@ -2068,9 +2001,9 @@
 
      Con  ?luz=dom  en la dirección, este módulo se queda dormido y vuelve el
      sistema anterior completo, sin tocar código. -->
-<script defer src="codigo/23-lienzo-de-luz.js?v=38"></script>
-<script defer src="codigo/14-haces-de-luz.js?v=38"></script>
-<script defer src="codigo/15-registro-de-confirmaciones.js?v=38"></script>
+<script defer src="codigo/23-lienzo-de-luz.js?v=40"></script>
+<script defer src="codigo/14-haces-de-luz.js?v=40"></script>
+<script defer src="codigo/15-registro-de-confirmaciones.js?v=40"></script>
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda).
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
      —incluso sobre el sobre de entrada— para que quien tenga un equipo
@@ -2085,15 +2018,22 @@
   <span class="boton-animaciones__texto">Animación</span>
 </button>
 
-<script defer src="codigo/16-volver-arriba.js?v=38"></script>
-<script defer src="codigo/17-joyas-colgantes.js?v=38"></script>
-<script defer src="codigo/18-motas-de-polvo.js?v=38"></script>
-<script defer src="codigo/19-velas.js?v=38"></script>
-<script defer src="codigo/20-boton-de-animaciones.js?v=38"></script>
-<script defer src="codigo/21-monitor-de-rendimiento.js?v=38"></script>
+<script defer src="codigo/16-volver-arriba.js?v=40"></script>
+<script defer src="codigo/17-joyas-colgantes.js?v=40"></script>
+<script defer src="codigo/18-motas-de-polvo.js?v=40"></script>
+<script defer src="codigo/19-velas.js?v=40"></script>
+<script defer src="codigo/20-boton-de-animaciones.js?v=40"></script>
+<script defer src="codigo/21-monitor-de-rendimiento.js?v=40"></script>
 <!-- Tiñe la luz que entra por los ventanales según la hora del día. Va
      después de los haces y las motas, porque escribe sobre sus capas. -->
-<script defer src="codigo/22-luz-de-la-hora.js?v=38"></script>
+<script defer src="codigo/22-luz-de-la-hora.js?v=40"></script>
+
+<!-- PREGUNTAS FRECUENTES (el botón "?" de la fila de controles).
+     El 00 tiene solo los datos —fecha, lugar, vestimenta, regalos— y el
+     25 arma el panel leyéndolos. Ese orden importa: si el 25 corriera
+     primero, no encontraría la lista de preguntas y no dibujaría nada. -->
+<script defer src="codigo/00-conocimiento-chatbot.js?v=40"></script>
+<script defer src="codigo/25-preguntas-frecuentes.js?v=40"></script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
      internet y se pueda instalar. Va al final y falla en silencio si el
@@ -2107,29 +2047,5 @@
   }
 </script>
 
-<!-- ══════════════════════════════════════════════════════════════════
-       INTERFAZ DEL ASISTENTE VIRTUAL
-       ══════════════════════════════════════════════════════════════════ -->
-  <div id="contenedor-chatbot">
-    <button id="btn-chatbot-toggle" aria-label="Abrir asistente virtual">
-      🌹
-    </button>
-    <div id="ventana-chatbot" class="chatbot-oculto" aria-hidden="true">
-      <div class="chatbot-header">
-        <span>Asistente de Ania XV</span>
-        <button id="btn-chatbot-cerrar" aria-label="Cerrar chat">&times;</button>
-      </div>
-      <div id="chatbot-mensajes" role="log" aria-live="polite"></div>
-      <div class="chatbot-input-area">
-        <input type="text" id="chatbot-input" placeholder="Escribe tu consulta sobre la fiesta..." aria-label="Escribe tu consulta">
-        <button id="chatbot-enviar">Enviar</button>
-      </div>
-    </div>
-  </div>
-
-<!-- CHATBOT / ASISTENTE -->
-<script src="codigo/00-conocimiento-chatbot.js?v=38" defer></script>
-
-  
 </body>
 </html>

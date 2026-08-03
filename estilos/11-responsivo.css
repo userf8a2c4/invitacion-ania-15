@@ -42,13 +42,11 @@
 
   .seccion { padding: 3.5rem .75rem; }
 
-  /* El reproductor ocupa el ancho disponible y se pega abajo */
-  #reproductor {
-    width: auto;
-    left:  calc(var(--marco-grosor) + .5rem);
-    right: calc(var(--marco-grosor) + .5rem);
-    bottom: calc(var(--marco-grosor) + .5rem);
-  }
+  /* El reproductor ocupa el ancho que le deja la fila de controles.
+     Ya no lleva left/right/bottom: desde que dejó de anclarse solo y pasó
+     a ser un hijo de #controles-flotantes (position:relative), esas tres
+     líneas no hacían absolutamente nada. Quien lo ubica es la fila. */
+  #reproductor { width: auto; }
 
   /* Los botones del pase se apilan para no quedar apretados */
   .pase__acciones,

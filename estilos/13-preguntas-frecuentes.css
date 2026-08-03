@@ -1,0 +1,350 @@
+/* ══════════════════════════════════════════════════════════════════════
+   13 · PREGUNTAS FRECUENTES
+   ══════════════════════════════════════════════════════════════════════
+
+   QUÉ ES ESTE ARCHIVO
+   El botón "?" de abajo a la derecha y el panel de preguntas que abre.
+
+   DÓNDE SE UBICA
+   No se ancla solo. Vive DENTRO de #controles-flotantes, la misma fila
+   que ya compartían el reproductor y la flecha de volver arriba
+   (bloque 0 de 09-reproductor.css). Ese es el punto: antes el chat
+   flotaba por su cuenta en otra esquina con otro z-index, y terminaba
+   montado encima del reproductor. Metiéndolo en la fila, el solape deja
+   de ser algo que hay que evitar con números y pasa a ser imposible.
+
+   CÓMO SE VE
+   El botón es gemelo de #volver-arriba —mismo tamaño, mismo fondo
+   carbón, mismo filo dorado— para que los dos se lean como un juego de
+   controles y no como dos botones de proyectos distintos.
+
+   El panel cambia de forma según la pantalla:
+     · En escritorio, se despliega sobre la fila, alineado al margen.
+     · En el celular, sube desde abajo como una hoja, a pantalla casi
+       completa, que es lo que un dedo espera de un panel de ayuda.
+
+   ÍNDICE
+     1. El botón "?"
+     2. El velo (solo celular)
+     3. El panel
+     4. La lista y el acordeón
+     5. Celular: el panel se vuelve hoja
+     6. Pantallas táctiles y sin movimiento
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. EL BOTÓN "?" ──────────────────────────────────────────────────
+   Mismas medidas y mismo tratamiento que #volver-arriba
+   (06-secciones.css). Si algún día cambia uno, cambian los dos.
+   ---------------------------------------------------------------------- */
+#boton-qa {
+  flex-shrink: 0;          /* nunca se aplasta: el que cede es el panel */
+
+  display: grid;
+  place-items: center;
+  width: 2.9rem;
+  height: 2.9rem;
+
+  background: var(--color-carbon);
+  border: 1px solid var(--borde-oro-tenue);
+  border-radius: 50%;
+  color: var(--color-oro-apagado);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, .7), 0 0 0 1px rgba(201, 168, 76, .1);
+  cursor: pointer;
+
+  font-family: var(--tipo-titulos);
+  font-size: 1.15rem;
+  line-height: 1;
+
+  transition: opacity .35s var(--curva-elegante),
+              transform .35s var(--curva-elegante),
+              visibility .35s,
+              color .25s,
+              border-color .25s,
+              box-shadow .25s;
+}
+
+#boton-qa:hover,
+#boton-qa:focus-visible {
+  color: var(--color-oro);
+  border-color: var(--color-oro-apagado);
+  box-shadow: 0 12px 50px rgba(0, 0, 0, .8), 0 0 25px rgba(201, 168, 76, .25);
+}
+
+/* Abierto, el botón queda encendido: se ve de dónde salió el panel. */
+#boton-qa[aria-expanded="true"] {
+  color: var(--color-oro-claro);
+  border-color: var(--borde-oro-fuerte);
+}
+
+/* ── Oculto hasta que se abre el sobre ──────────────────────────────────
+   Mientras se ve el sobre cerrado, la pantalla tiene que ser el sobre y
+   nada más. La clase la saca 25-preguntas-frecuentes.js al recibir el
+   evento 'sobre-abierto'; la regla del body es el cinturón de seguridad
+   por si el código no llegara a correr. */
+#boton-qa.qa-oculto {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(12px);
+  pointer-events: none;
+}
+body.sobre-visible #boton-qa { display: none; }
+
+
+/* ─── 2. EL VELO (SOLO CELULAR) ────────────────────────────────────────
+   En escritorio no hace falta oscurecer nada: el panel es chico y la
+   invitación se sigue viendo alrededor. En el celular la hoja tapa casi
+   todo, así que el velo separa las dos capas y da dónde tocar para
+   cerrar. Por eso acá está apagado y se enciende en el bloque 5.
+   ---------------------------------------------------------------------- */
+#velo-qa {
+  display: none;
+  position: fixed;
+  inset: 0;
+  /* Dentro de la fila de controles el orden de pintado lo da el orden del
+     HTML, y el reproductor va después. Sin estos dos z-index el panel
+     queda tapado por el reproductor justo donde se cruzan. */
+  z-index: 1;
+  background: rgba(6, 3, 2, .72);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  transition: opacity .3s var(--curva-elegante);
+}
+
+
+/* ─── 3. EL PANEL ──────────────────────────────────────────────────────
+   Se posiciona contra #controles-flotantes (que es fixed), no contra el
+   botón. Así queda alineado al margen derecho de la invitación en vez de
+   arrancar desde el "?" y desbordarse hacia afuera.
+   ---------------------------------------------------------------------- */
+#panel-qa {
+  position: absolute;
+  bottom: calc(100% + .65rem);
+  right: 0;
+  z-index: 2;        /* por encima del velo y del reproductor */
+
+  width: min(360px, calc(100vw - var(--marco-grosor) * 2 - 2rem));
+  max-height: min(60vh, 480px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  background: var(--color-carbon);
+  border: 1px solid var(--borde-oro-tenue);
+  box-shadow: 0 12px 50px rgba(0, 0, 0, .85), 0 0 0 1px rgba(201, 168, 76, .1);
+
+  /* Cerrado: no ocupa lugar ni recibe clics. Se usa visibility y no
+     display:none para que la transición tenga de dónde partir. */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px);
+  pointer-events: none;
+  transition: opacity .3s var(--curva-elegante),
+              transform .3s var(--curva-elegante),
+              visibility .3s;
+}
+
+#panel-qa.qa-abierto {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* ── Barra de título ───────────────────────────────────────────────────
+   Mismo lenguaje que la del reproductor: es la otra mitad del mismo
+   juego de controles. */
+.qa__barra-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  flex-shrink: 0;
+
+  padding: .6rem .85rem;
+  border-bottom: 1px solid var(--borde-oro-tenue);
+
+  font-family: var(--tipo-detalle);
+  font-size: .68rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--color-oro-apagado);
+}
+
+#boton-cerrar-qa {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 .2rem;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--color-oro-apagado);
+  transition: color .25s;
+}
+#boton-cerrar-qa:hover,
+#boton-cerrar-qa:focus-visible { color: var(--color-oro-claro); }
+
+
+/* ─── 4. LA LISTA Y EL ACORDEÓN ────────────────────────────────────── */
+
+.qa__lista {
+  overflow-y: auto;
+  overscroll-behavior: contain;   /* al llegar al final no arrastra la página */
+  -webkit-overflow-scrolling: touch;
+}
+
+.qa__item + .qa__item { border-top: 1px solid rgba(201, 168, 76, .16); }
+
+.qa__pregunta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .6rem;
+  width: 100%;
+
+  padding: .8rem .85rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+
+  font-family: var(--tipo-titulos);
+  font-size: .82rem;
+  line-height: 1.35;
+  color: var(--color-marfil-apagado);
+  transition: color .25s, background-color .25s;
+}
+.qa__pregunta:hover,
+.qa__pregunta:focus-visible {
+  color: var(--color-oro-claro);
+  background: rgba(201, 168, 76, .06);
+}
+
+.qa__flecha {
+  flex-shrink: 0;
+  font-size: 1.1rem;
+  color: var(--color-oro-apagado);
+  transition: transform .3s var(--curva-elegante);
+}
+.qa__item--abierto .qa__flecha { transform: rotate(90deg); }
+.qa__item--abierto .qa__pregunta { color: var(--color-oro-claro); }
+
+/* ── El despliegue ─────────────────────────────────────────────────────
+   La respuesta mide lo que mide, y no se sabe de antemano: depende del
+   texto y del ancho de la pantalla. El truco de la fila de rejilla que
+   pasa de 0fr a 1fr anima justamente hasta esa altura automática, cosa
+   que un max-height a ojo no puede hacer sin quedar corto o dar tirones. */
+.qa__respuesta {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows .32s var(--curva-elegante);
+}
+.qa__item--abierto .qa__respuesta { grid-template-rows: 1fr; }
+
+.qa__texto {
+  overflow: hidden;   /* imprescindible: es lo que deja recortar la fila */
+  font-family: var(--tipo-texto);
+  font-size: .95rem;
+  line-height: 1.6;
+  color: var(--color-marfil-apagado);
+}
+.qa__item--abierto .qa__texto { padding: 0 .85rem .9rem; }
+
+.qa__texto b { color: var(--color-oro-claro); font-weight: 600; }
+
+.qa__texto a {
+  color: var(--color-oro);
+  text-decoration: none;
+  border-bottom: 1px solid var(--borde-oro-tenue);
+  transition: color .25s, border-color .25s;
+}
+.qa__texto a:hover,
+.qa__texto a:focus-visible {
+  color: var(--color-oro-claro);
+  border-color: var(--borde-oro-fuerte);
+}
+
+
+/* ─── 5. CELULAR: EL PANEL SE VUELVE HOJA ──────────────────────────────
+   Un panel de 360 px anclado a una esquina funciona en un monitor. En un
+   celular de 375 px de ancho es toda la pantalla igual, pero corrido y
+   apretado contra el marco. Mejor asumirlo: sube desde abajo, ocupa el
+   ancho completo y se lee cómodo.
+   ---------------------------------------------------------------------- */
+@media (max-width: 600px) {
+
+  #velo-qa { display: block; }
+  #velo-qa.qa-abierto { opacity: 1; }
+
+  #panel-qa {
+    position: fixed;
+    inset: auto 0 0 0;
+    width: auto;
+    max-height: 75vh;
+    border-inline: none;
+    border-bottom: none;
+    border-radius: 14px 14px 0 0;
+    transform: translateY(100%);
+    transition: transform .34s var(--curva-elegante),
+                opacity .2s var(--curva-elegante),
+                visibility .34s;
+  }
+  #panel-qa.qa-abierto { transform: translateY(0); }
+
+  /* El tirador de la hoja: la barrita que dice "esto se agarra y baja". */
+  .qa__barra-titulo { padding: .85rem 1rem; }
+  .qa__barra-titulo::before {
+    content: '';
+    position: absolute;
+    top: .4rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2.2rem;
+    height: 3px;
+    border-radius: 3px;
+    background: var(--borde-oro-tenue);
+  }
+  #panel-qa .qa__barra-titulo { position: relative; }
+
+  .qa__pregunta { padding: .95rem 1rem; font-size: .88rem; }
+  .qa__item--abierto .qa__texto { padding: 0 1rem 1rem; }
+
+  /* Con la hoja arriba, la página de atrás no se mueve. Si no, el dedo
+     que quiere bajar por las preguntas termina scrolleando la web. */
+  body.qa-abierta { overflow: hidden; }
+}
+
+
+/* ─── 6. PANTALLAS TÁCTILES Y SIN MOVIMIENTO ─────────────────────────── */
+
+/* Un dedo no apunta como un mouse: los dos botones redondos crecen para
+   llegar al área mínima que se puede tocar sin errar. */
+@media (pointer: coarse) {
+  #boton-qa,
+  #volver-arriba {
+    width: 3.2rem;
+    height: 3.2rem;
+  }
+  #boton-qa { font-size: 1.3rem; }
+}
+
+/* Con las animaciones apagadas —por el botón de arriba a la izquierda o
+   por la preferencia del sistema— el panel aparece y las respuestas se
+   despliegan de una, sin transición. */
+html.animaciones-off #panel-qa,
+html.animaciones-off #velo-qa,
+html.animaciones-off .qa__respuesta,
+html.animaciones-off .qa__flecha,
+html.animaciones-off #boton-qa {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #panel-qa,
+  #velo-qa,
+  .qa__respuesta,
+  .qa__flecha,
+  #boton-qa {
+    transition: none;
+  }
+}
