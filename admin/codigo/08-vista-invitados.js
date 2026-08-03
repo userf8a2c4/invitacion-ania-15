@@ -40,8 +40,92 @@ let BUSQUEDA_INVITADOS = '';
  *
  * @returns {Promise<void>}
  */
-async function dibujarInvitados() {
+/** Qué sub-pestaña de "Gente" se está viendo: 'invitados' o 'contactos'. */
+let SECCION_GENTE = 'invitados';
+
+/**
+ * Dibuja la pestaña Gente: las confirmaciones o la agenda completa.
+ *
+ * POR QUÉ LAS DOS COSAS COMPARTEN PESTAÑA
+ * Porque las dos son personas, y meter una sexta pestaña abajo dejaba
+ * los rótulos ilegibles en un teléfono angosto. Invitados queda primero
+ * y es lo que se abre por defecto, así que para el uso de todos los
+ * días no cambia nada.
+ *
+ * @returns {Promise<void>}
+ */
+async function dibujarGente() {
   const vista = buscar('#vista-invitados');
+
+  vista.innerHTML =
+    '<div class="filtros" style="margin-bottom:var(--esp-2)">' +
+      '<button class="filtro' + (SECCION_GENTE === 'invitados' ? ' activo' : '') +
+        '" data-gente="invitados">Invitados</button>' +
+      '<button class="filtro' + (SECCION_GENTE === 'contactos' ? ' activo' : '') +
+        '" data-gente="contactos">Agenda de contactos</button>' +
+    '</div>' +
+    '<div id="cuerpo-invitados"' +
+      (SECCION_GENTE === 'invitados' ? '' : ' class="oculto"') + '></div>' +
+    '<div id="cuerpo-contactos"' +
+      (SECCION_GENTE === 'contactos' ? '' : ' class="oculto"') + '></div>';
+
+  buscarTodos('[data-gente]', vista).forEach(boton => {
+    boton.addEventListener('click', () => {
+      SECCION_GENTE = boton.dataset.gente;
+
+      buscarTodos('[data-gente]', vista).forEach(o =>
+        o.classList.toggle('activo', o === boton));
+
+      buscar('#cuerpo-invitados', vista)
+        .classList.toggle('oculto', SECCION_GENTE !== 'invitados');
+      buscar('#cuerpo-contactos', vista)
+        .classList.toggle('oculto', SECCION_GENTE !== 'contactos');
+
+      // Cada una se carga la primera vez que se abre, no antes.
+      if (SECCION_GENTE === 'contactos' && !CONTACTOS.length) dibujarContactos();
+      if (SECCION_GENTE === 'invitados' && !INVITADOS.length) dibujarInvitados();
+      else if (SECCION_GENTE === 'invitados') ponerTituloDeInvitados();
+    });
+  });
+
+  if (SECCION_GENTE === 'contactos') await dibujarContactos();
+  else await dibujarInvitados();
+}
+
+/**
+ * Pone el título del encabezado con el recuento de invitados.
+ *
+ * Si se la llama sin números, los recalcula de lo que haya en memoria.
+ * Eso hace falta al volver de la agenda de contactos, donde el título
+ * quedó cambiado.
+ *
+ * @param {number} [confirmaciones]
+ * @param {number} [personas]
+ * @returns {void}
+ */
+function ponerTituloDeInvitados(confirmaciones, personas) {
+  if (confirmaciones === undefined) {
+    const visibles = INVITADOS.filter(invitadoPasaElFiltro);
+    confirmaciones = visibles.length;
+    personas = visibles.reduce((suma, fila) => {
+      if (Number(fila.asiste) !== 1) return suma;
+      return suma + (Number(fila.adultos) || 0) + (Number(fila.ninos) || 0);
+    }, 0);
+  }
+
+  ponerTitulo('Gente',
+    pluralizar(confirmaciones, 'confirmación', 'confirmaciones') +
+    (personas ? ' · ' + pluralizar(personas, 'persona', 'personas') : ''));
+}
+
+/**
+ * Pide la lista de confirmaciones y arma su sección.
+ *
+ * @returns {Promise<void>}
+ */
+async function dibujarInvitados() {
+  const vista = buscar('#cuerpo-invitados');
+  if (!vista) return;
 
   vista.innerHTML =
     '<div class="buscador">' +
@@ -155,7 +239,7 @@ function pintarListaDeInvitados() {
       pintarVacio(lista, 'Nada coincide',
         'Probá con otra búsqueda o cambiá el filtro.');
     }
-    ponerTitulo('Invitados');
+    ponerTitulo('Gente');
     return;
   }
 
@@ -166,9 +250,7 @@ function pintarListaDeInvitados() {
     return suma + (Number(fila.adultos) || 0) + (Number(fila.ninos) || 0);
   }, 0);
 
-  ponerTitulo('Invitados',
-    pluralizar(visibles.length, 'confirmación', 'confirmaciones') +
-    (personas ? ' · ' + pluralizar(personas, 'persona', 'personas') : ''));
+  ponerTituloDeInvitados(visibles.length, personas);
 
   lista.innerHTML = visibles.map(filaDeInvitado).join('');
 
@@ -303,7 +385,7 @@ function abrirDetalleDeInvitado(id) {
       cerrarHoja();
       avisar('Confirmación eliminada.');
       ensuciarVistas('resumen');
-      dibujarInvitados();
+      dibujarGente();
     } catch (error) {
       avisar(error.message, true);
     }
@@ -376,7 +458,7 @@ function abrirFormularioDeInvitado(fila) {
       cerrarHoja();
       avisar(esNuevo ? 'Invitado agregado.' : 'Cambios guardados.');
       ensuciarVistas('resumen');
-      dibujarInvitados();
+      dibujarGente();
     } catch (error) {
       avisar(error.message, true);
     }
