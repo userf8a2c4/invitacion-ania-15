@@ -101,8 +101,8 @@ case 'listar':
     // Filtro de asistencia.
     $filtro = (string) ($_GET['filtro'] ?? 'todos');
     if (hay('asiste')) {
-        if ($filtro === 'asisten')   $condiciones[] = 'asiste = 1';
-        if ($filtro === 'no_asisten') $condiciones[] = 'asiste = 0';
+        if ($filtro === 'asisten')   $condiciones[] = 'confirmaciones.asiste = 1';
+        if ($filtro === 'no_asisten') $condiciones[] = 'confirmaciones.asiste = 0';
     }
 
     // Búsqueda por nombre, correo o código de pase.
@@ -110,7 +110,9 @@ case 'listar':
     if ($busca !== '') {
         $trozos = [];
         foreach (['nombre', 'correo', 'codigo'] as $columna) {
-            if (hay($columna)) $trozos[] = "`$columna` LIKE :busca";
+            // Con el LEFT JOIN de mesas hay que aclarar de qué tabla es
+            // cada columna: "mesas" también tiene "nombre".
+            if (hay($columna)) $trozos[] = "confirmaciones.`$columna` LIKE :busca";
         }
         if ($trozos) {
             $condiciones[] = '(' . implode(' OR ', $trozos) . ')';
@@ -125,10 +127,25 @@ case 'listar':
     // Se ordena por fecha si hay columna de fecha; si no, por id; y si
     // tampoco hay id, sin orden (mejor eso que un error de SQL).
     $orden = '';
-    if ($COL_FECHA)      $orden = "ORDER BY `$COL_FECHA` DESC";
-    elseif ($TIENE_ID)   $orden = 'ORDER BY id DESC';
+    if ($COL_FECHA)      $orden = "ORDER BY confirmaciones.`$COL_FECHA` DESC";
+    elseif ($TIENE_ID)   $orden = 'ORDER BY confirmaciones.id DESC';
 
-    $filas = consultarTodo("SELECT * FROM confirmaciones $donde $orden", $parametros);
+    // La mesa no vive en confirmaciones: se trae con un LEFT JOIN si esas
+    // tablas ya existen (podrían no existir si no se corrió esa parte de
+    // la migración).
+    $conMesa = $TIENE_ID && existeTabla('asignacion_mesas') && existeTabla('mesas');
+    $selectMesa = $conMesa
+        ? ', am.mesa_id AS mesa_id, m.nombre AS mesa'
+        : '';
+    $joinMesa = $conMesa
+        ? ' LEFT JOIN asignacion_mesas am ON am.confirmacion_id = confirmaciones.id' .
+          ' LEFT JOIN mesas m ON m.id = am.mesa_id'
+        : '';
+
+    $filas = consultarTodo(
+        "SELECT confirmaciones.* $selectMesa FROM confirmaciones $joinMesa $donde $orden",
+        $parametros
+    );
 
     responderBien([
         'filas'    => $filas,

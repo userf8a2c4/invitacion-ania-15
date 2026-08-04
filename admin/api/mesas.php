@@ -250,6 +250,32 @@ case 'sentar':
     break;
 
 
+/* Le busca mesa a UNA sola persona, sin tocar a nadie más. Es el atajo
+   que aparece en el ticket de cada invitado, para no tener que ir hasta
+   la pantalla de Mesas solo para sentar a alguien. */
+case 'sentar_auto':
+    exigirMetodo('POST');
+    $datos = cuerpoJson();
+    $confirmacion = campoEntero($datos, 'confirmacion_id', 1);
+
+    $r = sentarAUnoSolo($confirmacion);
+    if (!$r['ok']) responderMal($r['error'], 400);
+
+    if (!empty($r['ya_estaba'])) {
+        responderBien(['mensaje' => 'Ya tenía mesa asignada.', 'mesa_id' => $r['mesa_id']]);
+    }
+
+    $mesaInfo = consultarUno('SELECT nombre FROM mesas WHERE id = :m', [':m' => $r['mesa_id']]);
+    anotarEnBitacora($yo, 'sentó a alguien automáticamente', 'asignacion_mesas',
+                     $confirmacion, ($mesaInfo['nombre'] ?? ''));
+
+    responderBien([
+        'mensaje' => 'Quedó en ' . ($mesaInfo['nombre'] ?? 'una mesa') . '.',
+        'mesa_id' => $r['mesa_id'],
+    ]);
+    break;
+
+
 case 'fijar':
     exigirMetodo('POST');
     $datos = cuerpoJson();
