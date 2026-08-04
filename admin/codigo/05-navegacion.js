@@ -195,6 +195,14 @@ function atenderMenu(opcion) {
       abrirImportador();
       break;
 
+    case 'compartir':
+      abrirCompartir();
+      break;
+
+    case 'el-dia':
+      abrirModoDelDia();
+      break;
+
     case 'alarmas':
       abrirAlarmas();
       break;

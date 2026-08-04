@@ -83,7 +83,7 @@ class ErrorDelServidor extends Error {
  *
  * @example
  *   const lista = await pedir('confirmaciones.php?accion=listar');
- *   await pedir('notas.php?accion=crear', {
+ *   await pedir('planificador.php?accion=guardar_nota', {
  *     metodo: 'POST',
  *     cuerpo: { titulo: 'Llamar al DJ' },
  *   });

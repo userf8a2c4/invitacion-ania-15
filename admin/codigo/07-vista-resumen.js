@@ -37,6 +37,9 @@ async function dibujarResumen() {
 
   const partes = [];
 
+  /* "Hoy" va PRIMERO, antes que cualquier número. Es la única pregunta
+     que hay que contestar al abrir la app; el resto es contexto. */
+  partes.push('<div id="bloque-hoy"></div>');
   partes.push(bloqueCuentaAtras(datos.dias_para_la_fiesta));
   partes.push(bloqueInvitados(datos.invitados));
   partes.push(bloqueDinero(datos.dinero));
@@ -47,6 +50,10 @@ async function dibujarResumen() {
 
   actualizarBurbujas(datos);
   engancharResumen(vista);
+
+  /* Se pide aparte y sin esperarlo: si hoy.php tardara, el Resumen ya
+     está pintado y el bloque aparece encima cuando llega. */
+  pintarHoy(buscar('#bloque-hoy', vista));
 }
 
 
