@@ -521,6 +521,21 @@ select.campo__control {
 }
 .tostada--mal { border-color: var(--alerta); color: var(--alerta); }
 
+/* El aviso fijo de "sin conexión" / "cambios por enviar", arriba de todo. */
+.banner-conexion {
+  padding: 6px var(--esp-2);
+  text-align: center;
+  font-size: 12.5px;
+  background: rgba(207, 91, 82, .16);
+  color: var(--alerta);
+  border-bottom: 1px solid rgba(207, 91, 82, .3);
+}
+.banner-conexion--sincronizando {
+  background: rgba(212, 168, 67, .16);
+  color: var(--oro);
+  border-bottom-color: rgba(212, 168, 67, .3);
+}
+
 /* Lo que se ve cuando una lista todavía no tiene nada. Un vacío bien
    explicado evita que uno crea que la app se rompió. */
 .vacio {

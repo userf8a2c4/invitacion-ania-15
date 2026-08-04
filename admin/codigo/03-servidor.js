@@ -132,6 +132,30 @@ async function pedir(ruta, opciones) {
     if (error.name === 'AbortError') {
       throw new ErrorDelServidor('El servidor tardó demasiado. Probá de nuevo.', 0);
     }
+
+    /* Sin señal de verdad (y no un error real del servidor mientras hay
+       señal): para una lectura se devuelve la última copia guardada si
+       hay; para un envío, se anota en la cola para mandarlo solo cuando
+       vuelva la señal. Nada de esto aplica si esto YA viene de la cola
+       (config._sync): ahí conviene que falle, para que sincronizarCola()
+       lo deje esperando en vez de darlo por mandado. */
+    if (!navigator.onLine && !config._sync) {
+      if (metodo === 'GET') {
+        const copia = await leerLectura(ruta);
+        if (copia) {
+          actualizarBannerConexion();
+          return copia.datos;
+        }
+      } else if (config.cuerpo) {
+        await encolarEscritura(ruta, config.cuerpo);
+        actualizarBannerConexion();
+        // El "mensaje" genérico es para las vistas que hacen
+        // avisar(r.mensaje) después de guardar: sin esto, mostrarían
+        // "undefined" en vez de una frase con sentido.
+        return { _offline: true, mensaje: 'Sin conexión: se guardó y se va a mandar solo.' };
+      }
+    }
+
     throw new ErrorDelServidor('Sin conexión. Revisá tu internet.', 0);
   }
   clearTimeout(reloj);
@@ -160,6 +184,10 @@ async function pedir(ruta, opciones) {
       respuesta.status
     );
   }
+
+  // Se guarda una copia de toda lectura que salió bien, para poder
+  // mostrarla si la próxima vez no hay señal.
+  if (metodo === 'GET') guardarLectura(ruta, carga.datos);
 
   return carga.datos;
 }
