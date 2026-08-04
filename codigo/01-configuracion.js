@@ -204,7 +204,7 @@ const CONFIGURACION = {
 
   /* ─── 4. MESA DE REGALOS ──────────────────────────────────────────── */
   regalos: {
-    enlaceDeLaLista: 'https://www.amazon.com.mx/registries/gl/owner-view/LJDSRURUU3G4',
+    enlaceDeLaLista: 'https://www.amazon.com.mx/registries/gl/guest-view/LJDSRURUU3G4?ref_=cm_sw_r_apann_ggr-subnav-share_YQS0Y5DAPV5S2YHN6VDF&language=en-US',
     aclaracion: 'También se aceptan transferencias — preguntar a los papás',
   },
 
