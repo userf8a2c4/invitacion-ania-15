@@ -69,7 +69,7 @@ const CONFIGURACION = {
     codigoDeVestimenta: 'Formal · Etiqueta<br>Evitar color rojo',
 
     /** Información del estacionamiento. */
-    estacionamiento: 'Valet parking disponible<br>$50 por persona',
+    estacionamiento: 'Valet parking disponible<br>$50 por auto',
   },
 
 
