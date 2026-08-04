@@ -39,7 +39,7 @@ const CONFIGURACION = {
        enlace para compartir se saca desde Amazon con el botón "Invitar" o
        "Compartir" de la lista, y es el que habría que poner acá Y en la
        invitación. */
-    enlaceDeLaLista: 'https://www.amazon.com.mx/registries/gl/owner-view/LJDSRURUU3G4',
+    enlaceDeLaLista: 'https://www.amazon.com.mx/registries/gl/guest-view/LJDSRURUU3G4?ref_=cm_sw_r_apann_ggr-subnav-share_YQS0Y5DAPV5S2YHN6VDF&language=en-US',
 
     /* De qué remitente vienen los correos de "alguien compró de tu lista".
        El panel los busca en el buzón para ofrecerte dar de alta el regalo
