@@ -89,11 +89,17 @@ const CONOCIMIENTO_CHATBOT = {
   },
 
   /* ── MESA DE REGALOS ───────────────────────────────────────────────────
-     Opciones de regalo.                                                    */
+     El enlace de Amazon y la aclaración NO se escriben acá.
+
+     Ya viven en codigo/01-configuracion.js (sección 4, "regalos"), que es
+     de donde los toma la sección de regalos de la invitación. Tenerlos
+     dos veces es garantizar que un día digan cosas distintas: se cambia
+     uno, se olvida el otro, y la invitación y las preguntas frecuentes
+     mandan a la gente a lugares diferentes.
+
+     Acá solo va lo que es propio de esta respuesta.                        */
   regalos: {
     mensaje:      'Tu presencia es el mejor regalo.',              // ✏️
-    amazon:       'https://www.amazon.com.mx/registries/gl/owner-view/LJDSRURUU3G4', // ✏️
-    transferencia: 'También se aceptan transferencias, consultá a los papás', // ✏️
   },
 
   /* ── PREGUNTAS FRECUENTES EXTRA ────────────────────────────────────────
@@ -221,12 +227,21 @@ const PREGUNTAS_FRECUENTES = [
     pregunta: '¿Hay mesa de regalos?',
     respuesta: () => {
       const r = CONOCIMIENTO_CHATBOT.regalos;
+
+      /* El enlace y la aclaración se leen de 01-configuracion.js, que es
+         el mismo lugar del que los toma la sección de regalos de la
+         invitación. Así las dos no pueden contradecirse.
+         El typeof es por si algún día se carga este archivo suelto. */
+      const config = (typeof CONFIGURACION !== 'undefined' ? CONFIGURACION.regalos : null) || {};
+
       let texto = r.mensaje;
-      if (r.amazon) {
+
+      if (config.enlaceDeLaLista) {
         texto += `<br>Si querés obsequiarle algo, esta es su mesa: `
-               + `<a href="${r.amazon}" target="_blank" rel="noopener">Mesa de regalos</a>.`;
+               + `<a href="${config.enlaceDeLaLista}" target="_blank" rel="noopener">Mesa de regalos</a>.`;
       }
-      if (r.transferencia) texto += `<br>${r.transferencia}.`;
+      if (config.aclaracion) texto += `<br>${config.aclaracion}.`;
+
       return texto;
     },
   },
