@@ -54,7 +54,7 @@ const CONOCIMIENTO_CHATBOT = {
     direccion:     'Via José López Portillo 318, Delegación San Lorenzo Tepaltitlán I, Toluca, Estado de México', // ✏️
     googleMaps:    'https://maps.app.goo.gl/EBXftZ48M5c3HLFGA',   // ✏️
     referencia:    '',  // ✏️ Ej: 'A una cuadra del Walmart de Toluca'
-    estacionamiento: 'Valet parking disponible · $50 por persona', // ✏️
+    estacionamiento: 'Valet parking disponible · $50 por auto', // ✏️
   },
 
   /* ── VESTIMENTA ────────────────────────────────────────────────────────
