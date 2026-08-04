@@ -353,6 +353,12 @@ function abrirDetalleDeInvitado(id) {
                  : '—', true],
   ];
 
+  if (asiste) {
+    renglones.push(['Mesa', fila.mesa
+      ? '<span class="etiqueta etiqueta--bien">' + seguro(fila.mesa) + '</span>'
+      : '<span class="etiqueta etiqueta--alerta">Sin asignar</span>', true]);
+  }
+
   const detalle = renglones.map(r =>
     '<span class="detalle__rotulo">' + seguro(r[0]) + '</span>' +
     '<span class="detalle__valor">' + r[1] + '</span>'
@@ -360,6 +366,14 @@ function abrirDetalleDeInvitado(id) {
 
   const cuerpo = abrirHoja(fila.nombre || 'Confirmación',
     '<div class="detalle">' + detalle + '</div>' +
+    (asiste
+      ? '<div class="acciones">' +
+          '<button class="boton" id="mesa-auto-invitado">Sentar solo</button>' +
+          '<button class="boton boton--principal" id="mesa-elegir-invitado">' +
+            (fila.mesa ? 'Cambiar mesa' : 'Elegir mesa') +
+          '</button>' +
+        '</div>'
+      : '') +
     (INVITADOS_EDITABLES
       ? '<div class="acciones">' +
           '<button class="boton boton--peligro" id="borrar-invitado">Borrar</button>' +
@@ -367,6 +381,34 @@ function abrirDetalleDeInvitado(id) {
         '</div>'
       : '')
   );
+
+  if (asiste) {
+    const refrescar = () => { dibujarGente(); ensuciarVistas('resumen', 'evento'); };
+
+    buscar('#mesa-auto-invitado', cuerpo).addEventListener('click', async () => {
+      try {
+        const r = await mandar('mesas.php?accion=sentar_auto', { confirmacion_id: fila.id });
+        cerrarHoja();
+        avisar(r.mensaje);
+        refrescar();
+      } catch (error) {
+        avisar(error.message, true);
+      }
+    });
+
+    buscar('#mesa-elegir-invitado', cuerpo).addEventListener('click', async () => {
+      try {
+        if (!MESAS) MESAS = await traer('mesas.php?accion=todo');
+        if (!MESAS.mesas.length) {
+          avisar('Todavía no armaste ninguna mesa. Andá a Evento → Mesas.', true);
+          return;
+        }
+        elegirMesaPara(fila.id, refrescar);
+      } catch (error) {
+        avisar(error.message, true);
+      }
+    });
+  }
 
   if (!INVITADOS_EDITABLES) return;
 
