@@ -49,7 +49,7 @@ require_once __DIR__ . '/entorno.php';
  */
 function smtpEnviar($para, $asunto, $html, $from, $fromNombre,
                     $host, $port, $user, $pass, $responderA = '',
-                    $imagenes = []) {
+                    $imagenes = [], $adjuntos = []) {
     $log = [];
 
     // Con 465 el cifrado va desde el saludo. Con cualquier otro puerto se
@@ -126,11 +126,43 @@ function smtpEnviar($para, $asunto, $html, $from, $fromNombre,
     // español. Declararlo evita ese cartel.
     $msg .= "Content-Language: es-MX\r\n";
 
-    if (empty($imagenes)) {
-        // Sin imágenes: un correo simple de una sola parte, como siempre.
+    if (empty($imagenes) && empty($adjuntos)) {
+        // Sin nada adjunto: un correo simple de una sola parte, como siempre.
         $msg .= "Content-Type: text/html; charset=UTF-8\r\n";
         $msg .= "Content-Transfer-Encoding: base64\r\n";
         $msg .= "\r\n" . $cuerpoB64;
+
+    } elseif (!empty($adjuntos)) {
+        /* CON ARCHIVOS ADJUNTOS
+           multipart/MIXED, no /related: un adjunto es un archivo aparte
+           que se descarga, no una imagen incrustada en el HTML. Con
+           /related el respaldo aparecería como parte del mensaje y
+           varios lectores ni lo mostrarían. */
+        $frontera = 'ania' . bin2hex(random_bytes(12));
+
+        $msg .= "Content-Type: multipart/mixed; boundary=\"$frontera\"\r\n";
+        $msg .= "\r\n";
+        $msg .= "Este mensaje necesita un lector de correo que entienda HTML.\r\n\r\n";
+
+        $msg .= "--$frontera\r\n";
+        $msg .= "Content-Type: text/html; charset=UTF-8\r\n";
+        $msg .= "Content-Transfer-Encoding: base64\r\n";
+        $msg .= "\r\n" . $cuerpoB64 . "\r\n";
+
+        foreach ($adjuntos as $adjunto) {
+            // El nombre se limpia: unas comillas dentro romperían la
+            // cabecera y el archivo llegaría sin nombre o no llegaría.
+            $nombre = str_replace(['"', "\r", "\n"], '', (string) $adjunto['nombre']);
+            $tipo   = (string) ($adjunto['tipo'] ?? 'application/octet-stream');
+
+            $msg .= "--$frontera\r\n";
+            $msg .= "Content-Type: $tipo; name=\"$nombre\"\r\n";
+            $msg .= "Content-Transfer-Encoding: base64\r\n";
+            $msg .= "Content-Disposition: attachment; filename=\"$nombre\"\r\n";
+            $msg .= "\r\n" . chunk_split(base64_encode($adjunto['datos'])) . "\r\n";
+        }
+
+        $msg .= "--$frontera--";
 
     } else {
         /* CON IMÁGENES INCRUSTADAS

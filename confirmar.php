@@ -207,6 +207,16 @@ $htmlInvitado = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><met
     <p style='margin:28px 0 0;font-size:13px;color:#a07830;'>
       Presentá este correo o tu código en la entrada.<br>
       <strong>Salones Alvi Toluca · 5:00 PM · Vestimenta formal</strong>
+    </p>
+
+    <!-- El enlace para corregirse solo. Va con el código adentro, así
+         que abre directo su ficha sin tener que escribirlo. Sin esto,
+         cada cambio llega por WhatsApp y hay que cargarlo a mano. -->
+    <p style='margin:20px 0 0;font-size:13px;color:#a07830;'>
+      ¿Cambió algo? Podés
+      <a href='https://aniaxv.com/mi-pase.php?c=$codigo'
+         style='color:#d4a843;'>corregir tus datos acá</a>
+      sin escribirnos.
     </p>" : "
     <p style='margin:28px 0 0;color:#d4c098;'>Gracias por avisarnos, te vamos a extrañar. 🌹</p>") . "
   </td></tr>
