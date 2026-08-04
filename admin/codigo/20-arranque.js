@@ -70,6 +70,10 @@ function registrarServiceWorker() {
 function arrancarLaApp() {
   mostrarPantalla('app');
 
+  // Por si se abre ya sin señal, o quedaron cambios de la vez pasada.
+  actualizarBannerConexion();
+  sincronizarCola();
+
   // Si se entró desde un atajo del icono ("Invitados", "Dinero"…), se
   // abre esa vista en lugar del Resumen.
   const parametros = new URLSearchParams(location.search);
