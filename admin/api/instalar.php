@@ -128,6 +128,19 @@ $agregarColumna('cotizaciones', 'precio_pp', 'DECIMAL(12,2) NOT NULL DEFAULT 0')
    suyo por WhatsApp de un toque. Ver compartir.php. */
 $agregarColumna('proveedores', 'paquete', "VARCHAR(20) NOT NULL DEFAULT ''");
 
+/* Dónde está cada mesa en el salón, para poder dibujar el plano. En 0
+   quedan las que todavía no se ubicaron: se muestran aparte. */
+$agregarColumna('mesas', 'fila',    'INT NOT NULL DEFAULT 0');
+$agregarColumna('mesas', 'columna', 'INT NOT NULL DEFAULT 0');
+
+/* Qué tan buena es la ubicación. Número más chico = mejor mesa. Es lo
+   que hace que "los grupos de orden más bajo se quedan con las mejores
+   mesas" signifique algo: antes se ordenaba por nombre. */
+$agregarColumna('mesas', 'prioridad', 'INT NOT NULL DEFAULT 50');
+
+$agregarColumna('mesas', 'perfil',
+                "ENUM('normal','ninos','mayores') NOT NULL DEFAULT 'normal'");
+
 
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 

@@ -202,7 +202,88 @@ const CONFIGURACION = {
   ],
 
 
-  /* ─── 8. SERVIDOR ─────────────────────────────────────────────────── */
+  /* ─── 8. EL PLANO DEL SALÓN ───────────────────────────────────────── */
+  /* La disposición real del Salón Estrella de Alvi Toluca, tal como la
+     tiene Lucila en su planilla.
+
+     POR QUÉ UN PLANO Y NO UNA LISTA
+     Una lista de mesas no dice lo único que importa al acomodar gente:
+     DÓNDE está cada mesa. Cuál queda pegada a la pista, cuál al lado del
+     baño, cuál en el fondo. Por eso `mesas.ubicacion` nunca sirvió de
+     nada: se podía escribir "cerca de la pista" pero no se veía.
+
+     CÓMO SE LEE ESTO
+     Es una grilla de 4 columnas. Cada elemento dice en qué fila va y
+     cuántas columnas ocupa. Las mesas NO están acá: su posición vive en
+     la base de datos (mesas.fila y mesas.columna), para poder moverlas
+     sin tocar código.
+
+     Si algún día cambia el salón, se cambia esto y listo. */
+  salon: {
+    /** Cuántas columnas de mesas entran a lo ancho. */
+    columnas: 4,
+
+    /** En qué filas de la grilla van las mesas. */
+    filasDeMesas: [3, 4, 5, 6],
+
+    /* Lo que no es una mesa: la tarima, la pista, los servicios. Se
+       dibuja alrededor para que el plano se parezca al salón de verdad
+       y uno pueda orientarse de un vistazo. */
+    fijos: [
+      { clave: 'principal', nombre: 'Mesa principal', icono: '⭐',
+        fila: 1, desde: 1, ancho: 4, tipo: 'principal' },
+
+      { clave: 'dj',    nombre: 'DJ',             icono: '🎧',
+        fila: 2, desde: 1, ancho: 1, tipo: 'dj' },
+      { clave: 'pista', nombre: 'Pista de baile', icono: '💃',
+        fila: 2, desde: 2, ancho: 3, tipo: 'pista' },
+
+      { clave: 'bufet', nombre: 'Servicio / bufet', icono: '🍽️',
+        fila: 7, desde: 1, ancho: 1, tipo: 'servicio' },
+      { clave: 'banos', nombre: 'Baños',           icono: '🚻',
+        fila: 7, desde: 4, ancho: 1, tipo: 'servicio' },
+
+      { clave: 'barra',   nombre: 'Barra / bar', icono: '🍹',
+        fila: 8, desde: 1, ancho: 4, tipo: 'barra' },
+      { clave: 'entrada', nombre: 'Entrada',     icono: '🚪',
+        fila: 9, desde: 2, ancho: 2, tipo: 'entrada' },
+    ],
+
+    /* Las 14 mesas del salón, con su posición. Es lo que crea el botón
+       "Armar el salón de Alvi": así no hay que cargarlas a mano ni
+       acordarse de cuál va dónde.
+
+       Las rectangulares de Alvi son de 10 a 12 personas; se toma 10 para
+       no prometer lugares que después aprieten. */
+    mesas: [
+      { nombre: 'Mesa 1',  fila: 3, columna: 1 },
+      { nombre: 'Mesa 2',  fila: 3, columna: 2 },
+      { nombre: 'Mesa 3',  fila: 3, columna: 3 },
+      { nombre: 'Mesa 4',  fila: 3, columna: 4 },
+      { nombre: 'Mesa 5',  fila: 4, columna: 1 },
+      { nombre: 'Mesa 6',  fila: 4, columna: 2 },
+      { nombre: 'Mesa 7',  fila: 4, columna: 3 },
+      { nombre: 'Mesa 8',  fila: 4, columna: 4 },
+      { nombre: 'Mesa 9',  fila: 5, columna: 1 },
+      { nombre: 'Mesa 10', fila: 5, columna: 2 },
+      { nombre: 'Mesa 11', fila: 5, columna: 3 },
+      { nombre: 'Mesa 12', fila: 5, columna: 4 },
+      { nombre: 'Mesa 13', fila: 6, columna: 1 },
+      { nombre: 'Mesa 14', fila: 6, columna: 3 },
+    ],
+
+    /** Cuánta gente entra por mesa. */
+    capacidad: 10,
+
+    /* Las mesas más cerca de la pista son las mejores, y son las que
+       primero se reparten a los grupos de orden más bajo. Número más
+       chico = mejor mesa. Se calcula por la fila: la 3 está pegada a la
+       pista, la 6 es el fondo. */
+    prioridadPorFila: { 3: 10, 4: 30, 5: 50, 6: 70 },
+  },
+
+
+  /* ─── 9. SERVIDOR ─────────────────────────────────────────────────── */
   servidor: {
     /* De dónde cuelga la API. Se deja relativo a propósito: así funciona
        igual en aniaxv.com y en cualquier prueba local, sin tocar nada. */

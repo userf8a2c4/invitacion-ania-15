@@ -204,6 +204,100 @@
   transition: all var(--transicion);
 }
 
+/* ─── EL PLANO DEL SALÓN ───────────────────────────────────────────── */
+
+/* El dibujo del salón como es de verdad, para poder decidir quién queda
+   cerca de qué en vez de imaginárselo. Ver bloqueDelPlano() en
+   codigo/17-mesas.js y CONFIGURACION.salon en 01-configuracion.js. */
+
+.plano {
+  display: grid;
+  gap: 5px;
+  margin-bottom: var(--esp-2);
+  padding: var(--esp-2);
+  background: var(--fondo-hundido);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo);
+}
+
+/* Todo lo que no es una mesa: tarima, pista, bufet, baños, barra. Van
+   apagados a propósito — están para orientarse, no para tocarlos. */
+.plano__fijo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 4px 6px;
+  border-radius: var(--redondeo-chico);
+  border: 1px dashed var(--borde);
+  color: var(--texto-tenue);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-align: center;
+  line-height: 1.15;
+}
+
+/* La mesa principal y la pista se distinguen porque son las referencias
+   con las que uno se ubica en el salón. */
+.plano__fijo--principal {
+  border-style: solid;
+  border-color: var(--oro);
+  color: var(--oro);
+  min-height: 40px;
+}
+.plano__fijo--pista {
+  border-color: var(--info);
+  color: var(--info);
+  min-height: 54px;
+}
+.plano__fijo--entrada { border-color: var(--oro-apagado); }
+
+.plano__mesa {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  /* 54px: se tocan con el pulgar mientras se acomoda gente. */
+  min-height: 54px;
+  padding: 4px;
+  border-radius: var(--redondeo-chico);
+  border: 1px solid var(--borde);
+  background: var(--fondo-tarjeta);
+  color: var(--texto);
+  transition: transform var(--transicion);
+}
+.plano__mesa:active { transform: scale(.96); }
+
+/* El color dice cómo está la mesa de un vistazo. Es lo que uno busca al
+   mirar el salón entero: leerlo mesa por mesa sería mucho más lento.
+   El número sigue estando, así que no depende solo del color. */
+.plano__mesa--vacia     { opacity: .55; }
+.plano__mesa--con-gente { border-color: var(--oro-apagado); }
+.plano__mesa--completa  {
+  border-color: var(--bien);
+  background: rgba(95, 174, 106, .12);
+}
+.plano__mesa--pasada    {
+  border-color: var(--alerta);
+  background: rgba(207, 91, 82, .14);
+}
+
+.plano__nombre {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.plano__cuenta {
+  font-size: 10px;
+  color: var(--texto-tenue);
+  line-height: 1;
+}
+
+
 /* Los filtros del modo del día. Ese día se usa la app de pie, con
    ruido y con una mano: 34 px se falla. 44 es el mínimo cómodo. */
 .filtro--grande {

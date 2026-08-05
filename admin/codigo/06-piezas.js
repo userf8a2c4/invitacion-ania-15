@@ -25,6 +25,9 @@
 /** Qué hacer cuando la hoja se cierre. Se usa para refrescar la vista. */
 let AL_CERRAR_HOJA = null;
 
+/** Cómo estaban los campos al abrir, para detectar lo escrito sin guardar. */
+let LO_QUE_HABIA_AL_ABRIR = '';
+
 /**
  * Abre la hoja con un título y un contenido.
  *
@@ -53,6 +56,10 @@ function abrirHoja(titulo, contenido, alCerrar) {
   AL_CERRAR_HOJA = alCerrar || null;
   hoja.classList.remove('oculto');
 
+  /* Se guarda cómo quedó la hoja recién abierta. Al cerrarla se compara
+     contra esto para saber si se escribió algo que se perdería. */
+  LO_QUE_HABIA_AL_ABRIR = loEscritoEnLaHoja();
+
   // Que el fondo no se desplace mientras la hoja está abierta: si no,
   // arrastrar dentro del formulario mueve la lista de atrás.
   document.body.style.overflow = 'hidden';
@@ -66,9 +73,23 @@ function abrirHoja(titulo, contenido, alCerrar) {
  *
  * @returns {void}
  */
-function cerrarHoja() {
+function cerrarHoja(forzar) {
   const hoja = buscar('#hoja');
   if (hoja.classList.contains('oculto')) return;
+
+  /* ¿Hay algo escrito que se va a perder?
+   *
+   * El fondo oscuro de la hoja cierra al tocarlo, y es MUY fácil rozarlo
+   * queriendo tocar un campo del borde. Sin este control, media hora
+   * cargando un proveedor se borraba con un dedo mal apoyado y sin una
+   * sola palabra de aviso.
+   *
+   * El código llama a cerrarHoja(true) después de guardar: ahí no hay
+   * nada que preguntar porque ya está guardado. */
+  if (!forzar && loEscritoEnLaHoja() !== LO_QUE_HABIA_AL_ABRIR) {
+    if (!confirmarAccion('Escribiste cosas que todavía no se guardaron.\n\n' +
+                         '¿Cerrar igual y perderlas?')) return;
+  }
 
   hoja.classList.add('oculto');
   buscar('#hoja-cuerpo').innerHTML = '';
@@ -87,8 +108,49 @@ function cerrarHoja() {
  * @returns {void}
  */
 function prepararHoja() {
-  buscar('#hoja-cerrar').addEventListener('click', cerrarHoja);
-  buscar('#hoja-fondo').addEventListener('click', cerrarHoja);
+  buscar('#hoja-cerrar').addEventListener('click', () => cerrarHoja());
+  buscar('#hoja-fondo').addEventListener('click', () => cerrarHoja());
+
+  /* ─── QUE GUARDAR NO SE PUEDA TOCAR DOS VECES ──────────────────────
+   *
+   * Con mala señal, guardar puede tardar varios segundos sin que pase
+   * nada visible. El reflejo natural es volver a tocar el botón — y con
+   * eso se creaban dos gastos, dos tareas, dos proveedores.
+   *
+   * Va acá y no en cada formulario por la misma razón que la clave de
+   * idempotencia vive en cuerpoJson(): son cuarenta formularios y basta
+   * que uno se olvide para que el problema siga existiendo. En fase de
+   * captura para correr ANTES que el manejador de la vista.
+   *
+   * Se vuelve a habilitar sola: si el guardado falla, la hoja queda
+   * abierta y hay que poder reintentar. */
+  buscar('#hoja-cuerpo').addEventListener('click', evento => {
+    const boton = evento.target.closest('#pie-guardar, .boton--principal');
+    if (!boton || boton.disabled) return;
+
+    boton.disabled = true;
+    boton.dataset.textoOriginal = boton.textContent;
+    boton.textContent = 'Guardando…';
+
+    setTimeout(() => {
+      if (!boton.isConnected) return;
+      boton.disabled = false;
+      if (boton.dataset.textoOriginal) boton.textContent = boton.dataset.textoOriginal;
+    }, 4000);
+  }, true);
+}
+
+/**
+ * Toma una foto de lo que hay escrito en la hoja.
+ *
+ * Sirve para saber, al cerrarla, si se perdería algo.
+ *
+ * @returns {string}
+ */
+function loEscritoEnLaHoja() {
+  return buscarTodos('#hoja-cuerpo input, #hoja-cuerpo textarea, #hoja-cuerpo select')
+    .map(c => (c.type === 'checkbox' ? (c.checked ? '1' : '0') : c.value))
+    .join('');
 }
 
 

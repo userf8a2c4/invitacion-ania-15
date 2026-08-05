@@ -196,7 +196,7 @@ function abrirHojaDeNuevoAdministrador() {
         contrasena: clave,
         rol: valorDe('na-rol', cuerpo),
       });
-      cerrarHoja();
+      cerrarHoja(true);
       avisar('Cuenta creada para ' + nombre + '.');
     } catch (error) {
       avisar(error.message, true);
@@ -331,7 +331,7 @@ async function suscribirAAvisos() {
       auth:   crudo.keys ? crudo.keys.auth   : '',
     });
 
-    cerrarHoja();
+    cerrarHoja(true);
     avisar('Listo. Este teléfono va a recibir los recordatorios.');
 
   } catch (error) {

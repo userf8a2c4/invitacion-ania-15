@@ -323,7 +323,7 @@ function saltarARelacion(grupo, fila) {
 
   if (!grupo.ir_a) return;
 
-  cerrarHoja();
+  cerrarHoja(true);
 
   /* Se deja anotado a qué sub-sección hay que ir, y la vista de destino
      lo lee al dibujarse. Es la forma más simple de cruzar de una
@@ -345,7 +345,7 @@ function saltarARelacion(grupo, fila) {
  * @returns {void}
  */
 function abrirFichaCompleta(contacto) {
-  cerrarHoja();
+  cerrarHoja(true);
 
   switch (contacto.tipo) {
     case 'invitado':

@@ -477,7 +477,7 @@ function abrirDetalleDeInvitado(id) {
     buscar('#mesa-auto-invitado', cuerpo).addEventListener('click', async () => {
       try {
         const r = await mandar('mesas.php?accion=sentar_auto', { confirmacion_id: fila.id });
-        cerrarHoja();
+        cerrarHoja(true);
         avisar(r.mensaje);
         refrescar();
       } catch (error) {
@@ -513,7 +513,7 @@ function abrirDetalleDeInvitado(id) {
 
     try {
       await mandar('confirmaciones.php?accion=borrar', { id: fila.id });
-      cerrarHoja();
+      cerrarHoja(true);
       avisar('Confirmación eliminada.');
       ensuciarVistas('resumen');
       dibujarGente();
@@ -586,7 +586,7 @@ function abrirFormularioDeInvitado(fila) {
 
     try {
       await mandar('confirmaciones.php?accion=' + (esNuevo ? 'crear' : 'editar'), carga);
-      cerrarHoja();
+      cerrarHoja(true);
       avisar(esNuevo ? 'Invitado agregado.' : 'Cambios guardados.');
       ensuciarVistas('resumen');
       dibujarGente();

@@ -701,3 +701,44 @@ CREATE TABLE IF NOT EXISTS envios_proveedor (
   CONSTRAINT envio_de_proveedor FOREIGN KEY (proveedor_id)
     REFERENCES proveedores(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 8. EL PLANO DEL SALÓN Y EL DESHACER DEL ACOMODO
+-- ══════════════════════════════════════════════════════════════════════
+--
+-- A la tabla `mesas` le faltan cuatro columnas. NO se agregan desde acá
+-- (ADD COLUMN IF NOT EXISTS no existe en MySQL): las agrega
+-- api/instalar.php, que antes comprueba si ya están.
+--
+--   fila, columna → dónde está la mesa en el salón. Sin esto, el panel
+--     mostraba una lista y no había forma de saber cuál mesa quedaba
+--     pegada a la pista y cuál en el fondo, que es lo único que importa
+--     al decidir quién se sienta dónde.
+--   prioridad → qué tan buena es esa ubicación. El motor de acomodo
+--     promete que "los grupos de orden más bajo se quedan con las
+--     mejores mesas", pero antes ordenaba las mesas por NOMBRE, así que
+--     "la mejor mesa" terminaba siendo la que se llamaba Mesa 1.
+--   perfil → si es una mesa pensada para niños o para gente mayor.
+
+
+-- Una foto del acomodo antes de cambiarlo.
+--
+-- POR QUÉ HACE FALTA
+-- El botón de acomodar solo mueve a todo el mundo de una vez. Sin una
+-- forma de volver atrás, usarlo da miedo — y una función que da miedo no
+-- se usa, por buena que sea. Con el deshacer se puede probar.
+--
+-- Se guardan las últimas 5 y las viejas se van solas.
+
+CREATE TABLE IF NOT EXISTS acomodo_respaldo (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  -- El contenido entero de asignacion_mesas, en JSON.
+  contenido  MEDIUMTEXT NOT NULL,
+  -- Qué lo produjo: 'antes_de_acomodar', 'antes_de_vaciar'…
+  motivo     VARCHAR(40) NOT NULL DEFAULT '',
+  cuantos    INT NOT NULL DEFAULT 0,
+  usuario_id INT DEFAULT NULL,
+  cuando     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_fecha (cuando)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
