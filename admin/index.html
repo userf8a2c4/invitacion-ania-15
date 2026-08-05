@@ -94,11 +94,26 @@
       <h1 id="titulo-vista" class="encabezado__titulo">Resumen</h1>
       <p id="subtitulo-vista" class="encabezado__subtitulo"></p>
     </div>
-    <button id="boton-menu" class="boton-icono" aria-label="Menú" aria-haspopup="true">
-      <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
-        <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
-      </svg>
-    </button>
+    <!-- Los dos botones van juntos en una caja porque el encabezado usa
+         space-between: sueltos, la lupa se iría al medio de la pantalla. -->
+    <div class="encabezado__acciones">
+      <!-- La lupa busca en TODO el panel a la vez, no solo en la pestaña
+           donde uno esté. Va acá, a la vista desde cualquier pantalla:
+           con esta cantidad de datos, "¿dónde lo cargué?" es la pregunta
+           que más tiempo hace perder. -->
+      <button id="boton-buscar" class="boton-icono" aria-label="Buscar en todo">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
+          <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/>
+          <path d="M16.5 16.5L21 21" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button id="boton-menu" class="boton-icono" aria-label="Menú" aria-haspopup="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
+          <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
+        </svg>
+      </button>
+    </div>
   </header>
 
   <!-- ─── Aviso de conexión ──────────────────────────────────────────── -->
@@ -209,22 +224,34 @@
   </div>
 </div>
 
-<!-- Menú de los tres puntitos. -->
+<!-- Menú de los tres puntitos.
+
+     Va en DOS GRUPOS a propósito. Antes eran doce opciones seguidas, y
+     "Cerrar sesión" quedaba a un renglón de "Importar desde una
+     planilla": cosas que se hacen todas las semanas mezcladas con cosas
+     que se tocan una vez al año.
+
+     Arriba lo que se USA (herramientas de trabajo), abajo lo que se
+     CONFIGURA. -->
 <div id="menu" class="menu oculto" role="menu">
+
+  <div class="menu__titulo">Herramientas</div>
+  <button class="menu__opcion" data-menu="el-dia" role="menuitem">Modo día del evento</button>
+  <button class="menu__opcion" data-menu="compartir" role="menuitem">Compartir con proveedores</button>
+  <button class="menu__opcion" data-menu="importar" role="menuitem">Importar desde una planilla</button>
+  <button class="menu__opcion" data-menu="alarmas" role="menuitem">Alarmas</button>
+  <button class="menu__opcion" data-menu="bitacora" role="menuitem">Historial de cambios</button>
+
+  <div class="menu__titulo">Ajustes</div>
+  <button class="menu__opcion" data-menu="cuenta"  role="menuitem">Mi cuenta</button>
+  <button class="menu__opcion" data-menu="usuarios" role="menuitem">Personas con acceso</button>
+  <button class="menu__opcion" data-menu="nuevo-admin" role="menuitem">Agregar administrador</button>
+  <button class="menu__opcion" data-menu="avisos"  role="menuitem">Avisos y recordatorios</button>
+  <button class="menu__opcion" data-menu="etiquetas" role="menuitem">Cambiar los nombres</button>
   <!-- El de instalar se esconde solo cuando la app ya está instalada,
        o cuando el navegador no ofrece instalarla. -->
   <button class="menu__opcion oculto" data-menu="instalar" id="opcion-instalar"
           role="menuitem">Instalar en la pantalla de inicio</button>
-  <button class="menu__opcion" data-menu="cuenta"  role="menuitem">Mi cuenta</button>
-  <button class="menu__opcion" data-menu="usuarios" role="menuitem">Personas con acceso</button>
-  <button class="menu__opcion" data-menu="nuevo-admin" role="menuitem">Agregar administrador</button>
-  <button class="menu__opcion" data-menu="importar" role="menuitem">Importar desde una planilla</button>
-  <button class="menu__opcion" data-menu="compartir" role="menuitem">Compartir con proveedores</button>
-  <button class="menu__opcion" data-menu="el-dia" role="menuitem">Modo día del evento</button>
-  <button class="menu__opcion" data-menu="alarmas" role="menuitem">Alarmas</button>
-  <button class="menu__opcion" data-menu="avisos"  role="menuitem">Avisos y recordatorios</button>
-  <button class="menu__opcion" data-menu="etiquetas" role="menuitem">Cambiar los nombres</button>
-  <button class="menu__opcion" data-menu="bitacora" role="menuitem">Historial de cambios</button>
   <button class="menu__opcion menu__opcion--peligro" data-menu="salir" role="menuitem">Cerrar sesión</button>
 </div>
 
@@ -260,6 +287,7 @@
 <script src="codigo/24-etiquetas.js"></script>
 <script src="codigo/25-hoy.js"></script>
 <script src="codigo/26-sincronizacion.js"></script>
+<script src="codigo/27-buscador.js"></script>
 <!-- 20-arranque.js va SIEMPRE último: es el que enciende la app y usa
      funciones de todos los anteriores. Por eso el 21 y el 22 se cargan
      antes que él aunque su número sea mayor. -->

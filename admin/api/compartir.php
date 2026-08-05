@@ -27,10 +27,37 @@ require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
 
-exigirSesion();
-exigirMetodo('GET');
+/* Los paquetes de texto incluyen la lista completa de invitados con
+   sus códigos de pase, y las alergias con nombre y apellido. Es
+   información para mandarle a un proveedor, no para cualquier cuenta. */
+$yo = exigirAdministrador();
 
+/* GET para todo salvo anotar_envio, que escribe una fila. */
 $accion = (string) ($_GET['accion'] ?? 'que_hay');
+if ($accion !== 'anotar_envio') exigirMetodo('GET');
+
+/**
+ * Deja un teléfono como lo quiere wa.me: solo dígitos y con clave de país.
+ *
+ * ⚠️ TIENE QUE HACER LO MISMO QUE paraWhatsApp() EN codigo/02-utilidades.js.
+ * Si uno normaliza y el otro no, la lista de proveedores dice "sin
+ * WhatsApp" para un número que la ficha del mismo proveedor sí acepta, y
+ * no hay forma de saber cuál de los dos tiene razón.
+ *
+ * @param string $telefono Como lo escribió quien lo cargó.
+ * @return string Solo dígitos, o '' si no sirve.
+ */
+function telefonoParaWhatsApp($telefono) {
+    $digitos = preg_replace('/\D/', '', (string) $telefono);
+    if ($digitos === '') return '';
+
+    // Diez dígitos es un número mexicano al que le falta la clave.
+    if (strlen($digitos) === 10) return '52' . $digitos;
+    if (strlen($digitos) >= 11)  return $digitos;
+
+    // Menos de diez: incompleto, un interno, o un error de carga.
+    return '';
+}
 
 /** El encabezado que lleva todo lo que se manda. */
 function encabezado($titulo) {
@@ -54,9 +81,81 @@ if ($accion === 'que_hay') {
          'que' => 'Las canciones por momento y las prohibidas'],
         ['clave' => 'iglesia',   'nombre' => 'Para la iglesia',
          'que' => 'Datos de la misa y qué papeles faltan'],
+        ['clave' => 'modista',   'nombre' => 'Para la modista',
+         'que' => 'Las pruebas de vestido, con fecha y lugar'],
         ['clave' => 'invitados', 'nombre' => 'Lista de invitados',
          'que' => 'Quiénes confirmaron, con sus códigos de pase'],
     ]);
+}
+
+
+/* ─── A QUIÉN HAY QUE MANDARLE, Y SI YA SE LE MANDÓ ───────────────────── */
+
+/*
+   La pantalla "Mandarles a todos". Devuelve un renglón por proveedor que
+   tenga paquete asignado, diciendo si ya se le mandó y si el texto
+   cambió desde entonces.
+
+   ⚠️ WhatsApp NO deja mandarle a varios de un toque desde un enlace. No
+   hay truco que lo evite. Por eso esto es una lista para ir tocando uno
+   por uno, y no un botón de "mandar a todos". A cambio, el texto se
+   sigue viendo antes de cada envío, que es como corresponde.
+*/
+if ($accion === 'a_quien') {
+    if (!existeTabla('proveedores')) responderBien(['proveedores' => []]);
+
+    $hayEnvios = existeTabla('envios_proveedor');
+
+    $filas = consultarTodo(
+        "SELECT p.id, p.nombre, p.servicio, p.telefono, p.paquete, p.estado" .
+        ($hayEnvios
+            ? ", (SELECT e.enviado_en FROM envios_proveedor e
+                   WHERE e.proveedor_id = p.id AND e.paquete = p.paquete
+                   ORDER BY e.enviado_en DESC LIMIT 1) AS enviado_en,
+                 (SELECT e.huella FROM envios_proveedor e
+                   WHERE e.proveedor_id = p.id AND e.paquete = p.paquete
+                   ORDER BY e.enviado_en DESC LIMIT 1) AS huella"
+            : ', NULL AS enviado_en, NULL AS huella') . "
+         FROM proveedores p
+         WHERE p.paquete <> '' AND p.paquete IS NOT NULL
+           AND p.estado <> 'cancelado'
+         ORDER BY p.nombre"
+    );
+
+    foreach ($filas as &$f) {
+        $f['sirve_whatsapp'] = telefonoParaWhatsApp($f['telefono']) !== '';
+        $f['id'] = (int) $f['id'];
+    }
+    unset($f);
+
+    responderBien(['proveedores' => $filas]);
+}
+
+
+/* ─── ANOTAR QUE SE MANDÓ ─────────────────────────────────────────────── */
+
+/*
+   Lo llama la app justo después de abrir WhatsApp. No hay forma de saber
+   si el mensaje se envió de verdad —eso pasa dentro de WhatsApp, fuera
+   del alcance del panel—, así que esto significa "se abrió el chat con
+   el texto puesto", que es todo lo que se puede afirmar honestamente.
+*/
+if ($accion === 'anotar_envio') {
+    exigirMetodo('POST');
+    if (!existeTabla('envios_proveedor')) {
+        responderMal('Falta la tabla envios_proveedor. Corré migracion.sql.', 500);
+    }
+
+    $datos = cuerpoJson();
+
+    insertar('envios_proveedor', [
+        'proveedor_id' => campoEntero($datos, 'proveedor_id', 1),
+        'paquete'      => campoTexto($datos, 'paquete', 20),
+        'huella'       => campoTexto($datos, 'huella', 64),
+        'usuario_id'   => (int) $yo['id'],
+    ]);
+
+    responderBien(['mensaje' => 'Anotado.']);
 }
 
 
@@ -315,6 +414,52 @@ if ($cual === 'iglesia') {
 }
 
 
+/* ═══ MODISTA ═══ */
+/* Las citas de vestido eran lo único que el panel guardaba y no sabía
+   compartir con nadie, aunque son justo las que hay que confirmar con
+   otra persona. */
+if ($cual === 'modista') {
+    $texto = encabezado('Vestido y arreglo');
+
+    if (existeTabla('citas_arreglo')) {
+        $citas = consultarTodo(
+            "SELECT titulo, tipo, fecha, hora, lugar, notas
+             FROM citas_arreglo
+             WHERE estado <> 'cancelada'
+             ORDER BY fecha, hora"
+        );
+
+        $comoSeLlama = [
+            'vestido'    => 'Vestido',
+            'maquillaje' => 'Maquillaje',
+            'peinado'    => 'Peinado',
+            'zapatos'    => 'Zapatos',
+            'otro'       => 'Otro',
+        ];
+
+        if ($citas) {
+            foreach ($citas as $c) {
+                $cuando = $c['fecha'] ? date('d/m/Y', strtotime($c['fecha'])) : 'Sin fecha';
+                if ($c['hora']) $cuando .= ' · ' . substr($c['hora'], 0, 5);
+
+                $texto .= "*" . ($c['titulo'] ?: ($comoSeLlama[$c['tipo']] ?? 'Cita')) . "*\n";
+                $texto .= $cuando . "\n";
+                if ($c['lugar']) $texto .= "📍 " . $c['lugar'] . "\n";
+                if ($c['notas']) $texto .= "_" . $c['notas'] . "_\n";
+                $texto .= "\n";
+            }
+        } else {
+            $texto .= "_Todavía no hay citas agendadas._\n";
+        }
+    }
+
+    /* La fecha de la fiesta va al final: es contra lo que la modista
+       calcula cuándo tiene que estar terminado el vestido. */
+    $texto .= str_repeat('—', 24) . "\n";
+    $texto .= "*La fiesta es el 24 de octubre de 2026.*\n";
+}
+
+
 /* ═══ INVITADOS ═══ */
 if ($cual === 'invitados') {
     $texto = encabezado('Invitados confirmados');
@@ -341,9 +486,56 @@ if ($cual === 'invitados') {
 
 if ($texto === '') responderMal('No sé armar esa lista.', 404);
 
+
+/* ─── A QUIÉN SE LE MANDA ─────────────────────────────────────────────── */
+
+/*
+   Hasta acá el panel armaba textos perfectos y después te dejaba solo:
+   el enlace era `wa.me/?text=…` SIN número, o sea que abría el selector
+   de contactos de WhatsApp para que buscaras al DJ a mano. El teléfono
+   del DJ estaba guardado a un metro de distancia, en la tabla de
+   proveedores, y los dos sistemas nunca se miraron.
+
+   Con `?proveedor=7` se busca su teléfono y el enlace abre SU chat con
+   el texto ya escrito.
+*/
+
+$proveedorId = (int) ($_GET['proveedor'] ?? 0);
+$proveedor   = null;
+
+if ($proveedorId > 0 && existeTabla('proveedores')) {
+    $proveedor = consultarUno(
+        'SELECT id, nombre, telefono, correo FROM proveedores WHERE id = :id',
+        [':id' => $proveedorId]
+    );
+    if (!$proveedor) responderMal('Ese proveedor no existe.', 404);
+}
+
+/* Un número mal cargado abre un chat vacío, o el de otra persona en otro
+   país. Se avisa antes, que es mejor que descubrirlo con el mensaje ya
+   mandado. */
+$digitos = $proveedor ? telefonoParaWhatsApp($proveedor['telefono']) : '';
+$sirveParaWhatsApp = $digitos !== '';
+
+/* La huella dice si el texto cambió desde la última vez que se mandó.
+   Es lo que evita el desastre de que el DJ toque una canción que se
+   agregó a las prohibidas DESPUÉS de mandarle la lista. */
+$huella = hash('sha256', $texto);
+
 responderBien([
     'cual'  => $cual,
     'texto' => $texto,
-    // Listo para abrir WhatsApp con el texto ya escrito.
-    'whatsapp' => 'https://wa.me/?text=' . rawurlencode($texto),
+    'huella' => $huella,
+
+    'proveedor' => $proveedor ? [
+        'id'     => (int) $proveedor['id'],
+        'nombre' => $proveedor['nombre'],
+        'sirve_whatsapp' => $sirveParaWhatsApp,
+    ] : null,
+
+    /* Con número si lo hay y sirve; si no, el selector de siempre. */
+    'whatsapp' => 'https://wa.me/' . ($sirveParaWhatsApp ? $digitos : '') .
+                  '?text=' . rawurlencode($texto),
+
+    'correo' => $proveedor ? (string) $proveedor['correo'] : '',
 ]);

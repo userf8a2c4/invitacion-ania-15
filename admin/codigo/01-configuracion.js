@@ -99,6 +99,14 @@ const CONFIGURACION = {
     /* Con cuántos días de anticipación se considera "próximo" un pago o
        una fecha de la agenda, para mostrarlos en el Resumen. */
     diasDeAnticipacion: 14,
+
+    /* Cuántos días antes de la fiesta aparece en el Resumen el botón
+       para abrir el cronograma del día.
+
+       No es lo mismo que el aviso de arriba: acá se trata de tener a
+       mano la pantalla que se usa de pie en el salón. Con 3 alcanza
+       para repasarla la noche anterior sin que moleste en agosto. */
+    diasParaElModoDelDia: 3,
   },
 
 
@@ -129,7 +137,72 @@ const CONFIGURACION = {
   },
 
 
-  /* ─── 6. SERVIDOR ─────────────────────────────────────────────────── */
+  /* ─── 6. QUÉ ES CADA SECCIÓN DE EVENTO ────────────────────────────── */
+  /* La pantalla Evento es un índice: una lista de secciones agrupadas,
+     cada una con una línea que dice qué es. Esa línea vive acá.
+
+     POR QUÉ IMPORTA: "Papeles" no significa nada por sí solo. "Fe de
+     bautismo, pláticas y qué falta entregar" sí. Son los carteles que
+     hacen que alguien que no armó esta app sepa dónde está parado.
+
+     El ORDEN de los grupos y de las filas de acá es el que se ve en
+     pantalla. Se puede reordenar libremente; las claves son las que no
+     se tocan, porque las usa el resto del código. */
+  indiceDeEvento: [
+    {
+      titulo: 'Organización',
+      filas: [
+        ['calendario', 'Todo lo que viene, mes por mes'],
+        ['tareas',     'Lo que hay que hacer y quién se encarga'],
+        ['agenda',     'Las fechas que no se pueden pasar'],
+      ],
+    },
+    {
+      titulo: 'La ceremonia',
+      filas: [
+        ['ceremonia',            'Iglesia, hora y a quién hay que llamar'],
+        ['requisitos_ceremonia', 'Fe de bautismo, pláticas y qué falta entregar'],
+        ['musica',               'Qué suena en cada momento, y qué no suena nunca'],
+      ],
+    },
+    {
+      titulo: 'La quinceañera',
+      filas: [
+        ['corte_honor',   'Chambelanes y damas, con sus tallas'],
+        ['ensayos',       'Cuándo se ensaya el vals y quién faltó'],
+        ['citas_arreglo', 'Pruebas de vestido, maquillaje y peinado'],
+      ],
+    },
+    {
+      titulo: 'El día',
+      filas: [
+        /* "modo-dia" no es una sección como las otras: abre la pantalla
+           grande que se usa de pie en el salón. Va primero del grupo, y
+           es uno de los tres caminos que llevan ahí —los otros son el
+           Resumen y el menú—, para que el 24 de octubre no dependa de
+           acordarse de dónde estaba. */
+        ['modo-dia',   'Cronograma grande y buscador de pases, para el salón'],
+        ['cronograma', 'El minuto a minuto del 24 de octubre'],
+        ['tomas_foto', 'La lista de tomas para el fotógrafo'],
+      ],
+    },
+  ],
+
+
+  /* ─── 7. QUÉ ES CADA SECCIÓN DE GENTE ─────────────────────────────── */
+  /* Mesas, Regalos y Foráneos viven acá y no en Evento a propósito: son
+     cosas sobre PERSONAS. Antes había que saltar de pestaña para ver
+     quién confirmó y dónde sentarlo. */
+  seccionesDeGente: [
+    ['invitados', 'Invitados',          'Quién confirmó, cuántos vienen y qué comen'],
+    ['mesas',     'Mesas',              'Quién se sienta dónde'],
+    ['regalos',   'Regalos',            'Qué llegó y a quién falta agradecerle'],
+    ['foraneos',  'Foráneos',           'Los que vienen de afuera: hospedaje y llegada'],
+    ['contactos', 'Agenda de contactos','Todos los teléfonos del evento en un solo lugar'],
+  ],
+
+
+  /* ─── 8. SERVIDOR ─────────────────────────────────────────────────── */
   servidor: {
     /* De dónde cuelga la API. Se deja relativo a propósito: así funciona
        igual en aniaxv.com y en cualquier prueba local, sin tocar nada. */
@@ -137,7 +210,15 @@ const CONFIGURACION = {
 
     /* Cuántos segundos esperar una respuesta antes de darla por perdida.
        Con mala señal, sin este límite la app se queda colgada para
-       siempre con el girador dando vueltas. */
-    segundosDeEspera: 20,
+       siempre con el girador dando vueltas.
+
+       ERAN 20 Y AHORA SON 8. El número bajó porque cambió lo que pasa
+       al agotarse: antes se llegaba a un error, así que convenía
+       esperar mucho con tal de no fallar. Ahora se cae en la copia
+       guardada del teléfono, que es una respuesta útil. Y si hay una
+       copia, veinte segundos de esqueleto para terminar mostrando algo
+       que ya estaba ahí desde el principio no le sirven a nadie —menos
+       todavía el día de la fiesta, en un salón con la señal saturada. */
+    segundosDeEspera: 8,
   },
 };

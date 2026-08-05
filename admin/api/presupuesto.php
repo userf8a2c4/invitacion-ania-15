@@ -326,9 +326,19 @@ case 'guardar_proveedor':
         'anticipo'    => campoMonto($datos, 'anticipo'),
         'estado'      => campoOpcion($datos, 'estado',
                          ['candidato', 'contratado', 'pagado', 'cancelado'], 'candidato'),
+        /* Cuál de los textos de compartir.php le toca a este proveedor.
+           Lista blanca: si llegara cualquier otra cosa, queda en vacío
+           —o sea "no le mandes nada"— y no en un valor inventado. */
+        'paquete'     => campoOpcion($datos, 'paquete',
+                         ['', 'banquete', 'salon', 'fotografo', 'dj',
+                          'iglesia', 'modista'], ''),
         'notas'       => campoTexto($datos, 'notas', 2000),
     ];
     if ($valores['nombre'] === '') responderMal('El proveedor necesita un nombre.', 400);
+
+    /* La columna la agrega instalar.php. Si todavía no se corrió, se
+       guarda el resto igual en vez de fallar entero. */
+    if (!in_array('paquete', columnasDe('proveedores'), true)) unset($valores['paquete']);
 
     responderBien(guardarFila('proveedores', $datos, $valores, $yo, 'proveedor'));
     break;

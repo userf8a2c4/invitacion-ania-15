@@ -21,8 +21,18 @@ require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
 
-exigirSesion();
+$yo = exigirSesion();
 exigirMetodo('GET');
+
+/* Si ve el dinero o no.
+ *
+ * presupuesto.php exige ser administradora, pero las MISMAS cifras
+ * salían por acá con solo tener sesión: total gastado, lo que sale del
+ * bolsillo, lo que falta que entreguen los padrinos. Cerrar una puerta
+ * y dejar la ventana abierta no es cerrar nada.
+ *
+ * Se sigue el patrón que ya usa contactos.php. */
+$vePlata = ($yo['rol'] ?? '') === 'admin';
 
 /** Con cuántos días de anticipación se considera "próximo" algo. */
 $DIAS_PROXIMOS = 14;
@@ -114,7 +124,9 @@ if (existeTabla('confirmaciones')) {
 
 $resultado['dinero'] = ['hay' => false];
 
-if (existeTabla('gastos')) {
+/* Sin permiso no se consulta siquiera: lo que no se lee no se puede
+   filtrar por error más adelante. */
+if ($vePlata && existeTabla('gastos')) {
     /* Las dos cifras que de verdad importan, y son distintas:
          · costo   = lo que sale la fiesta entera.
          · propio  = lo que pone la familia, o sea el costo menos lo que
@@ -170,7 +182,8 @@ if (existeTabla('gastos')) {
 
 $resultado['pagos'] = [];
 
-if (existeTabla('pagos')) {
+// Los pagos por vencer son dinero: mismo permiso.
+if ($vePlata && existeTabla('pagos')) {
     $resultado['pagos'] = consultarTodo(
         "SELECT p.id, p.concepto, p.monto, p.fecha_limite, g.concepto AS gasto
          FROM pagos p
@@ -265,7 +278,7 @@ function agregarHito(&$linea, $fecha, $tipo, $texto, $detalle, $vistaDestino, $s
     ];
 }
 
-if (existeTabla('pagos')) {
+if ($vePlata && existeTabla('pagos')) {
     foreach (consultarTodo(
         "SELECT p.concepto, p.monto, p.fecha_limite, g.concepto AS gasto
          FROM pagos p LEFT JOIN gastos g ON g.id = p.gasto_id

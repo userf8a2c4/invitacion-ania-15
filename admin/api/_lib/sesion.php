@@ -38,6 +38,19 @@ require_once __DIR__ . '/responder.php';
 /** Cuántos días vive un token antes de pedir contraseña otra vez. */
 const DIAS_DE_SESION = 90;
 
+/**
+ * Cuánto puede durar una sesión COMO MÁXIMO, desde que se abrió.
+ *
+ * Cada uso corre la caducidad noventa días más adelante. Sin un tope,
+ * un token usado a diario no vencía nunca: un teléfono perdido o
+ * prestado conservaba el acceso para siempre.
+ *
+ * Un año da de sobra para organizar la fiesta —faltan menos de tres
+ * meses— sin que nadie tenga que volver a escribir la contraseña por
+ * culpa de este límite.
+ */
+const DIAS_MAXIMOS_DE_SESION = 365;
+
 /** Intentos fallidos de login permitidos antes de frenar. */
 const INTENTOS_MAXIMOS = 8;
 
@@ -143,7 +156,7 @@ function usuarioActual() {
     if (!$token) return $usuario = null;
 
     $fila = consultarUno(
-        'SELECT s.id AS sesion_id, s.token_hash, s.caduca_en,
+        'SELECT s.id AS sesion_id, s.token_hash, s.caduca_en, s.creado_en,
                 u.id, u.nombre, u.correo, u.rol, u.activo
          FROM sesiones s
          JOIN usuarios u ON u.id = s.usuario_id
@@ -156,8 +169,24 @@ function usuarioActual() {
     if (strtotime($fila['caduca_en']) < time())   return $usuario = null;
     if ((int) $fila['activo'] !== 1)              return $usuario = null;
 
-    // Cada uso corre la caducidad hacia adelante: quien entra seguido no
-    // tiene que volver a escribir la contraseña nunca.
+    /* TOPE ABSOLUTO DESDE QUE SE ABRIÓ LA SESIÓN.
+     *
+     * Cada uso corre la caducidad hacia adelante, para que quien entra
+     * seguido no tenga que escribir la contraseña nunca. El problema es
+     * que "nunca" era literal: un token usado a diario no vencía jamás,
+     * así que un teléfono perdido seguía teniendo acceso para siempre.
+     *
+     * Con el tope, la renovación sirve para la comodidad del día a día
+     * pero la sesión igual termina alguna vez. */
+    if (!empty($fila['creado_en'])) {
+        $limite = strtotime($fila['creado_en']) + DIAS_MAXIMOS_DE_SESION * 86400;
+        if (time() > $limite) {
+            ejecutar('DELETE FROM sesiones WHERE id = :id',
+                     [':id' => $fila['sesion_id']]);
+            return $usuario = null;
+        }
+    }
+
     ejecutar(
         'UPDATE sesiones SET ultimo_uso = NOW(), caduca_en = :c WHERE id = :id',
         [
@@ -166,7 +195,7 @@ function usuarioActual() {
         ]
     );
 
-    unset($fila['token_hash'], $fila['sesion_id'], $fila['caduca_en']);
+    unset($fila['token_hash'], $fila['sesion_id'], $fila['caduca_en'], $fila['creado_en']);
     return $usuario = $fila;
 }
 

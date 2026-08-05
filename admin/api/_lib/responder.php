@@ -52,7 +52,18 @@ function cabecerasJson() {
 function responderBien($datos = null, $codigo = 200) {
     cabecerasJson();
     http_response_code($codigo);
-    echo json_encode(['ok' => true, 'datos' => $datos], JSON_UNESCAPED_UNICODE);
+
+    $json = json_encode(['ok' => true, 'datos' => $datos], JSON_UNESCAPED_UNICODE);
+
+    /* Si este envío traía clave, se anota junto con lo que se contestó.
+       Un reintento del mismo cambio va a recibir esto mismo sin volver a
+       ejecutar nada. Solo se guardan las respuestas BUENAS: si algo
+       falló, reintentarlo es lo correcto. */
+    if (!empty($GLOBALS['CLAVE_DE_ESTE_ENVIO']) && function_exists('guardarRespuestaDada')) {
+        guardarRespuestaDada($GLOBALS['CLAVE_DE_ESTE_ENVIO'], $json);
+    }
+
+    echo $json;
     exit;
 }
 
@@ -91,6 +102,36 @@ function cuerpoJson($obligatorio = true) {
         if ($obligatorio) responderMal('No se recibieron datos válidos.', 400);
         return [];
     }
+
+    /* ─── EL FRENO A LOS DUPLICADOS ───────────────────────────────────
+     *
+     * Va acá, y no en cada endpoint, porque TODOS los que guardan algo
+     * llaman a esta función antes de tocar nada. Un solo control acá
+     * protege al panel entero, y ninguno se puede olvidar de ponerlo.
+     *
+     * Si el envío trae una clave que ya se atendió, se devuelve la misma
+     * respuesta de aquella vez y no se ejecuta ni una línea más del
+     * endpoint. Para quien llama es indistinguible de haber funcionado
+     * —porque de hecho funcionó, la primera vez—. */
+    $clave = trim((string) ($datos['_clave'] ?? ''));
+
+    if ($clave !== '' && function_exists('respuestaYaDada')) {
+        $anterior = respuestaYaDada($clave);
+        if ($anterior !== null) {
+            cabecerasJson();
+            http_response_code(200);
+            echo $anterior;
+            exit;
+        }
+        // Se recuerda para que responderBien() la anote al terminar.
+        $GLOBALS['CLAVE_DE_ESTE_ENVIO'] = $clave;
+    }
+
+    /* La clave es cosa del transporte, no un dato del formulario: se
+       saca antes de que el endpoint la vea y trate de guardarla como si
+       fuera una columna. */
+    unset($datos['_clave']);
+
     return $datos;
 }
 

@@ -40,34 +40,56 @@ let BUSQUEDA_INVITADOS = '';
  *
  * @returns {Promise<void>}
  */
-/** Qué sub-pestaña de "Gente" se está viendo: 'invitados' o 'contactos'. */
+/** Qué sección de "Gente" se está viendo. Las claves salen de CONFIGURACION. */
 let SECCION_GENTE = 'invitados';
 
+/** Qué secciones ya pidieron sus datos, para no pedirlos dos veces. */
+const GENTE_CARGADA = {};
+
 /**
- * Dibuja la pestaña Gente: las confirmaciones o la agenda completa.
+ * Dibuja la pestaña Gente.
  *
- * POR QUÉ LAS DOS COSAS COMPARTEN PESTAÑA
- * Porque las dos son personas, y meter una sexta pestaña abajo dejaba
- * los rótulos ilegibles en un teléfono angosto. Invitados queda primero
- * y es lo que se abre por defecto, así que para el uso de todos los
- * días no cambia nada.
+ * QUÉ HAY ACÁ ADENTRO
+ * Invitados, Mesas, Regalos, Foráneos y la Agenda de contactos. Las
+ * cinco son cosas sobre PERSONAS, y por eso viven juntas.
+ *
+ * POR QUÉ MESAS, REGALOS Y FORÁNEOS SE MUDARON DESDE EVENTO
+ * Porque no son "qué falta preparar", son "quién viene". Estando en
+ * Evento había que saltar de pestaña para ver quién confirmó y dónde
+ * sentarlo, que son la misma decisión tomada en dos pantallas.
+ *
+ * POR QUÉ ACÁ SIGUEN SIENDO PÍLDORAS Y NO UN ÍNDICE COMO EVENTO
+ * Porque son cinco y entran en un renglón. El índice de Evento existe
+ * porque catorce píldoras se apilaban en cinco renglones; con cinco, el
+ * índice sería un paso de más para llegar a lo mismo.
  *
  * @returns {Promise<void>}
  */
 async function dibujarGente() {
-  const vista = buscar('#vista-invitados');
+  const vista    = buscar('#vista-invitados');
+  const secciones = CONFIGURACION.seccionesDeGente;
+
+  /* Se rehace el HTML entero, así que lo dibujado antes ya no existe.
+     Sin esta limpieza, una sección quedaría marcada como cargada
+     apuntando a un contenedor vacío y no se volvería a pintar nunca. */
+  Object.keys(GENTE_CARGADA).forEach(k => { delete GENTE_CARGADA[k]; });
 
   vista.innerHTML =
     '<div class="filtros" style="margin-bottom:var(--esp-2)">' +
-      '<button class="filtro' + (SECCION_GENTE === 'invitados' ? ' activo' : '') +
-        '" data-gente="invitados">' + seguro(et('gente.invitados','Invitados')) + '</button>' +
-      '<button class="filtro' + (SECCION_GENTE === 'contactos' ? ' activo' : '') +
-        '" data-gente="contactos">' + seguro(et('gente.contactos','Agenda de contactos')) + '</button>' +
+      secciones.map(s =>
+        '<button class="filtro' + (SECCION_GENTE === s[0] ? ' activo' : '') +
+        '" data-gente="' + seguro(s[0]) + '">' +
+        seguro(et('gente.' + s[0], s[1])) + '</button>'
+      ).join('') +
     '</div>' +
-    '<div id="cuerpo-invitados"' +
-      (SECCION_GENTE === 'invitados' ? '' : ' class="oculto"') + '></div>' +
-    '<div id="cuerpo-contactos"' +
-      (SECCION_GENTE === 'contactos' ? '' : ' class="oculto"') + '></div>';
+
+    /* Los cinco cuerpos conviven en el DOM y se alternan con .oculto,
+       en vez de repintar uno solo. Así volver a una sección que ya se
+       miró es instantáneo y no vuelve a pedir nada al servidor. */
+    secciones.map(s =>
+      '<div id="cuerpo-' + seguro(s[0]) + '"' +
+      (SECCION_GENTE === s[0] ? '' : ' class="oculto"') + '></div>'
+    ).join('');
 
   buscarTodos('[data-gente]', vista).forEach(boton => {
     boton.addEventListener('click', () => {
@@ -76,20 +98,87 @@ async function dibujarGente() {
       buscarTodos('[data-gente]', vista).forEach(o =>
         o.classList.toggle('activo', o === boton));
 
-      buscar('#cuerpo-invitados', vista)
-        .classList.toggle('oculto', SECCION_GENTE !== 'invitados');
-      buscar('#cuerpo-contactos', vista)
-        .classList.toggle('oculto', SECCION_GENTE !== 'contactos');
+      secciones.forEach(s => {
+        buscar('#cuerpo-' + s[0], vista)
+          .classList.toggle('oculto', SECCION_GENTE !== s[0]);
+      });
 
-      // Cada una se carga la primera vez que se abre, no antes.
-      if (SECCION_GENTE === 'contactos' && !CONTACTOS.length) dibujarContactos();
-      if (SECCION_GENTE === 'invitados' && !INVITADOS.length) dibujarInvitados();
-      else if (SECCION_GENTE === 'invitados') ponerTituloDeInvitados();
+      pintarSeccionDeGente();
     });
   });
 
-  if (SECCION_GENTE === 'contactos') await dibujarContactos();
-  else await dibujarInvitados();
+  await pintarSeccionDeGente();
+}
+
+/**
+ * Pinta la sección de Gente que esté abierta.
+ *
+ * Cada una se carga la primera vez que se mira, no al abrir la pestaña:
+ * pedir las cinco de entrada serían cinco viajes al servidor para ver
+ * uno solo.
+ *
+ * @returns {Promise<void>}
+ */
+async function pintarSeccionDeGente() {
+  const clave  = SECCION_GENTE;
+  const cuerpo = buscar('#cuerpo-' + clave);
+  if (!cuerpo) return;
+
+  // Ya estaba dibujada: solo hay que corregir el título del encabezado.
+  if (GENTE_CARGADA[clave]) {
+    if (clave === 'invitados') ponerTituloDeInvitados();
+    else ponerTitulo(tituloDeGente(clave));
+    return;
+  }
+
+  GENTE_CARGADA[clave] = true;
+
+  try {
+    /* Invitados es la única que pone su propio título, porque le agrega
+       el recuento de gente. Las demás lo toman de la configuración; si
+       no se pusiera acá, quedaría el título de la sección anterior. */
+    if (clave === 'invitados') { await dibujarInvitados(); return; }
+
+    ponerTitulo(tituloDeGente(clave));
+
+    if (clave === 'contactos') { await dibujarContactos(); return; }
+
+    /* Mesas, Regalos y Foráneos salen de evento.php, que puede no
+       haberse pedido todavía si nadie entró a la pestaña Evento. */
+    pintarCargando(cuerpo, 4);
+    await asegurarEvento();
+
+    if (clave === 'mesas') { await pintarMesas(cuerpo); return; }
+
+    if (clave === 'regalos') {
+      // Los regalos llevan arriba la tarjeta de la lista de Amazon.
+      cuerpo.innerHTML = tarjetaMesaDeRegalos() + '<div id="lista-regalos"></div>';
+      engancharMesaDeRegalos(cuerpo);
+      pintarSeccionGenerica(buscar('#lista-regalos', cuerpo), 'regalos');
+      return;
+    }
+
+    pintarSeccionGenerica(cuerpo, clave);
+
+  } catch (error) {
+    // Se desmarca para que al volver a entrar lo intente de nuevo.
+    GENTE_CARGADA[clave] = false;
+    pintarError(cuerpo, error.message, () => {
+      GENTE_CARGADA[clave] = false;
+      pintarSeccionDeGente();
+    });
+  }
+}
+
+/**
+ * Cómo se llama una sección de Gente en el encabezado.
+ *
+ * @param {string} clave
+ * @returns {string}
+ */
+function tituloDeGente(clave) {
+  const fila = CONFIGURACION.seccionesDeGente.find(s => s[0] === clave);
+  return et('gente.' + clave, fila ? fila[1] : clave);
 }
 
 /**

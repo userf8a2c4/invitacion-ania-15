@@ -25,8 +25,14 @@ require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
 
-exigirSesion();
+$yo = exigirSesion();
 exigirMetodo('GET');
+
+/* Si ve el dinero o no. Mismo motivo que en estadisticas.php: las
+   cifras que presupuesto.php protege salían por acá sin ningún
+   control —pagos pendientes, montos de padrinos, cuánto falta pagar—.
+   Se sigue el patrón de contactos.php. */
+$vePlata = ($yo['rol'] ?? '') === 'admin';
 
 const DIA_DE_LA_FIESTA = '2026-10-24';
 
@@ -65,7 +71,7 @@ function pendiente(&$lista, $urgencia, $tipo, $texto, $detalle, $vista, $seccion
 
 /* ─── PAGOS ───────────────────────────────────────────────────────────── */
 
-if (existeTabla('pagos')) {
+if ($vePlata && existeTabla('pagos')) {
     foreach (consultarTodo(
         "SELECT p.id, p.concepto, p.monto, p.fecha_limite, g.concepto AS gasto
          FROM pagos p LEFT JOIN gastos g ON g.id = p.gasto_id
@@ -163,7 +169,7 @@ if (existeTabla('alarmas')) {
    gestión que más se posterga y la que más plata mueve. */
 $aQuienLlamar = [];
 
-if (existeTabla('padrinos')) {
+if ($vePlata && existeTabla('padrinos')) {
     foreach (consultarTodo(
         "SELECT id, nombre, telefono, apadrina, monto FROM padrinos
          WHERE estado = 'hablado' AND telefono <> ''
@@ -221,7 +227,7 @@ if ($diasQueFaltan >= 0 && $diasQueFaltan <= 14) {
             (int) $sinMesa['n'] > 0 ? (int) $sinMesa['n'] . ' sin mesa' : '');
     }
 
-    if (existeTabla('pagos')) {
+    if ($vePlata && existeTabla('pagos')) {
         $sinPagar = consultarUno(
             "SELECT COUNT(*) AS n, COALESCE(SUM(monto), 0) AS monto
              FROM pagos WHERE estado = 'pendiente'"

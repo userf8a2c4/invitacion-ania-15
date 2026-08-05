@@ -78,8 +78,28 @@ function smtpEnviar($para, $asunto, $html, $from, $fromNombre,
         return $buf;
     };
 
-    $cmd = function ($texto) use ($sock, $leer, &$log) {
-        $log[] = '> ' . trim($texto);
+    /* Qué líneas NO se anotan en el registro.
+     *
+     * El diálogo SMTP manda el usuario y la contraseña como dos líneas
+     * sueltas en base64, justo después de "AUTH LOGIN". Base64 no es
+     * cifrado: se descodifica en un segundo. Anotando el diálogo entero,
+     * la contraseña del correo quedaba escrita en el log de errores del
+     * servidor, en un renglón que cualquiera puede leer y descodificar.
+     *
+     * Se cuentan las líneas desde el AUTH LOGIN porque las credenciales
+     * no se pueden reconocer por su contenido: son texto cualquiera. */
+    $tocaCredencial = 0;
+
+    $cmd = function ($texto) use ($sock, $leer, &$log, &$tocaCredencial) {
+        if ($tocaCredencial > 0) {
+            $log[] = '> (credencial, no se anota)';
+            $tocaCredencial--;
+        } else {
+            $log[] = '> ' . trim($texto);
+            // Después de AUTH LOGIN vienen dos: el usuario y la clave.
+            if (stripos(trim($texto), 'AUTH LOGIN') === 0) $tocaCredencial = 2;
+        }
+
         fwrite($sock, $texto . "\r\n");
         return $leer();
     };

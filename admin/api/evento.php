@@ -266,6 +266,9 @@ case 'guardar':
 
 case 'borrar':
     exigirMetodo('POST');
+    /* Borrar es de administradora. Una cuenta de entrada trabaja en la
+       puerta el día del evento: puede consultar, no destruir. */
+    exigirAdministrador();
 
     $que = (string) ($_GET['que'] ?? '');
     if (!isset($TABLAS[$que])) responderMal('No sé borrar eso.', 400);

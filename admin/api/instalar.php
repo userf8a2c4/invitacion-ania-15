@@ -77,9 +77,17 @@ foreach ($instrucciones as $instruccion) {
            informan todas juntas. Así, si falta un permiso o una tabla
            tiene un problema puntual, igual se crean las otras 27 y el
            informe dice con precisión qué quedó pendiente. */
+        /* Al navegador va solo QUÉ falló, no POR QUÉ.
+         *
+         * Los mensajes crudos de MySQL cuentan de más: nombres de
+         * tablas y columnas, la base que se está usando, a veces el
+         * usuario de conexión. El resto del panel ya sigue esta regla
+         * (ver responderMal en _lib/responder.php); este archivo era la
+         * excepción. El detalle completo queda en el log del servidor,
+         * que es donde se puede leer sin publicarlo. */
         $fallidas[] = [
             'que'   => $etiqueta,
-            'error' => $e->getMessage(),
+            'error' => 'No se pudo. El detalle quedó en el registro del servidor.',
         ];
         error_log('[Ania XV · instalar] Falló ' . $etiqueta . ': ' . $e->getMessage());
     }
@@ -115,6 +123,10 @@ $agregarColumna('asignacion_mesas', 'fijada', 'TINYINT(1) NOT NULL DEFAULT 0');
 $agregarColumna('cotizaciones', 'tipo_precio',
                 "ENUM('por_persona','fijo') NOT NULL DEFAULT 'fijo'");
 $agregarColumna('cotizaciones', 'precio_pp', 'DECIMAL(12,2) NOT NULL DEFAULT 0');
+
+/* Qué paquete de texto le toca a cada proveedor, para poder mandarle lo
+   suyo por WhatsApp de un toque. Ver compartir.php. */
+$agregarColumna('proveedores', 'paquete', "VARCHAR(20) NOT NULL DEFAULT ''");
 
 
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */

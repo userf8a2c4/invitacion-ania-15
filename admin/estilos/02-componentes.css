@@ -324,6 +324,117 @@ select.campo__control {
 .barra__relleno--cerca  { background: var(--ojo); }
 
 
+/* ─── 5B. EL ÍNDICE DE SECCIONES ───────────────────────────────────── */
+
+/* La pantalla que reemplazó a la tira de catorce píldoras de Evento.
+   Cada renglón es una sección, con su nombre, una línea que explica qué
+   es, y una flecha que dice que se abre. Ver pintarIndice() en
+   codigo/06-piezas.js. */
+
+.indice__grupo { margin-bottom: var(--esp-4); }
+
+.indice__titulo {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--texto-tenue);
+  padding: 0 var(--esp-1);
+  margin-bottom: var(--esp-1);
+}
+
+.indice__fila {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  /* 60px y no 56: acá hay dos renglones de texto, no uno. */
+  min-height: 60px;
+  padding: var(--esp-2) var(--esp-3);
+  background: var(--fondo-tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo-chico);
+  margin-bottom: 6px;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  transition: background var(--transicion);
+}
+.indice__fila:active { background: var(--fondo-elevado); }
+
+/* Igual que en .lista__cuerpo: sin min-width:0 el texto largo empuja la
+   flecha fuera de la pantalla en vez de cortarse. */
+.indice__cuerpo { flex: 1; min-width: 0; }
+
+.indice__nombre {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 1px;
+}
+
+/* La descripción SÍ se parte en dos renglones si hace falta. Es lo
+   contrario a .lista__pie, que se corta con puntos suspensivos: una
+   explicación cortada a la mitad no explica nada. */
+.indice__descripcion {
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--texto-tenue);
+}
+
+.indice__cuenta {
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--oro);
+  color: #1a0d02;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+.indice__cuenta--alerta { background: var(--alerta); color: #fff; }
+
+.indice__flecha {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--texto-tenue);
+}
+
+
+/* ─── 5C. LA BARRA DE VOLVER ───────────────────────────────────────── */
+
+/* Encabeza una sección abierta desde el índice. Repite la explicación
+   que se leyó en el índice, porque para cuando alguien entra ya no la
+   tiene a la vista. */
+
+.volver { margin-bottom: var(--esp-2); }
+
+.volver__boton {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  /* 44px: es el primer botón que se toca al entrar y el que se usa para
+     salir. Tiene que ser cómodo. */
+  min-height: 44px;
+  padding: 0 var(--esp-1) 0 0;
+  background: none;
+  border: 0;
+  color: var(--oro);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.volver__descripcion {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--texto-tenue);
+  padding: 0 var(--esp-1);
+}
+
+
 /* ─── 6. LISTAS ────────────────────────────────────────────────────── */
 
 .lista {
@@ -488,6 +599,22 @@ select.campo__control {
   color: var(--alerta);
   border-top: 1px solid var(--borde);
   margin-top: var(--gota);
+}
+
+/* Separa Herramientas de Ajustes. El primero no lleva raya arriba
+   porque no hay nada de qué separarlo. */
+.menu__titulo {
+  padding: var(--esp-1) var(--esp-2) 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--texto-tenue);
+}
+.menu__titulo + .menu__opcion { margin-bottom: 0; }
+.menu__opcion + .menu__titulo {
+  margin-top: var(--gota);
+  border-top: 1px solid var(--borde);
 }
 
 

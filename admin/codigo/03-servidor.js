@@ -78,6 +78,9 @@ class ErrorDelServidor extends Error {
  * @param {string} [opciones.metodo='GET']
  * @param {Object} [opciones.cuerpo] - Se manda como JSON.
  * @param {boolean} [opciones.sinSesion=false] - Para el login.
+ * @param {boolean} [opciones.noEncolar=false] - Que falle en vez de
+ *        guardarse para más tarde. Para lo que no tiene sentido
+ *        reintentar después, como cerrar sesión.
  * @returns {Promise<*>} El contenido de "datos".
  * @throws {ErrorDelServidor}
  *
@@ -126,24 +129,37 @@ async function pedir(ruta, opciones) {
   } catch (error) {
     clearTimeout(reloj);
 
-    // Se distingue "se acabó el tiempo" de "no hay internet" porque lo
-    // que conviene hacer es distinto: en un caso reintentar, en el otro
-    // esperar a tener señal.
-    if (error.name === 'AbortError') {
-      throw new ErrorDelServidor('El servidor tardó demasiado. Probá de nuevo.', 0);
-    }
+    const seAcaboElTiempo = error.name === 'AbortError';
 
-    /* Sin señal de verdad (y no un error real del servidor mientras hay
-       señal): para una lectura se devuelve la última copia guardada si
-       hay; para un envío, se anota en la cola para mandarlo solo cuando
-       vuelva la señal. Nada de esto aplica si esto YA viene de la cola
-       (config._sync): ahí conviene que falle, para que sincronizarCola()
-       lo deje esperando en vez de darlo por mandado. */
-    if (!navigator.onLine && !config._sync) {
+    // No llegó al servidor: el banner tiene que reflejarlo.
+    anotarSiLlego(false);
+
+    /* ⚠️ NO SE PREGUNTA POR navigator.onLine, Y ES A PROPÓSITO.
+     *
+     * Ese valor solo sabe si hay una red enchufada, no si esa red llega
+     * a algún lado. Con el wifi de un salón que pide contraseña en un
+     * portal, o con datos móviles saturados, dice `true` mientras nada
+     * funciona. Confiando en él, el rescate no se activaba y el cambio
+     * se perdía con un mensaje de "revisá tu internet".
+     *
+     * Lo que sí es información honesta es que la petición FALLÓ: se
+     * cortó por tiempo o murió en la red. En los dos casos no hay
+     * servidor del otro lado, que es lo único que hacía falta saber.
+     *
+     * Que el timeout entre acá también es la mitad del arreglo: antes
+     * el AbortError salía por su cuenta unas líneas más arriba, así que
+     * en un salón lleno se esperaban veinte segundos para ver un error
+     * TENIENDO la copia guardada en el teléfono.
+     *
+     * Lo único que se excluye es lo que ya viene de la cola
+     * (config._sync): ahí conviene que falle, para que sincronizarCola()
+     * lo deje esperando en vez de darlo por mandado. */
+    if (!config._sync && !config.noEncolar) {
       if (metodo === 'GET') {
         const copia = await leerLectura(ruta);
         if (copia) {
           actualizarBannerConexion();
+          avisarDatosGuardados(copia.guardado_en);
           return copia.datos;
         }
       } else if (config.cuerpo) {
@@ -156,9 +172,22 @@ async function pedir(ruta, opciones) {
       }
     }
 
-    throw new ErrorDelServidor('Sin conexión. Revisá tu internet.', 0);
+    /* No había copia de qué agarrarse. Recién acá se distingue el
+       motivo, porque ahora sí cambia qué conviene hacer: si se acabó el
+       tiempo, reintentar puede servir; si no hay red, hay que esperar. */
+    throw new ErrorDelServidor(
+      seAcaboElTiempo
+        ? 'El servidor tardó demasiado. Probá de nuevo.'
+        : 'Sin conexión. Revisá tu internet.',
+      0
+    );
   }
   clearTimeout(reloj);
+
+  /* Contestó el servidor —aunque sea con un error suyo—, o sea que hay
+     camino hasta él. Si veníamos de una racha sin señal, esto además
+     dispara el envío de lo que haya quedado en la cola. */
+  anotarSiLlego(true);
 
   /* La respuesta debería ser JSON siempre. Si no lo es, casi seguro que
      el servidor devolvió una página de error de Apache o de PHP: se

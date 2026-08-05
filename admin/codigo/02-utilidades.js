@@ -365,6 +365,50 @@ function pluralizar(cantidad, singular, plural) {
 }
 
 
+/* ─── 5B. TELÉFONOS PARA WHATSAPP ──────────────────────────────────── */
+
+/*
+   WhatsApp abre un chat con wa.me/NUMERO, y ese número tiene que ser
+   SOLO DÍGITOS Y CON CLAVE DE PAÍS. Un "722 123 4567" guardado como lo
+   dicta la costumbre —sin el 52— no falla con un error: abre un chat
+   vacío, o peor, el de otra persona en otro país. Por eso conviene
+   avisar antes de tocar el botón y no después.
+*/
+
+/** Clave de país que se asume cuando el número no la trae. México. */
+const CLAVE_DE_PAIS = '52';
+
+/**
+ * Deja un teléfono como lo quiere wa.me.
+ *
+ * @param {string} telefono - Como lo escribió quien lo cargó.
+ * @returns {string} Solo dígitos, o '' si no sirve.
+ */
+function paraWhatsApp(telefono) {
+  const digitos = String(telefono || '').replace(/\D/g, '');
+  if (!digitos) return '';
+
+  /* Diez dígitos es un número mexicano al que le falta la clave: se la
+     pone. Once o más ya la trae (o es de otro país) y se deja como está,
+     porque adivinar de más rompe los números extranjeros. */
+  if (digitos.length === 10) return CLAVE_DE_PAIS + digitos;
+  if (digitos.length >= 11) return digitos;
+
+  // Menos de diez es un número incompleto, un interno o un error.
+  return '';
+}
+
+/**
+ * Dice si un teléfono sirve para abrir WhatsApp.
+ *
+ * @param {string} telefono
+ * @returns {boolean}
+ */
+function sirveParaWhatsApp(telefono) {
+  return paraWhatsApp(telefono) !== '';
+}
+
+
 /* ─── 6. MEMORIA DEL NAVEGADOR ─────────────────────────────────────── */
 
 /**
