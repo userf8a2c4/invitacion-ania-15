@@ -59,7 +59,7 @@ async function dibujarDinero() {
     '</div>' +
 
     '<div class="filtros" id="secciones-dinero">' +
-      botonSeccion('resumen',      'Resumen') +
+      botonSeccion('resumen',      et('dinero.resumen', 'Resumen')) +
       botonSeccion('gastos',       et('dinero.gastos', 'Gastos'),
                    DINERO.gastos.length) +
       botonSeccion('pagos',        et('dinero.pagos', 'Pagos'),
@@ -710,6 +710,20 @@ function engancharFormularioDinero(cuerpo, armarCarga, nombreAccion, existente) 
       if (!carga) return 0;
 
       const r = await mandar('presupuesto.php?accion=guardar_' + nombreAccion, carga);
+
+      /* Sin señal el guardado queda en la cola y todavía NO tiene id: lo
+         va a poner el servidor cuando el cambio salga de verdad. Antes
+         acá se devolvía undefined y el archivo terminaba atado al id 0,
+         o sea colgado de nada.
+
+         Se devuelve 0 para que montarAdjuntos() sepa que no hay dónde
+         atarlo y lo diga, en vez de subirlo a un registro inexistente. */
+      if (r && r._offline) {
+        avisar('Se guardó sin señal. Podés adjuntar el archivo cuando ' +
+               'vuelva la conexión.', true);
+        return 0;
+      }
+
       ensuciarVistas('resumen');
       return r.id;
     },
@@ -1080,13 +1094,31 @@ function formularioProveedor(proveedor) {
 
     campoTexto({ id: 'pro-contacto', rotulo: 'Persona de contacto', valor: d.contacto }) +
     '<div class="campo-par">' +
-      campoTexto({ id: 'pro-telefono', rotulo: 'Teléfono', tipo: 'tel', valor: d.telefono }) +
+      campoTexto({ id: 'pro-telefono', rotulo: 'Teléfono', tipo: 'tel', valor: d.telefono,
+                   ayuda: 'Con clave de país para poder abrirle WhatsApp: 52 722 123 4567' }) +
       campoTexto({ id: 'pro-correo', rotulo: 'Correo', tipo: 'email', valor: d.correo }) +
     '</div>' +
 
+    /* Qué se le manda por WhatsApp de un toque. Los textos los arma
+       compartir.php; acá solo se elige cuál le toca a este proveedor. */
+    campoLista({ id: 'pro-paquete', rotulo: '¿Qué le mando a este?',
+                 valor: d.paquete || '',
+                 opciones: [
+                   { valor: '',          texto: 'Nada automático' },
+                   { valor: 'banquete',  texto: 'Menús y alergias' },
+                   { valor: 'salon',     texto: 'Mesas y acomodo' },
+                   { valor: 'fotografo', texto: 'Lista de tomas y cronograma' },
+                   { valor: 'dj',        texto: 'Canciones y las prohibidas' },
+                   { valor: 'iglesia',   texto: 'Datos de la misa y papeles' },
+                   { valor: 'modista',   texto: 'Pruebas de vestido' },
+                 ] }) +
+
     campoLargo({ id: 'pro-notas', rotulo: 'Notas', valor: d.notas }) +
+    (proveedor ? botonesDeContacto(proveedor) : '') +
     pieDeFormulario('Guardar', !!proveedor)
   );
+
+  if (proveedor) engancharBotonesDeContacto(cuerpo, proveedor);
 
   engancharFormularioDinero(cuerpo, () => {
     const nombre = valorDe('pro-nombre', cuerpo);
@@ -1100,9 +1132,77 @@ function formularioProveedor(proveedor) {
       contacto:    valorDe('pro-contacto', cuerpo),
       telefono:    valorDe('pro-telefono', cuerpo),
       correo:      valorDe('pro-correo', cuerpo),
+      paquete:     valorDe('pro-paquete', cuerpo),
       notas:       valorDe('pro-notas', cuerpo),
     };
   }, 'proveedor', proveedor);
+}
+
+/**
+ * Los botones de llamar, escribir y mandarle lo suyo.
+ *
+ * Antes había que salir de Presupuesto e irse a la Agenda de contactos
+ * solo para conseguir un teléfono que ya estaba en esta misma pantalla.
+ *
+ * @param {Object} p - El proveedor.
+ * @returns {string} HTML
+ */
+function botonesDeContacto(p) {
+  const numero = paraWhatsApp(p.telefono);
+  const acciones = [];
+
+  if (p.telefono) {
+    acciones.push('<a class="boton" style="flex:1" href="tel:' +
+                  seguro(p.telefono) + '">Llamar</a>');
+  }
+
+  if (numero) {
+    acciones.push('<a class="boton" style="flex:1" target="_blank" rel="noopener" ' +
+                  'href="https://wa.me/' + seguro(numero) + '">WhatsApp</a>');
+  }
+
+  if (p.correo) {
+    acciones.push('<a class="boton" style="flex:1" href="mailto:' +
+                  seguro(p.correo) + '">Correo</a>');
+  }
+
+  /* Un teléfono cargado que no sirve para WhatsApp se avisa acá y no
+     cuando el chat abre vacío. */
+  const problema = (p.telefono && !numero)
+    ? '<p class="aviso-error" style="margin-top:var(--esp-1)">' +
+      'Ese teléfono no sirve para WhatsApp: le falta la clave de país.</p>'
+    : '';
+
+  const mandarle = p.paquete
+    ? '<button class="boton boton--ancho" id="pro-mandarle" ' +
+              'style="margin-top:var(--esp-1)">Mandarle lo suyo por WhatsApp</button>'
+    : '';
+
+  if (!acciones.length && !mandarle) return problema;
+
+  return '' +
+    '<div class="acciones" style="margin-top:var(--esp-2)">' +
+      acciones.join('') +
+    '</div>' +
+    mandarle +
+    problema;
+}
+
+/**
+ * Engancha el botón de "mandarle lo suyo".
+ *
+ * @param {Element} cuerpo
+ * @param {Object} p
+ * @returns {void}
+ */
+function engancharBotonesDeContacto(cuerpo, p) {
+  const boton = buscar('#pro-mandarle', cuerpo);
+  if (!boton) return;
+
+  boton.addEventListener('click', () => {
+    // armarParaCompartir abre su propia hoja encima de esta.
+    armarParaCompartir(p.paquete, { id: p.id, nombre: p.nombre });
+  });
 }
 
 

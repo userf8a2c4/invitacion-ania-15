@@ -45,26 +45,39 @@ const ETIQUETAS_EDITABLES = {
     ['nav.evento',     'Evento'],
   ],
   'Dentro de Presupuesto': [
+    ['dinero.resumen',      'Resumen'],
     ['dinero.gastos',       'Gastos'],
     ['dinero.pagos',        'Pagos'],
     ['dinero.padrinos',     'Padrinos'],
     ['dinero.proveedores',  'Proveedores'],
     ['dinero.cotizaciones', 'Cotizaciones'],
   ],
+
+  /* El orden de acá abajo sigue al de los grupos del índice de Evento
+     (ver CONFIGURACION.indiceDeEvento), para que encontrar un nombre en
+     esta lista sea igual de fácil que encontrarlo en pantalla. */
   'Dentro de Evento': [
-    ['evento.calendario',  'Calendario'],
-    ['evento.tareas',      'Tareas'],
-    ['evento.agenda',      'Agenda'],
-    ['evento.corte_honor', 'Corte'],
-    ['evento.ensayos',     'Ensayos'],
-    ['evento.ceremonia',   'Misa'],
-    ['evento.musica',      'Música'],
-    ['evento.mesas',       'Mesas'],
-    ['evento.regalos',     'Regalos'],
-    ['evento.foraneos',    'Foráneos'],
+    ['evento.calendario',           'Calendario'],
+    ['evento.tareas',               'Tareas'],
+    ['evento.agenda',               'Agenda'],
+    ['evento.ceremonia',            'Misa'],
+    ['evento.requisitos_ceremonia', 'Papeles'],
+    ['evento.musica',               'Música'],
+    ['evento.corte_honor',          'Corte'],
+    ['evento.ensayos',              'Ensayos'],
+    ['evento.citas_arreglo',        'Vestido'],
+    ['evento.cronograma',           'Cronograma'],
+    ['evento.tomas_foto',           'Fotos'],
   ],
+
+  /* Mesas, Regalos y Foráneos se mudaron acá desde Evento, así que sus
+     claves son "gente." — las mismas que usa dibujarGente() al pintar
+     las píldoras. */
   'Dentro de Gente': [
     ['gente.invitados', 'Invitados'],
+    ['gente.mesas',     'Mesas'],
+    ['gente.regalos',   'Regalos'],
+    ['gente.foraneos',  'Foráneos'],
     ['gente.contactos', 'Agenda de contactos'],
   ],
 };

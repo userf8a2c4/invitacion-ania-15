@@ -179,6 +179,117 @@ function pintarError(donde, mensaje, reintentar) {
 }
 
 
+/* ─── 3B. EL ÍNDICE AGRUPADO ───────────────────────────────────────── */
+
+/*
+   QUÉ ES Y POR QUÉ EXISTE
+
+   Una pantalla que tiene muchas secciones adentro no puede mostrarlas
+   como una tira de píldoras. Evento llegó a tener catorce: en un
+   teléfono se apilaban en cinco renglones y el contenido arrancaba a
+   media pantalla.
+
+   Un índice resuelve las dos cosas de una: entra en un vistazo, y cada
+   renglón tiene lugar para explicar QUÉ ES esa sección. Es el patrón de
+   la pantalla de Ajustes del teléfono, así que no hay que enseñárselo a
+   nadie.
+
+   La línea de explicación no es decoración: es la diferencia entre
+   "Papeles" —que no significa nada— y "Fe de bautismo, pláticas y qué
+   falta entregar".
+*/
+
+/**
+ * Dibuja un índice de secciones, agrupadas bajo títulos.
+ *
+ * @param {Element} donde
+ * @param {Array<{titulo: string, filas: Array}>} grupos
+ *        Cada fila: { clave, nombre, descripcion, cuantos?, alerta? }
+ *        - cuantos: número que se muestra a la derecha (0 no se muestra).
+ *        - alerta: si es true, el número se pinta en rojo.
+ * @param {Function} alElegir - Recibe la clave de la fila tocada.
+ * @returns {void}
+ *
+ * @example
+ *   pintarIndice(cuerpo, [
+ *     { titulo: 'Organización', filas: [
+ *       { clave: 'tareas', nombre: 'Tareas',
+ *         descripcion: 'Lo que hay que hacer y quién se encarga',
+ *         cuantos: 3 },
+ *     ]},
+ *   ], clave => abrirSeccion(clave));
+ */
+function pintarIndice(donde, grupos, alElegir) {
+  donde.innerHTML = grupos.map(grupo =>
+    '<div class="indice__grupo">' +
+      '<div class="indice__titulo">' + seguro(grupo.titulo) + '</div>' +
+
+      grupo.filas.map(fila => {
+        /* El contador solo aparece si hay algo que contar. Un "0" al
+           lado de cada renglón es ruido: la ausencia ya dice lo mismo. */
+        const n = Number(fila.cuantos) || 0;
+        /* Cuenta propia y no .burbuja: esa es position:absolute porque
+           vive pegada al icono de la barra de abajo, y acá tiene que
+           fluir dentro del renglón. */
+        const burbuja = n
+          ? '<span class="indice__cuenta' +
+            (fila.alerta ? ' indice__cuenta--alerta' : '') + '">' +
+            seguro(n) + '</span>'
+          : '';
+
+        return '' +
+          '<button class="indice__fila" data-indice="' + seguro(fila.clave) + '">' +
+            '<span class="indice__cuerpo">' +
+              '<span class="indice__nombre">' + seguro(fila.nombre) + '</span>' +
+              '<span class="indice__descripcion">' +
+                seguro(fila.descripcion || '') +
+              '</span>' +
+            '</span>' +
+            burbuja +
+            /* La flecha dice "esto se abre", que es lo único que hay que
+               entender antes de tocarlo. */
+            '<svg viewBox="0 0 24 24" class="indice__flecha" aria-hidden="true">' +
+              '<path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" ' +
+                    'stroke-width="2" stroke-linecap="round" ' +
+                    'stroke-linejoin="round"/>' +
+            '</svg>' +
+          '</button>';
+      }).join('') +
+    '</div>'
+  ).join('');
+
+  buscarTodos('[data-indice]', donde).forEach(boton => {
+    boton.addEventListener('click', () => alElegir(boton.dataset.indice));
+  });
+}
+
+/**
+ * La barra de "volver" que encabeza una sección abierta desde un índice.
+ *
+ * Devuelve HTML: quien lo use tiene que enganchar #indice-volver.
+ *
+ * @param {string} titulo - Cómo se llama la sección abierta.
+ * @param {string} [descripcion] - La misma línea que se ve en el índice.
+ * @returns {string} HTML
+ */
+function barraDeVuelta(titulo, descripcion) {
+  return '' +
+    '<div class="volver">' +
+      '<button class="volver__boton" id="indice-volver">' +
+        '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
+          '<path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" ' +
+                'stroke-width="2" stroke-linecap="round" ' +
+                'stroke-linejoin="round"/>' +
+        '</svg>' +
+        '<span>' + seguro(titulo) + '</span>' +
+      '</button>' +
+      (descripcion
+        ? '<p class="volver__descripcion">' + seguro(descripcion) + '</p>'
+        : '') +
+    '</div>';
+}
+
+
 /* ─── 4. ARMAR FORMULARIOS ─────────────────────────────────────────── */
 
 /**

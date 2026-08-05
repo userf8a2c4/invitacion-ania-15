@@ -60,6 +60,45 @@ const TIPOS_PERMITIDOS = [
     'application/pdf' => 'pdf',
 ];
 
+/**
+ * A qué está atado un archivo que solo debería ver una administradora.
+ *
+ * Son las cosas de dinero: contratos, comprobantes, cotizaciones. Quien
+ * tiene una cuenta de entrada para escanear pases el día del evento no
+ * tiene por qué poder bajarlas.
+ */
+const ATADOS_DE_ADMIN = ['gasto', 'pago', 'proveedor', 'padrino',
+                         'categoria', 'cotizacion'];
+
+/**
+ * Corta si esta persona no puede tocar este archivo.
+ *
+ * POR QUÉ HACE FALTA
+ * Antes alcanzaba con tener sesión. Los ids son números seguidos, así
+ * que pedir ?accion=ver&id=1, 2, 3… bajaba TODOS los contratos y
+ * comprobantes del evento, uno por uno, desde cualquier cuenta. Y
+ * accion=borrar tampoco miraba nada.
+ *
+ * @param array $yo   El usuario de la sesión.
+ * @param array $fila La fila de la tabla archivos.
+ * @return void Corta con 403 si no corresponde.
+ */
+function exigirQuePuedaVerElArchivo($yo, $fila) {
+    if (($yo['rol'] ?? '') === 'admin') return;
+
+    $atado = (string) ($fila['atado_a_tipo'] ?? '');
+
+    if (in_array($atado, ATADOS_DE_ADMIN, true)) {
+        responderMal('Este archivo es de la administración del evento.', 403);
+    }
+
+    /* Los sueltos (sin atar a nada) también son de admin: no hay forma
+       de saber qué son, y ante la duda no se entrega. */
+    if ($atado === '') {
+        responderMal('Este archivo es de la administración del evento.', 403);
+    }
+}
+
 
 switch ($accion) {
 
@@ -146,9 +185,18 @@ case 'subir':
     ]);
 
     /* Si es el comprobante de un pago, se enlaza en la propia fila del
-       pago para que aparezca al abrirlo sin tener que buscarlo. */
-    if (($_POST['tipo'] ?? '') === 'pago' && (int) ($_POST['id'] ?? 0) > 0) {
-        actualizar('pagos', (int) $_POST['id'], ['comprobante_id' => $id]);
+       pago para que aparezca al abrirlo sin tener que buscarlo.
+
+       Se comprueba el rol Y que el pago exista: antes esto escribía en
+       la tabla de pagos con el id que viniera, sin mirar nada. Una
+       cuenta de entrada podía tocar filas de dinero mandando un id
+       cualquiera. */
+    $pagoId = (int) ($_POST['id'] ?? 0);
+    if (($_POST['tipo'] ?? '') === 'pago' && $pagoId > 0 &&
+        ($yo['rol'] ?? '') === 'admin') {
+
+        $hayPago = consultarUno('SELECT id FROM pagos WHERE id = :id', [':id' => $pagoId]);
+        if ($hayPago) actualizar('pagos', $pagoId, ['comprobante_id' => $id]);
     }
 
     anotarEnBitacora($yo, 'subió un archivo', 'archivos', $id, $nombreReal);
@@ -171,6 +219,8 @@ case 'ver':
                          [':id' => (int) ($_GET['id'] ?? 0)]);
     if (!$fila) responderMal('Ese archivo no existe.', 404);
 
+    exigirQuePuedaVerElArchivo($yo, $fila);
+
     /* basename() por si acaso: aunque el nombre lo generamos nosotros,
        si alguna vez la fila se editara a mano en la base, esto impide
        que un "../" salga de la carpeta. */
@@ -183,7 +233,11 @@ case 'ver':
     /* inline para las imágenes (se ven en la app) y attachment para los
        PDF (se descargan). El nombre va entre comillas y sin comillas
        internas, para que un nombre raro no rompa la cabecera. */
-    $nombre = str_replace('"', '', $fila['nombre_real']);
+    /* Se sacan también los saltos de línea, no solo las comillas. Un \r
+       o un \n en el nombre parte la cabecera en dos y deja meter otras
+       cabeceras inventadas debajo. El nombre lo escribe quien sube el
+       archivo, así que no es un dato de confianza. */
+    $nombre = preg_replace('/[\r\n"]/', '', $fila['nombre_real']);
     $como   = strpos($fila['tipo_mime'], 'image/') === 0 ? 'inline' : 'attachment';
     header("Content-Disposition: $como; filename=\"$nombre\"");
 
@@ -229,6 +283,8 @@ case 'borrar':
 
     $fila = consultarUno('SELECT * FROM archivos WHERE id = :id', [':id' => $id]);
     if (!$fila) responderMal('Ese archivo no existe.', 404);
+
+    exigirQuePuedaVerElArchivo($yo, $fila);
 
     // Primero el archivo del disco, después la fila: si se hiciera al
     // revés y fallara el borrado del archivo, quedaría un huérfano que

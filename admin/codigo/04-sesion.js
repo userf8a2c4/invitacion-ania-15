@@ -207,12 +207,38 @@ function prepararEntrada() {
  * @returns {Promise<void>}
  */
 async function salir() {
-  try {
-    await mandar('sesion.php?accion=salir', {});
-  } catch (error) {
-    // Si el servidor no contesta, igual se sale localmente: el token se
-    // borra del teléfono y caducará solo en el servidor.
+  /* Si quedaron cambios sin mandar, se avisa ANTES de cerrar. Salir no
+     los borra —esperan a que esta misma persona vuelva a entrar— pero
+     nadie debería irse creyendo que guardó algo que todavía no salió
+     del teléfono. */
+  const pendientes = await contarCola();
+  if (pendientes > 0) {
+    const aviso = pendientes === 1
+      ? 'Queda 1 cambio sin mandar al servidor.'
+      : 'Quedan ' + pendientes + ' cambios sin mandar al servidor.';
+
+    if (!confirmarAccion(aviso + '\n\nSe van a mandar cuando vuelvas a ' +
+                         'entrar con esta cuenta y haya señal.\n\n¿Salir igual?')) {
+      return;
+    }
   }
+
+  try {
+    /* noEncolar: sin esto, salir sin señal metía el propio "cerrar
+       sesión" en la cola de cambios pendientes, para mandarlo más
+       tarde. No tiene ningún sentido: si falla, alcanza con borrar el
+       token de acá y dejar que caduque solo en el servidor. */
+    await pedir('sesion.php?accion=salir',
+                { metodo: 'POST', cuerpo: {}, noEncolar: true });
+  } catch (error) {
+    // Ídem: se sale localmente igual.
+  }
+
+  /* Las copias de lectura SÍ se borran: son lo que otra persona podría
+     llegar a ver en este mismo teléfono. La cola no, porque son cambios
+     de verdad que todavía no se guardaron en ningún lado. */
+  await borrarCopiasGuardadas();
+
   borrarToken();
   mostrarPantallaDeEntrada();
 }

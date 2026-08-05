@@ -632,3 +632,72 @@ INSERT IGNORE INTO categorias_gasto (nombre, techo, orden) VALUES
   ('Recuerdos',            0, 10),
   ('Transporte',           0, 11),
   ('Otros',                0, 99);
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 6. QUE NADA SE GUARDE DOS VECES
+-- ══════════════════════════════════════════════════════════════════════
+--
+-- Sin señal, la app guarda los cambios en una cola del teléfono y los
+-- reintenta cuando vuelve internet. El peligro es que el envío llegue y
+-- lo que se pierda sea la RESPUESTA: la app cree que falló, lo manda de
+-- nuevo, y donde había un gasto quedan dos.
+--
+-- Cada envío viaja con una clave única que inventa el teléfono. Acá se
+-- anota qué claves ya se atendieron y qué se contestó. Si llega una
+-- repetida, se devuelve la respuesta guardada sin volver a tocar nada.
+--
+-- Ver respuestaYaDada() y guardarRespuestaDada() en api/_lib/bd.php.
+
+CREATE TABLE IF NOT EXISTS escrituras_hechas (
+  -- La clave la pone el cliente. Es la ÚNICA parte del sistema que sabe
+  -- que dos envíos son el mismo intento y no dos decisiones distintas.
+  clave      VARCHAR(64) NOT NULL PRIMARY KEY,
+  -- La respuesta tal cual se devolvió, para poder repetirla igual.
+  respuesta  MEDIUMTEXT,
+  cuando     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Para poder borrar las viejas sin recorrer la tabla entera.
+  KEY por_fecha (cuando)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 7. QUÉ LE MANDAMOS A CADA PROVEEDOR
+-- ══════════════════════════════════════════════════════════════════════
+--
+-- compartir.php sabe armar siete paquetes de texto listos para WhatsApp
+-- (banquete, salón, fotógrafo, DJ, iglesia, modista, invitados). Esta
+-- columna dice cuál le toca a cada proveedor, para poder mandarle LO
+-- SUYO de un toque en vez de elegirlo a mano cada vez.
+--
+-- Vacío = a este no se le manda nada automático.
+
+-- ⚠️ La columna NO se agrega desde acá: "ADD COLUMN IF NOT EXISTS" no
+-- existe en MySQL, y sin el IF NOT EXISTS este archivo dejaría de poder
+-- correrse dos veces. La agrega api/instalar.php, que antes comprueba si
+-- ya está (ver $agregarColumna).
+
+
+-- Qué se mandó, a quién y cuándo.
+--
+-- La `huella` es un hash del texto que se envió. Sirve para una sola
+-- cosa, pero importante: comparar el texto de hoy contra el de aquella
+-- vez y avisar "esto cambió desde que se lo mandaste". Es lo que evita
+-- que el DJ toque una canción agregada a las prohibidas DESPUÉS de
+-- haberle pasado la lista.
+--
+-- ⚠️ Esta tabla registra que se ABRIÓ WhatsApp con el texto puesto, no
+-- que el mensaje se haya enviado: eso pasa dentro de WhatsApp y el panel
+-- no tiene forma de saberlo.
+
+CREATE TABLE IF NOT EXISTS envios_proveedor (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  proveedor_id  INT NOT NULL,
+  paquete       VARCHAR(20) NOT NULL,
+  huella        CHAR(64) NOT NULL,
+  enviado_en    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  usuario_id    INT DEFAULT NULL,
+  KEY por_proveedor (proveedor_id, paquete, enviado_en),
+  CONSTRAINT envio_de_proveedor FOREIGN KEY (proveedor_id)
+    REFERENCES proveedores(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

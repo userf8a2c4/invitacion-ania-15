@@ -40,7 +40,14 @@ async function pintarHoy(donde) {
   try {
     HOY = await traer('hoy.php');
   } catch (error) {
-    donde.innerHTML = '';
+    /* ANTES ESTO BORRABA EL BLOQUE SIN DECIR NADA, y con él se iba el
+       botón para abrir el cronograma. El 24 de octubre, un error de red
+       de un segundo escondía justo la pantalla que hace falta.
+
+       Ahora se avisa y se ofrece reintentar. Y el acceso al modo del
+       día no depende de esta llamada: está también en Evento y en el
+       menú. */
+    pintarError(donde, error.message, () => pintarHoy(donde));
     return;
   }
 
@@ -53,13 +60,25 @@ async function pintarHoy(donde) {
     ensayo: 'info', vestido: 'oro', alarma: 'oro',
   };
 
+  /* El día del evento la pantalla cambia de cara: deja de preguntar qué
+     hacer y pasa a ser el cronograma.
+
+     Los días previos el botón aparece igual, más discreto. Sirve para
+     repasar el cronograma la noche anterior —que es cuando de verdad se
+     repasa— y para que el 24 nadie tenga que descubrir un botón que ve
+     por primera vez. */
+  const faltan = Number(HOY.dias_para_la_fiesta);
+  const yaCasi = !HOY.es_el_dia && faltan >= 0 &&
+                 faltan <= CONFIGURACION.avisos.diasParaElModoDelDia;
+
   donde.innerHTML =
-    /* El día del evento, la pantalla cambia de cara: deja de preguntar
-       qué hacer y pasa a ser el cronograma. */
-    (HOY.es_el_dia
-      ? '<button class="boton boton--principal boton--ancho" id="hoy-es-el-dia" ' +
+    (HOY.es_el_dia || yaCasi
+      ? '<button class="boton boton--ancho ' +
+                (HOY.es_el_dia ? 'boton--principal' : '') + '" id="hoy-es-el-dia" ' +
                 'style="margin-bottom:var(--esp-2);min-height:52px;font-size:16px">' +
-          'Hoy son los XV · Abrir el cronograma' +
+          (HOY.es_el_dia
+            ? 'Hoy son los XV · Abrir el cronograma'
+            : 'Ver el cronograma del día') +
         '</button>'
       : '') +
 
@@ -107,8 +126,12 @@ async function pintarHoy(donde) {
       const [destino, seccion] = boton.dataset.hoy.split('|');
       if (!destino) { abrirAlarmas(); return; }
 
+      /* Evento va por su propia función: entrar a esa pestaña vuelve al
+         índice, así que asignar SECCION_EVENTO acá no alcanzaría —el
+         dibujado la pisaría antes de que se vea. */
+      if (destino === 'evento' && seccion) { irASeccionDeEvento(seccion); return; }
+
       if (destino === 'dinero' && seccion) SECCION_DINERO = seccion;
-      if (destino === 'evento' && seccion) SECCION_EVENTO = seccion;
       irA(destino, true);
     });
   });
@@ -136,8 +159,10 @@ function bloqueAQuienLlamar(gente) {
             '<span class="lista__titulo">' + seguro(p.nombre) + '</span>' +
             '<span class="lista__pie">' + seguro(p.porque) + '</span>' +
           '</span>' +
-          '<a class="boton boton--chico" href="tel:' + seguro(p.telefono) + '">Llamar</a>' +
-          '<a class="boton boton--chico" target="_blank" rel="noopener" ' +
+          /* Sin --chico: llamar y escribir son las dos cosas que se
+             hacen apurada y sin mirar. 44 px, como manda el mínimo. */
+          '<a class="boton" href="tel:' + seguro(p.telefono) + '">Llamar</a>' +
+          '<a class="boton" target="_blank" rel="noopener" ' +
              'href="https://wa.me/' + seguro(digitos) + '">WhatsApp</a>' +
         '</div>';
       }).join('') +
@@ -200,10 +225,13 @@ function bloqueListaFinal(lista, dias) {
  * @returns {Promise<void>}
  */
 async function abrirModoDelDia() {
+  /* filtro--grande y no .filtro a secas: estas dos pestañas se tocan de
+     pie, con prisa y con una sola mano. 34 px es chico para eso. */
   const cuerpo = abrirHoja('El día',
     '<div class="filtros">' +
-      '<button class="filtro activo" data-dia-modo="cronograma">Cronograma</button>' +
-      '<button class="filtro" data-dia-modo="pases">Buscar pase</button>' +
+      '<button class="filtro filtro--grande activo" data-dia-modo="cronograma">' +
+        'Cronograma</button>' +
+      '<button class="filtro filtro--grande" data-dia-modo="pases">Buscar pase</button>' +
     '</div>' +
     '<div id="dia-cuerpo"><div class="esqueleto"></div></div>');
 
@@ -300,18 +328,40 @@ async function pintarBuscadorDePases(donde) {
     '</div>' +
     '<div id="resultado-pase"></div>';
 
-  if (!INVITADOS.length) {
-    try {
-      const r = await traer('confirmaciones.php?accion=listar');
-      INVITADOS = r.filas || [];
-    } catch (error) {
-      // Se sigue igual: puede que ya estuvieran cargados de antes.
-    }
-  }
-
   const campo = buscar('#buscar-pase', donde);
   const caja  = buscar('#resultado-pase', donde);
   campo.focus();
+
+  /* SE RECARGA SIEMPRE, aunque ya hubiera invitados en memoria.
+   *
+   * Antes solo se pedía la lista si estaba vacía, y eso fallaba
+   * justo el día que importa: si alguien abrió la pestaña Invitados a
+   * la mañana, en la puerta se buscaba contra la lista de la mañana, y
+   * quien hubiera confirmado durante el día no aparecía. Buscar un pase
+   * que existe y que la app diga que no está es peor que no tener
+   * buscador.
+   *
+   * La espera no se nota: se puede empezar a escribir enseguida, y con
+   * la copia del teléfono esto contesta aunque no haya señal. */
+  let listaAlDia = false;
+  try {
+    const r = await traer('confirmaciones.php?accion=listar');
+    INVITADOS = r.filas || [];
+    INVITADOS_EDITABLES = !!r.editable;
+    listaAlDia = true;
+  } catch (error) {
+    /* Ni servidor ni copia guardada. Se sigue con lo que haya quedado
+       en memoria porque es mejor que nada, pero NO cuenta como lista al
+       día: justamente lo que puede faltarle es quien confirmó hoy. Que
+       haya algo cargado no lo vuelve confiable. */
+    listaAlDia = false;
+  }
+
+  if (!INVITADOS.length) {
+    caja.innerHTML =
+      '<p class="aviso-error">No pude cargar la lista de invitados. ' +
+      'Revisá la conexión y volvé a abrir esta pantalla.</p>';
+  }
 
   campo.addEventListener('input', () => {
     const aguja = paraBuscar(campo.value);
@@ -323,7 +373,14 @@ async function pintarBuscadorDePases(donde) {
     ).slice(0, 8);
 
     if (!encontrados.length) {
-      caja.innerHTML = '<p class="aviso-error">No encontré a nadie con eso.</p>';
+      /* Se distingue "no está en la lista" de "no tengo la lista". Antes
+         las dos decían lo mismo, y en la puerta eso significa mandar a
+         alguien de vuelta por un error de red. */
+      caja.innerHTML = listaAlDia
+        ? '<p class="aviso-error">No encontré a nadie con eso.</p>'
+        : '<p class="aviso-error">No pude cargar la lista completa, así que ' +
+          'esto puede estar incompleto. No busques por acá para dejar a ' +
+          'alguien afuera.</p>';
       return;
     }
 
@@ -359,32 +416,100 @@ async function pintarBuscadorDePases(donde) {
  */
 async function abrirCompartir() {
   const cuerpo = abrirHoja('Compartir',
-    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
-      'Armo el texto listo para mandar. Elegí a quién.</p>' +
     '<div id="compartir-lista"><div class="esqueleto"></div></div>');
 
   const caja = buscar('#compartir-lista', cuerpo);
 
-  let opciones;
+  let opciones, aQuien;
   try {
-    opciones = await traer('compartir.php?accion=que_hay');
+    // Las dos llamadas juntas: tardan lo que la más lenta.
+    [opciones, aQuien] = await Promise.all([
+      traer('compartir.php?accion=que_hay'),
+      traer('compartir.php?accion=a_quien'),
+    ]);
   } catch (error) {
     pintarError(caja, error.message, () => abrirCompartir());
     return;
   }
 
-  caja.innerHTML = opciones.map(o =>
-    '<button class="lista__fila" data-compartir="' + seguro(o.clave) + '">' +
-      '<span class="lista__cuerpo">' +
-        '<span class="lista__titulo">' + seguro(o.nombre) + '</span>' +
-        '<span class="lista__pie">' + seguro(o.que) + '</span>' +
-      '</span>' +
-    '</button>'
-  ).join('');
+  const proveedores = (aQuien && aQuien.proveedores) || [];
+  const comoSeLlama = {};
+  opciones.forEach(o => { comoSeLlama[o.clave] = o.nombre; });
+
+  caja.innerHTML =
+    /* ─── Los proveedores con paquete asignado ────────────────────── */
+    (proveedores.length
+      ? '<div class="indice__titulo">Tus proveedores</div>' +
+        proveedores.map(p => filaDeProveedorParaMandar(p, comoSeLlama)).join('') +
+        '<p class="vacio__texto" style="padding:0 var(--esp-1);' +
+             'margin-bottom:var(--esp-3)">' +
+          'WhatsApp no deja mandarle a varios de una vez: va uno por uno.' +
+        '</p>'
+      : '<div class="tarjeta">' +
+          '<p class="vacio__texto">Ningún proveedor tiene asignado qué mandarle. ' +
+          'Abrí un proveedor en Presupuesto y elegí su paquete: después vas a ' +
+          'poder mandarle lo suyo desde acá con un toque.</p>' +
+        '</div>') +
+
+    /* ─── Y los paquetes sueltos, para copiar o elegir destinatario ── */
+    '<div class="indice__titulo">Armar un texto suelto</div>' +
+    opciones.map(o =>
+      '<button class="lista__fila" data-compartir="' + seguro(o.clave) + '">' +
+        '<span class="lista__cuerpo">' +
+          '<span class="lista__titulo">' + seguro(o.nombre) + '</span>' +
+          '<span class="lista__pie">' + seguro(o.que) + '</span>' +
+        '</span>' +
+      '</button>'
+    ).join('');
 
   buscarTodos('[data-compartir]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => armarParaCompartir(boton.dataset.compartir));
   });
+
+  buscarTodos('[data-mandarle]', cuerpo).forEach(boton => {
+    const p = proveedores.find(x => String(x.id) === boton.dataset.mandarle);
+    boton.addEventListener('click', () => armarParaCompartir(p.paquete, p));
+  });
+}
+
+/**
+ * Un renglón de la lista de proveedores a los que mandarles lo suyo.
+ *
+ * Lo que de verdad importa acá es el estado: no alcanza con saber si se
+ * le mandó, hay que saber si LO QUE SE LE MANDÓ SIGUE SIENDO CIERTO. Un
+ * DJ con la lista de canciones de hace un mes es peor que uno sin lista,
+ * porque él cree que está al día.
+ *
+ * @param {Object} p
+ * @param {Object} comoSeLlama - clave de paquete => nombre legible.
+ * @returns {string} HTML
+ */
+function filaDeProveedorParaMandar(p, comoSeLlama) {
+  let estado;
+
+  if (!p.sirve_whatsapp) {
+    estado = '<span class="etiqueta etiqueta--alerta">Sin WhatsApp</span>';
+  } else if (!p.enviado_en) {
+    estado = '<span class="etiqueta etiqueta--tenue">Nunca</span>';
+  } else {
+    /* La huella se compara al abrir el texto, no acá: para saber si
+       cambió hay que armarlo de nuevo. Acá se dice cuándo fue. */
+    estado = '<span class="etiqueta etiqueta--bien">' +
+             seguro(comoCuando(String(p.enviado_en).slice(0, 10))) + '</span>';
+  }
+
+  return '' +
+    '<button class="lista__fila" data-mandarle="' + seguro(p.id) + '"' +
+            (p.sirve_whatsapp ? '' : ' disabled') + '>' +
+      '<span class="lista__cuerpo">' +
+        '<span class="lista__titulo">' + seguro(p.nombre) + '</span>' +
+        '<span class="lista__pie">' +
+          seguro(comoSeLlama[p.paquete] || p.paquete) +
+          (p.servicio ? ' · ' + seguro(p.servicio) : '') +
+        '</span>' +
+      '</span>' +
+      '<span class="lista__lado">' + estado + '</span>' +
+    '</button>';
 }
 
 /**
@@ -393,21 +518,44 @@ async function abrirCompartir() {
  * @param {string} cual
  * @returns {Promise<void>}
  */
-async function armarParaCompartir(cual) {
+async function armarParaCompartir(cual, proveedor) {
   const cuerpo = abrirHoja('Armando…', '<div class="esqueleto"></div>'.repeat(3));
 
   let datos;
   try {
-    datos = await traer('compartir.php?accion=armar&cual=' + encodeURIComponent(cual));
+    datos = await traer('compartir.php?accion=armar&cual=' + encodeURIComponent(cual) +
+                        (proveedor ? '&proveedor=' + encodeURIComponent(proveedor.id) : ''));
   } catch (error) {
     cuerpo.innerHTML = '';
-    pintarError(cuerpo, error.message, () => armarParaCompartir(cual));
+    pintarError(cuerpo, error.message, () => armarParaCompartir(cual, proveedor));
     return;
   }
 
-  buscar('#hoja-titulo').textContent = 'Listo para mandar';
+  buscar('#hoja-titulo').textContent = proveedor
+    ? 'Para ' + proveedor.nombre
+    : 'Listo para mandar';
+
+  /* ¿Cambió algo desde la última vez que se le mandó?
+   *
+   * Este es el aviso que evita el problema de verdad: que el DJ tenga la
+   * lista de canciones de hace un mes y NO LO SEPA. Se compara la huella
+   * del texto de ahora contra la que se guardó al mandarlo. */
+  const yaSeLeMando = proveedor && proveedor.enviado_en;
+  const cambio = yaSeLeMando && proveedor.huella && proveedor.huella !== datos.huella;
+
+  const aviso = !yaSeLeMando ? ''
+    : cambio
+      ? '<p class="aviso-error">Esto <strong>cambió</strong> desde que se lo ' +
+        'mandaste, el ' + seguro(comoFecha(String(proveedor.enviado_en).slice(0, 10))) +
+        '. Conviene volver a mandárselo.</p>'
+      : '<p class="vacio__texto" style="color:var(--bien);margin-bottom:var(--esp-2)">' +
+        'Se lo mandaste el ' +
+        seguro(comoFecha(String(proveedor.enviado_en).slice(0, 10))) +
+        ' y no cambió nada desde entonces.</p>';
 
   cuerpo.innerHTML =
+    aviso +
+
     /* Se muestra el texto completo antes de mandarlo. Nadie debería
        mandarle algo a un proveedor sin haberlo leído. */
     '<div class="tarjeta" style="white-space:pre-wrap;font-size:13px;' +
@@ -416,11 +564,29 @@ async function armarParaCompartir(cual) {
     '</div>' +
 
     '<a class="boton boton--principal boton--ancho" target="_blank" ' +
-       'rel="noopener" href="' + seguro(datos.whatsapp) + '" ' +
-       'style="margin-top:var(--esp-2)">Mandar por WhatsApp</a>' +
+       'rel="noopener" id="comp-whatsapp" href="' + seguro(datos.whatsapp) + '" ' +
+       'style="margin-top:var(--esp-2)">' +
+      (proveedor ? 'Mandarle a ' + seguro(proveedor.nombre) : 'Mandar por WhatsApp') +
+    '</a>' +
 
     '<button class="boton boton--ancho" id="comp-copiar" ' +
             'style="margin-top:var(--esp-1)">Copiar el texto</button>';
+
+  /* Al tocar el botón se anota que se le mandó. Se anota que se ABRIÓ
+     WhatsApp con el texto puesto: si después lo manda o no ya pasa
+     adentro de WhatsApp, donde el panel no ve nada. Decir "enviado"
+     sería afirmar más de lo que se sabe. */
+  if (proveedor) {
+    buscar('#comp-whatsapp', cuerpo).addEventListener('click', () => {
+      mandar('compartir.php?accion=anotar_envio', {
+        proveedor_id: proveedor.id,
+        paquete: cual,
+        huella: datos.huella,
+      }).catch(() => {
+        // Que no se pueda anotar no puede frenar el envío.
+      });
+    });
+  }
 
   buscar('#comp-copiar', cuerpo).addEventListener('click', async () => {
     try {

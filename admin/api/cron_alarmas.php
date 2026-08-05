@@ -9,7 +9,13 @@
    CÓMO SE PROGRAMA EN HOSTINGER
      hPanel → Avanzado → Trabajos cron → Crear
      Comando:  php /home/USUARIO/domains/aniaxv.com/public_html/admin/api/cron_alarmas.php
-     Cuándo:   cada 10 minutos  (minuto: */10)
+     Cuándo:   cada 10 minutos
+
+   ⚠️ OJO AL ESCRIBIR EL MINUTO EN hPanel
+   En el campo de minutos va un asterisco, una barra y el 10. NO se puede
+   escribir acá tal cual: esos dos caracteres juntos CIERRAN este bloque
+   de comentario, y todo lo que sigue se lee como código.
+   Eso fue exactamente lo que rompió este archivo una vez.
 
    POR QUÉ CADA 10 MINUTOS Y NO CADA MINUTO
    Porque una alarma que suena hasta diez minutos tarde sigue sirviendo,

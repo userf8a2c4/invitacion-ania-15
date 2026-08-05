@@ -200,6 +200,85 @@ function borrar($tabla, $id) {
     return ejecutar("DELETE FROM `$tabla` WHERE id = :id", [':id' => (int) $id]);
 }
 
+/* ─── QUE NADA SE GUARDE DOS VECES ────────────────────────────────────── */
+
+/*
+   EL PROBLEMA QUE RESUELVE ESTO
+
+   Sin señal, la app guarda los cambios en una cola del teléfono y los
+   manda cuando vuelve internet. Reintentar es lo correcto, pero trae un
+   peligro: si el envío llegó al servidor y lo que se perdió fue la
+   RESPUESTA, la app cree que falló y lo manda otra vez. Editar dos veces
+   no hace daño —el segundo pisa al primero—, pero CREAR dos veces deja
+   dos gastos idénticos, y nadie se entera hasta que las cuentas no dan.
+
+   Cada envío de la cola viaja con una clave única inventada por el
+   teléfono. Acá se anota qué claves ya se atendieron junto con la
+   respuesta que se dio. Si llega una repetida, se devuelve la respuesta
+   guardada sin volver a tocar la base.
+
+   Que la clave la ponga el CLIENTE y no el servidor es lo que hace que
+   funcione: es la única parte del sistema que sabe que dos envíos son el
+   mismo intento y no dos decisiones distintas.
+*/
+
+/** Cuántos días se recuerda una clave antes de olvidarla. */
+const DIAS_QUE_SE_RECUERDA_UNA_CLAVE = 30;
+
+/**
+ * Busca si una clave ya se atendió antes.
+ *
+ * @param string $clave
+ * @return string|null El JSON de la respuesta que se dio, o null.
+ */
+function respuestaYaDada($clave) {
+    if ($clave === '' || !existeTabla('escrituras_hechas')) return null;
+
+    $fila = consultarUno(
+        'SELECT respuesta FROM escrituras_hechas WHERE clave = :c',
+        [':c' => $clave]
+    );
+    return $fila ? $fila['respuesta'] : null;
+}
+
+/**
+ * Anota que una clave ya se atendió, con la respuesta que se dio.
+ *
+ * @param string $clave
+ * @param string $respuesta El JSON tal cual se devolvió.
+ * @return void
+ */
+function guardarRespuestaDada($clave, $respuesta) {
+    if ($clave === '' || !existeTabla('escrituras_hechas')) return;
+
+    try {
+        /* INSERT IGNORE y no INSERT a secas: si dos envíos iguales
+           llegan casi juntos, el segundo choca con la llave única. Eso
+           no es un error, es exactamente lo que tiene que pasar. */
+        ejecutar(
+            'INSERT IGNORE INTO escrituras_hechas (clave, respuesta)
+             VALUES (:c, :r)',
+            [':c' => $clave, ':r' => $respuesta]
+        );
+
+        /* Se limpian las viejas de a poco, aprovechando el viaje. Un
+           cron para esto sería otra cosa más que puede fallar callada. */
+        if (random_int(1, 50) === 1) {
+            ejecutar(
+                'DELETE FROM escrituras_hechas
+                 WHERE cuando < DATE_SUB(NOW(), INTERVAL :d DAY)',
+                [':d' => DIAS_QUE_SE_RECUERDA_UNA_CLAVE]
+            );
+        }
+    } catch (Exception $e) {
+        /* Que no se pueda anotar la clave no puede tumbar una operación
+           que YA se hizo bien. Lo peor que pasa es que un reintento
+           duplique, que es exactamente como estaba antes. */
+        error_log('[Ania XV · admin] No se pudo anotar la clave: ' . $e->getMessage());
+    }
+}
+
+
 /* ─── INSPECCIÓN DEL ESQUEMA ──────────────────────────────────────────── */
 
 /**

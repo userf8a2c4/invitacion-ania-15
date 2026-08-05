@@ -76,12 +76,19 @@ function env($clave, $respaldo = null) {
  * al .env del servidor exige entrar a mano por hPanel. Para no obligar a
  * eso, se acepta como llave cualquiera de estas dos:
  *
- *   · LLAVE_DIAGNOSTICO, si algún día se agrega al .env del servidor.
- *   · DB_PASSWORD, que YA está ahí porque sin ella no funcionaría nada.
+ * Solo vale LLAVE_DIAGNOSTICO, que está en el .env para esto.
  *
- * La contraseña de la base es un secreto tan bueno como cualquier otro
- * para esto, y no viaja a ningún lado: se compara contra lo que llega
- * por la URL y se descarta.
+ * ⚠️ ANTES TAMBIÉN SE ACEPTABA DB_PASSWORD, Y ERA UN ERROR.
+ *
+ * Parecía cómodo —ya estaba en el .env, no había que inventar nada—,
+ * pero esta llave VIAJA EN LA URL: los crones se llaman con
+ * `?llave=…`. Todo lo que va en una URL queda escrito en el registro de
+ * accesos de Apache, se manda en la cabecera Referer si la página
+ * enlaza a otro lado, y aparece en el historial del navegador.
+ *
+ * O sea que la contraseña de la base de datos quedaba en texto plano en
+ * varios archivos de registro. Quien pudiera leer un log tendría acceso
+ * completo a la base, no solo a correr un cron.
  *
  * @param string $recibida La llave que mandó quien llama.
  * @return bool
@@ -90,11 +97,10 @@ function llaveDeArranqueCorrecta($recibida) {
     $recibida = (string) $recibida;
     if ($recibida === '') return false;
 
-    foreach (['LLAVE_DIAGNOSTICO', 'DB_PASSWORD'] as $variable) {
-        $esperada = env($variable, '');
-        // hash_equals tarda lo mismo acierte o no, así que no se puede
-        // adivinar la llave letra por letra midiendo los tiempos.
-        if ($esperada !== '' && hash_equals($esperada, $recibida)) return true;
-    }
-    return false;
+    $esperada = env('LLAVE_DIAGNOSTICO', '');
+    if ($esperada === '') return false;
+
+    // hash_equals tarda lo mismo acierte o no, así que no se puede
+    // adivinar la llave letra por letra midiendo los tiempos.
+    return hash_equals($esperada, $recibida);
 }

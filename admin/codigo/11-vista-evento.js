@@ -27,8 +27,93 @@
 /** Lo que devolvió evento.php la última vez. */
 let EVENTO = null;
 
-/** Qué sub-pestaña se está viendo. */
-let SECCION_EVENTO = 'tareas';
+/**
+ * Qué sección se está viendo dentro de Evento.
+ *
+ * En null se muestra el ÍNDICE, que es la pantalla de entrada. Cualquier
+ * otra cosa es una sección abierta a pantalla completa.
+ */
+let SECCION_EVENTO = null;
+
+/**
+ * Sección que hay que abrir apenas Evento termine de cargar.
+ *
+ * Hace falta porque entrar a Evento con recarga vuelve a dibujar todo y
+ * deja el índice a la vista. Quien quiera llegar directo a una sección
+ * —el Resumen al tocar "Ensayo del vals", por ejemplo— no puede
+ * limitarse a asignar SECCION_EVENTO: el dibujado la pisaría. Lo deja
+ * acá y dibujarEvento() la respeta.
+ */
+let EVENTO_ABRIR_AL_CARGAR = null;
+
+/**
+ * Va a la pestaña Evento y abre una sección concreta.
+ *
+ * @param {string} clave - 'tareas', 'musica'…
+ * @returns {void}
+ */
+function irASeccionDeEvento(clave) {
+  EVENTO_ABRIR_AL_CARGAR = clave;
+  irA('evento', true);
+}
+
+/**
+ * Se asegura de que EVENTO esté cargado antes de usarlo.
+ *
+ * POR QUÉ HACE FALTA
+ * Regalos y Foráneos se ven desde la pestaña Gente, pero sus datos
+ * salen de evento.php. Si alguien entra directo a Gente sin pasar por
+ * Evento, EVENTO todavía es null y pintarSeccionGenerica() reventaría al
+ * leer EVENTO[clave].
+ *
+ * @returns {Promise<void>}
+ */
+async function asegurarEvento() {
+  if (EVENTO) return;
+  EVENTO = await traer('evento.php?accion=todo');
+}
+
+/**
+ * Vuelve a pedir los datos y repinta la pantalla DONDE ESTÁ EL USUARIO.
+ *
+ * POR QUÉ NO ALCANZA CON LLAMAR A dibujarEvento()
+ * Porque Mesas, Regalos y Foráneos ahora se ven desde Gente. Si alguien
+ * agrega un regalo estando en Gente y esto repintara Evento, se
+ * actualizaría una pantalla que no se está mirando y la que sí quedaría
+ * con el dato viejo.
+ *
+ * La vista que no se está mirando se marca como sucia, así se rehace
+ * sola la próxima vez que se entre.
+ *
+ * @returns {Promise<void>}
+ */
+async function refrescarEvento() {
+  EVENTO = await traer('evento.php?accion=todo');
+
+  if (VISTA_ACTUAL === 'invitados') {
+    ensuciarVistas('evento');
+    GENTE_CARGADA[SECCION_GENTE] = false;
+    await pintarSeccionDeGente();
+    return;
+  }
+
+  ensuciarVistas('invitados');
+  pintarSeccionDeEvento();
+}
+
+/**
+ * Vuelve al índice sin ir al servidor.
+ *
+ * La llama la navegación al volver a la pestaña Evento: entrar siempre
+ * muestra el índice, para que la pantalla abra igual todas las veces.
+ *
+ * @returns {void}
+ */
+function volverAlIndiceDeEvento() {
+  if (SECCION_EVENTO === null) return;
+  SECCION_EVENTO = null;
+  pintarSeccionDeEvento();
+}
 
 
 /* ─── 1. DESCRIPCIÓN DE LAS SECCIONES ──────────────────────────────── */
@@ -159,7 +244,10 @@ const SECCIONES = {
   },
 
   cronograma: {
-    rotulo: 'El día',
+    /* "Cronograma" y no "El día": en el índice esta fila vive dentro del
+       grupo llamado "El día", y un renglón que repite el título de su
+       propio grupo no dice nada. */
+    rotulo: 'Cronograma',
     titulo: 'Cronograma del día',
     vacio: ['Todavía no hay cronograma',
             'La hora a hora del 24 de octubre: llegada, misa, vals, cena…'],
@@ -311,54 +399,53 @@ async function dibujarEvento() {
     throw error;
   }
 
-  /* El orden de las pestañas sigue el orden en que se usan a lo largo
-     del año: primero lo que se hace todos los días (tareas, agenda),
-     al final lo del día del evento. */
-  const pestanas = [
-    ['calendario', 'Calendario'],
-    ['tareas',   'Tareas',  (PLAN.tareas || []).filter(t => t.estado !== 'hecha').length],
-    ['agenda',   'Agenda',  (PLAN.agenda || []).length],
-    ['corte_honor', null],
-    ['ensayos',  null],
-    ['ceremonia', 'Misa'],
-    ['requisitos_ceremonia', null],
-    ['musica',   null],
-    ['citas_arreglo', null],
-    ['mesas',    null],
-    ['cronograma', null],
-    ['tomas_foto', null],
-    ['regalos',  null, (EVENTO.regalos || []).filter(r => Number(r.agradecido) === 0).length],
-    ['foraneos', null],
-  ];
+  vista.innerHTML = '<div id="cuerpo-evento"></div>';
 
-  vista.innerHTML =
-    '<div class="filtros" id="pestanas-evento">' +
-      pestanas.map(p => {
-        const clave  = p[0];
-        const deFabrica = p[1] || (SECCIONES[clave] ? SECCIONES[clave].rotulo : clave);
-        const rotulo = et('evento.' + clave, deFabrica);
-        const n      = p[2];
-        return '<button class="filtro' +
-               (clave === SECCION_EVENTO ? ' activo' : '') +
-               '" data-ev="' + clave + '">' +
-               seguro(rotulo + (n ? ' (' + n + ')' : '')) + '</button>';
-      }).join('') +
-    '</div>' +
-    '<div id="cuerpo-evento"></div>';
-
-  buscarTodos('[data-ev]', vista).forEach(boton => {
-    boton.addEventListener('click', () => {
-      SECCION_EVENTO = boton.dataset.ev;
-      buscarTodos('[data-ev]', vista).forEach(o => o.classList.toggle('activo', o === boton));
-      pintarSeccionDeEvento();
-    });
-  });
-
+  /* SECCION_EVENTO en null significa "mostrar el índice". Entrar a
+     Evento muestra el índice y no la última sección abierta: la pantalla
+     tiene que abrir siempre igual para saber dónde está uno parado sin
+     mirar. La excepción es haber pedido una sección concreta. */
+  SECCION_EVENTO = EVENTO_ABRIR_AL_CARGAR;
+  EVENTO_ABRIR_AL_CARGAR = null;
   pintarSeccionDeEvento();
 }
 
 /**
- * Pinta la sub-pestaña elegida.
+ * Cuántos hay que mostrar al lado de cada sección en el índice.
+ *
+ * Solo llevan cuenta las secciones donde un número significa "esto te
+ * está esperando". Poner un contador en Fotos o en Música sería decir
+ * cuántos registros hay, que no es una noticia.
+ *
+ * @param {string} clave
+ * @returns {{cuantos: number, alerta: boolean}}
+ */
+function cuentaDeLaSeccion(clave) {
+  if (clave === 'tareas') {
+    return {
+      cuantos: (PLAN.tareas || []).filter(t => t.estado !== 'hecha').length,
+      alerta: false,
+    };
+  }
+
+  if (clave === 'agenda') {
+    return { cuantos: (PLAN.agenda || []).length, alerta: false };
+  }
+
+  if (clave === 'requisitos_ceremonia') {
+    // Los papeles que faltan entregar sí son una deuda: van en rojo.
+    return {
+      cuantos: (EVENTO.requisitos_ceremonia || [])
+                 .filter(r => r.estado !== 'listo').length,
+      alerta: true,
+    };
+  }
+
+  return { cuantos: 0, alerta: false };
+}
+
+/**
+ * Pinta el índice de Evento, o la sección que se haya abierto.
  *
  * @returns {void}
  */
@@ -366,25 +453,100 @@ function pintarSeccionDeEvento() {
   const cuerpo = buscar('#cuerpo-evento');
   if (!cuerpo) return;
 
-  // Las que no son listas genéricas tienen su propia función.
-  if (SECCION_EVENTO === 'calendario') { pintarCalendario(cuerpo); return; }
-  if (SECCION_EVENTO === 'tareas')    { pintarTareas(cuerpo); return; }
-  if (SECCION_EVENTO === 'agenda')    { pintarAgenda(cuerpo); return; }
-  if (SECCION_EVENTO === 'ceremonia') { pintarCeremonia(cuerpo); return; }
+  /* ─── El índice ─────────────────────────────────────────────────── */
+  if (!SECCION_EVENTO) {
+    ponerTitulo(et('nav.evento', 'Evento'));
 
-  /* Las mesas tienen pantalla propia (17-mesas.js): no son una lista de
-     registros sino un acomodo, con autoasignación y reglas. */
-  if (SECCION_EVENTO === 'mesas') { pintarMesas(cuerpo); return; }
+    const grupos = CONFIGURACION.indiceDeEvento.map(grupo => ({
+      titulo: grupo.titulo,
+      filas: grupo.filas.map(fila => {
+        const clave = fila[0];
+        const cuenta = cuentaDeLaSeccion(clave);
+        return {
+          clave: clave,
+          nombre: nombreDeLaSeccion(clave),
+          descripcion: fila[1],
+          cuantos: cuenta.cuantos,
+          alerta: cuenta.alerta,
+        };
+      }),
+    }));
 
-  // Los regalos llevan arriba la tarjeta de la lista de Amazon.
-  if (SECCION_EVENTO === 'regalos') {
-    cuerpo.innerHTML = tarjetaMesaDeRegalos() + '<div id="lista-regalos"></div>';
-    engancharMesaDeRegalos(cuerpo);
-    pintarSeccionGenerica(buscar('#lista-regalos', cuerpo), 'regalos');
+    pintarIndice(cuerpo, grupos, clave => {
+      /* El modo del día no es una sección: es una hoja aparte que se
+         abre encima. Por eso no cambia SECCION_EVENTO. */
+      if (clave === 'modo-dia') { abrirModoDelDia(); return; }
+
+      SECCION_EVENTO = clave;
+      pintarSeccionDeEvento();
+      buscar('#contenido').scrollTo({ top: 0 });
+    });
     return;
   }
 
-  pintarSeccionGenerica(cuerpo, SECCION_EVENTO);
+  /* ─── Una sección abierta ───────────────────────────────────────── */
+
+  const nombre = nombreDeLaSeccion(SECCION_EVENTO);
+  ponerTitulo(nombre);
+
+  cuerpo.innerHTML =
+    barraDeVuelta(et('nav.evento', 'Evento'), descripcionDeLaSeccion(SECCION_EVENTO)) +
+    '<div id="dentro-evento"></div>';
+
+  buscar('#indice-volver', cuerpo).addEventListener('click', () => {
+    SECCION_EVENTO = null;
+    pintarSeccionDeEvento();
+    buscar('#contenido').scrollTo({ top: 0 });
+  });
+
+  const dentro = buscar('#dentro-evento', cuerpo);
+
+  // Las que no son listas genéricas tienen su propia función.
+  if (SECCION_EVENTO === 'calendario') { pintarCalendario(dentro); return; }
+  if (SECCION_EVENTO === 'tareas')    { pintarTareas(dentro); return; }
+  if (SECCION_EVENTO === 'agenda')    { pintarAgenda(dentro); return; }
+  if (SECCION_EVENTO === 'ceremonia') { pintarCeremonia(dentro); return; }
+
+  pintarSeccionGenerica(dentro, SECCION_EVENTO);
+}
+
+/**
+ * Cómo se llama una sección, respetando el renombrado de ETIQUETAS.
+ *
+ * @param {string} clave
+ * @returns {string}
+ */
+function nombreDeLaSeccion(clave) {
+  /* Calendario, Tareas y Agenda no están en SECCIONES porque no son
+     listas genéricas: viven en el planificador y en el calendario. Sus
+     nombres de fábrica van acá. */
+  const aparte = {
+    calendario: 'Calendario',
+    tareas:     'Tareas',
+    agenda:     'Agenda',
+    ceremonia:  'Misa',
+    'modo-dia': 'Modo día del evento',
+  };
+
+  const deFabrica = aparte[clave] ||
+                    (SECCIONES[clave] ? SECCIONES[clave].rotulo : clave);
+
+  return et('evento.' + clave, deFabrica);
+}
+
+/**
+ * La línea que explica qué es una sección, buscada en la configuración.
+ *
+ * @param {string} clave
+ * @returns {string} Vacío si no tiene.
+ */
+function descripcionDeLaSeccion(clave) {
+  for (const grupo of CONFIGURACION.indiceDeEvento) {
+    for (const fila of grupo.filas) {
+      if (fila[0] === clave) return fila[1];
+    }
+  }
+  return '';
 }
 
 
@@ -589,7 +751,7 @@ function pintarSeccionGenerica(cuerpo, clave) {
       try {
         await mandar('evento.php?accion=alternar&que=' + clave, { id: casilla.dataset.alt });
         ensuciarVistas('resumen');
-        await dibujarEvento();
+        await refrescarEvento();
       } catch (error) {
         casilla.checked = !casilla.checked;
         avisar(error.message, true);
@@ -674,7 +836,7 @@ function formularioEvento(clave, registro) {
       cerrarHoja();
       avisar('Guardado.');
       ensuciarVistas('resumen');
-      await dibujarEvento();
+      await refrescarEvento();
     } catch (error) {
       avisar(error.message, true);
     }
@@ -688,7 +850,7 @@ function formularioEvento(clave, registro) {
         await mandar('evento.php?accion=borrar&que=' + clave, { id: registro.id });
         cerrarHoja();
         avisar('Eliminado.');
-        await dibujarEvento();
+        await refrescarEvento();
       } catch (error) {
         avisar(error.message, true);
       }
@@ -781,7 +943,7 @@ function formularioCeremonia() {
       });
       cerrarHoja();
       avisar('Guardado.');
-      await dibujarEvento();
+      await refrescarEvento();
     } catch (error) {
       avisar(error.message, true);
     }

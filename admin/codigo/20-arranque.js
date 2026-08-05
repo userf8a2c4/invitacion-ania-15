@@ -70,9 +70,13 @@ function registrarServiceWorker() {
 function arrancarLaApp() {
   mostrarPantalla('app');
 
-  // Por si se abre ya sin señal, o quedaron cambios de la vez pasada.
-  actualizarBannerConexion();
-  sincronizarCola();
+  /* Antes de nada: comprobar que lo guardado en el teléfono sea de esta
+     cuenta. Si era de otra, se borra. Recién después se mira la cola,
+     para no mandar cambios ajenos con este token. */
+  prepararGuardadoParaLaSesion().then(() => {
+    actualizarBannerConexion();
+    sincronizarCola();
+  });
 
   // Si se entró desde un atajo del icono ("Invitados", "Dinero"…), se
   // abre esa vista en lugar del Resumen.
@@ -247,6 +251,7 @@ async function encender() {
   prepararInstalacion();
 
   buscar('#boton-nota').addEventListener('click', abrirHojaDeNota);
+  buscar('#boton-buscar').addEventListener('click', abrirBuscadorGlobal);
 
   /* Se comprueba la sesión Y se espera la frase al mismo tiempo, no uno
      después del otro: así la frase no agrega ni un segundo de espera.

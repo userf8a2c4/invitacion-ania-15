@@ -225,6 +225,10 @@ case 'crear':
 
 case 'borrar':
     exigirMetodo('POST');
+    /* Borrar es de administradora. Una cuenta de entrada trabaja en la
+       puerta el día del evento: puede consultar, no destruir. */
+    exigirAdministrador();
+
     if (!$TIENE_ID) responderMal('Esta tabla no tiene columna id: no se puede borrar.', 400);
 
     $datos = cuerpoJson();
@@ -252,6 +256,11 @@ case 'borrar':
 
 case 'csv':
     exigirMetodo('GET');
+
+    /* La planilla lleva nombres, correos y CÓDIGOS DE PASE de todos.
+       Con esos códigos se entra a la fiesta, así que el archivo entero
+       vale tanto como la lista de invitaciones. */
+    exigirAdministrador();
 
     $filas = consultarTodo('SELECT * FROM confirmaciones' .
                            ($COL_FECHA ? " ORDER BY `$COL_FECHA` DESC" : ''));

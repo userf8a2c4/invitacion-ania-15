@@ -40,7 +40,13 @@ const VISTAS = {
      atajos del icono y las llamadas a ensuciarVistas()— pero lo que se
      lee en pantalla es "Presupuesto". */
   dinero:    { titulo: 'Presupuesto', dibujar: () => dibujarDinero() },
-  evento:    { titulo: 'Evento',    dibujar: () => dibujarEvento() },
+  /* alVolver corre al entrar a una vista que YA estaba dibujada. Evento
+     lo usa para volver a su índice: si uno dejó abierta una sección y
+     se fue a otra pestaña, al regresar tiene que ver el índice otra vez
+     —si no, el encabezado diría "Evento" y el cuerpo mostraría "Música"—.
+     No va al servidor: solo repinta lo que ya está en memoria. */
+  evento:    { titulo: 'Evento',    dibujar: () => dibujarEvento(),
+               alVolver: () => volverAlIndiceDeEvento() },
 };
 
 
@@ -84,6 +90,9 @@ function irA(cual, recargar) {
     if (resultado && typeof resultado.catch === 'function') {
       resultado.catch(() => { VISTAS_CARGADAS[cual] = false; });
     }
+  } else if (vista.alVolver) {
+    // Ya estaba dibujada: se le avisa por si tiene que reacomodarse.
+    vista.alVolver();
   }
 }
 

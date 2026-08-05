@@ -127,6 +127,80 @@ $html = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'></head>
 </table></body></html>";
 
 
+/* ─── PROTEGER EL ADJUNTO ─────────────────────────────────────────────── */
+
+/*
+   QUÉ LLEVA ESTE ARCHIVO Y POR QUÉ NO PUEDE VIAJAR EN CLARO
+
+   Todo: nombres, correos y teléfonos de los invitados, sus alergias,
+   los códigos con los que se entra a la fiesta, y cuánto se pagó por
+   cada cosa. El correo no va cifrado de punta a punta, y una vez
+   mandado el archivo queda en dos buzones para siempre.
+
+   Se manda dentro de un ZIP con contraseña (AES-256). La clave está en
+   el .env como RESPALDO_CLAVE y NUNCA se escribe en el cuerpo del
+   correo: mandar el candado junto a la llave no protege nada.
+
+   Si el hosting no puede cifrar, NO se adjunta nada. Volver en silencio
+   al archivo en claro sería lo peor de los dos mundos: se creería que
+   está protegido cuando no lo está.
+*/
+
+$clave = (string) env('RESPALDO_CLAVE', '');
+$adjuntos = [];
+$avisoDelAdjunto = '';
+
+if ($clave === '') {
+    $avisoDelAdjunto = 'No se adjuntó el respaldo porque falta RESPALDO_CLAVE ' .
+                       'en el .env del servidor.';
+
+} elseif (!class_exists('ZipArchive')) {
+    $avisoDelAdjunto = 'No se adjuntó el respaldo porque este servidor no ' .
+                       'puede crear archivos ZIP con contraseña.';
+
+} else {
+    $zipRuta = sys_get_temp_dir() . '/ania-respaldo-' . bin2hex(random_bytes(8)) . '.zip';
+    $zip = new ZipArchive();
+
+    $abierto = $zip->open($zipRuta, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    $cifrado = false;
+
+    if ($abierto === true) {
+        $zip->setPassword($clave);
+        $zip->addFromString($nombre, $json);
+
+        /* setEncryptionName necesita libzip 1.2 o más nuevo. Si no está,
+           el ZIP se crearía SIN cifrar aunque se le haya puesto
+           contraseña, que es exactamente la trampa que hay que evitar. */
+        if (method_exists($zip, 'setEncryptionName')) {
+            $cifrado = $zip->setEncryptionName($nombre, ZipArchive::EM_AES_256);
+        }
+        $zip->close();
+    }
+
+    if ($cifrado && is_file($zipRuta)) {
+        $adjuntos = [[
+            'nombre' => str_replace('.json', '.zip', $nombre),
+            'tipo'   => 'application/zip',
+            'datos'  => file_get_contents($zipRuta),
+        ]];
+    } else {
+        $avisoDelAdjunto = 'No se adjuntó el respaldo porque este servidor no ' .
+                           'pudo cifrarlo. El archivo NO se manda sin protección.';
+    }
+
+    if (is_file($zipRuta)) @unlink($zipRuta);
+}
+
+if ($avisoDelAdjunto !== '') {
+    $html = str_replace('</table></body></html>',
+        "</table><p style='color:#b00;font-size:13px;padding:0 24px'>⚠️ " .
+        htmlspecialchars($avisoDelAdjunto, ENT_QUOTES, 'UTF-8') .
+        "</p></body></html>", $html);
+    error_log('[Ania XV · respaldo] ' . $avisoDelAdjunto);
+}
+
+
 /* ─── MANDARLO ────────────────────────────────────────────────────────── */
 
 $destinatarios = array_filter(array_map('trim',
@@ -148,8 +222,8 @@ foreach ($destinatarios as $destino) {
         env('SMTP_PASSWORD', ''),
         '',
         [],
-        // El archivo adjunto de verdad.
-        [['nombre' => $nombre, 'tipo' => 'application/json', 'datos' => $json]]
+        // El respaldo, cifrado. Vacío si no se pudo proteger.
+        $adjuntos
     );
 
     if ($resultado === true) $enviados++;

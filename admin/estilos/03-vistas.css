@@ -48,6 +48,14 @@
 
 .encabezado__lado { min-width: 0; }
 
+/* La lupa y los tres puntitos, juntos a la derecha. Sin esta caja el
+   space-between del encabezado los separaría a lo ancho de la pantalla. */
+.encabezado__acciones {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
 .encabezado__titulo {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -194,6 +202,14 @@
      renglones se lee como dos filtros distintos. */
   white-space: nowrap;
   transition: all var(--transicion);
+}
+
+/* Los filtros del modo del día. Ese día se usa la app de pie, con
+   ruido y con una mano: 34 px se falla. 44 es el mínimo cómodo. */
+.filtro--grande {
+  min-height: 44px;
+  padding: 0 var(--esp-3);
+  font-size: 15px;
 }
 
 .filtro.activo {
