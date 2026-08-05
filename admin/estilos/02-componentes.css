@@ -324,6 +324,84 @@ select.campo__control {
 .barra__relleno--cerca  { background: var(--ojo); }
 
 
+/* ─── 4B. LOS GLOBOS DE AYUDA ──────────────────────────────────────── */
+
+/* El "?" que va pegado a un título. Discreto: quien ya sabe no tiene
+   que verlo, quien no sabe lo encuentra donde le surge la duda. */
+.ayuda {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--texto-tenue);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: middle;
+  /* La zona tocable es más grande que el círculo: 18px se falla con el
+     pulgar, pero un círculo de 44px al lado de un título se ve enorme. */
+  position: relative;
+}
+.ayuda::after {
+  content: '';
+  position: absolute;
+  top: -13px; right: -13px; bottom: -13px; left: -13px;
+}
+.ayuda:active { background: var(--fondo-elevado); color: var(--oro); }
+
+.globo {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--esp-3);
+}
+
+.globo__fondo {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, .6);
+}
+
+.globo__caja {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: var(--esp-3);
+  background: var(--fondo-elevado);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo);
+  box-shadow: var(--sombra);
+  animation: aparecer 140ms ease;
+}
+
+.globo__titulo {
+  margin-bottom: var(--esp-2);
+  color: var(--oro);
+  font-size: 17px;
+}
+
+/* pre-line respeta los saltos de línea del texto: las explicaciones
+   vienen en párrafos y de corrido serían un ladrillo. */
+.globo__texto {
+  white-space: pre-line;
+  margin-bottom: var(--esp-3);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--texto-suave);
+}
+
+
 /* ─── 5B. EL ÍNDICE DE SECCIONES ───────────────────────────────────── */
 
 /* La pantalla que reemplazó a la tira de catorce píldoras de Evento.

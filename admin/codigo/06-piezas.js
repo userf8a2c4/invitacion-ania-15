@@ -241,6 +241,91 @@ function pintarError(donde, mensaje, reintentar) {
 }
 
 
+/* ─── 2B. LOS GLOBOS DE AYUDA ──────────────────────────────────────── */
+
+/*
+   POR QUÉ EXISTEN
+
+   Este panel lo va a usar gente que no lo construyó. "De tu bolsillo",
+   "sin techo definido" o "fijar una mesa" son términos que significan
+   algo muy concreto acá adentro y nada en ningún otro lado.
+
+   La alternativa a explicarlos es que alguien toque un botón sin saber
+   qué hace, o —peor— que no lo toque nunca.
+
+   POR QUÉ UN "?" Y NO UN TEXTO SIEMPRE VISIBLE
+   Porque quien ya sabe no necesita leerlo cien veces. Un párrafo fijo
+   debajo de cada título convierte una pantalla de trabajo en un manual.
+*/
+
+/**
+ * Devuelve el HTML de un botón "?" al lado de un título.
+ *
+ * @param {string} clave - Una de CONFIGURACION.ayuda.
+ * @returns {string} HTML, o vacío si esa clave no tiene texto.
+ *
+ * @example
+ *   '<div class="tarjeta__titulo">Padrinos' + ayuda('dinero.padrinos') + '</div>'
+ */
+function ayuda(clave) {
+  if (!CONFIGURACION.ayuda[clave]) return '';
+
+  return '<button class="ayuda" data-ayuda="' + seguro(clave) + '" ' +
+                 'aria-label="Qué es esto">?</button>';
+}
+
+/**
+ * Abre el globo con una explicación.
+ *
+ * @param {string} clave
+ * @returns {void}
+ */
+function abrirAyuda(clave) {
+  const texto = CONFIGURACION.ayuda[clave];
+  if (!texto) return;
+
+  buscar('#globo-titulo').textContent = texto.titulo;
+  buscar('#globo-texto').textContent  = texto.texto;
+  buscar('#globo').classList.remove('oculto');
+}
+
+/**
+ * Cierra el globo.
+ *
+ * @returns {void}
+ */
+function cerrarAyuda() {
+  buscar('#globo').classList.add('oculto');
+}
+
+/**
+ * Engancha los globos. Se llama una sola vez, al arrancar.
+ *
+ * Escucha en todo el documento en vez de en cada botón: los "?" se
+ * dibujan y se borran cada vez que se repinta una vista, así que
+ * engancharlos uno por uno obligaría a acordarse de hacerlo en cada
+ * pantalla nueva.
+ *
+ * @returns {void}
+ */
+function prepararAyuda() {
+  document.addEventListener('click', evento => {
+    const boton = evento.target.closest('[data-ayuda]');
+    if (!boton) return;
+
+    /* Los "?" viven dentro de títulos que a veces son botones. Sin esto,
+       tocar la ayuda abriría además la sección de atrás. */
+    evento.preventDefault();
+    evento.stopPropagation();
+
+    abrirAyuda(boton.dataset.ayuda);
+  });
+
+  buscar('#globo-cerrar').addEventListener('click', cerrarAyuda);
+  buscar('#globo-fondo').addEventListener('click', cerrarAyuda);
+}
+
+
 /* ─── 3B. EL ÍNDICE AGRUPADO ───────────────────────────────────────── */
 
 /*

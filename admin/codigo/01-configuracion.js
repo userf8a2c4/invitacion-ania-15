@@ -283,7 +283,91 @@ const CONFIGURACION = {
   },
 
 
-  /* ─── 9. SERVIDOR ─────────────────────────────────────────────────── */
+  /* ─── 9. LOS GLOBOS DE AYUDA ──────────────────────────────────────── */
+  /* Los carteles que aparecen al tocar el "?" que hay junto a algunos
+     títulos.
+
+     QUÉ VA ACÁ Y QUÉ NO
+     Solo los CONCEPTOS que no se entienden por su nombre. "Gastos" no
+     necesita explicación; "de tu bolsillo" sí, porque es una cifra que
+     el panel calcula y que en ningún otro lado del mundo se llama así.
+
+     Las secciones de Evento no están acá: el índice de esa pantalla ya
+     lleva su propia línea explicativa en cada renglón. */
+  ayuda: {
+    'dinero.dos-cifras': {
+      titulo: 'Cuesta y De tu bolsillo',
+      texto:
+        'Son dos números distintos y conviene no confundirlos.\n\n' +
+        'CUESTA es lo que sale la fiesta entera, sin importar quién lo ' +
+        'pague. Es lo que hay que negociar con los proveedores.\n\n' +
+        'DE TU BOLSILLO es lo que ponen ustedes: el costo menos lo que ' +
+        'cubren los padrinos.\n\n' +
+        'Mirar solo el primero asusta de más. Mirar solo el segundo ' +
+        'esconde que un padrino puede echarse atrás y ese gasto vuelve ' +
+        'a caer sobre ustedes.',
+    },
+
+    'dinero.techo': {
+      titulo: 'El techo de una categoría',
+      texto:
+        'Es cuánto decidiste que estás dispuesta a gastar en algo: el ' +
+        'límite, no lo que llevás gastado.\n\n' +
+        'Sirve para que el panel avise ANTES de pasarse, no después. ' +
+        'Al llegar al 85 % la barra se pone amarilla, y si se pasa, roja.\n\n' +
+        'Una categoría sin techo no avisa nunca: se puede gastar de más ' +
+        'sin que nadie diga nada.',
+    },
+
+    'dinero.padrinos': {
+      titulo: 'Padrinos',
+      texto:
+        'Quienes se ofrecieron a cubrir algo de la fiesta: el pastel, la ' +
+        'música, las invitaciones.\n\n' +
+        'Cada gasto se puede atar a un padrino. Eso es lo que hace que ' +
+        '"de tu bolsillo" sea un número real.\n\n' +
+        'Ojo con el estado: PROMETIDO no es ENTREGADO. Mientras no haya ' +
+        'entregado, ese dinero todavía no existe, y el panel lo marca en ' +
+        'amarillo para que no se te olvide.',
+    },
+
+    'mesas.fijar': {
+      titulo: 'Fijar una mesa',
+      texto:
+        'Sentar a alguien a mano es una PROPUESTA: el acomodo automático ' +
+        'puede volver a moverlo si le conviene.\n\n' +
+        'Fijar es distinto. Es decir "esta persona se queda acá pase lo ' +
+        'que pase", y el automático no la toca nunca más. Se ve con un ' +
+        'candado al lado del nombre.\n\n' +
+        'Se usa para lo que tiene un motivo que la computadora no puede ' +
+        'saber: la abuela lejos del parlante, los primos que se llevan ' +
+        'bien, alguien que necesita estar cerca de la puerta.',
+    },
+
+    'mesas.acomodar': {
+      titulo: 'Acomodar solo',
+      texto:
+        'Reparte a todos los que confirmaron entre las mesas, respetando ' +
+        'los grupos, las reglas de "no sentar juntos" y lo que fijaste ' +
+        'con el candado.\n\n' +
+        'Antes de aplicar nada te muestra qué se va a mover, y guarda ' +
+        'una foto de cómo estaba. Si no te gusta el resultado, el botón ' +
+        '"Volver al acomodo anterior" lo deshace.\n\n' +
+        'Se puede tocar sin miedo: no hay forma de perder trabajo.',
+    },
+
+    'gente.pases': {
+      titulo: 'El código de pase',
+      texto:
+        'Cada confirmación tiene un código propio. Es lo que se busca en ' +
+        'la puerta el día de la fiesta, desde el modo del día.\n\n' +
+        'Sirve para no depender de cómo esté escrito el apellido: se ' +
+        'puede buscar por nombre también, pero el código es exacto.',
+    },
+  },
+
+
+  /* ─── 10. SERVIDOR ────────────────────────────────────────────────── */
   servidor: {
     /* De dónde cuelga la API. Se deja relativo a propósito: así funciona
        igual en aniaxv.com y en cualquier prueba local, sin tocar nada. */
