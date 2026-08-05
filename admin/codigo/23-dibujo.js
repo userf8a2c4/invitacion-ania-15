@@ -303,7 +303,7 @@ function prepararLienzo(cuerpo, opciones) {
       });
 
       if (salio) {
-        cerrarHoja();
+        cerrarHoja(true);
         avisar('Dibujo guardado.');
         if (opciones.despues) opciones.despues();
       } else {

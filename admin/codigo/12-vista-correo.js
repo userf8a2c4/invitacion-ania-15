@@ -394,7 +394,7 @@ async function abrirCorreo(numero) {
   buscar('#no-leido', cuerpo).addEventListener('click', async () => {
     try {
       const r = await mandar('correo.php?accion=no_leido', { numero: numero });
-      cerrarHoja();
+      cerrarHoja(true);
       avisar(r.mensaje);
       dibujarCorreo();
     } catch (error) {
@@ -440,7 +440,7 @@ function formularioCorreo(previo) {
         asunto: valorDe('cor-asunto', cuerpo),
         texto: texto,
       });
-      cerrarHoja();
+      cerrarHoja(true);
       avisar(r.mensaje || 'Correo enviado.');
     } catch (error) {
       avisar(error.message, true);

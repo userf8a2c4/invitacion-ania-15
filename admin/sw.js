@@ -26,7 +26,7 @@
 /* ⚠️ SUBÍ ESTE NÚMERO CADA VEZ QUE CAMBIES CÓDIGO DEL PANEL.
    Si no, el teléfono sigue mostrando la copia guardada de la versión
    anterior y parece que el cambio "no se subió". */
-const VERSION = 'ania-admin-v17';
+const VERSION = 'ania-admin-v19';
 
 /* Lo mínimo para que la app arranque sin red. Se guarda al instalar. */
 const ARMAZON = [
@@ -34,6 +34,11 @@ const ARMAZON = [
   './index.html',
   './manifest.webmanifest',
   './recursos/icono-admin.svg',
+  /* Los PNG van acá porque son los que Android usa para el icono de la
+     pantalla de inicio. Si el teléfono los pide estando sin señal y no
+     están guardados, la app instalada queda con el icono genérico. */
+  './recursos/icono-admin-192.png',
+  './recursos/icono-admin-512.png',
 ];
 
 

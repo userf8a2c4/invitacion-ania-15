@@ -50,6 +50,11 @@ case 'todo':
             'capacidad'  => (int) $mesa['capacidad'],
             'ubicacion'  => $mesa['ubicacion'],
             'notas'      => $mesa['notas'],
+            // Dónde va en el plano. En 0 = todavía sin ubicar.
+            'fila'       => (int) ($mesa['fila'] ?? 0),
+            'columna'    => (int) ($mesa['columna'] ?? 0),
+            'prioridad'  => (int) ($mesa['prioridad'] ?? 50),
+            'perfil'     => $mesa['perfil'] ?? 'normal',
             'ocupados'   => 0,
             'invitados'  => [],
         ];
@@ -103,6 +108,112 @@ case 'todo':
         ],
         'auto_al_confirmar' => $ajuste && $ajuste['valor'] === '1',
     ]);
+    break;
+
+
+/* ─── ARMAR EL SALÓN DE ALVI DE UNA VEZ ───────────────────────────────── */
+
+/*
+   Crea las 14 mesas del Salón Estrella con su nombre, capacidad y
+   POSICIÓN EN EL PLANO, tal como están en la planilla de Lucila.
+
+   La posición es lo que no se puede cargar a mano sin equivocarse, y es
+   justo lo que hace que el plano sirva: sin ella el panel vuelve a ser
+   una lista donde no se sabe cuál mesa queda pegada a la pista.
+
+   Es idempotente: si una mesa ya existe se le completa la posición pero
+   no se duplica ni se le pisa la capacidad.
+*/
+case 'armar_salon':
+    exigirMetodo('POST');
+    $datos = cuerpoJson();
+
+    $mesasDelPlano = $datos['mesas'] ?? [];
+    if (!is_array($mesasDelPlano) || !$mesasDelPlano) {
+        responderMal('No llegó el plano del salón.', 400);
+    }
+
+    $creadas = 0;
+    $ubicadas = 0;
+    $capacidad = campoEntero($datos, 'capacidad', 1, 30, 10);
+
+    foreach ($mesasDelPlano as $m) {
+        $nombre  = trim((string) ($m['nombre'] ?? ''));
+        if ($nombre === '') continue;
+
+        $fila    = (int) ($m['fila'] ?? 0);
+        $columna = (int) ($m['columna'] ?? 0);
+        $prioridad = (int) ($m['prioridad'] ?? 50);
+
+        $existe = consultarUno('SELECT id FROM mesas WHERE nombre = :n', [':n' => $nombre]);
+
+        if ($existe) {
+            /* Ya estaba: solo se le pone dónde va. No se le toca la
+               capacidad ni la ubicación escrita, que puede haberse
+               ajustado a mano por algo. */
+            actualizar('mesas', (int) $existe['id'], [
+                'fila' => $fila, 'columna' => $columna, 'prioridad' => $prioridad,
+            ]);
+            $ubicadas++;
+            continue;
+        }
+
+        insertar('mesas', [
+            'nombre'    => $nombre,
+            'capacidad' => $capacidad,
+            'ubicacion' => '',
+            'fila'      => $fila,
+            'columna'   => $columna,
+            'prioridad' => $prioridad,
+        ]);
+        $creadas++;
+    }
+
+    anotarEnBitacora($yo, 'armó el plano del salón', 'mesas', 0,
+                     $creadas . ' creadas, ' . $ubicadas . ' ubicadas');
+
+    responderBien([
+        'creadas'  => $creadas,
+        'ubicadas' => $ubicadas,
+        'mensaje'  => $creadas
+            ? 'Se armó el salón: ' . $creadas . ' mesas de ' . $capacidad . ' lugares.'
+            : 'Las mesas ya estaban: se les puso su lugar en el plano.',
+    ]);
+    break;
+
+
+/* ─── VOLVER AL ACOMODO ANTERIOR ──────────────────────────────────────── */
+
+case 'deshacer':
+    exigirMetodo('POST');
+
+    $r = volverAlAcomodoAnterior();
+    if (empty($r['ok'])) responderMal($r['error'], 400);
+
+    anotarEnBitacora($yo, 'volvió al acomodo anterior', 'asignacion_mesas', 0,
+                     $r['cuantos'] . ' asignaciones restauradas');
+
+    responderBien(['mensaje' => 'Listo: el acomodo volvió a como estaba antes.']);
+    break;
+
+
+/* ─── MOVER UNA MESA EN EL PLANO ──────────────────────────────────────── */
+
+case 'ubicar':
+    exigirMetodo('POST');
+    $datos = cuerpoJson();
+
+    $mesa = campoEntero($datos, 'mesa_id', 1);
+    if (!consultarUno('SELECT id FROM mesas WHERE id = :m', [':m' => $mesa])) {
+        responderMal('Esa mesa no existe.', 404);
+    }
+
+    actualizar('mesas', $mesa, [
+        'fila'    => campoEntero($datos, 'fila', 0, 20),
+        'columna' => campoEntero($datos, 'columna', 0, 12),
+    ]);
+
+    responderBien(['mensaje' => 'Mesa movida.']);
     break;
 
 
@@ -167,6 +278,9 @@ case 'autoasignar':
     if ($accion === 'vista_previa') {
         responderBien($resultado);
     }
+
+    // Foto de cómo estaba, para poder volver si no gusta el resultado.
+    guardarFotoDelAcomodo('antes_de_acomodar', (int) $yo['id']);
 
     $cuantos = guardarPlanDeMesas($resultado['plan'], $respetar);
 
@@ -233,9 +347,17 @@ case 'sentar':
         'confirmacion_id' => $confirmacion,
         'mesa_id'         => $mesa,
         'lugares'         => $lugares,
-        // Sentar a mano fija la asignación: si alguien se tomó el
-        // trabajo, el acomodo automático no debe deshacerlo después.
-        'fijada'          => 1,
+        /* Sentar a mano PROPONE, no traba.
+         *
+         * Antes todo sentado manual quedaba fijado para siempre, así que
+         * no existía el término medio entre "lo puse acá probando" y
+         * "esto no se toca". Después de mover cinco personas de prueba,
+         * el acomodo automático ya casi no tenía margen para trabajar y
+         * nadie entendía por qué.
+         *
+         * El candado ahora se pone aparte, con el botón "Fijar acá" que
+         * ya existía y que hasta ahora no significaba nada. */
+        'fijada'          => 0,
     ]);
 
     anotarEnBitacora($yo, 'sentó a alguien a mano', 'asignacion_mesas', $confirmacion,

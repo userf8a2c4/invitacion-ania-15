@@ -376,7 +376,7 @@ function abrirHojaDeFormatos(titulo, queHacer) {
   buscarTodos('[data-bajar]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
       queHacer(boton.dataset.bajar);
-      cerrarHoja();
+      cerrarHoja(true);
     });
   });
 }

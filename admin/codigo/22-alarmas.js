@@ -222,7 +222,7 @@ function formularioDeAlarma(alarma, despues, precargado) {
 
     try {
       const r = await mandar('alarmas.php?accion=guardar', carga);
-      cerrarHoja();
+      cerrarHoja(true);
       avisar(r.mensaje);
       if (r.aviso) avisar(r.aviso, true);
       despues();
@@ -237,7 +237,7 @@ function formularioDeAlarma(alarma, despues, precargado) {
       if (!confirmarAccion('¿Borrar esta alarma?')) return;
       try {
         await mandar('alarmas.php?accion=borrar', { id: alarma.id });
-        cerrarHoja();
+        cerrarHoja(true);
         avisar('Alarma eliminada.');
         despues();
       } catch (error) { avisar(error.message, true); }
@@ -250,7 +250,7 @@ function formularioDeAlarma(alarma, despues, precargado) {
       try {
         const r = await mandar('alarmas.php?accion=posponer',
                                { id: alarma.id, minutos: 60 });
-        cerrarHoja();
+        cerrarHoja(true);
         avisar(r.mensaje);
         despues();
       } catch (error) { avisar(error.message, true); }
@@ -262,7 +262,7 @@ function formularioDeAlarma(alarma, despues, precargado) {
     apagar.addEventListener('click', async () => {
       try {
         const r = await mandar('alarmas.php?accion=apagar', { id: alarma.id });
-        cerrarHoja();
+        cerrarHoja(true);
         avisar(r.mensaje);
         despues();
       } catch (error) { avisar(error.message, true); }

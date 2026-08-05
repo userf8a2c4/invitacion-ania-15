@@ -355,7 +355,7 @@ function pintarResultados(donde, loEscrito) {
     boton.addEventListener('click', () => {
       const fila = RESULTADOS_BUSQUEDA[Number(boton.dataset.resultado)];
       if (!fila) return;
-      cerrarHoja();
+      cerrarHoja(true);
       fila.fuente.ir(fila.registro);
     });
   });

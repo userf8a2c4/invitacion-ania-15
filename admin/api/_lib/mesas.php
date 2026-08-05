@@ -48,7 +48,24 @@ function panoramaDeMesas() {
        es lo que uno espera. El ORDER BY de MySQL lo haría al revés,
        comparando letra por letra. */
     $mesas = existeTabla('mesas') ? consultarTodo('SELECT * FROM mesas') : [];
+
+    /* Primero las MEJORES mesas, después las peores; a igualdad, por
+       nombre natural ("Mesa 2" antes que "Mesa 10", que es lo que uno
+       espera y lo que el ORDER BY de MySQL haría al revés).
+
+       ⚠️ EL ORDEN DE ESTA LISTA NO ES COSMÉTICO. mejorMesaPara() la
+       recorre en este orden y, a igualdad de lugares sobrantes, se queda
+       con la primera. O sea que esto es lo que decide qué significa "la
+       mejor mesa" cuando un grupo de orden bajo elige.
+
+       Antes se ordenaba SOLO por nombre, así que la promesa de que "los
+       grupos de orden más bajo se quedan con las mejores mesas" se
+       cumplía dándoles la que se llamaba Mesa 1 — que puede estar en el
+       fondo, al lado del baño. */
     usort($mesas, function ($a, $b) {
+        $pa = (int) ($a['prioridad'] ?? 50);
+        $pb = (int) ($b['prioridad'] ?? 50);
+        if ($pa !== $pb) return $pa - $pb;
         return strnatcasecmp($a['nombre'], $b['nombre']);
     });
 
@@ -286,7 +303,52 @@ function repartirEnMesas($respetarFijados = true) {
         'plan'      => $plan,
         'sin_lugar' => $sinLugar,
         'mesas'     => array_values($estado),
+        // Qué se va a MOVER de donde está hoy. Ver la función de abajo.
+        'movimientos' => movimientosDelPlan($plan, $datos['invitados'], $mesas),
     ];
+}
+
+/**
+ * Compara un plan contra el acomodo de ahora y dice qué cambiaría.
+ *
+ * POR QUÉ ESTO ES LA MITAD DEL BOTÓN "ACOMODAR SOLO"
+ * La vista previa avisaba cuántos quedaban sin lugar, pero no que Juan
+ * pasa de la Mesa 3 a la Mesa 5. Y ese es justo el dato que uno necesita
+ * para animarse a tocar el botón: no "cuántos entran" sino "qué se me va
+ * a desarmar de lo que ya tenía".
+ *
+ * @param array $plan       confirmacion_id => mesa_id
+ * @param array $invitados  Con su mesa_id actual.
+ * @param array $mesas      Para poder poner los nombres.
+ * @return array
+ */
+function movimientosDelPlan($plan, $invitados, $mesas) {
+    $comoSeLlama = [];
+    foreach ($mesas as $m) $comoSeLlama[(int) $m['id']] = $m['nombre'];
+
+    $movimientos = [];
+
+    foreach ($invitados as $invitado) {
+        $id     = (int) $invitado['id'];
+        $antes  = (int) ($invitado['mesa_id'] ?? 0);
+        $ahora  = (int) ($plan[$id] ?? 0);
+
+        // Se queda donde estaba: no hay nada que contar.
+        if ($antes === $ahora) continue;
+
+        $movimientos[] = [
+            'nombre'     => $invitado['nombre'],
+            'de'         => $antes ? ($comoSeLlama[$antes] ?? 'otra mesa') : '',
+            'a'          => $ahora ? ($comoSeLlama[$ahora] ?? 'otra mesa') : '',
+            /* Tres formas distintas de cambiar, y no dan la misma
+               tranquilidad: sentar a alguien que estaba suelto es
+               ganancia pura; sacarlo de una mesa es lo que hay que
+               mirar dos veces. */
+            'que_pasa'   => !$antes ? 'se_sienta' : (!$ahora ? 'se_levanta' : 'se_muda'),
+        ];
+    }
+
+    return $movimientos;
 }
 
 /**
@@ -383,6 +445,100 @@ function guardarPlanDeMesas($plan, $respetarFijados = true) {
         bd()->rollBack();
         error_log('[Ania XV · mesas] Falló el guardado del plan: ' . $e->getMessage());
         return 0;
+    }
+}
+
+
+/* ─── 3B. PODER VOLVER ATRÁS ──────────────────────────────────────────── */
+
+/** Cuántas fotos del acomodo se conservan. */
+const CUANTOS_RESPALDOS = 5;
+
+/**
+ * Guarda una foto del acomodo actual antes de cambiarlo.
+ *
+ * POR QUÉ EXISTE
+ * "Acomodar solo" mueve a ciento treinta personas de un botonazo. Sin
+ * forma de volver atrás, la función da miedo — y una función que da
+ * miedo no se usa, por buena que sea. Esto es lo que permite probar.
+ *
+ * @param string $motivo
+ * @param int    $usuarioId
+ * @return void
+ */
+function guardarFotoDelAcomodo($motivo, $usuarioId = 0) {
+    if (!existeTabla('acomodo_respaldo') || !existeTabla('asignacion_mesas')) return;
+
+    try {
+        $filas = consultarTodo('SELECT * FROM asignacion_mesas');
+
+        insertar('acomodo_respaldo', [
+            'contenido'  => json_encode($filas, JSON_UNESCAPED_UNICODE),
+            'motivo'     => $motivo,
+            'cuantos'    => count($filas),
+            'usuario_id' => $usuarioId ?: null,
+        ]);
+
+        /* Se dejan solo las últimas. Sin esto la tabla crece para
+           siempre con copias que nadie va a mirar. */
+        $viejas = consultarTodo(
+            'SELECT id FROM acomodo_respaldo ORDER BY cuando DESC, id DESC LIMIT 50'
+        );
+        foreach (array_slice($viejas, CUANTOS_RESPALDOS) as $v) {
+            ejecutar('DELETE FROM acomodo_respaldo WHERE id = :id', [':id' => $v['id']]);
+        }
+    } catch (Exception $e) {
+        /* Que no se pueda respaldar no puede impedir acomodar. Se avisa
+           al log y se sigue: lo peor es quedarse sin deshacer. */
+        error_log('[Ania XV · mesas] No se pudo respaldar el acomodo: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Vuelve al acomodo anterior.
+ *
+ * @return array ['ok' => bool, 'cuantos' => int, 'error' => string]
+ */
+function volverAlAcomodoAnterior() {
+    if (!existeTabla('acomodo_respaldo')) {
+        return ['ok' => false, 'error' => 'Falta la tabla de respaldos.'];
+    }
+
+    $ultimo = consultarUno(
+        'SELECT * FROM acomodo_respaldo ORDER BY cuando DESC, id DESC LIMIT 1'
+    );
+    if (!$ultimo) return ['ok' => false, 'error' => 'No hay ningún acomodo anterior guardado.'];
+
+    $filas = json_decode($ultimo['contenido'], true);
+    if (!is_array($filas)) {
+        return ['ok' => false, 'error' => 'El respaldo está dañado.'];
+    }
+
+    bd()->beginTransaction();
+    try {
+        ejecutar('DELETE FROM asignacion_mesas');
+
+        foreach ($filas as $f) {
+            insertar('asignacion_mesas', [
+                'confirmacion_id' => (int) $f['confirmacion_id'],
+                'mesa_id'         => (int) $f['mesa_id'],
+                'lugares'         => (int) $f['lugares'],
+                'fijada'          => (int) $f['fijada'],
+                'notas'           => (string) ($f['notas'] ?? ''),
+            ]);
+        }
+
+        /* El respaldo usado se descarta: si quedara, tocar deshacer dos
+           veces volvería a lo mismo y parecería que no funciona. */
+        ejecutar('DELETE FROM acomodo_respaldo WHERE id = :id', [':id' => $ultimo['id']]);
+
+        bd()->commit();
+        return ['ok' => true, 'cuantos' => count($filas)];
+
+    } catch (Exception $e) {
+        bd()->rollBack();
+        error_log('[Ania XV · mesas] Falló el deshacer: ' . $e->getMessage());
+        return ['ok' => false, 'error' => 'No se pudo volver atrás.'];
     }
 }
 

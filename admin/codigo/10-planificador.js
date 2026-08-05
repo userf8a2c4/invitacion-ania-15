@@ -45,7 +45,7 @@ async function traerPlanificador() {
 async function guardarPlan(accion, carga, despues) {
   try {
     await mandar('planificador.php?accion=' + accion, carga);
-    cerrarHoja();
+    cerrarHoja(true);
     avisar('Guardado.');
     // Tareas y agenda aparecen en el Resumen: hay que refrescarlo.
     ensuciarVistas('resumen');

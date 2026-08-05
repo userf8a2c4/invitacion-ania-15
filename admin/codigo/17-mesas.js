@@ -8,14 +8,23 @@
    CÓMO ESTÁ PENSADA
    Arriba, siempre, los cuatro números que contestan "¿entra todo el
    mundo?". Después, los que todavía no tienen mesa —porque eso es lo
-   que hay que resolver—. Y al final las mesas con su gente.
+   que hay que resolver—. Y al final el salón: el PLANO, que dibuja las
+   mesas donde están de verdad, o la lista para repasar nombre por
+   nombre.
 
-   La computadora propone, la persona dispone: cualquier cosa que se
-   acomode a mano queda FIJADA y el acomodo automático no la vuelve a
-   tocar nunca. Es lo que permite usar el botón sin miedo.
+   LA COMPUTADORA PROPONE, LA PERSONA DISPONE
+   Sentar a alguien a mano es una propuesta, no un candado: el acomodo
+   automático puede volver a moverlo. Para trabar una asignación hay que
+   tocar "Fijar acá" a propósito.
+
+   Antes todo sentado manual quedaba fijado, y después de mover cinco
+   personas de prueba el automático ya casi no tenía margen. Además,
+   ahora se guarda una foto antes de cada acomodo, así que se puede
+   probar y volver atrás.
 
    ÍNDICE
      1. Datos y dibujado
+     1B. El plano del salón
      2. Cuando todavía no hay mesas
      3. Las mesas y su gente
      4. Sentar a mano
@@ -25,6 +34,9 @@
 
 /** Lo que devolvió mesas.php la última vez. */
 let MESAS = null;
+
+/** Si se está viendo el plano del salón o la lista: 'plano' o 'lista'. */
+let VISTA_DE_MESAS = recordado('vista-de-mesas', 'plano');
 
 
 /* ─── 1. DATOS Y DIBUJADO ──────────────────────────────────────────── */
@@ -54,10 +66,137 @@ async function pintarMesas(cuerpo) {
   cuerpo.innerHTML =
     bloqueResumenDeMesas(MESAS.resumen) +
     bloqueBotonesDeMesas() +
+
+    /* Plano o lista. El plano es el que sirve para decidir —muestra
+       dónde queda cada mesa— y la lista para repasar nombre por nombre. */
+    '<div class="filtros">' +
+      '<button class="filtro' + (VISTA_DE_MESAS === 'plano' ? ' activo' : '') +
+        '" data-vista-mesas="plano">Plano</button>' +
+      '<button class="filtro' + (VISTA_DE_MESAS === 'lista' ? ' activo' : '') +
+        '" data-vista-mesas="lista">Lista</button>' +
+    '</div>' +
+
     bloqueSinSentar(MESAS.sin_sentar) +
-    bloqueDeLasMesas(MESAS.mesas);
+    (VISTA_DE_MESAS === 'plano'
+      ? bloqueDelPlano(MESAS.mesas)
+      : bloqueDeLasMesas(MESAS.mesas));
 
   engancharMesas(cuerpo);
+
+  buscarTodos('[data-vista-mesas]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', () => {
+      VISTA_DE_MESAS = boton.dataset.vistaMesas;
+      recordar('vista-de-mesas', VISTA_DE_MESAS);
+      pintarMesas(cuerpo);
+    });
+  });
+}
+
+
+/* ─── 1B. EL PLANO DEL SALÓN ───────────────────────────────────────── */
+
+/*
+   QUÉ ES Y POR QUÉ EXISTE
+
+   El dibujo del salón como es de verdad: la mesa principal arriba, la
+   pista, las catorce mesas en cuatro columnas, el bufet, los baños, la
+   barra y la entrada. Sale de la planilla que ya usaba Lucila.
+
+   POR QUÉ UNA LISTA NO ALCANZABA
+   Acomodar gente es decidir QUIÉN QUEDA CERCA DE QUÉ: los abuelos lejos
+   del parlante, los amigos pegados a la pista, la familia cerca de la
+   mesa principal. Con una lista de nombres esa decisión se toma de
+   memoria, imaginándose el salón. Acá se ve.
+
+   Por eso `mesas.ubicacion` existía desde el principio y no servía para
+   nada: se podía escribir "cerca de la pista" pero nunca se dibujaba.
+*/
+
+/**
+ * Dibuja el plano completo.
+ *
+ * @param {Array} mesas
+ * @returns {string} HTML
+ */
+function bloqueDelPlano(mesas) {
+  const salon = CONFIGURACION.salon;
+
+  /* Las que todavía no tienen lugar en el plano van aparte, abajo. Sin
+     esto desaparecerían de la pantalla sin explicación. */
+  const ubicadas  = mesas.filter(m => m.fila > 0 && m.columna > 0);
+  const sinUbicar = mesas.filter(m => !(m.fila > 0 && m.columna > 0));
+
+  if (!ubicadas.length) {
+    return '' +
+      '<div class="tarjeta">' +
+        '<div class="tarjeta__titulo">El plano está vacío</div>' +
+        '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+          'Ninguna mesa tiene todavía su lugar en el salón. Con el botón ' +
+          'de abajo se crean las catorce del Salón Estrella, cada una en ' +
+          'su sitio, tal como están en la planilla.' +
+        '</p>' +
+        '<button class="boton boton--principal boton--ancho" id="mesa-armar-salon">' +
+          'Armar el salón de Alvi' +
+        '</button>' +
+      '</div>' +
+      (sinUbicar.length ? bloqueDeLasMesas(sinUbicar) : '');
+  }
+
+  const celdas = salon.fijos.map(f =>
+    '<div class="plano__fijo plano__fijo--' + seguro(f.tipo) + '" ' +
+         'style="grid-row:' + f.fila + ';grid-column:' + f.desde +
+         ' / span ' + f.ancho + '">' +
+      '<span aria-hidden="true">' + f.icono + '</span> ' + seguro(f.nombre) +
+    '</div>'
+  ).concat(ubicadas.map(m => celdaDeMesaEnElPlano(m))).join('');
+
+  return '' +
+    '<div class="plano" style="grid-template-columns:repeat(' +
+         salon.columnas + ',1fr)">' + celdas + '</div>' +
+
+    '<p class="vacio__texto" style="text-align:center;margin-bottom:var(--esp-3)">' +
+      'Tocá una mesa para ver quién se sienta ahí.' +
+    '</p>' +
+
+    (sinUbicar.length
+      ? '<div class="tarjeta__titulo">Sin lugar en el plano</div>' +
+        bloqueDeLasMesas(sinUbicar)
+      : '');
+}
+
+/**
+ * Una mesa dentro del plano.
+ *
+ * El color dice de un vistazo cómo está: vacía, con lugar, completa o
+ * pasada. Es la información que uno busca al mirar el salón entero, y
+ * leerla en números mesa por mesa sería mucho más lento.
+ *
+ * @param {Object} mesa
+ * @returns {string} HTML
+ */
+function celdaDeMesaEnElPlano(mesa) {
+  const libres = mesa.capacidad - mesa.ocupados;
+
+  let como = 'vacia';
+  if (mesa.ocupados > mesa.capacidad) como = 'pasada';
+  else if (libres === 0)              como = 'completa';
+  else if (mesa.ocupados > 0)         como = 'con-gente';
+
+  /* El nombre se acorta porque en una grilla de cuatro columnas en un
+     teléfono no entra "Mesa de los abuelos" entero. */
+  const corto = mesa.nombre.replace(/^Mesa\s+/i, '');
+
+  return '' +
+    '<button class="plano__mesa plano__mesa--' + como + '" ' +
+            'data-plano-mesa="' + seguro(mesa.id) + '" ' +
+            'style="grid-row:' + mesa.fila + ';grid-column:' + mesa.columna + '" ' +
+            'aria-label="' + seguro(mesa.nombre + ': ' + mesa.ocupados +
+                                    ' de ' + mesa.capacidad) + '">' +
+      '<span class="plano__nombre">' + seguro(corto) + '</span>' +
+      '<span class="plano__cuenta">' +
+        seguro(mesa.ocupados + '/' + mesa.capacidad) +
+      '</span>' +
+    '</button>';
 }
 
 /**
@@ -293,7 +432,19 @@ function engancharMesas(cuerpo) {
 
   buscar('#mesa-auto', cuerpo).addEventListener('click', () => acomodarSolo(refrescar));
   buscar('#mesa-opciones', cuerpo).addEventListener('click', () => abrirOpcionesDeMesas(refrescar));
-  buscar('#mesa-nueva', cuerpo).addEventListener('click', () => formularioEvento('mesas'));
+
+  /* Estos tres pueden no estar según qué vista se esté mirando. */
+  const nueva = buscar('#mesa-nueva', cuerpo);
+  if (nueva) nueva.addEventListener('click', () => formularioEvento('mesas'));
+
+  const armar = buscar('#mesa-armar-salon', cuerpo);
+  if (armar) armar.addEventListener('click', () => armarElSalon(refrescar));
+
+  // Tocar una mesa del plano abre quiénes se sientan ahí.
+  buscarTodos('[data-plano-mesa]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', () =>
+      abrirLaMesa(Number(boton.dataset.planoMesa), refrescar));
+  });
 
   buscarTodos('[data-sentar]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () =>
@@ -338,17 +489,49 @@ async function acomodarSolo(refrescar) {
   const fijados = (MESAS.mesas || []).reduce((n, m) =>
     n + m.invitados.filter(i => i.fijada).length, 0);
 
+  /* Lo que se va a MOVER, no solo lo que va a entrar.
+   *
+   * Antes esta pantalla decía cuántos se sentaban y cuántos quedaban
+   * afuera, y con eso no alcanzaba para animarse: lo que uno teme al
+   * tocar "acomodar solo" no es que falte lugar, es que se desarme el
+   * trabajo que ya venía haciendo a mano. */
+  const movimientos = previa.movimientos || [];
+  const mudanzas = movimientos.filter(m => m.que_pasa === 'se_muda');
+  const levantados = movimientos.filter(m => m.que_pasa === 'se_levanta');
+
+  const comoSeLee = m =>
+    m.que_pasa === 'se_muda'    ? seguro(m.nombre + ': ' + m.de + ' → ' + m.a)
+  : m.que_pasa === 'se_levanta' ? seguro(m.nombre + ': sale de ' + m.de)
+  :                               seguro(m.nombre + ' → ' + m.a);
+
+  const bloqueDeCambios =
+    (mudanzas.length || levantados.length)
+      ? '<div class="tarjeta" style="margin-bottom:var(--esp-2)">' +
+          '<div class="tarjeta__titulo">Lo que se mueve de lugar</div>' +
+          mudanzas.concat(levantados).slice(0, 12).map(m =>
+            '<p class="lista__pie" style="margin:2px 0">' + comoSeLee(m) + '</p>'
+          ).join('') +
+          (mudanzas.length + levantados.length > 12
+            ? '<p class="vacio__texto">y ' +
+              seguro(mudanzas.length + levantados.length - 12) + ' más</p>'
+            : '') +
+        '</div>'
+      : '<p class="vacio__texto" style="color:var(--bien)">' +
+        'No se mueve de mesa nadie que ya estuviera sentado.</p>';
+
   const cuerpo = abrirHoja('Acomodar solo',
-    '<p style="margin-bottom:var(--esp-3)">' +
+    '<p style="margin-bottom:var(--esp-2)">' +
       'Se van a sentar <strong>' + seguro(Object.keys(previa.plan || {}).length) +
       '</strong> confirmaciones.' +
     '</p>' +
 
+    bloqueDeCambios +
+
     (fijados
       ? '<p class="vacio__texto">' +
         seguro(fijados === 1
-          ? 'La que acomodaste a mano no se va a tocar.'
-          : 'Las ' + fijados + ' que acomodaste a mano no se van a tocar.') +
+          ? 'La que fijaste con el candado no se va a tocar.'
+          : 'Las ' + fijados + ' que fijaste con el candado no se van a tocar.') +
         '</p>'
       : '') +
 
@@ -368,17 +551,121 @@ async function acomodarSolo(refrescar) {
     '</div>'
   );
 
-  buscar('#acomodo-cancelar', cuerpo).addEventListener('click', cerrarHoja);
+  buscar('#acomodo-cancelar', cuerpo).addEventListener('click', () => cerrarHoja(true));
 
   buscar('#acomodo-aplicar', cuerpo).addEventListener('click', async () => {
     try {
       const r = await mandar('mesas.php?accion=autoasignar', {});
-      cerrarHoja();
+      cerrarHoja(true);
       avisar(r.mensaje);
       refrescar();
     } catch (error) {
       avisar(error.message, true);
     }
+  });
+}
+
+
+/**
+ * Crea las 14 mesas del salón con su lugar en el plano.
+ *
+ * @param {Function} refrescar
+ * @returns {Promise<void>}
+ */
+async function armarElSalon(refrescar) {
+  const salon = CONFIGURACION.salon;
+
+  /* La prioridad sale de la fila: la primera está pegada a la pista y
+     es la mejor, la última es el fondo. Es lo que hace que el acomodo
+     automático les dé las buenas mesas a los grupos de orden más bajo. */
+  const mesas = salon.mesas.map(m => ({
+    nombre:    m.nombre,
+    fila:      m.fila,
+    columna:   m.columna,
+    prioridad: salon.prioridadPorFila[m.fila] || 50,
+  }));
+
+  if (!confirmarAccion(
+    'Se van a crear ' + mesas.length + ' mesas de ' + salon.capacidad +
+    ' lugares, cada una en su sitio del plano.\n\n' +
+    'Las que ya existan con ese nombre no se duplican: solo se les ' +
+    'pone su lugar.\n\n¿Armar el salón?'
+  )) return;
+
+  try {
+    const r = await mandar('mesas.php?accion=armar_salon',
+                           { mesas: mesas, capacidad: salon.capacidad });
+    avisar(r.mensaje);
+    refrescar();
+  } catch (error) {
+    avisar(error.message, true);
+  }
+}
+
+/**
+ * Abre una mesa: quiénes se sientan, y qué se puede hacer con ella.
+ *
+ * @param {number} mesaId
+ * @param {Function} refrescar
+ * @returns {void}
+ */
+function abrirLaMesa(mesaId, refrescar) {
+  const mesa = (MESAS.mesas || []).find(m => Number(m.id) === mesaId);
+  if (!mesa) return;
+
+  const libres = mesa.capacidad - mesa.ocupados;
+
+  const gente = mesa.invitados.length
+    ? mesa.invitados.map(inv =>
+        '<button class="lista__fila" data-mover-de-mesa="' + seguro(inv.id) + '">' +
+          '<span class="lista__cuerpo">' +
+            '<span class="lista__titulo">' +
+              (inv.fijada ? '<span style="color:var(--oro)">🔒</span> ' : '') +
+              seguro(inv.nombre) +
+            '</span>' +
+            '<span class="lista__pie">' +
+              seguro(pluralizar(inv.lugares, 'lugar', 'lugares') +
+                     (inv.grupo ? ' · ' + inv.grupo : '')) +
+            '</span>' +
+          '</span>' +
+        '</button>'
+      ).join('')
+    : '<p class="vacio__texto">Esta mesa está vacía.</p>';
+
+  const cuerpo = abrirHoja(mesa.nombre,
+    '<div class="detalle" style="margin-bottom:var(--esp-3)">' +
+      '<span class="detalle__rotulo">Ocupación</span>' +
+      '<span class="detalle__valor">' +
+        seguro(mesa.ocupados + ' de ' + mesa.capacidad) +
+        (mesa.ocupados > mesa.capacidad
+          ? ' <span class="etiqueta etiqueta--alerta">Se pasa por ' +
+            seguro(mesa.ocupados - mesa.capacidad) + '</span>'
+          : libres === 0
+            ? ' <span class="etiqueta etiqueta--bien">Completa</span>'
+            : ' <span class="etiqueta etiqueta--tenue">' +
+              seguro(pluralizar(libres, 'libre', 'libres')) + '</span>') +
+      '</span>' +
+      (mesa.ubicacion
+        ? '<span class="detalle__rotulo">Dónde está</span>' +
+          '<span class="detalle__valor">' + seguro(mesa.ubicacion) + '</span>'
+        : '') +
+    '</div>' +
+
+    gente +
+
+    '<button class="boton boton--ancho" id="mesa-editar" ' +
+            'style="margin-top:var(--esp-3)">Cambiar nombre o capacidad</button>'
+  );
+
+  buscarTodos('[data-mover-de-mesa]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', () =>
+      elegirMesaPara(Number(boton.dataset.moverDeMesa), refrescar));
+  });
+
+  buscar('#mesa-editar', cuerpo).addEventListener('click', () => {
+    const cruda = (EVENTO && EVENTO.mesas || []).find(m => Number(m.id) === mesaId);
+    if (cruda) formularioEvento('mesas', cruda);
+    else avisar('Abrí la sección Mesas de Evento para editarla.', true);
   });
 }
 
@@ -466,7 +753,7 @@ function elegirMesaPara(confirmacionId, refrescar) {
           confirmacion_id: confirmacionId,
           mesa_id: Number(boton.dataset.mesa),
         });
-        cerrarHoja();
+        cerrarHoja(true);
         avisar(r.mensaje);
         if (r.se_excede) avisar(r.aviso, true);
         refrescar();
@@ -482,7 +769,7 @@ function elegirMesaPara(confirmacionId, refrescar) {
       try {
         const r = await mandar('mesas.php?accion=fijar',
                                { confirmacion_id: confirmacionId });
-        cerrarHoja();
+        cerrarHoja(true);
         avisar(r.mensaje);
         refrescar();
       } catch (error) { avisar(error.message, true); }
@@ -495,7 +782,7 @@ function elegirMesaPara(confirmacionId, refrescar) {
       try {
         await mandar('mesas.php?accion=sentar',
                      { confirmacion_id: confirmacionId, mesa_id: 0 });
-        cerrarHoja();
+        cerrarHoja(true);
         avisar('Se quitó de la mesa.');
         refrescar();
       } catch (error) { avisar(error.message, true); }
@@ -594,7 +881,7 @@ function abrirPreferenciasDe(quien, refrescar) {
         });
       }
 
-      cerrarHoja();
+      cerrarHoja(true);
       avisar('Guardado.');
       refrescar();
     } catch (error) {
@@ -604,9 +891,17 @@ function abrirPreferenciasDe(quien, refrescar) {
 
   buscarTodos('[data-quitar-pelea]', cuerpo).forEach(boton => {
     boton.addEventListener('click', async () => {
+      /* Borrar una regla de "no sentar juntos" pedía confirmación en
+         ningún lado, a diferencia de borrar un grupo diez líneas más
+         abajo. Y es peor equivocarse acá: el motivo por el que dos
+         personas no se pueden sentar juntas rara vez se vuelve a
+         escribir, y el error recién se descubre en la fiesta. */
+      if (!confirmarAccion('¿Quitar esta regla?\n\n' +
+                           'Estas dos personas van a poder quedar en la ' +
+                           'misma mesa.')) return;
       try {
         await mandar('mesas.php?accion=borrar_pelea', { id: boton.dataset.quitarPelea });
-        cerrarHoja();
+        cerrarHoja(true);
         avisar('Regla eliminada.');
         refrescar();
       } catch (error) { avisar(error.message, true); }
@@ -663,6 +958,17 @@ function abrirOpcionesDeMesas(refrescar) {
       'reglas. Si no hay lugar, queda sin mesa y te avisa acá.</p>' +
 
     '<div class="tarjeta__titulo" style="margin-top:var(--esp-4)">' +
+      'Si algo salió mal' +
+    '</div>' +
+    '<button class="boton boton--ancho" id="mesa-deshacer" ' +
+            'style="margin-bottom:var(--esp-1)">' +
+      'Volver al acomodo anterior' +
+    '</button>' +
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
+      'Antes de cada acomodo automático se guarda cómo estaba. Esto ' +
+      'devuelve todo a la última foto.</p>' +
+
+    '<div class="tarjeta__titulo" style="margin-top:var(--esp-4)">' +
       'Empezar de nuevo' +
     '</div>' +
     '<button class="boton boton--ancho boton--peligro" id="mesa-vaciar" ' +
@@ -683,7 +989,7 @@ function abrirOpcionesDeMesas(refrescar) {
         nombre: nombre,
         orden: valorDe('gr-orden', cuerpo),
       });
-      cerrarHoja();
+      cerrarHoja(true);
       avisar('Grupo creado.');
       refrescar();
     } catch (error) { avisar(error.message, true); }
@@ -694,7 +1000,7 @@ function abrirOpcionesDeMesas(refrescar) {
       if (!confirmarAccion('¿Borrar este grupo? Sus invitados quedan sin grupo.')) return;
       try {
         await mandar('mesas.php?accion=borrar_grupo', { id: boton.dataset.borrarGrupo });
-        cerrarHoja();
+        cerrarHoja(true);
         avisar('Grupo eliminado.');
         refrescar();
       } catch (error) { avisar(error.message, true); }
@@ -712,12 +1018,21 @@ function abrirOpcionesDeMesas(refrescar) {
     }
   });
 
+  buscar('#mesa-deshacer', cuerpo).addEventListener('click', async () => {
+    try {
+      const r = await mandar('mesas.php?accion=deshacer', {});
+      cerrarHoja(true);
+      avisar(r.mensaje);
+      refrescar();
+    } catch (error) { avisar(error.message, true); }
+  });
+
   buscar('#mesa-vaciar', cuerpo).addEventListener('click', async () => {
     if (!confirmarAccion('¿Sacar a todos de las mesas?\n\n' +
-                         'Lo que fijaste a mano queda como está.')) return;
+                         'Lo que fijaste con el candado queda como está.')) return;
     try {
       const r = await mandar('mesas.php?accion=vaciar', {});
-      cerrarHoja();
+      cerrarHoja(true);
       avisar(r.mensaje);
       refrescar();
     } catch (error) { avisar(error.message, true); }
@@ -728,7 +1043,7 @@ function abrirOpcionesDeMesas(refrescar) {
                          'Esto no se puede deshacer.')) return;
     try {
       const r = await mandar('mesas.php?accion=vaciar', { todo: true });
-      cerrarHoja();
+      cerrarHoja(true);
       avisar(r.mensaje);
       refrescar();
     } catch (error) { avisar(error.message, true); }

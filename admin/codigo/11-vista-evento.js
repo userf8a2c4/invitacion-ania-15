@@ -833,7 +833,7 @@ function formularioEvento(clave, registro) {
 
     try {
       await mandar('evento.php?accion=guardar&que=' + clave, carga);
-      cerrarHoja();
+      cerrarHoja(true);
       avisar('Guardado.');
       ensuciarVistas('resumen');
       await refrescarEvento();
@@ -848,7 +848,7 @@ function formularioEvento(clave, registro) {
       if (!confirmarAccion('¿Borrar esto? No se puede deshacer.')) return;
       try {
         await mandar('evento.php?accion=borrar&que=' + clave, { id: registro.id });
-        cerrarHoja();
+        cerrarHoja(true);
         avisar('Eliminado.');
         await refrescarEvento();
       } catch (error) {
@@ -941,7 +941,7 @@ function formularioCeremonia() {
         costo:     valorDe('cer-costo', cuerpo),
         notas:     valorDe('cer-notas', cuerpo),
       });
-      cerrarHoja();
+      cerrarHoja(true);
       avisar('Guardado.');
       await refrescarEvento();
     } catch (error) {

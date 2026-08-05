@@ -203,7 +203,7 @@ function abrirEtiquetas() {
       const r = await mandar('etiquetas.php?accion=guardar', { etiquetas: cambios });
       ETIQUETAS = r.etiquetas || {};
 
-      cerrarHoja();
+      cerrarHoja(true);
       avisar(r.mensaje);
       aplicarEtiquetas();
 
@@ -224,7 +224,7 @@ function abrirEtiquetas() {
       const r = await mandar('etiquetas.php?accion=restaurar', {});
       ETIQUETAS = {};
 
-      cerrarHoja();
+      cerrarHoja(true);
       avisar(r.mensaje);
       aplicarEtiquetas();
       ensuciarVistas('resumen', 'invitados', 'correo', 'dinero', 'evento');

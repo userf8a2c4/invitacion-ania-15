@@ -438,7 +438,7 @@ function agregarEnEseDia(fecha) {
   buscarTodos('[data-crear]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
       const que = boton.dataset.crear;
-      cerrarHoja();
+      cerrarHoja(true);
 
       /* Se abre el formulario de siempre con la fecha ya puesta. No se
          duplica ningún formulario: son los mismos que se usan desde su

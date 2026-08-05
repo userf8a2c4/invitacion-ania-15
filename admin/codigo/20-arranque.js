@@ -215,7 +215,7 @@ function abrirHojaDeCuenta() {
 
     try {
       await mandar('sesion.php?accion=cambiar', { actual: actual, nueva: nueva });
-      cerrarHoja();
+      cerrarHoja(true);
       borrarToken();
       mostrarPantallaDeEntrada('Contraseña cambiada. Entrá con la nueva.');
     } catch (error) {

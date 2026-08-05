@@ -425,7 +425,7 @@ function pintarVistaPreviaDeImportacion(donde, cuerpo) {
         saltear_repetidos: !!valorDe('imp-repetidos', cuerpo),
       });
 
-      cerrarHoja();
+      cerrarHoja(true);
       avisar(salida.mensaje);
 
       // Todo lo que muestra invitados cambió: se recarga entero.
@@ -509,7 +509,7 @@ function pintarPreviaDeCotizaciones(donde, cuerpo, encontradas) {
         })),
       });
 
-      cerrarHoja();
+      cerrarHoja(true);
       avisar(r.mensaje);
       ensuciarVistas('dinero');
       SECCION_DINERO = 'cotizaciones';

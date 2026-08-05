@@ -550,7 +550,7 @@ function formularioDeRenglon(cotizacionId, item, despues) {
 
     try {
       await mandar('cotizador.php?accion=guardar_item', carga);
-      cerrarHoja();
+      cerrarHoja(true);
       avisar('Guardado.');
       despues();
     } catch (error) {
@@ -564,7 +564,7 @@ function formularioDeRenglon(cotizacionId, item, despues) {
       if (!confirmarAccion('¿Borrar este renglón?')) return;
       try {
         await mandar('cotizador.php?accion=borrar_item', { id: item.id });
-        cerrarHoja();
+        cerrarHoja(true);
         avisar('Renglón eliminado.');
         despues();
       } catch (error) { avisar(error.message, true); }
@@ -591,7 +591,7 @@ async function pasarAlPresupuesto(id) {
   try {
     const r = await mandar('cotizador.php?accion=a_presupuesto',
                            { id: id, personas: PERSONAS_CALCULO });
-    cerrarHoja();
+    cerrarHoja(true);
     avisar(r.mensaje);
     ensuciarVistas('resumen', 'dinero');
     SECCION_DINERO = 'gastos';

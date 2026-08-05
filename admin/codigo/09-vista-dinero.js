@@ -664,7 +664,7 @@ function pintarCotizaciones(cuerpo) {
 async function guardarDinero(accion, carga, mensaje) {
   try {
     await mandar('presupuesto.php?accion=' + accion, carga);
-    cerrarHoja();
+    cerrarHoja(true);
     avisar(mensaje);
     // El Resumen muestra totales de dinero: hay que refrescarlo también.
     ensuciarVistas('resumen');
