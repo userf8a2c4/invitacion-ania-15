@@ -243,6 +243,7 @@ async function encender() {
   prepararEntrada();
   prepararNavegacion();
   prepararHoja();
+  prepararAyuda();
   prepararBotonFlotante();
 
   /* Va acá y no dentro de la app porque el navegador dispara el aviso de

@@ -255,6 +255,23 @@
   <button class="menu__opcion menu__opcion--peligro" data-menu="salir" role="menuitem">Cerrar sesión</button>
 </div>
 
+<!-- El globo de ayuda que se abre al tocar un "?".
+
+     Es una capa APARTE de la hoja de abajo, a propósito: si usara la
+     hoja, tocar el "?" mientras se está llenando un formulario borraría
+     todo lo escrito. La ayuda nunca puede costar trabajo. -->
+<div id="globo" class="globo oculto" role="dialog" aria-modal="true"
+     aria-labelledby="globo-titulo">
+  <div id="globo-fondo" class="globo__fondo"></div>
+  <div class="globo__caja">
+    <h2 id="globo-titulo" class="globo__titulo"></h2>
+    <p id="globo-texto" class="globo__texto"></p>
+    <button id="globo-cerrar" class="boton boton--principal boton--ancho">
+      Entendido
+    </button>
+  </div>
+</div>
+
 <!-- Mensajito que aparece abajo y se va solo ("Guardado", "Sin conexión"…). -->
 <div id="tostada" class="tostada oculto" role="status" aria-live="polite"></div>
 

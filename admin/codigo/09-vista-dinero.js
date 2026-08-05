@@ -224,7 +224,8 @@ function bloqueTotales(t) {
             seguro(comoDinero(t.costo, false)) + '</div>' +
         '</div>' +
         '<div class="dinero-resumen__mitad">' +
-          '<div class="dinero-resumen__rotulo">De tu bolsillo</div>' +
+          '<div class="dinero-resumen__rotulo">De tu bolsillo' +
+            ayuda('dinero.dos-cifras') + '</div>' +
           '<div class="dinero-resumen__cifra dinero-resumen__cifra--propio">' +
             seguro(comoDinero(t.propio, false)) + '</div>' +
         '</div>' +
@@ -313,7 +314,8 @@ function pintarCategorias(cuerpo) {
               '<div class="barra__relleno' + clase + '" style="width:' +
                 Math.min(pct, 100) + '%"></div>' +
             '</div>'
-          : '<div class="vacio__texto" style="margin-top:4px">Sin techo definido</div>') +
+          : '<div class="vacio__texto" style="margin-top:4px">Sin techo definido' +
+            ayuda('dinero.techo') + '</div>') +
       '</button>';
   }).join('');
 
@@ -467,6 +469,10 @@ function pintarPadrinos(cuerpo) {
 
   if (!padrinos.length) {
     cuerpo.innerHTML = '';
+    /* El "?" va acá, en el vacío, que es justo cuando alguien se
+       pregunta qué se supone que va en esta sección. */
+    cuerpo.insertAdjacentHTML('beforeend',
+      '<div class="tarjeta__titulo">Padrinos' + ayuda('dinero.padrinos') + '</div>');
     pintarVacio(cuerpo, 'Todavía no hay padrinos',
       'Anotá quién apadrina qué para saber cuánto sale de tu bolsillo de verdad.');
     cuerpo.insertAdjacentHTML('beforeend', botonAgregar('Nuevo padrino'));

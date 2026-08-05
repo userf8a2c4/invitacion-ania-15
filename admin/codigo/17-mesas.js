@@ -239,6 +239,8 @@ function bloqueBotonesDeMesas() {
       '<button class="boton boton--principal" style="flex:2" id="mesa-auto">' +
         'Acomodar solo' +
       '</button>' +
+      '<span style="display:flex;align-items:center">' +
+        ayuda('mesas.acomodar') + '</span>' +
       '<button class="boton" style="flex:1" id="mesa-opciones">Opciones</button>' +
     '</div>';
 }
