@@ -371,11 +371,36 @@ function pintarArranqueDeMesas(cuerpo) {
   const sugeridas = Math.max(1, Math.ceil(gente / 10)) || 8;
 
   cuerpo.innerHTML =
+    /* ─── EL CAMINO CORTO ────────────────────────────────────────────
+     *
+     * Va PRIMERO y destacado porque es el que sirve en este evento: el
+     * salón ya está contratado y su plano ya se conoce. Pedirle a
+     * alguien que cuente las mesas de Alvi a mano, cuando el panel las
+     * sabe, es trabajo inventado.
+     *
+     * ⚠️ Antes este botón solo existía dentro del plano, o sea que
+     * hacía falta tener mesas para poder crear las mesas. Con la base
+     * vacía no aparecía por ningún lado. */
+    '<div class="tarjeta" style="border-color:var(--oro)">' +
+      '<div class="tarjeta__titulo">El salón de Alvi' +
+        ayuda('mesas.acomodar') + '</div>' +
+      '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+        'Creo las ' + CONFIGURACION.salon.mesas.length + ' mesas del Salón ' +
+        'Estrella de ' + CONFIGURACION.salon.capacidad + ' lugares cada una, ' +
+        'y las coloco en el plano donde están de verdad: la principal ' +
+        'arriba, la pista, el bufet, los baños y la barra.' +
+      '</p>' +
+      '<button class="boton boton--principal boton--ancho" id="mesa-armar-salon">' +
+        'Armar el salón de Alvi' +
+      '</button>' +
+    '</div>' +
+
     '<div class="tarjeta">' +
-      '<div class="tarjeta__titulo">Armar el salón</div>' +
+      '<div class="tarjeta__titulo">O crearlas a mano</div>' +
       '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
-        'Creá todas las mesas de una vez y después acomodá la gente. ' +
-        'Podés cambiar cualquier mesa después, una por una.' +
+        'Si el salón fuera otro: creá todas las mesas de una vez y después ' +
+        'acomodá la gente. Podés cambiar cualquiera después, una por una. ' +
+        'Estas nacen sin lugar en el plano; se les puede poner después.' +
       '</p>' +
 
       '<div class="campo-par">' +
@@ -398,6 +423,9 @@ function pintarArranqueDeMesas(cuerpo) {
           'Hay ' + seguro(gente) + ' personas confirmadas.</p>'
         : '') +
     '</div>';
+
+  buscar('#mesa-armar-salon', cuerpo).addEventListener('click',
+    () => armarElSalon(() => pintarMesas(cuerpo)));
 
   buscar('#lote-crear', cuerpo).addEventListener('click', async () => {
     const cuantas = Number(valorDe('lote-cuantas', cuerpo)) || 0;
