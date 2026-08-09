@@ -107,10 +107,18 @@
     elemento,
 
     /* Dónde nace el haz, en porcentaje del ancho de la ventana. Lo pone el
-       CSS (.haz:nth-child(N) { left: … }) y se lee UNA sola vez acá, al
-       arrancar, para no volver a preguntarle nada al navegador después. */
-    izquierda: parseFloat(getComputedStyle(elemento).left) /
-               Math.max(1, window.innerWidth) * 100 || 0,
+       CSS (.haz:nth-child(N) { left: … }) y hay que preguntárselo al
+       navegador con getComputedStyle.
+
+       ⚠️ POR QUÉ NO SE LEE ACÁ. Preguntar por un valor calculado obliga al
+       navegador a resolver estilos y layout EN ESE INSTANTE (un "reflow
+       forzado"). Y este código se evalúa durante la carga, o sea en el peor
+       momento posible: se le hacía frenar el arranque para averiguar algo
+       que no hace falta hasta que el sobre se abre y hay luz que dibujar.
+
+       Se deja en 0 y lo rellena medirLosHaces(), en el primer cuadro que
+       de verdad se dibuja. */
+    izquierda: 0,
 
     /* El objeto que lee el lienzo cuadro a cuadro. Se crea una vez y
        después solo se le cambian los números: cero basura por cuadro. */
@@ -230,6 +238,29 @@
     return (Math.sin((segundos / periodo) * Math.PI * 2 + fase) + 1) / 2;
   }
 
+  /** ¿Ya se leyó del CSS dónde nace cada haz? (ver `izquierda`, arriba). */
+  let yaSeMidieron = false;
+
+  /**
+   * Lee del CSS dónde nace cada haz. Se hace UNA sola vez, y a propósito
+   * NO durante la carga: preguntar por un valor calculado obliga al
+   * navegador a resolver layout en ese instante, y hacerlo mientras la
+   * página arranca retrasa el primer dibujo. Acá ya estamos en un cuadro
+   * de animación con el sobre abierto, así que el layout ya está resuelto
+   * y la lectura no le cuesta nada a nadie.
+   *
+   * @returns {void}
+   */
+  function medirLosHaces() {
+    if (yaSeMidieron) return;
+    yaSeMidieron = true;
+
+    const ancho = Math.max(1, window.innerWidth);
+    for (const haz of estadoDeLosHaces) {
+      haz.izquierda = parseFloat(getComputedStyle(haz.elemento).left) / ancho * 100 || 0;
+    }
+  }
+
   /**
    * Recalcula la forma de cada haz.
    * @param {number} momentoActual - Marca de tiempo del navegador.
@@ -238,10 +269,12 @@
   function animarLosHaces(momentoActual) {
     if (!animacionActiva) return;
 
-    /* Animaciones apagadas (botón o accesibilidad): el bucle sigue vivo
-       pero no dibuja luz —el CSS, además, esconde la capa—. Listo para
-       reanudar al instante si se encienden, sin recargar. */
-    if (prefiereMenosMovimiento()) { requestAnimationFrame(animarLosHaces); return; }
+    /* Sin nadie mirando —sobre todavía cerrado, pestaña de fondo, o
+       animaciones apagadas— el bucle sigue vivo pero no dibuja luz. Listo
+       para reanudar al instante, sin recargar. */
+    if (!hayAlgoQueMirar()) { requestAnimationFrame(animarLosHaces); return; }
+
+    medirLosHaces();   // la primera vez lee el CSS; después no hace nada
 
     if (momentoActual - ultimoCalculo >= cadaCuanto) {
       ultimoCalculo = momentoActual;

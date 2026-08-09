@@ -1649,7 +1649,7 @@
        si se encienden las animaciones con el botón, vuelven a mecerse en el
        acto, sin recargar. Se actualiza el reloj para que al reanudar no dé
        un salto por el tiempo acumulado. */
-    if (document.hidden || prefiereMenosMovimiento()) {
+    if (!hayAlgoQueMirar()) {
       momentoAnterior = momentoActual;
       requestAnimationFrame(dibujarCuadro);
       return;

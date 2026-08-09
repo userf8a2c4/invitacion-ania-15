@@ -543,10 +543,14 @@
   function dibujarCuadro(momentoActual) {
     if (!animacionActiva) return;   // pausa por pestaña oculta
 
-    /* Animaciones apagadas (botón o accesibilidad): el bucle sigue vivo
-       pero no mueve pétalos; el CSS los esconde. Listo para reanudar en
-       vivo si se encienden. */
-    if (prefiereMenosMovimiento()) {
+    /* Sin nadie mirando —sobre todavía cerrado, pestaña de fondo, o
+       animaciones apagadas por botón o accesibilidad— el bucle sigue vivo
+       pero no mueve pétalos. Listo para reanudar en vivo.
+
+       El reloj se adelanta igual (momentoDelCuadroAnterior) aunque no se
+       mueva nada: si no, al reanudar el `dt` sería el de todo el rato que
+       estuvo detenido y los pétalos aparecerían teletransportados. */
+    if (!hayAlgoQueMirar()) {
       momentoDelCuadroAnterior = momentoActual;
       requestAnimationFrame(dibujarCuadro);
       return;

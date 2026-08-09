@@ -290,9 +290,11 @@
   let ultimoRepintado = 0;
 
   function pintarLaLuz(ahora) {
-    /* Con la pestaña oculta o las animaciones apagadas no se redibuja,
-       pero el lienzo conserva lo último pintado: la escena no se apaga. */
-    if (document.hidden || prefiereMenosMovimiento()) {
+    /* Sin nadie mirando no se redibuja, pero el lienzo conserva lo último
+       pintado: la escena no se apaga. hayAlgoQueMirar() (02-utilidades.js)
+       cubre los tres casos: sobre todavía cerrado, pestaña de fondo, o
+       animaciones apagadas. */
+    if (!hayAlgoQueMirar()) {
       requestAnimationFrame(pintarLaLuz);
       return;
     }

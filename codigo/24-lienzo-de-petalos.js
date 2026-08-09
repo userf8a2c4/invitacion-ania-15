@@ -158,10 +158,12 @@
    * @returns {void}
    */
   function pintarLosPetalos() {
-    /* Con la pestaña oculta o las animaciones apagadas no se redibuja. Los
-       canvas conservan lo último pintado, así que los pétalos quedan
-       quietos en su sitio en vez de desaparecer de golpe. */
-    if (document.hidden || prefiereMenosMovimiento()) {
+    /* Sin nadie mirando no se redibuja. Los canvas conservan lo último
+       pintado, así que los pétalos quedan quietos en su sitio en vez de
+       desaparecer de golpe. hayAlgoQueMirar() (02-utilidades.js) cubre los
+       tres casos: sobre todavía cerrado, pestaña de fondo, o animaciones
+       apagadas. */
+    if (!hayAlgoQueMirar()) {
       requestAnimationFrame(pintarLosPetalos);
       return;
     }
