@@ -279,6 +279,53 @@ function prefiereMenosMovimiento() {
   return document.documentElement.classList.contains('animaciones-off');
 }
 
+
+/* ─── ¿VALE LA PENA DIBUJAR AHORA MISMO? ──────────────────────────────
+   EL ERROR QUE ESTO CORRIGE, QUE ERA EL MÁS CARO DE TODOS
+
+   El sobre de entrada (#sobre-de-apertura) es una capa `position: fixed`
+   con `inset: 0`, fondo opaco y z-index 2000: TAPA LA PANTALLA ENTERA.
+   Y sin embargo, seis bucles de animación arrancaban durante la carga y
+   se ponían a pintar debajo de él: la luz de las velas, los pétalos en
+   sus tres planos, la física de esos pétalos, el balanceo de las joyas y
+   los haces de luz.
+
+   Es decir: la computadora pintaba a 60 cuadros por segundo una escena
+   que nadie podía ver, mientras el invitado todavía miraba el sobre. Eso
+   explicaba a la vez el tiempo de bloqueo al cargar, el consumo de
+   batería en el celular, y esa sensación de pesadez que no terminaba de
+   irse por más que se optimizara lo de adentro: el navegador arrancaba
+   ya saturado haciendo trabajo inútil.
+
+   La solución no es dibujar más rápido: es NO DIBUJAR. Esta función es
+   la única fuente de verdad de "¿hay alguien mirando?", y la consultan
+   los cinco bucles de animación al principio de cada cuadro.
+
+   OJO: los bucles NO se apagan, siguen vivos re-agendándose. Es a
+   propósito. Apagarlos y volver a encenderlos con banderas es justo el
+   tipo de máquina de estados que ya rompió las enredaderas antes: si una
+   sola vía de reencendido falla, la escena queda muerta para siempre.
+   Un rAF que despierta, mira y se vuelve a dormir cuesta prácticamente
+   nada y no se puede romper.
+   ---------------------------------------------------------------- */
+
+/** Se enciende cuando el sobre se abre y la invitación queda a la vista. */
+let _laInvitacionSeVe = false;
+document.addEventListener('invitacion-visible', () => { _laInvitacionSeVe = true; }, { once: true });
+
+/**
+ * ¿Hay que dibujar este cuadro?
+ *
+ * @returns {boolean} false si el sobre todavía tapa todo, si la pestaña
+ *          está de fondo, o si se pidió menos movimiento.
+ *
+ * @example
+ *   if (!hayAlgoQueMirar()) { requestAnimationFrame(dibujarCuadro); return; }
+ */
+function hayAlgoQueMirar() {
+  return _laInvitacionSeVe && !document.hidden && !prefiereMenosMovimiento();
+}
+
 /* ─── POSICIÓN DEL SCROLL, SIN PREGUNTARLE AL NAVEGADOR ───────────────
    POR QUÉ EXISTE ESTO (lo confirmó un perfil de rendimiento real)
    Leer `window.scrollY` parece gratis, pero no lo es: si hay estilos
@@ -491,8 +538,24 @@ function rebotar(funcion, espera) {
  * @returns {void}
  */
 function cederElHilo(seguir) {
-  if (document.hidden) setTimeout(seguir, 0);
-  else requestAnimationFrame(seguir);
+  if (document.hidden) { setTimeout(seguir, 0); return; }
+
+  /* scheduler.yield() es la forma moderna de decir "tomá el control, pero
+     devolvémelo apenas puedas". La diferencia con setTimeout no es menor:
+     setTimeout manda la continuación AL FINAL de la cola, detrás de
+     cualquier otra cosa que haya llegado mientras tanto, así que las
+     construcciones troceadas terminaban más tarde de lo necesario.
+     scheduler.yield la devuelve con prioridad de continuación: se cede el
+     paso al navegador para que pinte, pero se retoma enseguida.
+
+     Todavía no está en todos los navegadores (Chrome 129+), por eso el
+     respaldo de siempre. Es puramente aditivo: donde no existe, el
+     comportamiento es exactamente el de antes. */
+  if (typeof scheduler !== 'undefined' && typeof scheduler.yield === 'function') {
+    scheduler.yield().then(seguir);
+    return;
+  }
+  requestAnimationFrame(seguir);
 }
 
 /**

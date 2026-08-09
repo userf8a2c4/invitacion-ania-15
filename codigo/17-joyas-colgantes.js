@@ -271,10 +271,11 @@
   }
 
   function dibujarCuadro(momentoActual) {
-    /* Pestaña oculta o animaciones apagadas: el bucle sigue vivo pero no
-       mueve nada (las joyas quedan rectas). Listo para reanudar si se
-       encienden las animaciones con el botón, sin recargar la página. */
-    if (document.hidden || prefiereMenosMovimiento()) { requestAnimationFrame(dibujarCuadro); return; }
+    /* Sin nadie mirando (sobre cerrado, pestaña de fondo o animaciones
+       apagadas): el bucle sigue vivo pero no mueve nada, las joyas quedan
+       rectas. Listo para reanudar en cuanto se abra el sobre o se
+       enciendan las animaciones, sin recargar la página. */
+    if (!hayAlgoQueMirar()) { requestAnimationFrame(dibujarCuadro); return; }
 
     /* ⚡ YA NO TOCA EL DOM: medidaDelRelicario() (02-utilidades.js) mide una
        sola vez —al cargar y en cada resize— y acá solo se hace una resta con

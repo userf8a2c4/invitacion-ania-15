@@ -9,18 +9,38 @@
 # lifetimes" y también encarece cada visita porque el HTML/CSS/JS viajan
 # sin comprimir.
 #
-# POR QUÉ EL CACHÉ SE REPARTE EN DOS GRUPOS (coherente con sw.js)
-# El Service Worker (sw.js) ya separa los archivos en dos estrategias:
-#   · Código de la app (HTML, CSS, JS) → "primero la red", para que un
-#     cambio se vea con una sola recarga.
-#   · Assets pesados y estables (imágenes, svg, audio, fuentes) → "primero
-#     la copia", porque casi nunca cambian.
-# Si acá le diéramos cache LARGO al HTML/CSS/JS, el propio navegador
-# podría servir una copia vieja sin siquiera llegar a preguntarle al
-# Service Worker, y un cambio de código no se vería aunque subamos VERSION
-# en sw.js. Por eso el código lleva cache corto con revalidación, y los
-# assets estables sí llevan cache largo — un año, porque cuando cambian de
-# verdad (raro) alcanza con renombrarlos o el usuario los ve tras purgar.
+# CÓMO SE REPARTE EL CACHÉ, Y POR QUÉ
+# Hay tres grupos, y la diferencia entre ellos es UNA sola pregunta:
+# ¿este archivo cambia de dirección cuando cambia su contenido?
+#
+#   1. CSS y JS de la invitación → CACHÉ DE UN AÑO ("immutable").
+#      Sí cambian de dirección: se piden como `01-fundamentos.css?v=45`, y
+#      al tocarlos se sube ese número (con herramientas/subir-version.mjs).
+#      Para el navegador `?v=45` y `?v=46` son archivos distintos, así que
+#      se puede guardar el viejo para siempre sin riesgo de que alguien
+#      quede con una versión vieja: la próxima vez le vamos a pedir otra
+#      dirección. Esto es lo que hace que la web abra al instante en la
+#      segunda visita.
+#
+#      ⚠️ ESTO OBLIGA A CORRER herramientas/subir-version.mjs ANTES DE
+#      SUBIR CAMBIOS. Si se sube código sin subir la versión, los que ya
+#      habían entrado seguirían viendo lo viejo durante un año y no habría
+#      manera de arreglarlo desde el servidor.
+#
+#   2. index.html y sw.js → SIN CACHÉ, siempre revalidan.
+#      NO cambian de dirección: siempre se piden igual. Y son justamente
+#      los dos que reparten las direcciones nuevas — el HTML trae los
+#      `?v=` y sw.js su propia VERSION. Si se cachearan, nadie se
+#      enteraría nunca de que hubo cambios. Son el ancla de todo el
+#      sistema.
+#
+#   3. Imágenes, SVG, audio y tipografías → CACHÉ DE UN AÑO.
+#      No llevan versión, pero casi nunca cambian; el día que haya que
+#      cambiar alguno, se le pone otro nombre de archivo.
+#
+# (La carpeta admin/ tiene su propio .htaccess con sus propias reglas: sus
+#  archivos NO están versionados, así que allá el caché sigue corto. En
+#  Apache, el .htaccess de una subcarpeta manda sobre el de arriba.)
 # ══════════════════════════════════════════════════════════════════════
 
 # ─── Proteger archivos secretos ─────────────────────────────────────────
@@ -33,7 +53,8 @@
 </FilesMatch>
 
 # Y los archivos de trabajo que tampoco tienen por qué servirse.
-<FilesMatch "\.(env|md|sql|log)$">
+# (.mjs = las herramientas de desarrollo, como subir-version.mjs)
+<FilesMatch "\.(env|md|sql|log|mjs)$">
   Require all denied
 </FilesMatch>
 
@@ -56,11 +77,12 @@
 <IfModule mod_expires.c>
   ExpiresActive On
 
-  # Código de la app: cache corto con revalidación — el Service Worker
-  # es quien decide si sirve de red o de copia, no el navegador.
+  # CSS y JS: van versionados con ?v=NN, así que se pueden guardar un año.
+  ExpiresByType text/css                   "access plus 1 year"
+  ExpiresByType application/javascript     "access plus 1 year"
+
+  # El HTML y el manifiesto NO llevan versión: siempre se revalidan.
   ExpiresByType text/html                  "access plus 0 seconds"
-  ExpiresByType text/css                   "access plus 0 seconds"
-  ExpiresByType application/javascript     "access plus 0 seconds"
   ExpiresByType application/manifest+json  "access plus 0 seconds"
 
   # Assets pesados y estables: cache largo, casi nunca cambian.
@@ -75,12 +97,35 @@
 </IfModule>
 
 <IfModule mod_headers.c>
-  # HTML/CSS/JS: que revalide siempre contra el servidor (no cache "duro").
-  <FilesMatch "\.(html|css|js)$">
+
+  # ⚠️ EL ORDEN DE ESTOS BLOQUES IMPORTA Y NO SE PUEDE CAMBIAR.
+  # "Header set" PISA lo que haya puesto una regla anterior. Así que
+  # primero va la regla general (cachear todo el CSS y JS un año) y
+  # DESPUÉS las excepciones, que son las que tienen que ganar.
+
+  # ─── Regla general: CSS y JS, un año ────────────────────────────────
+  # Seguro porque van versionados con ?v=NN (ver la explicación de arriba).
+  <FilesMatch "\.(css|js)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+
+  # ─── Excepción 1: el HTML ───────────────────────────────────────────
+  # No lleva ?v= (es la dirección que la gente escribe), y además es quien
+  # reparte los ?v= nuevos. Si se cacheara, nadie vería jamás un cambio.
+  <FilesMatch "\.html$">
     Header set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
 
-  # Assets estables: cache largo e "immutable" (el navegador ni pregunta).
+  # ─── Excepción 2: el service worker ─────────────────────────────────
+  # index.html lo registra como 'sw.js' a secas, sin ?v=. Si se cacheara,
+  # los visitantes quedarían atrapados con un service worker viejo y sin
+  # ninguna vía para actualizarse. Es la excepción más importante.
+  <FilesMatch "^sw\.js$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+
+  # ─── Assets estables: cache largo e "immutable" ─────────────────────
+  # El navegador ni pregunta. Para cambiar alguno, hay que renombrarlo.
   <FilesMatch "\.(svg|jpg|jpeg|png|webp|ico|mp3|woff|woff2)$">
     Header set Cache-Control "public, max-age=31536000, immutable"
   </FilesMatch>

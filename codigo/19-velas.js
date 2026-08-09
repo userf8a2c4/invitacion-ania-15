@@ -889,7 +889,7 @@
   };
 
   function dibujarCuadro(t) {
-    if (document.hidden || prefiereMenosMovimiento()) {
+    if (!hayAlgoQueMirar()) {
       requestAnimationFrame(dibujarCuadro);
       return;
     }
