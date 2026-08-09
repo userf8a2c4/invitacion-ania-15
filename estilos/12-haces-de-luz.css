@@ -153,6 +153,25 @@
      ⚠️ SIN filtro CSS acá (nada de drop-shadow): la llama titila DENTRO de
      este contenedor, y un filtro obligaría a re-rasterizar todo el
      candelabro en cada cuadro —caro, sobre todo sin placa de video—. */
+
+  /* ⚡ POR QUÉ ESTA TRANSICIÓN, Y POR QUÉ NO COSTABA NADA TENERLA.
+     La posición de un candelabro "de piso" depende de lineaDelPiso()
+     (codigo/19-velas.js), que a su vez depende de la altura TOTAL del
+     documento. Esa altura sigue creciendo mientras las enredaderas se
+     terminan de construir en paralelo (varios cuadros después de que las
+     velas ya se ubicaron una primera vez), y también cambia si el mapa
+     incrustado carga tarde y empuja el contenido. Cuando algo de eso
+     dispara un reacomodo (acomodarConRespiro), el candelabro saltaba de
+     golpe a su nueva posición — se notaba particularmente en la LUZ, que
+     vive en un contenedor aparte (.luz-de-pieza, ver más abajo) y por eso
+     se notaba el candelabro "vacío" un instante.
+
+     `top`/`left` no son propiedades de compositor —animarlas fuerza
+     layout en cada cuadro de la transición—, pero acá el reacomodo es un
+     evento RARÍSIMO (una vez, con debounce de 200ms), no una animación
+     continua. El costo de layout de una transición de 400ms, una vez, es
+     insignificante comparado con lo que ya cuesta cada cuadro del titileo. */
+  transition: top .4s var(--curva-elegante, ease), left .4s var(--curva-elegante, ease);
 }
 /* La llama titila: el JS le cambia opacidad y un leve escalado. El origen
    abajo hace que crezca desde la mecha, como una llama real. */
@@ -210,6 +229,14 @@
   position: absolute;
   pointer-events: none;
   mix-blend-mode: screen;
+
+  /* La MISMA transición que .aplique (arriba), y por el mismo motivo: este
+     contenedor es el que carga la luz de las llamas, y se posiciona junto
+     con su candelabro. Si uno de los dos transicionara y el otro no, la
+     luz se despegaría del candelabro un instante durante el reacomodo —
+     la llama quedándose atrás mientras el candelabro ya saltó a su lugar
+     nuevo. Deben moverse siempre juntos. */
+  transition: top .4s var(--curva-elegante, ease), left .4s var(--curva-elegante, ease);
 
   /* ⛔ SIN `content-visibility`, aunque parezca el lugar perfecto.
      Estas son las capas más caras de la web —`mix-blend-mode` obliga al

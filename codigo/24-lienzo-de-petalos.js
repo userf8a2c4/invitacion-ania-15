@@ -92,6 +92,50 @@
   /** Expuestas para que el módulo de física elija una al crear un pétalo. */
   window.LienzoDePetalos.imagenes = imagenes;
 
+  /* ⚡ PRE-RASTERIZADO: la razón de que esto costara tanto por cuadro.
+     `imagen` es un <img> que apunta a un archivo .svg. Un SVG no es un
+     mapa de píxeles: cuando se dibuja con drawImage() bajo una ROTACIÓN
+     distinta cada vez (pintarLosPetalos gira cada pétalo un ángulo propio),
+     el navegador tiene que VOLVER A RASTERIZAR el vector entero en cada
+     cuadro — no hay forma de cachear eso entre ángulos.
+
+     Con ~18 pétalos activos y dos lienzos, eran ~18 rasterizaciones
+     vectoriales POR CUADRO. Coincide exacto con el perfil real: "Paint" al
+     12,3 % y la función pintarLosPetalos sola al 21,5 %.
+
+     La solución: rasterizar cada uno de los 3 dibujos UNA sola vez, a un
+     canvas oculto, y de ahí en más dibujar ESE mapa de bits (que sí se
+     cachea entre rotaciones sin costo). 128 px alcanza de sobra: el pétalo
+     más grande mide 62 px (06-petalos-con-fisica.js, plano "frente"), así
+     que 128 cubre esa medida a densidad de pantalla 2x, y todo lo demás se
+     dibuja reduciendo, que es barato.
+
+     Mientras el rasterizado no está listo (una fracción de segundo, a lo
+     sumo lo que tarda en decodificar el SVG) se sigue dibujando desde el
+     <img> original: nunca hay un cuadro sin pétalos. */
+  const TAMANO_DEL_MAPA = 128;
+  const mapasDePixeles = new Map();
+
+  function rasterizar(img) {
+    const lienzoOculto = document.createElement('canvas');
+    lienzoOculto.width = TAMANO_DEL_MAPA;
+    lienzoOculto.height = TAMANO_DEL_MAPA;
+    const pincelOculto = lienzoOculto.getContext('2d');
+    if (!pincelOculto) return;
+    pincelOculto.drawImage(img, 0, 0, TAMANO_DEL_MAPA, TAMANO_DEL_MAPA);
+    mapasDePixeles.set(img, lienzoOculto);
+  }
+
+  for (const img of imagenes) {
+    if (img.complete && img.naturalWidth) {
+      rasterizar(img);
+    } else if (typeof img.decode === 'function') {
+      img.decode().then(() => rasterizar(img)).catch(() => {});
+    } else {
+      img.addEventListener('load', () => rasterizar(img), { once: true });
+    }
+  }
+
   /* ── Un canvas por plano ── */
   const planos = [];
 
@@ -121,6 +165,20 @@
   }
 
   if (!planos.length) { window.LienzoDePetalos.activo = false; return; }
+
+  /* ⚡ #petalos-medio SIGUE EXISTIENDO EN EL HTML PERO YA NO SE USA (ver la
+     nota grande de "POR QUÉ TRES CANVAS Y NO UNO", más arriba: los planos
+     medio y frente comparten canvas desde hace tiempo). El problema es que
+     sigue siendo `position: fixed` a pantalla completa
+     (estilos/10-cursor-y-petalos.css), y el navegador le arma una capa de
+     compositor igual, aunque nunca se dibuje nada adentro. Se oculta acá.
+
+     ⚠️ NO SE PUEDE BORRAR DEL <div> EN index.html: 06-petalos-con-fisica.js
+     hace `if (!buscar('#petalos-medio')) return;` — si el elemento no
+     existiera, TODOS los pétalos (no solo los del plano medio) dejarían de
+     crearse. display:none conserva el elemento pero apaga la capa. */
+  const capaMedioSinUso = buscar('#petalos-medio');
+  if (capaMedioSinUso) capaMedioSinUso.style.display = 'none';
 
   let ancho = 0, alto = 0, densidad = 1;
 
@@ -214,6 +272,12 @@
 
         const medio = pet.tamaño / 2;
 
+        /* El mapa de bits pre-rasterizado, si ya está listo; si no, el SVG
+           original (nunca se pierde un cuadro por esperar). Ver la nota
+           grande de más arriba: dibujar el SVG con rotación distinta cada
+           vez obligaba a re-rasterizarlo entero por cuadro. */
+        const fuente = mapasDePixeles.get(imagen) || imagen;
+
         pincel.save();
         /* Se gira sobre el CENTRO del pétalo, igual que hacía el CSS: el
            transform del div era translate + rotate, y el origen por defecto
@@ -221,7 +285,7 @@
         pincel.translate(pet.x + medio, pet.y + medio);
         pincel.rotate(pet.angulo * Math.PI / 180);
         pincel.globalAlpha = pet.opacidad;
-        pincel.drawImage(imagen, -medio, -medio, pet.tamaño, pet.tamaño);
+        pincel.drawImage(fuente, -medio, -medio, pet.tamaño, pet.tamaño);
         pincel.restore();
 
         /* Se anota QUÉ ZONA ocupó, para poder borrar solo eso el próximo
