@@ -1,0 +1,230 @@
+/* ══════════════════════════════════════════════════════════════════════
+   00 · TIPOGRAFÍAS · alojadas acá, no en Google
+   ══════════════════════════════════════════════════════════════════════
+
+   QUÉ CAMBIÓ Y POR QUÉ
+   Antes las tres familias (Cinzel Decorative, Cormorant Garamond, IM Fell
+   English) se pedían a fonts.googleapis.com/fonts.gstatic.com. Eso tenía
+   dos costos:
+
+     1. UN SALTO VISUAL EN CADA CARGA (Cumulative Layout Shift).
+        Mientras la fuente de Google no llega, el navegador pinta con una
+        serif del sistema. Esas letras NO miden igual que Cinzel Decorative
+        ni que las otras dos, así que cuando la buena llega el texto cambia
+        de ancho y de alto, y todo lo que está centrado alrededor —el
+        saludo del sobre, el nombre "ANIA" en el óvalo— se corre. Ese salto
+        es exactamente lo que un diagnóstico de PageSpeed mide como CLS.
+
+     2. DOS DOMINIOS EXTERNOS EN EL CAMINO CRÍTICO.
+        Antes de poder mostrar el texto, el navegador tenía que resolver
+        fonts.googleapis.com, bajar de ahí un CSS, y ESE CSS recién
+        apuntaba a fonts.gstatic.com para el archivo de verdad. Dos
+        conexiones nuevas (DNS + TLS cada una) solo para tipografía.
+
+   Sirviendo los archivos desde acá los dos problemas se resuelven juntos:
+   no hay dominios nuevos que resolver, y con el <link rel="preload"> del
+   <head> las dos fuentes que se ven primero (el saludo del sobre y el
+   nombre de la portada) están listas ANTES del primer pintado, así que no
+   hay ningún salto que corregir después.
+
+   Bonus: el service worker (sw.js) ya cachea cualquier .woff2 como asset
+   estable, y el .htaccess ya les da un año de caché — antes eso no servía
+   de nada porque los archivos vivían en el dominio de Google, fuera de
+   nuestro control. Ahora si alguien abre la invitación sin internet
+   después de la primera visita, el texto se ve con la tipografía correcta
+   y no con la del sistema.
+
+   CÓMO SE GENERÓ ESTE ARCHIVO
+   Se le pidió a Google Fonts su CSS (igual al que antes cargaba
+   index.html) y se descargaron los .woff2 que reference, solo los
+   subconjuntos "latin" y "latin-ext" —los que cubren español: tildes, ñ,
+   signos de apertura ¿¡—. Se descartaron cyrillic, greek y vietnamese, que
+   esta invitación nunca usa. Los unicode-range se copiaron tal cual los
+   entrega Google: son los que le dicen al navegador "de esta familia,
+   bajá solo el archivo que cubre los caracteres que el texto usa de
+   verdad", así que un texto en español nunca toca el archivo cyrillic
+   aunque estuviera declarado.
+   ══════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── CINZEL DECORATIVE (títulos: el nombre, "XV años") ──────────────── */
+
+@font-face {
+  font-family: 'Cinzel Decorative';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../recursos/tipografias/cinzel-decorative-400-normal-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Cinzel Decorative';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../recursos/tipografias/cinzel-decorative-400-normal-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Cinzel Decorative';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../recursos/tipografias/cinzel-decorative-700-normal-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Cinzel Decorative';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../recursos/tipografias/cinzel-decorative-700-normal-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+
+/* ─── CORMORANT GARAMOND (texto corrido) ──────────────────────────────── */
+
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('../recursos/tipografias/cormorant-garamond-300-normal-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('../recursos/tipografias/cormorant-garamond-300-normal-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../recursos/tipografias/cormorant-garamond-400-normal-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../recursos/tipografias/cormorant-garamond-400-normal-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../recursos/tipografias/cormorant-garamond-600-normal-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../recursos/tipografias/cormorant-garamond-600-normal-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: italic;
+  font-weight: 300;
+  font-display: swap;
+  src: url('../recursos/tipografias/cormorant-garamond-300-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: italic;
+  font-weight: 300;
+  font-display: swap;
+  src: url('../recursos/tipografias/cormorant-garamond-300-italic-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../recursos/tipografias/cormorant-garamond-400-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../recursos/tipografias/cormorant-garamond-400-italic-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+
+/* ─── IM FELL ENGLISH (detalles: fecha, indicaciones) ─────────────────
+   Google no ofrece un subconjunto latin-ext para esta familia: todo lo
+   que necesita el español (tildes, ñ, ¿¡) ya vive en el subconjunto
+   "latin" (Latin-1), así que con uno solo alcanza. */
+
+@font-face {
+  font-family: 'IM Fell English';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../recursos/tipografias/im-fell-english-400-normal-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IM Fell English';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../recursos/tipografias/im-fell-english-400-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+
+/* ─── RESPALDO MÉTRICO ───────────────────────────────────────────────
+   Con las fuentes precargadas (ver index.html) no debería llegar a
+   usarse esto en la práctica: los archivos están listos antes del primer
+   pintado. Pero en una conexión muy mala igual puede haber un instante
+   de espera, y ahí es donde esto importa.
+
+   `size-adjust` escala una fuente de RESPALDO del sistema para que sus
+   letras midan lo más parecido posible a la fuente definitiva. Así, si
+   llega a pintarse un instante con la de respaldo, el texto ocupa
+   prácticamente el mismo espacio y el cambio a la fuente real no mueve
+   nada (o casi nada) alrededor.
+
+   Los valores de ajuste son aproximados —se calibraron a ojo comparando
+   el ancho de una serif genérica contra cada familia— y está bien que lo
+   sean: no hace falta precisión de píxel, alcanza con que la diferencia
+   quede por debajo de lo que un layout shift puede llegar a notar. */
+
+@font-face {
+  font-family: 'Cinzel Fallback';
+  src: local('Georgia'), local('Times New Roman');
+  size-adjust: 92%;
+  ascent-override: 88%;
+  descent-override: 22%;
+}
+@font-face {
+  font-family: 'Cormorant Fallback';
+  src: local('Georgia'), local('Times New Roman');
+  size-adjust: 98%;
+  ascent-override: 90%;
+  descent-override: 22%;
+}
+@font-face {
+  font-family: 'IM Fell Fallback';
+  src: local('Georgia'), local('Times New Roman');
+  size-adjust: 96%;
+  ascent-override: 88%;
+  descent-override: 22%;
+}

@@ -1335,25 +1335,22 @@
       });
     }
 
-    /* ⚡ TROCEADO EN TANDAS. Crear las ~22 plantas de una sola vez —cada
-       una con su propio SVG de rama, nudos y flores, más leer su
-       geometría después— podía bloquear el hilo principal casi medio
-       segundo DE UNA SOLA VEZ (una "tarea larga" bien gorda, detectable
-       con codigo/21-monitor-de-rendimiento.js). El resultado final es
-       IDÉNTICO se haga de una vez o de a poco; lo único que cambia es que,
-       de a poco, el navegador puede respirar entre tanda y tanda —pintar,
-       atender un clic— en vez de quedar congelado. */
-    /* ⚡ EL CORTE LO DECIDE EL RELOJ, NO UN NÚMERO FIJO.
-       Antes acá había PLANTAS_POR_TANDA = 2, un número elegido a mano
-       midiendo en la máquina objetivo (un i5-4590T de 2 GHz). El problema de
-       un número fijo es que solo vale para la máquina donde se midió: en una
-       más lenta, dos plantas se pasan igual del presupuesto, y en una más
-       rápida se está cediendo el hilo más de lo necesario.
+    /* ⚡ TROCEADO EN TANDAS, POR PRESUPUESTO DE TIEMPO.
+       Crear las ~22 plantas de una sola vez —cada una con su propio SVG de
+       rama, nudos y flores, más leer su geometría después— podía bloquear
+       el hilo principal casi medio segundo DE UNA SOLA VEZ (una "tarea
+       larga" bien gorda, detectable con codigo/21-monitor-de-rendimiento.js).
+       El resultado final es IDÉNTICO se haga de una vez o de a poco; lo
+       único que cambia es que, de a poco, el navegador puede respirar entre
+       tanda y tanda —pintar, atender un clic— en vez de quedar congelado.
 
        trabajarPorTandas() (codigo/02-utilidades.js) hace todas las plantas
-       que entren en 8 ms y corta ahí. Se adapta solo a cada equipo, que es
-       justo lo que hace falta: la invitación tiene que ir fluida tanto acá
-       como en el teléfono de cualquier invitado. */
+       que entren en 8 ms y corta ahí. Antes acá había un número fijo de
+       plantas por tanda, elegido a mano midiendo en una sola máquina — y un
+       número fijo solo vale para la máquina donde se midió. Con presupuesto
+       de tiempo se adapta solo a cada equipo, que es justo lo que hace
+       falta: la invitación tiene que ir fluida tanto en la máquina donde se
+       la prueba como en el teléfono de cualquier invitado. */
     trabajarPorTandas(
       tareas.length,
       /* sigoVigente(): si entró una construcción más nueva (un resize que

@@ -137,15 +137,26 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Ania XV">
 
-  <!-- Tipografías de Google -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Cinzel+Decorative:wght@400;700&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
+  <!-- ═══ TIPOGRAFÍAS ═════════════════════════════════════════════════
+       Alojadas en recursos/tipografias/ (ver estilos/00-tipografias.css
+       para el porqué completo). Antes esto era un preconnect + un
+       <link> a Google; ahora son estos dos preload: precargan SOLO las
+       dos fuentes que se ven antes de abrir el sobre —el saludo y el
+       nombre de la portada—, para que estén listas antes del primer
+       pintado y no haya ningún salto de layout que corregir después.
+       Las demás variantes (itálicas, otros pesos) llegan con la hoja de
+       estilos, sin necesidad de adelantarlas: no se ven hasta más tarde. -->
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+        href="recursos/tipografias/cinzel-decorative-400-normal-latin.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+        href="recursos/tipografias/im-fell-english-400-normal-latin.woff2">
 
   <!-- ═══ ESTILOS ═════════════════════════════════════════════════════
        Se cargan en orden numérico. El orden IMPORTA: si dos archivos
        dicen cosas distintas sobre lo mismo, gana el que va último.
+       00-tipografias va primero: declara las fuentes que el resto usa.
   ═══════════════════════════════════════════════════════════════════ -->
+  <link rel="stylesheet" href="estilos/00-tipografias.css?v=44">
   <link rel="stylesheet" href="estilos/01-fundamentos.css?v=43">
   <link rel="stylesheet" href="estilos/02-marco-victoriano.css?v=43">
   <link rel="stylesheet" href="estilos/03-sobre-de-apertura.css?v=43">

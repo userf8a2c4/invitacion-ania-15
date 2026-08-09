@@ -63,10 +63,21 @@
   /* Tipografías.
      titulos  → Cinzel Decorative, la ornamentada de "ANIA"
      texto    → Cormorant Garamond, la de los párrafos
-     detalle  → IM Fell English, la antigua de los rótulos pequeños */
-  --tipo-titulos:  'Cinzel Decorative', serif;
-  --tipo-texto:    'Cormorant Garamond', serif;
-  --tipo-detalle:  'IM Fell English', serif;
+     detalle  → IM Fell English, la antigua de los rótulos pequeños
+
+     Las declaraciones @font-face viven en 00-tipografias.css (se cargan
+     ANTES que este archivo), alojadas acá y no en Google — ver ese
+     archivo para el porqué completo.
+
+     El nombre "…Fallback" en el medio de cada lista es la fuente de
+     respaldo con size-adjust calibrado (también en 00-tipografias.css):
+     mide casi igual que la definitiva, así que si en una conexión muy
+     mala llega a pintarse antes de que baje la de verdad, el cambio no
+     mueve nada alrededor. "serif" al final es el último respaldo, por si
+     ni siquiera esa existiera. */
+  --tipo-titulos:  'Cinzel Decorative', 'Cinzel Fallback', serif;
+  --tipo-texto:    'Cormorant Garamond', 'Cormorant Fallback', serif;
+  --tipo-detalle:  'IM Fell English', 'IM Fell Fallback', serif;
 
   /* Medidas del marco victoriano.
      clamp(mínimo, ideal, máximo) elige el valor ideal pero nunca baja
