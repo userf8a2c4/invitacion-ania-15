@@ -94,6 +94,29 @@ function env($clave, $respaldo = null) {
  * @return bool
  */
 function llaveDeArranqueCorrecta($recibida) {
+    /* FRENO ANTES DE COMPROBAR NADA.
+     *
+     * instalar.php y diagnostico.php no tienen sesión ni el freno de
+     * INTENTOS_MAXIMOS de _lib/sesion.php (corren antes de que exista
+     * usuario alguno), así que sin esto alguien podría probar llaves una
+     * tras otra sin límite. Reutiliza la misma tabla `intentos_login` que
+     * el login normal, con su propia marca para no mezclar los conteos.
+     *
+     * Solo funciona si _lib/bd.php ya se cargó antes que este archivo,
+     * que es el caso en instalar.php y diagnostico.php. */
+    if (function_exists('consultarUno') && function_exists('insertar')) {
+        $ip     = substr($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0', 0, 45);
+        $fila   = consultarUno(
+            'SELECT COUNT(*) AS n FROM intentos_login
+             WHERE ip = :ip AND correo = :marca
+               AND cuando > DATE_SUB(NOW(), INTERVAL 15 MINUTE)',
+            [':ip' => $ip, ':marca' => '__llave__']
+        );
+        if ($fila && (int) $fila['n'] >= 5) {
+            responderMal('Demasiados intentos. Espera 15 minutos.', 429);
+        }
+    }
+
     $recibida = (string) $recibida;
     if ($recibida === '') return false;
 
@@ -102,5 +125,12 @@ function llaveDeArranqueCorrecta($recibida) {
 
     // hash_equals tarda lo mismo acierte o no, así que no se puede
     // adivinar la llave letra por letra midiendo los tiempos.
-    return hash_equals($esperada, $recibida);
+    $correcta = hash_equals($esperada, $recibida);
+
+    if (!$correcta && function_exists('insertar')) {
+        $ip = substr($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0', 0, 45);
+        insertar('intentos_login', ['ip' => $ip, 'correo' => '__llave__']);
+    }
+
+    return $correcta;
 }
