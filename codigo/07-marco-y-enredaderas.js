@@ -762,6 +762,21 @@
     const ANGULO_MAS_HORIZONTAL = 0.08;
     const ANGULO_MAS_VERTICAL   = 1.46;
 
+    /* ⚡ POR QUÉ EL TALLO TIENE QUE ENGROSAR CON LA DENSIDAD.
+       La CANTIDAD de rosas escala con `densidad` (ver `escalar` arriba):
+       en una pantalla ancha, ~1250px de más suben la densidad hasta 1,9 y
+       aparecen ~135 rosas por ramillete. Pero el GROSOR del tallo era un
+       número fijo, pensado para el caso de densidad ~1. Con casi el doble
+       de flores encima de un tallo que no engrosó un milímetro, la punta
+       —que ya adelgaza a propósito hasta un solo píxel— quedaba tapada
+       entera: rosas que parecen flotar sin nada que las sostenga.
+
+       Math.max(densidad, 1) para no ADELGAZAR el tallo en pantallas
+       angostas: ahí la densidad baja de 1 y también hay menos rosas, así
+       que el grosor de siempre ya alcanza. Solo se engruesa cuando hace
+       falta, nunca se afina de más. */
+    const grosorDelTallo = Math.max(densidad, 1);
+
     for (let i = 0; i < cuantosTallos; i++) {
       const reparto = i / (cuantosTallos - 1);
       const anguloDeSalida =
@@ -798,7 +813,11 @@
          Si el degradado resuelve bien (lo normal), tapa al sólido entero y
          no cambia nada; si no resolviera, el sólido de abajo salva la
          rama en vez de dejarla como un hilo casi invisible. */
-      const dDelTallo = siluetaDelTallo(tallo, azar, azar.entre(3.4, 5.2), 1);
+      const dDelTallo = siluetaDelTallo(
+        tallo, azar,
+        azar.entre(3.4, 5.2) * grosorDelTallo,
+        1 * grosorDelTallo
+      );
       piezas.push(
         `<path d="${dDelTallo}" fill="#6a5322"/>` +
         `<path d="${dDelTallo}" fill="url(#rosa-tallo)" stroke="#241d0d" stroke-width=".6"/>`
@@ -840,7 +859,12 @@
         });
 
         // Mismo relleno de reserva que el tallo principal (ver la nota de arriba).
-        const dDeLaRama = siluetaDelTallo(rama, azar, azar.entre(1.8, 2.8), 0.8);
+        // Y el mismo engrosamiento por densidad (ver grosorDelTallo, arriba).
+        const dDeLaRama = siluetaDelTallo(
+          rama, azar,
+          azar.entre(1.8, 2.8) * grosorDelTallo,
+          0.8 * grosorDelTallo
+        );
         piezas.push(
           `<path d="${dDeLaRama}" fill="#6a5322"/>` +
           `<path d="${dDeLaRama}" fill="url(#rosa-tallo)" stroke="#241d0d" stroke-width=".5"/>`
@@ -1114,6 +1138,15 @@
      * @returns {void}
      */
     function crearRamillete(hueco, indice) {
+      /* ⚠️ SI ESTO SE LLAMA DE NUEVO SOBRE EL MISMO HUECO (revisarQueEstenLosDos
+         reconstruyendo un ramillete que no salió bien), el innerHTML de abajo
+         tira el SVG viejo — pero la entrada que ESE ramillete tenía en
+         `plantas` seguía viva, animándose cada cuadro sobre un nodo que ya
+         no está en la página. Se limpia antes de agregar la nueva. */
+      for (let i = plantas.length - 1; i >= 0; i--) {
+        if (plantas[i].elemento && !plantas[i].elemento.isConnected) plantas.splice(i, 1);
+      }
+
       hueco.innerHTML = dibujarRamilleteDeEsquina(semilla++, densidad);
 
       const azarDeMovimiento = crearAzarConSemilla(semilla * 7919);

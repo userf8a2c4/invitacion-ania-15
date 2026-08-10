@@ -154,24 +154,20 @@
      este contenedor, y un filtro obligaría a re-rasterizar todo el
      candelabro en cada cuadro —caro, sobre todo sin placa de video—. */
 
-  /* ⚡ POR QUÉ ESTA TRANSICIÓN, Y POR QUÉ NO COSTABA NADA TENERLA.
-     La posición de un candelabro "de piso" depende de lineaDelPiso()
-     (codigo/19-velas.js), que a su vez depende de la altura TOTAL del
-     documento. Esa altura sigue creciendo mientras las enredaderas se
-     terminan de construir en paralelo (varios cuadros después de que las
-     velas ya se ubicaron una primera vez), y también cambia si el mapa
-     incrustado carga tarde y empuja el contenido. Cuando algo de eso
-     dispara un reacomodo (acomodarConRespiro), el candelabro saltaba de
-     golpe a su nueva posición — se notaba particularmente en la LUZ, que
-     vive en un contenedor aparte (.luz-de-pieza, ver más abajo) y por eso
-     se notaba el candelabro "vacío" un instante.
+  /* ⛔ ACÁ NO VA UNA `transition` DE top/left, aunque el salto del
+     reacomodo lo pida a gritos. Se probó y EMPEORA el problema.
 
-     `top`/`left` no son propiedades de compositor —animarlas fuerza
-     layout en cada cuadro de la transición—, pero acá el reacomodo es un
-     evento RARÍSIMO (una vez, con debounce de 200ms), no una animación
-     continua. El costo de layout de una transición de 400ms, una vez, es
-     insignificante comparado con lo que ya cuesta cada cuadro del titileo. */
-  transition: top .4s var(--curva-elegante, ease), left .4s var(--curva-elegante, ease);
+     El motivo: el candelabro de metal es un elemento del DOM, pero su
+     LUZ ya no lo es —la dibuja el lienzo (codigo/23-lienzo-de-luz.js)—.
+     Una transición CSS solo puede animar el DOM, así que el metal se
+     deslizaba suave mientras el resplandor saltaba de golpe: peor que
+     tenerlos desincronizados, quedaban despegados a la vista.
+
+     El salto real se arregló donde estaba la causa: acomodarTodo() coloca
+     las piezas de a una por cuadro y antes le avisaba al lienzo recién al
+     terminar las ocho. Ahora le avisa después de cada una, así luz y
+     candelabro se mueven siempre juntos. Ver rearmarLasFuentesDeLuz() en
+     codigo/19-velas.js. */
 }
 /* La llama titila: el JS le cambia opacidad y un leve escalado. El origen
    abajo hace que crezca desde la mecha, como una llama real. */
@@ -230,13 +226,12 @@
   pointer-events: none;
   mix-blend-mode: screen;
 
-  /* La MISMA transición que .aplique (arriba), y por el mismo motivo: este
-     contenedor es el que carga la luz de las llamas, y se posiciona junto
-     con su candelabro. Si uno de los dos transicionara y el otro no, la
-     luz se despegaría del candelabro un instante durante el reacomodo —
-     la llama quedándose atrás mientras el candelabro ya saltó a su lugar
-     nuevo. Deben moverse siempre juntos. */
-  transition: top .4s var(--curva-elegante, ease), left .4s var(--curva-elegante, ease);
+  /* ⛔ TAMPOCO ACÁ VA UNA `transition` (ver la nota igual en .aplique).
+     Este contenedor, con el lienzo activo, queda en `display: none`
+     (rearmarLasFuentesDeLuz(), codigo/19-velas.js): la luz de verdad la
+     dibuja el canvas, no este div. Una transición acá no animaría nada
+     que se vea. El salto se resolvió en el JS, avisándole al lienzo la
+     posición nueva después de CADA pieza en vez de al final de las ocho. */
 
   /* ⛔ SIN `content-visibility`, aunque parezca el lugar perfecto.
      Estas son las capas más caras de la web —`mix-blend-mode` obliga al

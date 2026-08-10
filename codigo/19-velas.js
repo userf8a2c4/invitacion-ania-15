@@ -558,17 +558,30 @@
    * que 40 ms constantes: lo que se percibe como pesadez es el tirón, no la
    * media. De a una, ninguna pasada se sale del presupuesto de un cuadro.
    *
+   * ⚠️ rearmarLasFuentesDeLuz() SE LLAMA DESPUÉS DE CADA PIEZA, no solo al
+   * final. Antes se llamaba una única vez, cuando las ocho ya estaban
+   * colocadas — y como colocarPieza() mueve el candelabro (un elemento del
+   * DOM) pero es rearmarLasFuentesDeLuz() quien le avisa al LIENZO dónde
+   * quedó la luz, durante esos cuadros intermedios el metal ya estaba en su
+   * sitio nuevo y el resplandor se seguía dibujando en el viejo: un salto
+   * visible entre el candelabro y su propia luz. Reconstruir el array de
+   * fuentes 8 veces en vez de 1 es trivial (recorre ~104 objetos), y
+   * garantiza que nunca queden desincronizados.
+   *
    * @param {Function} [alTerminar] - Se llama cuando están todas colocadas.
    * @returns {void}
    */
   function acomodarTodo(alTerminar) {
     const anchoRef = anchoBase();
+    const usaElLienzo = !!(window.LienzoDeLuz && window.LienzoDeLuz.activo);
 
     trabajarPorTandas(
       piezas.length,
-      i => colocarPieza(piezas[i], anchoRef),
+      i => {
+        colocarPieza(piezas[i], anchoRef);
+        if (usaElLienzo) rearmarLasFuentesDeLuz();
+      },
       () => {
-        if (window.LienzoDeLuz && window.LienzoDeLuz.activo) rearmarLasFuentesDeLuz();
         if (typeof alTerminar === 'function') alTerminar();
       }
     );
@@ -759,6 +772,16 @@
     const fuentes = [];
     for (const c of piezas) {
       for (const fuego of c.fuegos) {
+        /* ⚠️ SE SALTEA UN FUEGO QUE TODAVÍA NO TIENE POSICIÓN.
+           Desde que acomodarTodo() llama a esta función después de CADA
+           pieza (y no solo al final de las ocho), acá pueden convivir
+           fuegos ya colocados con otros que esperan su turno —a esos
+           colocarPieza() todavía no les asignó cx/radioNucleo/radioDerrame,
+           así que quedarían `undefined`. Sin este filtro, el lienzo
+           recibiría una fuente con radio undefined y perdería tiempo en
+           cada cuadro intentando dibujar algo que no existe. */
+        if (fuego.radioNucleo === undefined) continue;
+
         fuego.fuenteNucleo  = { x: fuego.cx, y: fuego.cy, radio: fuego.radioNucleo,  alfa: 0, derrame: false };
         fuego.fuenteDerrame = { x: fuego.cx, y: fuego.cy, radio: fuego.radioDerrame, alfa: 0, derrame: true };
         fuentes.push(fuego.fuenteDerrame, fuego.fuenteNucleo);   // el derrame va debajo
