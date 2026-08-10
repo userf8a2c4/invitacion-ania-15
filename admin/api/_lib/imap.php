@@ -270,7 +270,10 @@ class BuzonImap {
             }
         }
 
-        $texto = decodificarCuerpo($encabezados, $cuerpoCrudo);
+        $analizado = analizarParteMime($encabezados, $cuerpoCrudo, '');
+
+        $texto = $analizado['texto'] !== '' ? trim($analizado['texto'])
+               : ($analizado['html'] !== '' ? trim(html_entity_decode(strip_tags($analizado['html']))) : '');
 
         // Marcar como leído, ahora que efectivamente se abrió.
         $this->ordenar("STORE $numero +FLAGS (\\Seen)");
@@ -282,7 +285,66 @@ class BuzonImap {
             'asunto'     => $asunto,
             'fecha'      => $fecha,
             'texto'      => $texto,
+            'adjuntos'   => $analizado['adjuntos'],
         ];
+    }
+
+    /**
+     * Baja un adjunto concreto de un mensaje, ya decodificado.
+     *
+     * @param int    $numero El mensaje.
+     * @param string $ruta   La ruta MIME que devolvió leer(), ej. "2" o "1.2".
+     * @return array|null    ['nombre', 'tipo', 'datos'], o null si falló.
+     */
+    public function leerAdjunto($numero, $ruta) {
+        $this->ordenar('SELECT INBOX');
+
+        // Los encabezados de esa parte sola, para saber cómo decodificarla.
+        $cab = $this->cuerpoDeFetch(
+            $this->ordenar("FETCH $numero (BODY.PEEK[$ruta.MIME])")
+        );
+
+        // El contenido crudo de esa parte sola, sin bajar el mensaje entero.
+        $crudo = $this->cuerpoDeFetch(
+            $this->ordenar("FETCH $numero (BODY.PEEK[$ruta])")
+        );
+
+        if ($crudo === null) return null;
+
+        $tipo = 'application/octet-stream';
+        if ($cab !== null && preg_match('/Content-Type:\s*([^;\r\n]+)/i', $cab, $m)) {
+            $tipo = trim($m[1]);
+        }
+
+        $nombre = 'archivo';
+        if ($cab !== null && preg_match('/filename\*?=\s*"?([^"\r\n;]+)"?/i', $cab, $m)) {
+            $nombre = decodificarEncabezado(trim($m[1]));
+        } elseif ($cab !== null && preg_match('/name="?([^"\r\n;]+)"?/i', $cab, $m)) {
+            $nombre = decodificarEncabezado(trim($m[1]));
+        }
+
+        $codificacion = '';
+        if ($cab !== null && preg_match('/Content-Transfer-Encoding:\s*([^\r\n;]+)/i', $cab, $m)) {
+            $codificacion = strtolower(trim($m[1]));
+        }
+
+        $datos = desarmarCodificacion("Content-Transfer-Encoding: $codificacion", $crudo);
+
+        return ['nombre' => $nombre, 'tipo' => $tipo, 'datos' => $datos];
+    }
+
+    /**
+     * Saca el contenido de en medio de una respuesta FETCH, descartando
+     * la línea "* N FETCH (...)" del principio y la etiqueta del final.
+     *
+     * @param string[] $lineas
+     * @return string|null
+     */
+    private function cuerpoDeFetch($lineas) {
+        if (empty($lineas)) return null;
+        array_shift($lineas);
+        array_pop($lineas);
+        return implode("\n", $lineas);
     }
 
 
@@ -382,53 +444,138 @@ function decodificarEncabezado($texto) {
 }
 
 /**
- * Saca el cuerpo legible de un mensaje.
+ * Recorre el árbol MIME completo de un mensaje (o de una parte suya) y
+ * junta el texto legible y la lista de adjuntos que encuentra.
  *
- * Un correo puede venir en texto plano, en HTML, o en varias partes a la
- * vez (multipart). Acá se busca la versión en texto; si solo hay HTML,
- * se le quitan las etiquetas.
+ * POR QUÉ HACÍA FALTA
+ * La versión anterior solo miraba UN nivel de "boundary". Un correo con
+ * adjunto casi siempre viene anidado: un multipart/mixed (el mensaje y
+ * el adjunto) que adentro tiene un multipart/alternative (texto plano y
+ * HTML del mensaje). A ese primer nivel no hay texto ni HTML directo, así
+ * que la versión vieja no encontraba nada y mostraba el MIME crudo — el
+ * "código" que se veía en vez del correo.
  *
- * @param string $encabezados
- * @param string $cuerpo
- * @return string
+ * Esta versión se llama a sí misma: cada vez que encuentra un
+ * "multipart/…" baja un nivel más, hasta llegar a las partes de verdad.
+ * De paso arma la ruta de cada parte tal como IMAP la numera (1, 2, 1.1,
+ * 1.2…), que es lo que hace falta para poder pedir un adjunto suelto con
+ * FETCH BODY[esa-ruta] sin tener que bajar el mensaje entero.
+ *
+ * @param string $cabecera Los encabezados de ESTA parte (o del mensaje).
+ * @param string $contenido El contenido crudo de esta parte.
+ * @param string $ruta La ruta MIME acumulada hasta acá ('' en la raíz).
+ * @return array ['texto' => string, 'html' => string, 'adjuntos' => array[]]
  */
-function decodificarCuerpo($encabezados, $cuerpo) {
+function analizarParteMime($cabecera, $contenido, $ruta) {
+    $tipo = '';
+    if (preg_match('/Content-Type:\s*([^;\r\n]+)/i', $cabecera, $m)) {
+        $tipo = strtolower(trim($m[1]));
+    }
 
-    // ¿Viene partido en varios trozos?
-    if (preg_match('/boundary="?([^"\s;]+)"?/i', $encabezados, $m)) {
-        $separador = '--' . $m[1];
-        $trozos    = explode($separador, $cuerpo);
+    /* ─── ES UN CONTENEDOR: bajar un nivel más ─────────────────────── */
+    if (strpos($tipo, 'multipart/') === 0) {
+        if (!preg_match('/boundary="?([^"\s;]+)"?/i', $cabecera, $mb)) {
+            return ['texto' => '', 'html' => '', 'adjuntos' => []];
+        }
+        $separador = '--' . $mb[1];
+        $trozos    = explode($separador, $contenido);
 
-        $mejorTexto = '';
-        $mejorHtml  = '';
+        $texto = '';
+        $html  = '';
+        $adjuntos = [];
+        $indice = 0;
 
         foreach ($trozos as $trozo) {
+            $trozo = ltrim($trozo, "\r\n");
+
+            // El pedazo antes del primer boundary, y el "--" final que
+            // cierra el multipart, no son partes: se saltan.
+            if ($trozo === '' || strpos($trozo, '--') === 0) continue;
+
             $partes = preg_split("/\r?\n\r?\n/", $trozo, 2);
             if (count($partes) < 2) continue;
 
-            $cabecera = $partes[0];
-            $contenido = desarmarCodificacion($cabecera, $partes[1]);
+            $indice++;
+            $subRuta = ($ruta === '') ? (string) $indice : "$ruta.$indice";
 
-            if (stripos($cabecera, 'text/plain') !== false && $mejorTexto === '') {
-                $mejorTexto = $contenido;
-            } elseif (stripos($cabecera, 'text/html') !== false && $mejorHtml === '') {
-                $mejorHtml = $contenido;
-            }
+            $sub = analizarParteMime($partes[0], $partes[1], $subRuta);
+
+            if ($texto === '') $texto = $sub['texto'];
+            if ($html === '')  $html  = $sub['html'];
+            $adjuntos = array_merge($adjuntos, $sub['adjuntos']);
         }
 
-        // Se prefiere el texto plano: es más legible en un teléfono y no
-        // arrastra estilos ni imágenes que no se van a poder mostrar.
-        if ($mejorTexto !== '') return trim($mejorTexto);
-        if ($mejorHtml !== '')  return trim(html_entity_decode(strip_tags($mejorHtml)));
-        return '';
+        return ['texto' => $texto, 'html' => $html, 'adjuntos' => $adjuntos];
     }
 
-    $contenido = desarmarCodificacion($encabezados, $cuerpo);
-
-    if (stripos($encabezados, 'text/html') !== false) {
-        return trim(html_entity_decode(strip_tags($contenido)));
+    /* ─── ES UNA HOJA: texto del mensaje o adjunto ─────────────────── */
+    $nombre = '';
+    if (preg_match('/filename\*?=\s*"?([^"\r\n;]+)"?/i', $cabecera, $mf)) {
+        $nombre = decodificarEncabezado(trim($mf[1]));
+    } elseif (preg_match('/[^-]name="?([^"\r\n;]+)"?/i', $cabecera, $mn)) {
+        $nombre = decodificarEncabezado(trim($mn[1]));
     }
-    return trim($contenido);
+
+    $esAdjunto = $nombre !== ''
+        || preg_match('/Content-Disposition:\s*attachment/i', $cabecera)
+        || (!in_array($tipo, ['text/plain', 'text/html'], true) && $tipo !== '');
+
+    if (!$esAdjunto) {
+        $decodificado = aTextoUtf8($cabecera, desarmarCodificacion($cabecera, $contenido));
+
+        if ($tipo === 'text/html') {
+            return ['texto' => '', 'html' => $decodificado, 'adjuntos' => []];
+        }
+        // Sin Content-Type declarado, se asume texto plano.
+        return ['texto' => $decodificado, 'html' => '', 'adjuntos' => []];
+    }
+
+    if ($nombre === '') $nombre = '(sin nombre)';
+    if ($ruta === '') $ruta = '1';   // mensaje de una sola parte con adjunto raro
+
+    $codificacion = '';
+    if (preg_match('/Content-Transfer-Encoding:\s*([^\r\n;]+)/i', $cabecera, $mc)) {
+        $codificacion = strtolower(trim($mc[1]));
+    }
+
+    return [
+        'texto' => '', 'html' => '',
+        'adjuntos' => [[
+            'ruta'   => $ruta,
+            'nombre' => $nombre,
+            'tipo'   => $tipo !== '' ? $tipo : 'application/octet-stream',
+            // Base64 pesa 4/3 del archivo real; es una estimación, no hace
+            // falta exacta porque solo se muestra como referencia.
+            'tamano' => ($codificacion === 'base64')
+                ? (int) round(strlen($contenido) * 3 / 4)
+                : strlen($contenido),
+        ]],
+    ];
+}
+
+/**
+ * Convierte el texto de una parte a UTF-8 según su charset declarado.
+ *
+ * Antes esto se ignoraba por completo, y de ahí salían los acentos rotos
+ * en correos que no venían en UTF-8 (Outlook y varios webmails todavía
+ * mandan ISO-8859-1 / Windows-1252 en texto plano).
+ *
+ * @param string $cabecera
+ * @param string $texto
+ * @return string
+ */
+function aTextoUtf8($cabecera, $texto) {
+    $charset = 'UTF-8';
+    if (preg_match('/charset="?([^"\r\n;]+)"?/i', $cabecera, $m)) {
+        $charset = trim($m[1]);
+    }
+
+    if (strcasecmp($charset, 'UTF-8') === 0 || strcasecmp($charset, 'US-ASCII') === 0) {
+        return $texto;
+    }
+
+    $convertido = @iconv($charset, 'UTF-8//IGNORE', $texto);
+    return $convertido !== false ? $convertido : $texto;
 }
 
 /**

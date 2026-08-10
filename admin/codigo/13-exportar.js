@@ -89,7 +89,7 @@ function armarCsv(encabezados, filas) {
 }
 
 /**
- * Arma un archivo que Excel abre como planilla.
+ * Arma un archivo que Excel abre como hoja de cálculo.
  *
  * @param {string} titulo
  * @param {Array} bloques - [{ titulo, encabezados, filas }]
@@ -162,7 +162,7 @@ function armarPdf(titulo, bloques) {
   const ventana = window.open('', '_blank');
 
   if (!ventana) {
-    avisar('El navegador bloqueó la ventana. Permití las ventanas emergentes.', true);
+    avisar('El navegador bloqueó la ventana. Permite las ventanas emergentes.', true);
     return;
   }
 

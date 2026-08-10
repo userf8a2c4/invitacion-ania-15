@@ -120,8 +120,8 @@ async function cargarNotas(donde, busca) {
   if (!notas.length) {
     pintarVacio(donde,
       busca ? 'Nada coincide' : 'Todavía no hay notas',
-      busca ? 'Probá con otras palabras.'
-            : 'Anotá lo que no querés que se te olvide.');
+      busca ? 'Prueba con otras palabras.'
+            : 'Anota lo que no quieres que se te olvide.');
     return;
   }
 
@@ -159,7 +159,7 @@ function formularioNota(nota) {
 
   const cuerpo = abrirHoja(nota ? 'Nota' : 'Nueva nota',
     campoTexto({ id: 'not-titulo', rotulo: 'Título', valor: d.titulo,
-                 ayuda: 'Si lo dejás vacío se arma solo con la primera línea.' }) +
+                 ayuda: 'Si lo dejas vacío se arma solo con la primera línea.' }) +
     campoLargo({ id: 'not-cuerpo', rotulo: 'Nota', valor: d.cuerpo }) +
     campoTexto({ id: 'not-etiqueta', rotulo: 'Etiqueta', valor: d.etiqueta,
                  pista: 'Salón, vestido, música…' }) +
@@ -240,7 +240,7 @@ function pintarTareas(donde) {
   if (!tareas.length) {
     donde.innerHTML = '';
     pintarVacio(donde, 'Todavía no hay tareas',
-      'Anotá lo que hay que hacer y quién se encarga.');
+      'Anota lo que hay que hacer y quién se encarga.');
     donde.insertAdjacentHTML('beforeend',
       '<button class="boton boton--principal boton--ancho" id="tarea-nueva" ' +
       'style="margin-top:var(--esp-3)">Nueva tarea</button>');

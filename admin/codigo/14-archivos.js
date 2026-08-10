@@ -277,7 +277,7 @@ async function subirArchivo(archivo, opciones) {
     return true;
 
   } catch (error) {
-    avisar('No se pudo subir. Revisá tu conexión.', true);
+    avisar('No se pudo subir. Revisa tu conexión.', true);
     return false;
   }
 }
@@ -461,7 +461,7 @@ function montarAdjuntos(opciones) {
 
         if (!idActual) return;   // armarCarga() ya avisó qué falta
 
-        avisar('Guardado. Ahora elegí el archivo.');
+        avisar('Guardado. Ahora elige el archivo.');
       }
 
       // El dibujo no pasa por el selector de archivos: abre el lienzo.

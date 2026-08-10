@@ -144,7 +144,7 @@ function pintarListaDeContactos() {
     pintarVacio(lista,
       CONTACTOS.length ? 'Nada coincide' : 'Todavía no hay contactos',
       CONTACTOS.length
-        ? 'Probá con otra búsqueda.'
+        ? 'Prueba con otra búsqueda.'
         : 'Van apareciendo solos a medida que cargues invitados, proveedores y padrinos.');
     return;
   }

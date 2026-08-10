@@ -179,7 +179,7 @@ function abrirEtiquetas() {
 
   const cuerpo = abrirHoja('Cambiar los nombres',
     '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
-      'Escribí cómo preferís que se llame cada cosa. Lo que dejes vacío ' +
+      'Escribe cómo prefieres que se llame cada cosa. Lo que dejes vacío ' +
       'se queda con el nombre de siempre.' +
     '</p>' +
 
