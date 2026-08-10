@@ -150,6 +150,14 @@ $agregarColumna('usuarios', 'puede_ver_dinero',    'TINYINT(1) NOT NULL DEFAULT 
 $agregarColumna('usuarios', 'puede_borrar',        'TINYINT(1) NOT NULL DEFAULT 0');
 $agregarColumna('usuarios', 'puede_crear_cuentas', 'TINYINT(1) NOT NULL DEFAULT 0');
 
+/* La mesa de regalos de Amazon: cargar la lista de deseos una vez y
+   cruzarla después contra los avisos de compra que llegan por correo.
+   Ver codigo/11-vista-evento.js. */
+$agregarColumna('regalos', 'precio', 'DECIMAL(12,2) NOT NULL DEFAULT 0');
+$agregarColumna('regalos', 'enlace', "VARCHAR(500) NOT NULL DEFAULT ''");
+$agregarColumna('regalos', 'comprado_en', 'DATE DEFAULT NULL');
+$agregarColumna('regalos', 'pedido_en_lista', 'TINYINT(1) NOT NULL DEFAULT 0');
+
 
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 

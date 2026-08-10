@@ -134,18 +134,27 @@ $TABLAS = [
         'obligatorio' => 'nombre',
     ],
     'regalos' => [
-        'orden'  => 'agradecido, recibido_en DESC, id DESC',
+        'orden'  => 'pedido_en_lista DESC, agradecido, recibido_en DESC, id DESC',
         'campos' => [
-            'de_parte_de'   => ['texto', 150],
-            'descripcion'   => ['texto', 300],
-            'origen'        => ['opcion', ['amazon','directo','efectivo','otro'], 'directo'],
-            'monto'         => ['monto'],
-            'recibido_en'   => ['fecha'],
-            'agradecido'    => ['booleano'],
-            'correo_origen' => ['texto', 190],
-            'notas'         => ['texto', 2000],
+            'de_parte_de'     => ['texto', 150],
+            'descripcion'     => ['texto', 300],
+            'origen'          => ['opcion', ['amazon','directo','efectivo','otro'], 'directo'],
+            'monto'           => ['monto'],
+            'recibido_en'     => ['fecha'],
+            'agradecido'      => ['booleano'],
+            'correo_origen'   => ['texto', 190],
+            'notas'           => ['texto', 2000],
+            // La mesa de regalos de Amazon (ver el bloque de abajo):
+            // artículos cargados una vez y cruzados contra el correo.
+            'precio'          => ['monto'],
+            'enlace'          => ['texto', 500],
+            'comprado_en'     => ['fecha'],
+            'pedido_en_lista' => ['booleano'],
         ],
-        'obligatorio' => 'de_parte_de',
+        // 'descripcion' y no 'de_parte_de': un artículo recién cargado a
+        // la lista de deseos todavía no tiene quién lo regaló —eso se
+        // sabe después, cuando llega—, pero sí tiene que decir qué es.
+        'obligatorio' => 'descripcion',
     ],
     'foraneos' => [
         'orden'  => 'llega IS NULL, llega, nombre',
