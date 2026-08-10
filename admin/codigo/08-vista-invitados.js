@@ -323,10 +323,10 @@ function pintarListaDeInvitados() {
   if (!visibles.length) {
     if (!INVITADOS.length) {
       pintarVacio(lista, 'Todavía no hay confirmaciones',
-        'Van a aparecer acá en cuanto alguien responda la invitación.');
+        'Van a aparecer aquí en cuanto alguien responda la invitación.');
     } else {
       pintarVacio(lista, 'Nada coincide',
-        'Probá con otra búsqueda o cambiá el filtro.');
+        'Prueba con otra búsqueda o cambia el filtro.');
     }
     ponerTitulo('Gente');
     return;
@@ -463,6 +463,7 @@ function abrirDetalleDeInvitado(id) {
           '</button>' +
         '</div>'
       : '') +
+    (asiste && gente ? '<div id="bloque-acompanantes"></div>' : '') +
     (INVITADOS_EDITABLES
       ? '<div class="acciones">' +
           '<button class="boton boton--peligro" id="borrar-invitado">Borrar</button>' +
@@ -470,6 +471,10 @@ function abrirDetalleDeInvitado(id) {
         '</div>'
       : '')
   );
+
+  if (asiste && gente) {
+    dibujarAcompanantes(fila.id, gente, buscar('#bloque-acompanantes', cuerpo));
+  }
 
   if (asiste) {
     const refrescar = () => { dibujarGente(); ensuciarVistas('resumen', 'evento'); };
@@ -489,7 +494,7 @@ function abrirDetalleDeInvitado(id) {
       try {
         if (!MESAS) MESAS = await traer('mesas.php?accion=todo');
         if (!MESAS.mesas.length) {
-          avisar('Todavía no armaste ninguna mesa. Andá a Evento → Mesas.', true);
+          avisar('Todavía no armaste ninguna mesa. Ve a Evento → Mesas.', true);
           return;
         }
         elegirMesaPara(fila.id, refrescar);
@@ -590,6 +595,167 @@ function abrirFormularioDeInvitado(fila) {
       avisar(esNuevo ? 'Invitado agregado.' : 'Cambios guardados.');
       ensuciarVistas('resumen');
       dibujarGente();
+    } catch (error) {
+      avisar(error.message, true);
+    }
+  });
+}
+
+
+/* ─── 5. LOS NOMBRES DE CADA ACOMPAÑANTE ───────────────────────────── */
+
+/**
+ * Pide y pinta la lista de acompañantes nombrados de una confirmación.
+ *
+ * El número de la confirmación (adultos + niños) sigue mandando: acá
+ * solo se puede nombrar hasta llegar a esa cantidad, nunca de más.
+ *
+ * @param {number} confirmacionId
+ * @param {number} cupo - Cuántas personas declaró la confirmación.
+ * @param {Element} contenedor
+ * @returns {Promise<void>}
+ */
+async function dibujarAcompanantes(confirmacionId, cupo, contenedor) {
+  if (!contenedor) return;
+
+  contenedor.innerHTML = '<div class="esqueleto"></div>';
+
+  let filas;
+  try {
+    const r = await traer('acompanantes.php?accion=listar&confirmacion_id=' + confirmacionId);
+    filas = r.filas || [];
+  } catch (error) {
+    contenedor.innerHTML = '';
+    return; // No es crítico: la confirmación se puede ver igual sin esto.
+  }
+
+  pintarAcompanantes(confirmacionId, cupo, filas, contenedor);
+}
+
+/**
+ * @param {number} confirmacionId
+ * @param {number} cupo
+ * @param {Object[]} filas
+ * @param {Element} contenedor
+ * @returns {void}
+ */
+function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
+  const puedeAgregarMas = filas.length < cupo;
+
+  contenedor.innerHTML =
+    '<p class="detalle__rotulo" style="margin-top:var(--esp-2)">' +
+      'Con nombre (' + filas.length + ' de ' + cupo + ')' +
+    '</p>' +
+    (filas.length
+      ? filas.map(a =>
+          '<div class="fila-adjunto" style="display:flex;align-items:center;' +
+               'justify-content:space-between;padding:var(--esp-1) 0;' +
+               'border-top:1px solid var(--borde)">' +
+            '<span>' + seguro(a.nombre) +
+              (a.alergias ? ' <span style="color:var(--texto-tenue);font-size:.85em">· ' +
+                seguro(a.alergias) + '</span>' : '') +
+            '</span>' +
+            '<button class="boton boton--chico" data-quitar-acomp="' + a.id + '">Quitar</button>' +
+          '</div>'
+        ).join('')
+      : '<p class="vacio__texto" style="padding:var(--esp-1) 0">Todavía nadie tiene nombre.</p>') +
+    (puedeAgregarMas
+      ? '<button class="boton boton--ancho" style="margin-top:var(--esp-1)" ' +
+               'id="agregar-acompanante">Agregar</button>'
+      : '');
+
+  buscarTodos('[data-quitar-acomp]', contenedor).forEach(boton => {
+    boton.addEventListener('click', async () => {
+      if (!confirmarAccion('¿Quitar a esta persona de la lista de nombrados?')) return;
+      try {
+        await mandar('acompanantes.php?accion=borrar', { id: Number(boton.dataset.quitarAcomp) });
+        dibujarAcompanantes(confirmacionId, cupo, contenedor);
+      } catch (error) {
+        avisar(error.message, true);
+      }
+    });
+  });
+
+  const agregar = buscar('#agregar-acompanante', contenedor);
+  if (agregar) {
+    agregar.addEventListener('click', () => {
+      formularioDeAcompanante(confirmacionId, cupo - filas.length, () =>
+        dibujarAcompanantes(confirmacionId, cupo, contenedor)
+      );
+    });
+  }
+}
+
+/**
+ * Formulario para nombrar a un acompañante.
+ *
+ * Si el teléfono soporta la Contact Picker API (Chrome en Android, nada
+ * más — ni iPhone ni computadora la tienen) se ofrece un botón para
+ * traer nombre y teléfono de los contactos en vez de escribirlos. En
+ * todos los demás casos se escribe a mano, que es el camino normal.
+ *
+ * @param {number} confirmacionId
+ * @param {number} cupan Cuántos faltan por nombrar (solo informativo).
+ * @param {Function} alGuardar
+ * @returns {void}
+ */
+function formularioDeAcompanante(confirmacionId, cupan, alGuardar) {
+  const tieneContactPicker =
+    typeof navigator !== 'undefined' && navigator.contacts && navigator.contacts.select;
+
+  const cuerpo = abrirHoja('Agregar acompañante',
+    (tieneContactPicker
+      ? '<button type="button" class="boton boton--ancho" id="acomp-de-contactos" ' +
+               'style="margin-bottom:var(--esp-2)">Traer de mis contactos</button>'
+      : '') +
+    campoTexto({ id: 'acomp-nombre', rotulo: 'Nombre' }) +
+    campoLista({
+      id: 'acomp-tipo', rotulo: 'Tipo', valor: 'adulto',
+      opciones: [
+        { valor: 'adulto', texto: 'Adulto' },
+        { valor: 'nino', texto: 'Niño' },
+      ],
+    }) +
+    campoTexto({ id: 'acomp-telefono', rotulo: 'Teléfono', valor: '' }) +
+    campoTexto({ id: 'acomp-correo', rotulo: 'Correo', tipo: 'email', valor: '' }) +
+    campoTexto({ id: 'acomp-menu', rotulo: 'Menú', valor: '' }) +
+    campoTexto({ id: 'acomp-alergias', rotulo: 'Alergias', valor: '' }) +
+    pieDeFormulario('Agregar')
+  );
+
+  if (tieneContactPicker) {
+    buscar('#acomp-de-contactos', cuerpo).addEventListener('click', async () => {
+      try {
+        const elegidos = await navigator.contacts.select(['name', 'tel'], { multiple: false });
+        if (!elegidos || !elegidos.length) return;
+
+        const c = elegidos[0];
+        if (c.name && c.name[0]) buscar('#acomp-nombre', cuerpo).value = c.name[0];
+        if (c.tel && c.tel[0])   buscar('#acomp-telefono', cuerpo).value = c.tel[0];
+      } catch (error) {
+        // El usuario canceló el selector, o el navegador lo rechazó: no
+        // es un error que valga la pena mostrar, se sigue escribiendo a mano.
+      }
+    });
+  }
+
+  buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
+    const nombre = valorDe('acomp-nombre', cuerpo);
+    if (!nombre) { avisar('Falta el nombre.', true); return; }
+
+    try {
+      await mandar('acompanantes.php?accion=agregar', {
+        confirmacion_id: confirmacionId,
+        nombre:   nombre,
+        tipo:     valorDe('acomp-tipo', cuerpo),
+        telefono: valorDe('acomp-telefono', cuerpo),
+        correo:   valorDe('acomp-correo', cuerpo),
+        menu:     valorDe('acomp-menu', cuerpo),
+        alergias: valorDe('acomp-alergias', cuerpo),
+      });
+      cerrarHoja(true);
+      avisar('Agregado.');
+      alGuardar();
     } catch (error) {
       avisar(error.message, true);
     }
