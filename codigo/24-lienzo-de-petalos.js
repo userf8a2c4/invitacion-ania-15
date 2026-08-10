@@ -45,8 +45,14 @@
 
   if (!USAR_LIENZO) return;
 
-  /* ⚡ DOS LIENZOS, NO TRES — Y EL PORQUÉ, QUE SE COMPROBÓ MIRANDO EL MAPA
-     COMPLETO DE z-index ANTES DE TOCAR NADA.
+  /* ⚡ UN SOLO LIENZO PARA LOS TRES PLANOS — Y EL PORQUÉ.
+
+     Este archivo empezó con tres canvas, bajó a dos (fusionando medio y
+     frente), y un perfil real terminó de decidirlo: con el sobre CERRADO y
+     nada animándose, `Layerize` se comía el 67 % del cuadro, y estos dos
+     lienzos a pantalla completa eran el bloque más caro de toda la escena
+     —más que el resto junto—. Quedaba una sola capa de composición por
+     sacar, y esta es.
 
      El apilado real de la página es este:
 
@@ -56,23 +62,20 @@
          z-4   el nombre "ANIA"   ← no se tapa con nada
          z-50  pétalos FRENTE
 
-     · FONDO no se puede fusionar con nada: el contenido está justo encima
-       de él, y juntarlo con los otros pondría los pétalos de atrás POR
-       DELANTE del texto. Se queda solo.
+     Fusionar FONDO con los otros dos significa que esos pétalos dejan de
+     estar DETRÁS del contenido (z-1) y pasan a estar DELANTE (z-50), igual
+     que ya están los de FRENTE. Parece más arriesgado que fusionar medio
+     con frente, pero no lo es: los de FRENTE miden 36-62 px con opacidad
+     0,70-1 y YA pasan por delante de todo el texto — nunca molestaron. Los
+     de FONDO son los más CHICOS (13-26 px) y los más TENUES (opacidad
+     0,30-0,55) de los tres planos: si los grandes y opacos no estorban la
+     lectura, los chicos y casi transparentes, menos.
 
-     · MEDIO y FRENTE sí, porque entre z-4 y z-50 no hay absolutamente nada
-       más. Lo único que los separaba era el nombre de Ania, y eso se
-       resuelve subiendo el nombre a 51 (ver estilos/04-portada.css).
-
-     Resultado: una capa a pantalla completa menos. En la pantalla objetivo
-     —3305 px de ancho— eso son 2,6 millones de píxeles menos de compositing
-     en cada cuadro, y esta página está limitada por tasa de relleno.
-
-     La profundidad no se pierde: como dice el propio módulo de física, lo
-     que separa un plano de otro es el TAMAÑO y la OPACIDAD, no el apilado. */
+     La profundidad no se pierde por el apilado sino por tamaño y opacidad
+     —el mismo argumento, ya probado, que fusionó medio con frente—: acá
+     se aplica una vez más, a la última capa que quedaba. */
   const LIENZOS = [
-    { contenedor: '#petalos-fondo',  planos: ['fondo'] },
-    { contenedor: '#petalos-frente', planos: ['medio', 'frente'] },
+    { contenedor: '#petalos-frente', planos: ['fondo', 'medio', 'frente'] },
   ];
 
   /** Los mismos tres dibujos de pétalo de siempre, precargados como
@@ -166,19 +169,23 @@
 
   if (!planos.length) { window.LienzoDePetalos.activo = false; return; }
 
-  /* ⚡ #petalos-medio SIGUE EXISTIENDO EN EL HTML PERO YA NO SE USA (ver la
-     nota grande de "POR QUÉ TRES CANVAS Y NO UNO", más arriba: los planos
-     medio y frente comparten canvas desde hace tiempo). El problema es que
-     sigue siendo `position: fixed` a pantalla completa
+  /* ⚡ #petalos-medio Y #petalos-fondo SIGUEN EXISTIENDO EN EL HTML PERO YA
+     NO SE USAN (ver la nota grande de arriba: los tres planos comparten un
+     solo canvas ahora, montado en #petalos-frente). El problema es que
+     ambos siguen siendo `position: fixed` a pantalla completa
      (estilos/10-cursor-y-petalos.css), y el navegador le arma una capa de
-     compositor igual, aunque nunca se dibuje nada adentro. Se oculta acá.
+     compositor a cada uno igual, aunque nunca se dibuje nada adentro. Se
+     ocultan acá, los dos.
 
-     ⚠️ NO SE PUEDE BORRAR DEL <div> EN index.html: 06-petalos-con-fisica.js
-     hace `if (!buscar('#petalos-medio')) return;` — si el elemento no
-     existiera, TODOS los pétalos (no solo los del plano medio) dejarían de
-     crearse. display:none conserva el elemento pero apaga la capa. */
-  const capaMedioSinUso = buscar('#petalos-medio');
-  if (capaMedioSinUso) capaMedioSinUso.style.display = 'none';
+     ⚠️ NO SE PUEDEN BORRAR LOS <div> DE index.html: 06-petalos-con-fisica.js
+     hace `if (!buscar('#petalos-fondo') || !buscar('#petalos-medio') || ...) return;`
+     — si cualquiera de los tres no existiera, TODOS los pétalos (no solo
+     los de ese plano) dejarían de crearse. display:none conserva el
+     elemento pero apaga la capa. */
+  for (const idSinUso of ['#petalos-fondo', '#petalos-medio']) {
+    const capaSinUso = buscar(idSinUso);
+    if (capaSinUso) capaSinUso.style.display = 'none';
+  }
 
   /* ⚡ SE BAJA LA RESOLUCIÓN, IGUAL QUE YA SE HACE CON LA LUZ.
      El comentario que había acá decía que los pétalos "SÍ tienen forma y
