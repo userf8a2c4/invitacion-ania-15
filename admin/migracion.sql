@@ -742,3 +742,31 @@ CREATE TABLE IF NOT EXISTS acomodo_respaldo (
   cuando     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY por_fecha (cuando)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ─────────────────────────────────────────────────────────────────────
+-- LOS NOMBRES DENTRO DE CADA CONFIRMACIÓN
+--
+-- POR QUÉ HACE FALTA
+-- Una confirmación dice "3 adultos y 1 niño" y ahí se queda. Esos cuatro
+-- son personas con nombre, y no saberlo se paga en la puerta (a quién se
+-- deja pasar), en las mesas (sentar personas, no bultos) y en el
+-- banquete (de quién es la alergia).
+--
+-- ES OPCIONAL Y PROGRESIVO A PROPÓSITO
+-- El número de la confirmación sigue mandando: nombrar 0, 2 o los 4 no
+-- lo cambia. confirmaciones.php se encarga de no dejar cargar más
+-- nombres que los que la confirmación declaró.
+CREATE TABLE IF NOT EXISTS acompanantes (
+  id               INT AUTO_INCREMENT PRIMARY KEY,
+  confirmacion_id  INT NOT NULL,
+  nombre           VARCHAR(150) NOT NULL,
+  tipo             ENUM('adulto','nino') NOT NULL DEFAULT 'adulto',
+  telefono         VARCHAR(40) NOT NULL DEFAULT '',
+  correo           VARCHAR(190) NOT NULL DEFAULT '',
+  menu             VARCHAR(120) NOT NULL DEFAULT '',
+  alergias         VARCHAR(200) NOT NULL DEFAULT '',
+  notas            VARCHAR(300) NOT NULL DEFAULT '',
+  creado_en        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_confirmacion (confirmacion_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
