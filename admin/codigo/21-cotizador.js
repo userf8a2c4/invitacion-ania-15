@@ -58,7 +58,7 @@ async function abrirComparador() {
 
   if (!servicios.length) {
     pintarVacio(buscar('#comp-cuerpo', cuerpo), 'Todavía no hay cotizaciones',
-      'Cargá al menos dos del mismo servicio para poder compararlas.');
+      'Carga al menos dos del mismo servicio para poder compararlas.');
     return;
   }
 
@@ -71,7 +71,7 @@ async function abrirComparador() {
 
   buscar('#comp-cuerpo', cuerpo).innerHTML =
     '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
-      '¿Qué querés comparar?</p>' +
+      '¿Qué quieres comparar?</p>' +
     servicios.map(s =>
       '<button class="lista__fila" data-servicio="' + seguro(s.servicio) + '">' +
         '<span class="lista__cuerpo">' +
@@ -282,13 +282,13 @@ function bloqueImpactoEnPresupuesto(cotizaciones) {
   const masBarata = cotizaciones[0];
   const masCara   = cotizaciones[cotizaciones.length - 1];
 
-  /* Solo tiene sentido hablar de "te pasás" si hay un techo puesto. Sin
+  /* Solo tiene sentido hablar de "te pasas" si hay un techo puesto. Sin
      techo, mostrar un porcentaje de nada sería inventar. */
   if (!p.techo) {
     return '<div class="tarjeta">' +
       '<div class="tarjeta__titulo">En el presupuesto</div>' +
-      '<p class="vacio__texto">Llevás ' + seguro(comoDinero(p.gastado, false)) +
-      ' gastados. Poné techos por categoría en Presupuesto para ver si esto ' +
+      '<p class="vacio__texto">Llevas ' + seguro(comoDinero(p.gastado, false)) +
+      ' gastados. Pon techos por categoría en Presupuesto para ver si esto ' +
       'te alcanza.</p></div>';
   }
 
@@ -301,7 +301,7 @@ function bloqueImpactoEnPresupuesto(cotizaciones) {
       '<div class="tarjeta__titulo">En el presupuesto</div>' +
 
       '<div class="comparador__renglon">' +
-        '<span>Llevás gastado</span>' +
+        '<span>Llevas gastado</span>' +
         '<span class="cifra">' + seguro(comoDinero(p.gastado, false)) + '</span>' +
       '</div>' +
       '<div class="comparador__renglon">' +
@@ -327,7 +327,7 @@ function bloqueImpactoEnPresupuesto(cotizaciones) {
 
       (conMasBarata > p.techo
         ? '<p class="aviso-error" style="margin-top:var(--esp-2)">' +
-          'Aun con la más barata te pasás por ' +
+          'Aun con la más barata te pasas por ' +
           seguro(comoDinero(conMasBarata - p.techo, false)) + '.</p>'
         : '<p class="vacio__texto" style="margin-top:var(--esp-1)">' +
           'Con la más barata quedarías al ' + pct + '% del techo.</p>') +
@@ -416,7 +416,7 @@ async function abrirDetalleDeCotizacion(id, volver) {
 
     (datos.items.length
       ? datos.items.map(item => renglonDeCotizacion(item, tipos)).join('')
-      : '<p class="vacio__texto">Todavía no cargaste renglones. Agregá los ' +
+      : '<p class="vacio__texto">Todavía no cargaste renglones. Agrega los ' +
         'extras y lo que ya viene incluido para que el total sea real.</p>') +
 
     '<button class="boton boton--ancho" id="cot-item-nuevo" ' +

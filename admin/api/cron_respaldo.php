@@ -116,7 +116,7 @@ $html = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'></head>
     ($peso KB).</p>
 
     <p style='line-height:1.6;font-size:13px;color:#666;'>
-    <strong>Guardá este correo.</strong> Si algún día se pierde la base de
+    <strong>Guarda este correo.</strong> Si algún día se pierde la base de
     datos, esto es lo que permite recuperar todo. No hace falta que hagas
     nada con el archivo: solo que no borres el correo.</p>
 

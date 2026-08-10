@@ -122,19 +122,19 @@ function partirRespetandoComillas(texto, separador) {
  * @returns {void}
  */
 function abrirImportador() {
-  const cuerpo = abrirHoja('Importar desde una planilla',
+  const cuerpo = abrirHoja('Importar desde una hoja de cálculo',
     '<div class="filtros" style="margin-bottom:var(--esp-2)">' +
       '<button class="filtro activo" data-que="invitados">Invitados</button>' +
       '<button class="filtro" data-que="cotizaciones">Cotizaciones</button>' +
     '</div>' +
 
     '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
-      'En Google Sheets o Excel, seleccioná las filas <strong>incluyendo ' +
-      'la de los títulos</strong>, copiá con Ctrl+C, y pegá acá abajo.' +
+      'En Google Sheets o Excel, selecciona las filas <strong>incluyendo ' +
+      'la de los títulos</strong>, copia con Ctrl+C, y pega aquí abajo.' +
     '</p>' +
 
     '<label class="campo">' +
-      '<span class="campo__rotulo">Pegá acá</span>' +
+      '<span class="campo__rotulo">Pega aquí</span>' +
       '<textarea id="imp-pegado" class="campo__control" style="min-height:150px" ' +
                 'placeholder="Ctrl+V"></textarea>' +
     '</label>' +
@@ -270,7 +270,7 @@ async function analizarLoPegado(cuerpo) {
   const filas = leerPlanillaPegada(texto);
 
   if (filas.length < 2) {
-    donde.innerHTML = '<p class="aviso-error">Pegá al menos la fila de ' +
+    donde.innerHTML = '<p class="aviso-error">Pega al menos la fila de ' +
                       'títulos y una fila de datos.</p>';
     return;
   }
@@ -364,7 +364,7 @@ function pintarVistaPreviaDeImportacion(donde, cuerpo) {
         ? '<p class="vacio__texto" style="margin-top:var(--esp-1)">' +
           'No encontré: ' + seguro(faltantes.join(', ')) + '. ' +
           'Si alguna de esas te importa, agregale el título a la columna ' +
-          'en la planilla y volvé a pegar.</p>'
+          'en la hoja de cálculo y vuelve a pegar.</p>'
         : '') +
     '</div>' +
 
@@ -456,7 +456,7 @@ function pintarPreviaDeCotizaciones(donde, cuerpo, encontradas) {
   if (!encontradas.length) {
     donde.innerHTML =
       '<p class="aviso-error">No encontré precios en lo que pegaste.<br><br>' +
-      'Para una comparativa, pegá el bloque que tenga los nombres de los ' +
+      'Para una comparativa, pega el bloque que tenga los nombres de los ' +
       'salones arriba y la fila de precios debajo.</p>';
     return;
   }

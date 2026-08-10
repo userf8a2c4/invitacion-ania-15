@@ -140,7 +140,7 @@ async function pedir(ruta, opciones) {
      * a algún lado. Con el wifi de un salón que pide contraseña en un
      * portal, o con datos móviles saturados, dice `true` mientras nada
      * funciona. Confiando en él, el rescate no se activaba y el cambio
-     * se perdía con un mensaje de "revisá tu internet".
+     * se perdía con un mensaje de "revisa tu internet".
      *
      * Lo que sí es información honesta es que la petición FALLÓ: se
      * cortó por tiempo o murió en la red. En los dos casos no hay
@@ -177,8 +177,8 @@ async function pedir(ruta, opciones) {
        tiempo, reintentar puede servir; si no hay red, hay que esperar. */
     throw new ErrorDelServidor(
       seAcaboElTiempo
-        ? 'El servidor tardó demasiado. Probá de nuevo.'
-        : 'Sin conexión. Revisá tu internet.',
+        ? 'El servidor tardó demasiado. Prueba de nuevo.'
+        : 'Sin conexión. Revisa tu internet.',
       0
     );
   }
@@ -260,6 +260,6 @@ function mandar(ruta, cuerpo) {
 function manejarSesionVencida() {
   borrarToken();
   if (typeof mostrarPantallaDeEntrada === 'function') {
-    mostrarPantallaDeEntrada('Tu sesión expiró. Volvé a entrar.');
+    mostrarPantallaDeEntrada('Tu sesión expiró. Vuelve a entrar.');
   }
 }

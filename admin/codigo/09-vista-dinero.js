@@ -141,7 +141,7 @@ function sinResultadosDeBusqueda(cuerpo) {
 
   cuerpo.innerHTML = '';
   pintarVacio(cuerpo, 'Nada coincide con "' + BUSQUEDA_DINERO + '"',
-    'Probá con otra palabra, o mirá en otra sección.');
+    'Prueba con otra palabra, o mira en otra sección.');
   return true;
 }
 
@@ -344,7 +344,7 @@ function pintarGastos(cuerpo) {
   if (!gastos.length) {
     cuerpo.innerHTML = '';
     pintarVacio(cuerpo, 'Todavía no hay gastos',
-      'Cargá el primero para empezar a ver el presupuesto.');
+      'Carga el primero para empezar a ver el presupuesto.');
     cuerpo.insertAdjacentHTML('beforeend', botonAgregar('Nuevo gasto'));
   } else {
     cuerpo.innerHTML = gastos.map(gasto => {
@@ -395,7 +395,7 @@ function pintarPagos(cuerpo) {
   if (!pagos.length) {
     cuerpo.innerHTML = '';
     pintarVacio(cuerpo, 'Todavía no hay pagos',
-      'Cargá los anticipos y las fechas límite para que el panel te avise.');
+      'Carga los anticipos y las fechas límite para que el panel te avise.');
     cuerpo.insertAdjacentHTML('beforeend', botonAgregar('Nuevo pago'));
     buscar('#agregar', cuerpo).addEventListener('click', () => formularioPago());
     return;
@@ -474,7 +474,7 @@ function pintarPadrinos(cuerpo) {
     cuerpo.insertAdjacentHTML('beforeend',
       '<div class="tarjeta__titulo">Padrinos' + ayuda('dinero.padrinos') + '</div>');
     pintarVacio(cuerpo, 'Todavía no hay padrinos',
-      'Anotá quién apadrina qué para saber cuánto sale de tu bolsillo de verdad.');
+      'Anota quién apadrina qué para saber cuánto sale de tu bolsillo de verdad.');
     cuerpo.insertAdjacentHTML('beforeend', botonAgregar('Nuevo padrino'));
     buscar('#agregar', cuerpo).addEventListener('click', () => formularioPadrino());
     return;
@@ -584,7 +584,7 @@ function pintarCotizaciones(cuerpo) {
   if (!cotizaciones.length) {
     cuerpo.innerHTML = '';
     pintarVacio(cuerpo, 'Todavía no hay cotizaciones',
-      'Cargá las que vayas pidiendo para compararlas lado a lado antes de contratar.');
+      'Carga las que vayas pidiendo para compararlas lado a lado antes de contratar.');
     cuerpo.insertAdjacentHTML('beforeend', botonAgregar('Nueva cotización'));
     buscar('#agregar', cuerpo).addEventListener('click', () => formularioCotizacion());
     return;
@@ -725,7 +725,7 @@ function engancharFormularioDinero(cuerpo, armarCarga, nombreAccion, existente) 
          Se devuelve 0 para que montarAdjuntos() sepa que no hay dónde
          atarlo y lo diga, en vez de subirlo a un registro inexistente. */
       if (r && r._offline) {
-        avisar('Se guardó sin señal. Podés adjuntar el archivo cuando ' +
+        avisar('Se guardó sin señal. Puedes adjuntar el archivo cuando ' +
                'vuelva la conexión.', true);
         return 0;
       }
@@ -830,7 +830,7 @@ function campoListaAmpliable(opciones) {
   '<div id="' + seguro(opciones.id) + '-nuevo-caja" class="oculto" ' +
        'style="margin-top:calc(var(--esp-3) * -1);margin-bottom:var(--esp-3)">' +
     '<input type="text" id="' + seguro(opciones.id) + '-nuevo" ' +
-           'class="campo__control" placeholder="Escribí el nombre nuevo">' +
+           'class="campo__control" placeholder="Escribe el nombre nuevo">' +
   '</div>';
 }
 
@@ -874,7 +874,7 @@ function formularioCategoria(categoria) {
     campoTexto({ id: 'cat-nombre', rotulo: 'Nombre', valor: d.nombre }) +
     campoTexto({ id: 'cat-techo', rotulo: 'Techo de presupuesto', tipo: 'number',
                  paso: '0.01', valor: d.techo ? desdePesos(d.techo) : '',
-                 ayuda: 'Dejalo en 0 si no querés poner límite.' }) +
+                 ayuda: 'Dejalo en 0 si no quieres poner límite.' }) +
     pieDeFormulario('Guardar', !!categoria)
   );
 
@@ -992,17 +992,17 @@ function formularioPago(pago) {
     if (gastoElegido === '__nuevo__') {
       const nombreNuevo = valorDe('pag-gasto-nuevo', cuerpo);
       if (!nombreNuevo) {
-        avisar('Escribí el nombre del gasto nuevo.', true);
+        avisar('Escribe el nombre del gasto nuevo.', true);
         return null;
       }
       gastoId = '';
       if (!conceptoFinal) conceptoFinal = nombreNuevo;
-      avisar('El pago queda suelto. Creá el gasto desde la pestaña Gastos ' +
-             'si querés vincularlo.');
+      avisar('El pago queda suelto. Crea el gasto desde la pestaña Gastos ' +
+             'si quieres vincularlo.');
     }
 
     if (!conceptoFinal && !gastoId) {
-      avisar('Poné un concepto o elegí a qué gasto pertenece.', true);
+      avisar('Pon un concepto o elige a qué gasto pertenece.', true);
       return null;
     }
 
@@ -1039,7 +1039,7 @@ function formularioPadrino(padrino) {
 
     campoTexto({ id: 'pad-monto', rotulo: 'Monto', tipo: 'number',
                  paso: '0.01', valor: d.monto ? desdePesos(d.monto) : '',
-                 ayuda: 'Si aporta en especie, poné el valor aproximado o dejalo en 0.' }) +
+                 ayuda: 'Si aporta en especie, pon el valor aproximado o dejalo en 0.' }) +
 
     campoLista({ id: 'pad-estado', rotulo: 'En qué va',
                  valor: d.estado || 'hablado',
@@ -1216,7 +1216,7 @@ function formularioCotizacion(cotizacion) {
   const d = cotizacion || {};
   const cuerpo = abrirHoja(cotizacion ? 'Editar cotización' : 'Nueva cotización',
     campoTexto({ id: 'cot-servicio', rotulo: 'Servicio', valor: d.servicio,
-                 ayuda: 'Escribí el mismo nombre en todas las del mismo rubro ' +
+                 ayuda: 'Escribe el mismo nombre en todas las del mismo rubro ' +
                         'para poder compararlas juntas.' }) +
     campoTexto({ id: 'cot-proveedor', rotulo: 'Quién cotiza', valor: d.proveedor }) +
 

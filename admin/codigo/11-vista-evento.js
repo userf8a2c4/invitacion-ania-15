@@ -130,7 +130,7 @@ const SECCIONES = {
     rotulo: 'Corte',
     titulo: 'Chambelanes y damas',
     vacio: ['Todavía no hay corte de honor',
-            'Anotá a los chambelanes y las damas, con su talla.'],
+            'Anota a los chambelanes y las damas, con su talla.'],
     campos: [
       { id: 'nombre',   rotulo: 'Nombre' },
       { id: 'rol',      rotulo: 'Rol', lista: [
@@ -156,7 +156,7 @@ const SECCIONES = {
   ensayos: {
     rotulo: 'Ensayos',
     titulo: 'Ensayos del vals',
-    vacio: ['Todavía no hay ensayos', 'Agendá los ensayos del vals.'],
+    vacio: ['Todavía no hay ensayos', 'Agenda los ensayos del vals.'],
     campos: [
       { id: 'fecha', rotulo: 'Fecha', tipo: 'date' },
       { id: 'hora',  rotulo: 'Hora',  tipo: 'time' },
@@ -196,7 +196,7 @@ const SECCIONES = {
     rotulo: 'Música',
     titulo: 'Canciones',
     vacio: ['Todavía no hay canciones',
-            'El vals, la entrada, el pastel… y las que NO querés que suenen.'],
+            'El vals, la entrada, el pastel… y las que NO quieres que suenen.'],
     campos: [
       { id: 'cancion', rotulo: 'Canción' },
       { id: 'artista', rotulo: 'Artista' },
@@ -267,7 +267,7 @@ const SECCIONES = {
     rotulo: 'Fotos',
     titulo: 'Tomas imprescindibles',
     vacio: ['Todavía no hay lista de tomas',
-            'Las fotos que no se pueden perder. Se la pasás al fotógrafo.'],
+            'Las fotos que no se pueden perder. Se la pasas al fotógrafo.'],
     alternar: 'hecha',
     campos: [
       { id: 'toma',     rotulo: 'Qué foto' },
@@ -286,7 +286,7 @@ const SECCIONES = {
     rotulo: 'Mesas',
     titulo: 'Mesas',
     vacio: ['Todavía no hay mesas',
-            'Creá las mesas y después acomodá a los invitados.'],
+            'Crea las mesas y después acomoda a los invitados.'],
     campos: [
       { id: 'nombre',    rotulo: 'Nombre o número' },
       { id: 'capacidad', rotulo: 'Cuántos caben', tipo: 'number' },
@@ -312,7 +312,7 @@ const SECCIONES = {
     rotulo: 'Regalos',
     titulo: 'Regalos recibidos',
     vacio: ['Todavía no hay regalos',
-            'Anotá lo que llegue para no olvidarte de agradecer.'],
+            'Anota lo que llegue para no olvidarte de agradecer.'],
     alternar: 'agradecido',
     /* Viaja al servidor pero no se muestra: es la huella del correo de
        Amazon del que salió este regalo, y sirve para no volver a
@@ -653,7 +653,7 @@ function engancharMesaDeRegalos(donde) {
 
     const cuerpo = abrirHoja('Compras encontradas',
       '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
-        'Estos correos de Amazon parecen avisos de compra. Tocá uno para ' +
+        'Estos correos de Amazon parecen avisos de compra. Toca uno para ' +
         'darlo de alta como regalo.' +
       '</p>' +
       candidatos.map((c, i) =>

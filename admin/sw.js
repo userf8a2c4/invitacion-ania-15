@@ -26,7 +26,7 @@
 /* ⚠️ SUBÍ ESTE NÚMERO CADA VEZ QUE CAMBIES CÓDIGO DEL PANEL.
    Si no, el teléfono sigue mostrando la copia guardada de la versión
    anterior y parece que el cambio "no se subió". */
-const VERSION = 'ania-admin-v21';
+const VERSION = 'ania-admin-v22';
 
 /* Lo mínimo para que la app arranque sin red. Se guarda al instalar. */
 const ARMAZON = [
@@ -157,7 +157,7 @@ self.addEventListener('push', evento => {
  */
 async function armarYMostrarElAviso(evento) {
   let titulo = 'Ania XV';
-  let cuerpo = 'Tenés algo pendiente.';
+  let cuerpo = 'Tienes algo pendiente.';
 
   /* Si el aviso trajera texto (por si alguna vez se agrega), se usa ese
      y no hace falta preguntar. */

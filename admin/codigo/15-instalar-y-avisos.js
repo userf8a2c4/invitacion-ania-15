@@ -53,7 +53,7 @@ function prepararInstalacion() {
     INVITACION_A_INSTALAR = null;
     const opcion = buscar('#opcion-instalar');
     if (opcion) opcion.classList.add('oculto');
-    avisar('App instalada. Ya la podés abrir desde la pantalla de inicio.');
+    avisar('App instalada. Ya la puedes abrir desde la pantalla de inicio.');
   });
 
   mostrarOpcionDeInstalar();
@@ -97,7 +97,7 @@ async function instalarLaApp() {
 
     avisar(resultado.outcome === 'accepted'
       ? 'Instalando…'
-      : 'No se instaló. Podés hacerlo más tarde desde el menú.');
+      : 'No se instaló. Puedes hacerlo más tarde desde el menú.');
 
     mostrarOpcionDeInstalar();
     return;
@@ -111,18 +111,18 @@ async function instalarLaApp() {
       ? '<p>En iPhone hay que hacerlo a mano, Safari no permite ' +
         'instalarlo desde un botón:</p>' +
         '<ol style="line-height:2;padding-left:20px;color:var(--texto-suave)">' +
-          '<li>Tocá el botón <strong>Compartir</strong> (el cuadradito ' +
+          '<li>Toca el botón <strong>Compartir</strong> (el cuadradito ' +
               'con la flecha hacia arriba, abajo en el centro).</li>' +
-          '<li>Deslizá hacia abajo y elegí <strong>Agregar a inicio</strong>.</li>' +
-          '<li>Tocá <strong>Agregar</strong>.</li>' +
+          '<li>Desliza hacia abajo y elige <strong>Agregar a inicio</strong>.</li>' +
+          '<li>Toca <strong>Agregar</strong>.</li>' +
         '</ol>' +
         '<p class="vacio__texto">Tiene que ser desde Safari. Si estás en ' +
         'Chrome o dentro de otra app, la opción no aparece.</p>'
 
       : '<p>En Android:</p>' +
         '<ol style="line-height:2;padding-left:20px;color:var(--texto-suave)">' +
-          '<li>Tocá el menú del navegador (los tres puntitos, arriba).</li>' +
-          '<li>Elegí <strong>Instalar aplicación</strong> o ' +
+          '<li>Toca el menú del navegador (los tres puntitos, arriba).</li>' +
+          '<li>Elige <strong>Instalar aplicación</strong> o ' +
               '<strong>Agregar a pantalla de inicio</strong>.</li>' +
         '</ol>' +
         '<p class="vacio__texto">Si no aparece la opción, puede que ya ' +
@@ -241,7 +241,7 @@ async function abrirHojaDeAvisos() {
       'Todos los días a la mañana te avisamos de los pagos que vencen en ' +
       'los próximos 3 días, las tareas atrasadas y las fechas que se ' +
       'acercan. El correo llega siempre a info@aniaxv.com; la ' +
-      'notificación al teléfono, solo si la activás acá.' +
+      'notificación al teléfono, solo si la activas aquí.' +
     '</p>' +
 
     (permiso === 'denied'

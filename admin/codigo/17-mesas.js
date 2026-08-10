@@ -15,7 +15,7 @@
    LA COMPUTADORA PROPONE, LA PERSONA DISPONE
    Sentar a alguien a mano es una propuesta, no un candado: el acomodo
    automático puede volver a moverlo. Para trabar una asignación hay que
-   tocar "Fijar acá" a propósito.
+   tocar "Fijar aquí" a propósito.
 
    Antes todo sentado manual quedaba fijado, y después de mover cinco
    personas de prueba el automático ya casi no tenía margen. Además,
@@ -133,7 +133,7 @@ function bloqueDelPlano(mesas) {
         '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
           'Ninguna mesa tiene todavía su lugar en el salón. Con el botón ' +
           'de abajo se crean las catorce del Salón Estrella, cada una en ' +
-          'su sitio, tal como están en la planilla.' +
+          'su sitio, tal como están en la hoja de cálculo.' +
         '</p>' +
         '<button class="boton boton--principal boton--ancho" id="mesa-armar-salon">' +
           'Armar el salón de Alvi' +
@@ -155,7 +155,7 @@ function bloqueDelPlano(mesas) {
          salon.columnas + ',1fr)">' + celdas + '</div>' +
 
     '<p class="vacio__texto" style="text-align:center;margin-bottom:var(--esp-3)">' +
-      'Tocá una mesa para ver quién se sienta ahí.' +
+      'Toca una mesa para ver quién se sienta ahí.' +
     '</p>' +
 
     (sinUbicar.length
@@ -213,7 +213,7 @@ function bloqueResumenDeMesas(r) {
     ? '<p class="aviso-error" style="margin-top:var(--esp-2)">' +
       'Faltan ' + seguro(r.faltan_lugares) + ' lugares: hay ' +
       seguro(r.gente) + ' personas y solo ' + seguro(r.capacidad) +
-      ' sillas. Agregá mesas o subile la capacidad a las que hay.</p>'
+      ' sillas. Agrega mesas o subile la capacidad a las que hay.</p>'
     : '';
 
   return '' +
@@ -398,8 +398,8 @@ function pintarArranqueDeMesas(cuerpo) {
     '<div class="tarjeta">' +
       '<div class="tarjeta__titulo">O crearlas a mano</div>' +
       '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
-        'Si el salón fuera otro: creá todas las mesas de una vez y después ' +
-        'acomodá la gente. Podés cambiar cualquiera después, una por una. ' +
+        'Si el salón fuera otro: crea todas las mesas de una vez y después ' +
+        'acomoda la gente. Puedes cambiar cualquiera después, una por una. ' +
         'Estas nacen sin lugar en el plano; se les puede poner después.' +
       '</p>' +
 
@@ -431,8 +431,8 @@ function pintarArranqueDeMesas(cuerpo) {
     const cuantas = Number(valorDe('lote-cuantas', cuerpo)) || 0;
     const sillas  = Number(valorDe('lote-capacidad', cuerpo)) || 0;
 
-    if (cuantas < 1) { avisar('Poné cuántas mesas.', true); return; }
-    if (sillas < 1)  { avisar('Poné cuántas sillas por mesa.', true); return; }
+    if (cuantas < 1) { avisar('Pon cuántas mesas.', true); return; }
+    if (sillas < 1)  { avisar('Pon cuántas sillas por mesa.', true); return; }
 
     try {
       const r = await mandar('mesas.php?accion=crear_lote', {
@@ -695,7 +695,7 @@ function abrirLaMesa(mesaId, refrescar) {
   buscar('#mesa-editar', cuerpo).addEventListener('click', () => {
     const cruda = (EVENTO && EVENTO.mesas || []).find(m => Number(m.id) === mesaId);
     if (cruda) formularioEvento('mesas', cruda);
-    else avisar('Abrí la sección Mesas de Evento para editarla.', true);
+    else avisar('Abre la sección Mesas de Evento para editarla.', true);
   });
 }
 
@@ -767,7 +767,7 @@ function elegirMesaPara(confirmacionId, refrescar) {
     '<div class="acciones">' +
       (mesaActual
         ? '<button class="boton" id="mesa-fijar">' +
-          (quien.fijada ? 'Dejar que se mueva' : 'Fijar acá') + '</button>' +
+          (quien.fijada ? 'Dejar que se mueva' : 'Fijar aquí') + '</button>' +
           '<button class="boton boton--peligro" id="mesa-quitar">Sacar de la mesa</button>'
         : '') +
     '</div>' +
@@ -985,7 +985,7 @@ function abrirOpcionesDeMesas(refrescar) {
                    rotulo: 'Sentarlo solo apenas confirma',
                    marcado: !!MESAS.auto_al_confirmar }) +
     '<p class="vacio__texto">Busca la mejor mesa respetando su grupo y las ' +
-      'reglas. Si no hay lugar, queda sin mesa y te avisa acá.</p>' +
+      'reglas. Si no hay lugar, queda sin mesa y te avisa aquí.</p>' +
 
     '<div class="tarjeta__titulo" style="margin-top:var(--esp-4)">' +
       'Si algo salió mal' +
@@ -1012,7 +1012,7 @@ function abrirOpcionesDeMesas(refrescar) {
 
   buscar('#gr-crear', cuerpo).addEventListener('click', async () => {
     const nombre = valorDe('gr-nombre', cuerpo);
-    if (!nombre) { avisar('Poné el nombre del grupo.', true); return; }
+    if (!nombre) { avisar('Pon el nombre del grupo.', true); return; }
 
     try {
       await mandar('mesas.php?accion=guardar_grupo', {
