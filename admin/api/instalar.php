@@ -141,6 +141,15 @@ $agregarColumna('mesas', 'prioridad', 'INT NOT NULL DEFAULT 50');
 $agregarColumna('mesas', 'perfil',
                 "ENUM('normal','ninos','mayores') NOT NULL DEFAULT 'normal'");
 
+/* El organigrama: qué perfil se eligió al crear la cuenta (solo para
+   mostrarlo después, no decide nada por su cuenta — ver 01-configuracion.js)
+   y los cuatro permisos que no son una sección del panel. */
+$agregarColumna('usuarios', 'perfil', "VARCHAR(40) NOT NULL DEFAULT ''");
+$agregarColumna('usuarios', 'puede_escanear',      'TINYINT(1) NOT NULL DEFAULT 0');
+$agregarColumna('usuarios', 'puede_ver_dinero',    'TINYINT(1) NOT NULL DEFAULT 0');
+$agregarColumna('usuarios', 'puede_borrar',        'TINYINT(1) NOT NULL DEFAULT 0');
+$agregarColumna('usuarios', 'puede_crear_cuentas', 'TINYINT(1) NOT NULL DEFAULT 0');
+
 
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 
@@ -153,7 +162,7 @@ $tablasEsperadas = [
     'mesas', 'asignacion_mesas', 'grupos_invitados', 'preferencias_invitado',
     'incompatibilidades', 'corte_honor', 'ensayos', 'asistencia_ensayos',
     'regalos', 'foraneos', 'ceremonia', 'requisitos_ceremonia', 'musica',
-    'citas_arreglo', 'tomas_foto', 'acompanantes',
+    'citas_arreglo', 'tomas_foto', 'acompanantes', 'permisos_usuario',
 ];
 
 $faltantes = [];

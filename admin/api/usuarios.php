@@ -83,10 +83,27 @@ switch ($accion) {
     case 'listar':
         exigirMetodo('GET');
         // Nunca se devuelve password_hash, ni siquiera a un admin.
-        responderBien(consultarTodo(
-            'SELECT id, nombre, correo, rol, activo, creado_en
-             FROM usuarios ORDER BY nombre'
-        ));
+        $cuentas = consultarTodo(
+            (hay_columna_usuarios('perfil')
+                ? 'SELECT id, nombre, correo, rol, activo, creado_en,
+                          perfil, puede_escanear, puede_ver_dinero,
+                          puede_borrar, puede_crear_cuentas
+                   FROM usuarios ORDER BY nombre'
+                : 'SELECT id, nombre, correo, rol, activo, creado_en
+                   FROM usuarios ORDER BY nombre')
+        );
+
+        if (existeTabla('permisos_usuario')) {
+            foreach ($cuentas as &$cuenta) {
+                $cuenta['permisos'] = consultarTodo(
+                    'SELECT seccion, nivel FROM permisos_usuario WHERE usuario_id = :u',
+                    [':u' => $cuenta['id']]
+                );
+            }
+            unset($cuenta);
+        }
+
+        responderBien($cuentas);
         break;
 
     case 'crear':
@@ -107,13 +124,19 @@ switch ($accion) {
         $repetido = consultarUno('SELECT id FROM usuarios WHERE correo = :c', [':c' => $correo]);
         if ($repetido) responderMal('Ya hay una cuenta con ese correo.', 409);
 
-        $id = insertar('usuarios', [
+        $campos = [
             'nombre'        => $nombre,
             'correo'        => $correo,
             'password_hash' => hashearContrasena($contrasena),
             'rol'           => $rol,
             'activo'        => 1,
-        ]);
+        ];
+        if (hay_columna_usuarios('perfil')) {
+            $campos += camposDelOrganigrama($datos);
+        }
+
+        $id = insertar('usuarios', $campos);
+        guardarPermisosDeSeccion($id, $datos['permisos'] ?? null);
 
         anotarEnBitacora($yo, 'creó una cuenta', 'usuarios', $id, $correo);
         responderBien(['id' => $id], 201);
@@ -131,6 +154,9 @@ switch ($accion) {
         if (isset($datos['nombre'])) $cambios['nombre'] = campoTexto($datos, 'nombre', 100);
         if (isset($datos['rol']))    $cambios['rol']    = campoOpcion($datos, 'rol', ['admin', 'entrada'], $usuario['rol']);
         if (isset($datos['activo'])) $cambios['activo'] = !empty($datos['activo']) ? 1 : 0;
+        if (hay_columna_usuarios('perfil')) {
+            $cambios += camposDelOrganigrama($datos);
+        }
 
         // Nadie puede quitarse a sí mismo el rol de admin ni desactivarse:
         // si es el único admin, el panel quedaría sin dueño y habría que
@@ -147,6 +173,11 @@ switch ($accion) {
             }
             anotarEnBitacora($yo, 'editó una cuenta', 'usuarios', $id, $usuario['correo']);
         }
+
+        if (array_key_exists('permisos', $datos)) {
+            guardarPermisosDeSeccion($id, $datos['permisos']);
+        }
+
         responderBien(['mensaje' => 'Cuenta actualizada.']);
         break;
 
@@ -198,4 +229,81 @@ switch ($accion) {
 
     default:
         responderMal('Acción desconocida.', 404);
+}
+
+
+/* ─── EL ORGANIGRAMA ──────────────────────────────────────────────────── */
+
+/**
+ * Dice si `usuarios` ya tiene las columnas del organigrama.
+ *
+ * Instalar.php las agrega a una tabla que ya existía; en un servidor que
+ * todavía no corrió esa migración, no están — y este archivo tiene que
+ * poder seguir creando y editando cuentas igual, solo que sin perfil ni
+ * permisos especiales todavía.
+ *
+ * @param string $columna
+ * @return bool
+ */
+function hay_columna_usuarios($columna) {
+    static $columnas = null;
+    if ($columnas === null) $columnas = columnasDe('usuarios');
+    return in_array($columna, $columnas, true);
+}
+
+/**
+ * Saca de lo que mandó la app el perfil y los cuatro permisos
+ * especiales, listos para insertar() o actualizar().
+ *
+ * Solo toca lo que la app mandó explícitamente: no pisa un permiso que
+ * ya estaba con lo que faltaría en un envío parcial.
+ *
+ * @param array $datos
+ * @return array
+ */
+function camposDelOrganigrama($datos) {
+    $campos = [];
+
+    if (array_key_exists('perfil', $datos)) {
+        $campos['perfil'] = campoTexto($datos, 'perfil', 40);
+    }
+
+    $especiales = is_array($datos['especiales'] ?? null) ? $datos['especiales'] : null;
+    if ($especiales !== null) {
+        foreach (['escanear', 'ver_dinero', 'borrar', 'crear_cuentas'] as $clave) {
+            $campos['puede_' . $clave] = in_array($clave, $especiales, true) ? 1 : 0;
+        }
+    }
+
+    return $campos;
+}
+
+/**
+ * Reemplaza los permisos por sección de un usuario.
+ *
+ * Se borran todos y se vuelven a insertar los que vinieron: más simple y
+ * más seguro que calcular un diff, y son pocas filas (una por sección).
+ *
+ * @param int        $usuarioId
+ * @param array|null $permisos [{seccion, nivel}], o null si no se mandó nada.
+ * @return void
+ */
+function guardarPermisosDeSeccion($usuarioId, $permisos) {
+    if ($permisos === null || !existeTabla('permisos_usuario')) return;
+
+    ejecutar('DELETE FROM permisos_usuario WHERE usuario_id = :u', [':u' => $usuarioId]);
+
+    if (!is_array($permisos)) return;
+
+    foreach ($permisos as $fila) {
+        $seccion = preg_replace('/[^a-z_]/', '', (string) ($fila['seccion'] ?? ''));
+        $nivel   = ($fila['nivel'] ?? '') === 'editar' ? 'editar' : 'ver';
+        if ($seccion === '') continue;
+
+        insertar('permisos_usuario', [
+            'usuario_id' => $usuarioId,
+            'seccion'    => $seccion,
+            'nivel'      => $nivel,
+        ]);
+    }
 }

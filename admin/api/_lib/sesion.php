@@ -167,9 +167,23 @@ function usuarioActual() {
     $token = tokenDeLaPeticion();
     if (!$token) return $usuario = null;
 
+    /* Las columnas del organigrama (puede_escanear, puede_ver_dinero…)
+       las agrega instalar.php a una tabla `usuarios` que ya existía. En
+       una instalación que todavía no corrió esa migración no existen
+       todavía, y pedirlas en el SELECT reventaría el login entero — por
+       eso se arman a mano según lo que columnasDe() encuentre. */
+    $colsUsuarios = columnasDe('usuarios');
+    $colsEspeciales = array_values(array_filter(
+        ['perfil', 'puede_escanear', 'puede_ver_dinero', 'puede_borrar', 'puede_crear_cuentas'],
+        function ($c) use ($colsUsuarios) { return in_array($c, $colsUsuarios, true); }
+    ));
+    $selectEspeciales = $colsEspeciales
+        ? ', ' . implode(', ', array_map(function ($c) { return "u.`$c`"; }, $colsEspeciales))
+        : '';
+
     $fila = consultarUno(
         'SELECT s.id AS sesion_id, s.token_hash, s.caduca_en, s.creado_en,
-                u.id, u.nombre, u.correo, u.rol, u.activo
+                u.id, u.nombre, u.correo, u.rol, u.activo' . $selectEspeciales . '
          FROM sesiones s
          JOIN usuarios u ON u.id = s.usuario_id
          WHERE s.token_hash = :h',
@@ -278,6 +292,100 @@ function exigirAdministrador() {
         responderMal('No tienes permiso para hacer esto.', 403);
     }
     return $usuario;
+}
+
+
+/* ─── 2b. EL ORGANIGRAMA: PERMISOS POR SECCIÓN ────────────────────────── */
+
+/*
+   CÓMO FUNCIONA
+
+   El PERFIL (Manager, Banquete, DJ…) es solo una plantilla que vive en
+   codigo/01-configuracion.js: sirve para pre-tildar casillas al crear
+   una cuenta. Lo que de verdad manda acá es la tabla `permisos_usuario`,
+   una fila por sección a la que se le dio 'ver' o 'editar'.
+
+   'admin' pasa todo siempre — es exactamente el mismo comportamiento
+   que ya tenía antes de este mecanismo, no se le agregó ninguna reja
+   nueva a las cuentas que ya funcionaban así.
+
+   CUENTAS 'entrada' YA EXISTENTES, ANTES DE ESTE MECANISMO
+   Hasta acá, cualquier cuenta con sesión (admin o entrada) podía leer y
+   escribir en mesas, invitados, contactos, etc. — la única reja real
+   estaba en dinero, correo y borrar. Si de golpe TODAS las cuentas
+   'entrada' pasaran a necesitar permisos explícitos, una cuenta de
+   entrada que ya está en uso el día de hoy se quedaría afuera de todo
+   sin que nadie lo haya decidido así.
+
+   Por eso: una cuenta 'entrada' SIN ninguna fila en permisos_usuario
+   sigue funcionando exactamente como antes (acceso a las secciones
+   comunes). En cuanto se le asigna un perfil o se le toca una sola
+   casilla desde Ajustes → Cuentas, esa cuenta pasa al modo estricto:
+   de ahí en más solo ve lo que tiene marcado.
+*/
+
+/**
+ * Dice si un usuario tiene, como mínimo, el nivel pedido en una sección.
+ *
+ * @param array  $usuario
+ * @param string $seccion   Ej. 'mesas', 'invitados', 'archivos'…
+ * @param string $nivelMinimo 'ver' o 'editar'.
+ * @return bool
+ */
+function tienePermiso($usuario, $seccion, $nivelMinimo = 'ver') {
+    if (($usuario['rol'] ?? '') === 'admin') return true;
+    if (!existeTabla('permisos_usuario')) return true;   // instalación vieja, sin migrar
+
+    $filas = consultarTodo(
+        'SELECT seccion, nivel FROM permisos_usuario WHERE usuario_id = :u',
+        [':u' => (int) ($usuario['id'] ?? 0)]
+    );
+
+    // Cuenta sin ningún permiso configurado: modo viejo, no se restringe.
+    if (!$filas) return true;
+
+    foreach ($filas as $fila) {
+        if ($fila['seccion'] !== $seccion) continue;
+        if ($fila['nivel'] === 'editar') return true;
+        if ($fila['nivel'] === 'ver' && $nivelMinimo === 'ver') return true;
+    }
+    return false;
+}
+
+/**
+ * Exige el permiso, o corta la petición con 403.
+ *
+ * @param array  $usuario
+ * @param string $seccion
+ * @param string $nivelMinimo
+ * @return array El mismo $usuario, para poder encadenar.
+ */
+function exigirPermiso($usuario, $seccion, $nivelMinimo = 'ver') {
+    if (!tienePermiso($usuario, $seccion, $nivelMinimo)) {
+        responderMal('No tienes permiso para ' .
+            ($nivelMinimo === 'editar' ? 'editar esto.' : 'ver esto.'), 403);
+    }
+    return $usuario;
+}
+
+/**
+ * Los cuatro permisos que no son una sección del panel.
+ *
+ * Mismo criterio que tienePermiso(): admin siempre puede, y una cuenta
+ * sin fila en `usuarios` para esta columna (instalación vieja sin
+ * migrar) no se restringe.
+ *
+ * @param array  $usuario
+ * @param string $clave 'escanear' | 'ver_dinero' | 'borrar' | 'crear_cuentas'
+ * @return bool
+ */
+function tieneEspecial($usuario, $clave) {
+    if (($usuario['rol'] ?? '') === 'admin') return true;
+
+    $columna = 'puede_' . $clave;
+    if (!array_key_exists($columna, $usuario)) return true;
+
+    return (int) $usuario[$columna] === 1;
 }
 
 

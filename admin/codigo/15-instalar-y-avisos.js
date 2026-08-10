@@ -145,35 +145,97 @@ function abrirHojaDeNuevoAdministrador() {
     return;
   }
 
-  const cuerpo = abrirHoja('Agregar administrador',
+  const perfiles   = CONFIGURACION.perfiles || [];
+  const secciones  = CONFIGURACION.seccionesDePermiso || [];
+  const especiales = [
+    ['escanear',      'Puede escanear pases en la puerta'],
+    ['ver_dinero',    'Puede ver el dinero (presupuesto, pagos, cotizaciones)'],
+    ['borrar',        'Puede borrar (no solo editar)'],
+    ['crear_cuentas', 'Puede crear otras cuentas'],
+  ];
+
+  const cuerpo = abrirHoja('Agregar persona al panel',
     campoTexto({ id: 'na-nombre', rotulo: 'Nombre' }) +
     campoTexto({ id: 'na-correo', rotulo: 'Correo', tipo: 'email' }) +
 
-    campoLista({ id: 'na-rol', rotulo: 'Qué va a poder hacer',
-                 valor: 'admin',
+    campoLista({ id: 'na-rol', rotulo: 'Tipo de cuenta',
+                 valor: 'entrada',
                  opciones: [
-                   { valor: 'admin',   texto: 'Todo (administradora)' },
-                   { valor: 'entrada', texto: 'Solo invitados y pases (entrada)' },
+                   { valor: 'admin',   texto: 'Administradora (ve y puede todo)' },
+                   { valor: 'entrada', texto: 'Cuenta con permisos elegidos abajo' },
                  ] }) +
 
     campoTexto({ id: 'na-clave', rotulo: 'Contraseña', tipo: 'password',
-                 ayuda: 'Al menos 10 caracteres. Pasásela por un medio seguro; ' +
+                 ayuda: 'Al menos 10 caracteres. Pásasela por un medio seguro; ' +
                         'esa persona puede cambiarla desde Mi cuenta.' }) +
 
-    '<p class="vacio__texto" style="margin-top:var(--esp-2)">' +
-      'El rol <strong>entrada</strong> sirve para quien reciba a los ' +
-      'invitados el día del evento: ve la lista y los códigos de pase, ' +
-      'pero no el presupuesto ni el correo.' +
-    '</p>' +
+    '<div id="na-organigrama">' +
+      campoLista({ id: 'na-perfil', rotulo: 'Perfil (solo para prellenar, se puede ajustar abajo)',
+                   valor: '',
+                   opciones: [{ valor: '', texto: '— Elegir a mano —' }]
+                     .concat(perfiles.map(p => ({ valor: p.clave, texto: p.nombre + ' · ' + p.quien }))) }) +
+
+      '<p class="detalle__rotulo" style="margin-top:var(--esp-2)">Qué puede ver o editar</p>' +
+      secciones.map(s =>
+        '<div class="campo-par" style="align-items:center;padding:4px 0">' +
+          '<span>' + seguro(s[1]) + '</span>' +
+          campoLista({ id: 'na-sec-' + s[0], rotulo: '', valor: 'nada',
+                       opciones: [
+                         { valor: 'nada',   texto: 'Nada' },
+                         { valor: 'ver',    texto: 'Ver' },
+                         { valor: 'editar', texto: 'Editar' },
+                       ] }) +
+        '</div>'
+      ).join('') +
+
+      '<p class="detalle__rotulo" style="margin-top:var(--esp-2)">Permisos especiales</p>' +
+      especiales.map(e =>
+        '<label style="display:flex;align-items:center;gap:var(--esp-1);padding:4px 0">' +
+          '<input type="checkbox" class="na-especial" value="' + e[0] + '"> ' + seguro(e[1]) +
+        '</label>'
+      ).join('') +
+    '</div>' +
 
     '<button type="button" class="boton boton--principal boton--ancho" ' +
             'id="na-crear" style="margin-top:var(--esp-3)">Crear la cuenta</button>'
   );
 
+  /* El rol 'admin' ya lo puede todo por diseño (exigirAdministrador() en
+     el backend), así que el organigrama de abajo no le pinta nada: para
+     esa cuenta se esconde y no confunde con casillas que no hacen nada. */
+  const organigrama = buscar('#na-organigrama', cuerpo);
+  const rolSelector  = buscar('#na-rol', cuerpo);
+  const actualizarVisibilidad = () => {
+    organigrama.classList.toggle('oculto', rolSelector.value === 'admin');
+  };
+  rolSelector.addEventListener('change', actualizarVisibilidad);
+  actualizarVisibilidad();
+
+  // Elegir un perfil prellena las casillas; se pueden seguir tocando después.
+  buscar('#na-perfil', cuerpo).addEventListener('change', () => {
+    const clave  = valorDe('na-perfil', cuerpo);
+    const perfil = perfiles.find(p => p.clave === clave);
+    if (!perfil) return;
+
+    const permisos = perfil.permisos === 'todo_editar'
+      ? Object.fromEntries(secciones.map(s => [s[0], 'editar']))
+      : (perfil.permisos || {});
+
+    secciones.forEach(s => {
+      const campo = buscar('#na-sec-' + s[0], cuerpo);
+      if (campo) campo.value = permisos[s[0]] || 'nada';
+    });
+
+    buscarTodos('.na-especial', cuerpo).forEach(caja => {
+      caja.checked = (perfil.especiales || []).includes(caja.value);
+    });
+  });
+
   buscar('#na-crear', cuerpo).addEventListener('click', async () => {
     const nombre = valorDe('na-nombre', cuerpo);
     const correo = valorDe('na-correo', cuerpo);
     const clave  = valorDe('na-clave', cuerpo);
+    const rol    = valorDe('na-rol', cuerpo);
 
     if (!nombre) { avisar('Falta el nombre.', true); return; }
     if (!correo || correo.indexOf('@') < 0) {
@@ -185,17 +247,24 @@ function abrirHojaDeNuevoAdministrador() {
       return;
     }
 
+    const carga = { nombre: nombre, correo: correo, contrasena: clave, rol: rol };
+
+    if (rol !== 'admin') {
+      carga.perfil = valorDe('na-perfil', cuerpo);
+      carga.permisos = secciones
+        .map(s => ({ seccion: s[0], nivel: valorDe('na-sec-' + s[0], cuerpo) }))
+        .filter(p => p.nivel !== 'nada');
+      carga.especiales = buscarTodos('.na-especial', cuerpo)
+        .filter(c => c.checked)
+        .map(c => c.value);
+    }
+
     const boton = buscar('#na-crear', cuerpo);
     boton.disabled = true;
     boton.textContent = 'Creando…';
 
     try {
-      await mandar('usuarios.php?accion=crear', {
-        nombre: nombre,
-        correo: correo,
-        contrasena: clave,
-        rol: valorDe('na-rol', cuerpo),
-      });
+      await mandar('usuarios.php?accion=crear', carga);
       cerrarHoja(true);
       avisar('Cuenta creada para ' + nombre + '.');
     } catch (error) {
