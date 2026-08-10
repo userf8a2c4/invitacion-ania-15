@@ -313,6 +313,19 @@ h2 {
   background-size: auto, cover, cover, cover;
   background-position: center, center, center, center;
   background-repeat: repeat, no-repeat, no-repeat, no-repeat;
+
+  /* ⚠️ SIEMPRE PUESTO, SIN CONDICIÓN — Y NO ES UN OLVIDO.
+     Se probó sacarlo en calidad baja (donde el parallax de
+     08-efectos-de-scroll.js ni se ejecuta) para no reservar una capa que
+     "no hace falta". Empeoró: esta capa tiene CUATRO fondos superpuestos,
+     uno con un filtro SVG de turbulencia (el ruido de papel, fusionado acá
+     arriba). Sin `will-change`, el navegador no la cachea como textura
+     propia y la vuelve a PINTAR en cada composición en vez de solo
+     recolocarla — más caro que la capa que se pretendía ahorrar, y le pegó
+     justo a los equipos de calidad baja, que son los que menos margen
+     tienen. La promoción se paga sola: cachear una textura compleja sale
+     más barato que repintarla. */
+  will-change: transform;
 }
 
 
