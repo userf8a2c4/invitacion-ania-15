@@ -180,21 +180,39 @@
   const capaMedioSinUso = buscar('#petalos-medio');
   if (capaMedioSinUso) capaMedioSinUso.style.display = 'none';
 
+  /* ⚡ SE BAJA LA RESOLUCIÓN, IGUAL QUE YA SE HACE CON LA LUZ.
+     El comentario que había acá decía que los pétalos "SÍ tienen forma y
+     borde —a diferencia de la luz— así que no se baja la resolución". Un
+     perfil real lo contradijo: con el sobre CERRADO y nada animándose,
+     `Layerize` se comía el 67 % del cuadro, y estos dos lienzos —a
+     resolución completa, devicePixelRatio hasta 2x, dos canvas a pantalla
+     completa— eran 492 ms (22 %) del perfil con scroll: más que el resto
+     de toda la escena junta.
+
+     El lienzo de luz (codigo/23-lienzo-de-luz.js) lleva rondas dibujando a
+     media resolución (factor 0.5-0.75 según calidad) y a nadie le pareció
+     nunca que la luz se viera peor. Los pétalos son formas chicas (13-62
+     unidades) cayendo en movimiento constante: el mismo margen de sobra
+     aplica. Se copia el mismo criterio, con la misma tabla de factores. */
+  const FACTOR_POR_CALIDAD = { 0: 0.75, 1: 0.6, 2: 0.5 };
+
+  /** Tope de densidad de píxeles, igual que en el lienzo de luz: dibujar al
+   *  doble en una pantalla 2x cuadruplica el relleno para un dibujo que ya
+   *  se ve nítido a densidad 1. */
+  const MAXIMA_DENSIDAD = 1;
+
   let ancho = 0, alto = 0, densidad = 1;
 
   /**
-   * Ajusta los tres canvas al tamaño de la ventana.
-   *
-   * Los pétalos SÍ tienen forma y borde —a diferencia de la luz, que es
-   * una mancha difusa—, así que acá no se baja la resolución: se respeta
-   * la densidad de la pantalla hasta 2x. Bajarla se notaría.
-   *
+   * Ajusta los tres canvas al tamaño de la ventana y a la calidad vigente.
    * @returns {void}
    */
   function ajustarLosLienzos() {
+    const factor = FACTOR_POR_CALIDAD[nivelDeCalidad()] ?? 1;
+    densidad = Math.min(window.devicePixelRatio || 1, MAXIMA_DENSIDAD) * factor;
+
     ancho = window.innerWidth;
     alto  = window.innerHeight;
-    densidad = Math.min(window.devicePixelRatio || 1, 2);
 
     for (const plano of planos) {
       plano.lienzo.width  = Math.max(1, Math.round(ancho * densidad));
@@ -206,6 +224,7 @@
 
   ajustarLosLienzos();
   window.addEventListener('resize', rebotar(ajustarLosLienzos, 200));
+  document.addEventListener('calidad-cambio', () => setTimeout(ajustarLosLienzos, 50));
 
   /**
    * Un cuadro: limpia los tres canvas y estampa cada pétalo donde toca.

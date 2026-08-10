@@ -285,40 +285,34 @@ h2 {
           cada diez minutos: no se anima, no cuesta nada por cuadro.
        2. Un velo negro al 20 % que oscurece el dibujo para que el texto
           resalte.
-       3. El dibujo del fondo. */
+       3. El dibujo del fondo.
+       4. (Y una cuarta, el ruido, va PRIMERO en la declaración real de
+          abajo — ver la nota grande ahí mismo.) */
+  /* ⚡ EL RUIDO DE PAPEL ANTIGUO SE MUDÓ ACÁ ADENTRO (era `body::before`,
+     una capa `fixed` a pantalla completa aparte). Va PRIMERO en la lista de
+     `background-image` para quedar arriba del dibujo ornamental —en CSS,
+     la primera capa es la más cercana a quien mira—, y con su propio
+     tamaño y repetición: `background-size`/`background-repeat` de acá
+     abajo son listas, y se emparejan EN ORDEN con `background-image`. El
+     ruido tiene que repetirse en mosaico (`repeat`, tamaño natural); el
+     resto sigue cubriendo a pantalla completa (`cover`, `no-repeat`), tal
+     cual estaba.
+
+     Fusionarlo acá quita una capa entera de compositor a pantalla completa
+     sin cambiar un solo píxel del resultado: el ruido queda exactamente en
+     el mismo lugar de la pila (por encima de este fondo, por debajo de
+     absolutamente todo el contenido), solo que ahora es parte de la MISMA
+     capa en vez de una propia. Un perfil real mostró `Layerize` en 67 %
+     con el sobre cerrado y nada animándose — esta era una de las capas
+     que sobraban. */
   background-image:
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23r)' opacity='0.02'/%3E%3C/svg%3E"),
     var(--velo-de-la-hora, linear-gradient(transparent, transparent)),
     linear-gradient(rgba(0, 0, 0, .2), rgba(0, 0, 0, .2)),
     url('../recursos/fondo-ornamental.svg');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  will-change: transform;   /* aviso al navegador: esto se va a mover */
-}
-
-/* Ruido muy sutil encima de todo: rompe los degradados perfectos y da
-   una textura de papel antiguo. */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;     /* no bloquea clics */
-
-  /* ⚡ SIN `opacity: .5`, Y LA TRANSPARENCIA VA HORNEADA EN EL DIBUJO.
-     Un `opacity` menor que 1 sobre un elemento `position: fixed` que cubre
-     toda la pantalla hace que el navegador le reserve su PROPIA capa de
-     compositor y la mezcle entera en cada cuadro.
-
-     En la pantalla ultrapanorámica de la máquina objetivo eso son 2,6
-     millones de píxeles mezclados por cuadro… para un grano que se ve al
-     2 %. Y esta página está limitada por TASA DE RELLENO: se comprobó que
-     el tiempo por cuadro escala con el ancho de pantalla (1546 px → 31 ms;
-     3305 px → 59 ms).
-
-     La opacidad se pasa al propio SVG (0.04 × 0.5 = 0.02), así el resultado
-     es idéntico y el elemento deja de necesitar capa propia. */
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23r)' opacity='0.02'/%3E%3C/svg%3E");
+  background-size: auto, cover, cover, cover;
+  background-position: center, center, center, center;
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat;
 }
 
 

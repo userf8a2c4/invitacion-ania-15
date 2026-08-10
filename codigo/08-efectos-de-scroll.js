@@ -42,11 +42,30 @@
      casi no se nota (es solo profundidad extra), y se ahorra ese cálculo
      y esa escritura en cada scroll. */
   let calidad = nivelDeCalidad();
+
+  /* ⚡ `will-change: transform` SOLO CUANDO EL PARALLAX DE VERDAD CORRE.
+     Antes esto estaba fijo en el CSS: la capa de fondo (la más grande de
+     toda la web, ~1,5 megapíxeles de textura) reservaba su propia capa de
+     compositor SIEMPRE, incluso en calidad baja, donde el parallax de acá
+     arriba ni se ejecuta. Un perfil real mostró `Layerize` en 67 % con el
+     sobre cerrado y nada animándose: esta era una de las capas que sobraban.
+
+     `will-change` es un aviso, no una decoración: si nunca se va a animar,
+     no hay que pedirla. Se pone recién cuando la calidad deja de ser baja
+     (que es cuando `actualizarEfectos()`, más abajo, empieza a escribirle
+     `transform`), y se saca cuando vuelve a bajar. */
+  function aplicarWillChangeDeFondo() {
+    if (!capaDeFondo) return;
+    capaDeFondo.style.willChange = calidad === CALIDAD_GRAFICA.BAJA ? 'auto' : 'transform';
+  }
+  aplicarWillChangeDeFondo();
+
   document.addEventListener('calidad-cambio', evento => {
     calidad = (evento.detail && evento.detail.calidad) ?? 0;
     // Al degradar, se devuelve el fondo a su lugar natural (sin quedar
     // congelado a mitad de un desplazamiento de parallax).
     if (calidad === CALIDAD_GRAFICA.BAJA && capaDeFondo) capaDeFondo.style.transform = '';
+    aplicarWillChangeDeFondo();
   });
 
   /** Evita hacer cuentas de más: solo una por cuadro de animación. */

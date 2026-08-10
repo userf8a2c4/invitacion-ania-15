@@ -34,11 +34,23 @@
    español: son los que se editan siempre. Este script solo LEE su
    contenido y arma la copia empaquetada; nunca escribe en ellos.
 
-   POR QUÉ NO ESTÁ MINIFICADO
-   Achicar el CSS quitando espacios y comentarios ahorraría algo de peso,
-   pero hacerlo bien requiere un analizador de verdad. El ahorro real acá
-   viene de bajar de 14 peticiones a 1, no de los bytes; y el .htaccess ya
-   comprime con gzip/brotli en el camino.
+   SÍ SE MINIFICA (solo comentarios y espacios, nada más)
+   El paquete sin minificar disparó dos auditorías nuevas de Lighthouse:
+   "Minify CSS" y "Reduce unused CSS" — 181 KB, buena parte comentarios
+   largos en español. Se aplica un minificado CONSERVADOR: se sacan los
+   comentarios de estilo C (barra-asterisco … asterisco-barra) y se
+   colapsa todo el espacio en blanco (saltos de línea incluidos) a un
+   solo espacio.
+
+   Es seguro hacerlo así en CSS —a diferencia de JS, donde un regex casero
+   puede romper un string o una regex literal— porque en CSS el espacio en
+   blanco NUNCA es significativo más allá de separar dos palabras: unir
+   todo en una sola línea no cambia el significado de ninguna regla. El
+   único riesgo real serían strings con espacios múltiples a propósito
+   (`content: "a   b"`), que este proyecto no usa.
+
+   El resultado no se lee, así que no importa que pierda los comentarios:
+   la copia de trabajo son los 14 archivos de estilos/, no esto.
 
    CÓMO SABE QUÉ ARCHIVOS JUNTAR, LA SEGUNDA VEZ EN ADELANTE
    La PRIMERA vez, index.html todavía tiene la lista completa de <link>
@@ -134,7 +146,22 @@ for (const { archivo } of hojasDeEstilo) {
   partes.push(`\n/* ═══ ${archivo} ═══ */\n`, readFileSync(ruta, 'utf8'));
 }
 
-const cssEmpaquetado = partes.join('');
+const cssSinMinificar = partes.join('');
+
+/**
+ * Minificado conservador: solo comentarios y espacio en blanco.
+ * Ver la explicación completa en el encabezado de este archivo.
+ * @param {string} codigo
+ * @returns {string}
+ */
+function minificarCss(codigo) {
+  return codigo
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')   // fuera los comentarios
+    .replace(/\s+/g, ' ')                 // todo el espacio en blanco, uno solo
+    .trim();
+}
+
+const cssEmpaquetado = minificarCss(cssSinMinificar);
 
 /* ─── 3. Versión ───────────────────────────────────────────────────────── */
 let version;
