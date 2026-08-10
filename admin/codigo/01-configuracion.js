@@ -202,6 +202,121 @@ const CONFIGURACION = {
   ],
 
 
+  /* ─── 7b. LAS SECCIONES QUE SE PUEDEN PERMITIR O NO ───────────────── */
+  /* Cada una es algo que un endpoint del panel protege por su cuenta con
+     exigirPermiso() (ver api/_lib/sesion.php). El nombre de acá tiene
+     que coincidir letra por letra con la sección que pide el backend. */
+  seccionesDePermiso: [
+    ['invitados',      'Invitados',              'Confirmaciones y acompañantes'],
+    ['mesas',          'Mesas',                  'El acomodo del salón'],
+    ['regalos',        'Regalos',                'La mesa de regalos'],
+    ['foraneos',       'Foráneos',                'Hospedaje y llegada de quien viene de afuera'],
+    ['contactos',      'Contactos',              'La agenda del evento'],
+    ['planificador',   'Tareas y agenda',        'Pendientes, cronograma y calendario'],
+    ['archivos',       'Archivos',               'Contratos y comprobantes subidos'],
+    ['avisos',         'Avisos',                 'Recordatorios y notificaciones'],
+    ['musica',         'Música',                 'Canciones pedidas y prohibidas'],
+    ['ceremonia',      'Ceremonia',              'Requisitos y datos de la misa'],
+    ['corte_honor',    'Corte de honor',         'Chambelanes, damas y ensayos'],
+    ['citas_arreglo',  'Vestido y arreglo',      'Citas de prueba'],
+  ],
+
+  /* ─── 7c. EL ORGANIGRAMA: PERFILES PARA UNOS XV ─────────────────────── */
+  /*
+     UN PERFIL ES UNA PLANTILLA, NO UNA JAULA.
+     Elegirlo solo PRE-TILDA un conjunto de permisos al crear la cuenta.
+     Después, cada casilla se prende y apaga a mano sin ninguna
+     restricción: "María es del Banquete" deja marcado lo típico, y si
+     además acomoda mesas, se le suma ahí mismo.
+
+     Tres roles genéricos no alcanzan para unos XV: hay como quince
+     trabajos distintos, y cada uno necesita ver cosas distintas. El DJ
+     no tiene nada que hacer con las alergias; el banquete no tiene nada
+     que hacer con la música.
+
+     `permisos`: seccion → 'nada' | 'ver' | 'editar' (lo que no se
+     nombra queda en 'nada'). `especiales`: la lista de los cuatro
+     permisos que no son una sección — 'escanear', 'ver_dinero',
+     'borrar', 'crear_cuentas'.
+  */
+  perfiles: [
+    {
+      clave: 'manager', nombre: 'Manager', quien: 'Lucila, Carlos',
+      permisos: 'todo_editar',
+      especiales: ['escanear', 'ver_dinero', 'borrar', 'crear_cuentas'],
+    },
+    {
+      clave: 'mano_derecha', nombre: 'Mano derecha', quien: 'Hermana, mejor amiga',
+      permisos: 'todo_editar',
+      especiales: ['escanear'],
+    },
+    {
+      clave: 'tesoreria', nombre: 'Tesorería', quien: 'Quien lleva las cuentas',
+      permisos: { contactos: 'editar' },
+      especiales: ['ver_dinero'],
+      // El presupuesto, pagos, proveedores y padrinos ya viven detrás de
+      // exigirAdministrador() en presupuesto.php y cotizador.php — este
+      // perfil no es 'admin', así que hoy solo ve contactos y dinero
+      // donde ya está enganchado. Ver la nota en el plan del Bloque 1.
+    },
+    {
+      clave: 'recepcion', nombre: 'Recepción / puerta', quien: 'Quien recibe el 24',
+      permisos: { invitados: 'ver' },
+      especiales: ['escanear'],
+    },
+    {
+      clave: 'anfitriona_mesas', nombre: 'Anfitriona de mesas', quien: 'Quien acomoda al llegar',
+      permisos: { invitados: 'editar', mesas: 'editar' },
+      especiales: ['escanear'],
+    },
+    {
+      clave: 'regalos', nombre: 'Regalos', quien: 'La tía de la mesa de regalos',
+      permisos: { regalos: 'editar', contactos: 'ver' },
+      especiales: [],
+    },
+    {
+      clave: 'coordinacion_salon', nombre: 'Coordinación del salón', quien: 'El de Alvi',
+      permisos: { planificador: 'ver', mesas: 'ver' },
+      especiales: [],
+    },
+    {
+      clave: 'banquete', nombre: 'Banquete', quien: 'Catering',
+      permisos: { invitados: 'ver' },
+      especiales: [],
+    },
+    {
+      clave: 'musica_dj', nombre: 'Música / DJ', quien: 'El DJ',
+      permisos: { musica: 'editar', planificador: 'ver' },
+      especiales: [],
+    },
+    {
+      clave: 'foto_video', nombre: 'Foto y video', quien: 'Fotógrafo',
+      permisos: { planificador: 'ver', corte_honor: 'ver' },
+      especiales: [],
+    },
+    {
+      clave: 'ceremonia', nombre: 'Ceremonia', quien: 'Quien lleva los papeles',
+      permisos: { ceremonia: 'editar' },
+      especiales: [],
+    },
+    {
+      clave: 'corte_vals', nombre: 'Corte y vals', quien: 'Coreógrafo',
+      permisos: { corte_honor: 'editar' },
+      especiales: [],
+    },
+    {
+      clave: 'vestido_arreglo', nombre: 'Vestido y arreglo', quien: 'Modista, maquilladora',
+      permisos: { citas_arreglo: 'editar' },
+      especiales: [],
+    },
+    {
+      clave: 'foraneos_perfil', nombre: 'Foráneos', quien: 'Quien organiza hospedaje',
+      permisos: { foraneos: 'editar', contactos: 'ver' },
+      especiales: [],
+    },
+  ],
+
+
   /* ─── 8. EL PLANO DEL SALÓN ───────────────────────────────────────── */
   /* La disposición real del Salón Estrella de Alvi Toluca, tal como la
      tiene Lucila en su planilla.

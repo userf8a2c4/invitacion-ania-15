@@ -28,6 +28,7 @@ require_once __DIR__ . '/_lib/responder.php';
 require_once __DIR__ . '/_lib/mesas.php';
 
 $yo     = exigirSesion();
+exigirPermiso($yo, 'mesas', ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' ? 'ver' : 'editar');
 $accion = (string) ($_GET['accion'] ?? 'todo');
 
 

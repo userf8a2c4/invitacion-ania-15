@@ -29,11 +29,13 @@ require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
 
 $yo     = exigirSesion();
+exigirPermiso($yo, 'contactos', 'ver');
 $accion = (string) ($_GET['accion'] ?? 'todos');
 
-/* Quien tenga el rol 'entrada' no ve dinero. Se usa más abajo para
-   esconderle los montos de proveedores y padrinos. */
-$vePlata = ($yo['rol'] ?? '') === 'admin';
+/* Admin siempre ve dinero; una cuenta sin rol admin lo ve solo si tiene
+   el permiso especial 'ver_dinero' marcado (ver Ajustes → Cuentas). Se
+   usa más abajo para esconderle los montos de proveedores y padrinos. */
+$vePlata = tieneEspecial($yo, 'ver_dinero');
 
 
 switch ($accion) {

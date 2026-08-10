@@ -26,7 +26,7 @@
 /* ⚠️ SUBÍ ESTE NÚMERO CADA VEZ QUE CAMBIES CÓDIGO DEL PANEL.
    Si no, el teléfono sigue mostrando la copia guardada de la versión
    anterior y parece que el cambio "no se subió". */
-const VERSION = 'ania-admin-v24';
+const VERSION = 'ania-admin-v25';
 
 /* Lo mínimo para que la app arranque sin red. Se guarda al instalar. */
 const ARMAZON = [

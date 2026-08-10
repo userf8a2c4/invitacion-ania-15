@@ -770,3 +770,24 @@ CREATE TABLE IF NOT EXISTS acompanantes (
   creado_en        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY por_confirmacion (confirmacion_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ─────────────────────────────────────────────────────────────────────
+-- EL ORGANIGRAMA: PERMISOS POR PERSONA
+--
+-- EL PERFIL ES UNA PLANTILLA (vive en codigo/01-configuracion.js, no
+-- acá); LO QUE MANDA DE VERDAD ES ESTA TABLA. Elegir un perfil al crear
+-- la cuenta solo pre-tilda estas filas — después cada casilla se prende
+-- y apaga a mano sin que el perfil original le importe a nadie.
+--
+-- Una fila por cada sección a la que se le dio 'ver' o 'editar'. La
+-- sección que no aparece acá para un usuario se trata como 'nada'.
+CREATE TABLE IF NOT EXISTS permisos_usuario (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id  INT NOT NULL,
+  seccion     VARCHAR(40) NOT NULL,
+  nivel       ENUM('ver','editar') NOT NULL DEFAULT 'ver',
+  UNIQUE KEY una_fila_por_seccion (usuario_id, seccion),
+  CONSTRAINT fk_permisos_usuario
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
