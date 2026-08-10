@@ -289,22 +289,30 @@
   const CADA_CUANTO_REPINTAR = 45;
   let ultimoRepintado = 0;
 
-  function pintarLaLuz(ahora) {
-    /* Sin nadie mirando no se redibuja, pero el lienzo conserva lo último
-       pintado: la escena no se apaga. hayAlgoQueMirar() (02-utilidades.js)
-       cubre los tres casos: sobre todavía cerrado, pestaña de fondo, o
-       animaciones apagadas. */
-    if (!hayAlgoQueMirar()) {
-      requestAnimationFrame(pintarLaLuz);
-      return;
-    }
+  /* ⚠️ SE APAGABAN LAS ANIMACIONES Y LA LUZ SE QUEDABA CONGELADA.
+     hayAlgoQueMirar() agrupa tres motivos bajo un mismo "no dibujes":
+     sobre todavía cerrado, pestaña de fondo, o animaciones apagadas a
+     propósito. Para los dos primeros, dejar el lienzo tal cual estaba es
+     lo correcto —nadie lo está mirando—. Pero con las animaciones recién
+     apagadas, la persona SIGUE mirando la pantalla, y lo que veía era lo
+     último que se alcanzó a dibujar: un haz a mitad de camino, motas
+     dispersas por cualquier lado. Apagar el movimiento debería APAGAR la
+     luz que se mueve, no congelarla en un instante al azar.
 
-    if (ahora - ultimoRepintado < CADA_CUANTO_REPINTAR) {
-      requestAnimationFrame(pintarLaLuz);
-      return;
-    }
-    ultimoRepintado = ahora;
+     La solución: cuando el motivo es específicamente que se apagaron las
+     animaciones, se hace UNA pasada más mostrando solo el resplandor fijo
+     de las velas —la luz de ambiente, que a propósito se mantiene
+     encendida (ver la nota en estilos/01-fundamentos.css: sin ella el
+     fondo queda demasiado oscuro)— sin haces ni motas, que son puro
+     movimiento. Recién ahí se deja de redibujar. */
+  let yaSeDibujoElEstadoQuieto = false;
 
+  /**
+   * Un cuadro completo (o solo la luz fija, si `conMovimiento` es false).
+   * @param {boolean} conMovimiento - false = sin haces ni motas.
+   * @returns {void}
+   */
+  function dibujarUnCuadro(conMovimiento) {
     pincel.setTransform(escalaDelLienzo, 0, 0, escalaDelLienzo, 0, 0);
     pincel.clearRect(0, 0, anchoCss, altoCss);
 
@@ -314,8 +322,9 @@
     pincel.globalCompositeOperation = 'lighter';
 
     /* El polvo se calcula acá, en el mismo bucle: no tiene sentido un
-       requestAnimationFrame aparte para 32 puntitos. */
-    if (window.LienzoDeLuz.animarLasMotas) {
+       requestAnimationFrame aparte para 32 puntitos. Solo hace falta
+       calcularlo si se va a dibujar. */
+    if (conMovimiento && window.LienzoDeLuz.animarLasMotas) {
       window.LienzoDeLuz.animarLasMotas(
         (performance.now() - momentoDeInicio) / 1000,
         anchoCss, altoCss,
@@ -352,39 +361,71 @@
                        f.x - f.radio, y - f.radio, lado, lado);
     }
 
-    /* ── b) LOS HACES DE LOS VENTANALES ──
-       Van en coordenadas de la ventana (su capa era `fixed`), así que no se
-       les resta el scroll. Cada uno se estampa girado sobre su borde
-       superior, que es el mismo `transform-origin: 50% 0` que tenía el CSS:
-       el rayo pivota desde donde entra, no desde su centro. */
-    const haces = window.LienzoDeLuz.haces;
-    for (let i = 0; i < haces.length; i++) {
-      const h = haces[i];
-      if (h.alfa <= 0.004 || h.ancho <= 0) continue;
+    /* ── b) LOS HACES DE LOS VENTANALES Y c) EL POLVO ──
+       Puro movimiento, así que con las animaciones apagadas (conMovimiento
+       = false) se saltean entero: la pasada única del "estado quieto" deja
+       solo el resplandor de las velas de la sección anterior. */
+    if (conMovimiento) {
+      /* Van en coordenadas de la ventana (su capa era `fixed`), así que no
+         se les resta el scroll. Cada uno se estampa girado sobre su borde
+         superior, que es el mismo `transform-origin: 50% 0` que tenía el
+         CSS: el rayo pivota desde donde entra, no desde su centro. */
+      const haces = window.LienzoDeLuz.haces;
+      for (let i = 0; i < haces.length; i++) {
+        const h = haces[i];
+        if (h.alfa <= 0.004 || h.ancho <= 0) continue;
 
-      pincel.globalAlpha = h.alfa > 1 ? 1 : h.alfa;
-      pincel.save();
-      pincel.translate(h.x, h.y);
-      pincel.rotate(h.giro);
-      pincel.drawImage(SELLO_HAZ, -h.ancho / 2, 0, h.ancho, h.alto);
-      pincel.restore();
-    }
+        pincel.globalAlpha = h.alfa > 1 ? 1 : h.alfa;
+        pincel.save();
+        pincel.translate(h.x, h.y);
+        pincel.rotate(h.giro);
+        pincel.drawImage(SELLO_HAZ, -h.ancho / 2, 0, h.ancho, h.alto);
+        pincel.restore();
+      }
 
-    /* ── c) EL POLVO EN SUSPENSIÓN ──
-       También en coordenadas de ventana. Son puntitos: se estampan sin
-       girar y sin más cuentas. */
-    const motas = window.LienzoDeLuz.motas;
-    for (let i = 0; i < motas.length; i++) {
-      const m = motas[i];
-      if (m.alfa <= 0.004) continue;
+      /* También en coordenadas de ventana. Son puntitos: se estampan sin
+         girar y sin más cuentas. */
+      const motas = window.LienzoDeLuz.motas;
+      for (let i = 0; i < motas.length; i++) {
+        const m = motas[i];
+        if (m.alfa <= 0.004) continue;
 
-      pincel.globalAlpha = m.alfa > 1 ? 1 : m.alfa;
-      const lado = m.radio * 2;
-      pincel.drawImage(SELLO_MOTA, m.x - m.radio, m.y - m.radio, lado, lado);
+        pincel.globalAlpha = m.alfa > 1 ? 1 : m.alfa;
+        const lado = m.radio * 2;
+        pincel.drawImage(SELLO_MOTA, m.x - m.radio, m.y - m.radio, lado, lado);
+      }
     }
 
     pincel.globalAlpha = 1;
     pincel.globalCompositeOperation = 'source-over';
+  }
+
+  /**
+   * El bucle: decide CUÁNDO dibujar (o no) y llama a dibujarUnCuadro().
+   * @param {number} ahora - Marca de tiempo del navegador.
+   * @returns {void}
+   */
+  function pintarLaLuz(ahora) {
+    if (!hayAlgoQueMirar()) {
+      /* Con las animaciones apagadas (a diferencia de sobre cerrado o
+         pestaña de fondo) SÍ vale la pena una pasada: deja la luz en el
+         estado quieto correcto en vez de congelada a mitad de movimiento.
+         Una sola vez alcanza — nada vuelve a cambiar mientras siga así. */
+      if (prefiereMenosMovimiento() && !yaSeDibujoElEstadoQuieto) {
+        yaSeDibujoElEstadoQuieto = true;
+        dibujarUnCuadro(false);
+      }
+      requestAnimationFrame(pintarLaLuz);
+      return;
+    }
+    yaSeDibujoElEstadoQuieto = false;
+
+    if (ahora - ultimoRepintado < CADA_CUANTO_REPINTAR) {
+      requestAnimationFrame(pintarLaLuz);
+      return;
+    }
+    ultimoRepintado = ahora;
+    dibujarUnCuadro(true);
 
     requestAnimationFrame(pintarLaLuz);
   }
