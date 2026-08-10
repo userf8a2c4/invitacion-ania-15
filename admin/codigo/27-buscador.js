@@ -8,7 +8,7 @@
 
    POR QUÉ HACÍA FALTA
    Antes había cinco buscadores, cada uno encerrado en su pantalla. El de
-   Presupuesto llegaba a decir "mirá en otra sección" cuando no
+   Presupuesto llegaba a decir "mira en otra sección" cuando no
    encontraba algo: sabía que lo que buscabas podía existir en otro lado
    y aun así te mandaba a buscarlo a mano.
 
@@ -273,7 +273,7 @@ async function abrirBuscadorGlobal() {
     '</div>' +
     '<div id="buscar-resultados">' +
       '<p class="vacio__texto" style="text-align:center;padding:var(--esp-3)">' +
-        'Escribí al menos ' + MINIMO_PARA_BUSCAR + ' letras.' +
+        'Escribe al menos ' + MINIMO_PARA_BUSCAR + ' letras.' +
       '</p>' +
     '</div>');
 
@@ -306,7 +306,7 @@ function pintarResultados(donde, loEscrito) {
   if (paraBuscar(loEscrito).trim().length < MINIMO_PARA_BUSCAR) {
     donde.innerHTML =
       '<p class="vacio__texto" style="text-align:center;padding:var(--esp-3)">' +
-        'Escribí al menos ' + MINIMO_PARA_BUSCAR + ' letras.' +
+        'Escribe al menos ' + MINIMO_PARA_BUSCAR + ' letras.' +
       '</p>';
     return;
   }
@@ -315,7 +315,7 @@ function pintarResultados(donde, loEscrito) {
 
   if (!grupos.length) {
     pintarVacio(donde, 'No encontré nada',
-      'Probá con otra palabra, o con una parte del nombre.');
+      'Prueba con otra palabra, o con una parte del nombre.');
     return;
   }
 

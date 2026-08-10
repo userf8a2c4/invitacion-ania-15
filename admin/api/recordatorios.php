@@ -121,8 +121,8 @@ case 'pendientes':
         $cuantos = (int) ($fila['n'] ?? 0);
         if ($cuantos > 0) {
             $avisos[] = $cuantos === 1
-                ? 'Tenés un pago por vencer'
-                : 'Tenés ' . $cuantos . ' pagos por vencer';
+                ? 'Tienes un pago por vencer'
+                : 'Tienes ' . $cuantos . ' pagos por vencer';
         }
     }
 

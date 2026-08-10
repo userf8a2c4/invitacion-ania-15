@@ -122,7 +122,7 @@ case 'subir':
     }
 
     if ($archivo['size'] > PESO_MAXIMO) {
-        responderMal('El archivo pesa más de 8 MB. Probá con una foto más chica.', 413);
+        responderMal('El archivo pesa más de 8 MB. Prueba con una foto más chica.', 413);
     }
     if ($archivo['size'] === 0) {
         responderMal('El archivo está vacío.', 400);

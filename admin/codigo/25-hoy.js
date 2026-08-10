@@ -272,7 +272,7 @@ async function pintarCronogramaGrande(donde) {
 
   if (!momentos.length) {
     pintarVacio(donde, 'Todavía no hay cronograma',
-      'Armalo desde Evento → El día para tenerlo acá el 24.');
+      'Armalo desde Evento → El día para tenerlo aquí el 24.');
     return;
   }
 
@@ -360,7 +360,7 @@ async function pintarBuscadorDePases(donde) {
   if (!INVITADOS.length) {
     caja.innerHTML =
       '<p class="aviso-error">No pude cargar la lista de invitados. ' +
-      'Revisá la conexión y volvé a abrir esta pantalla.</p>';
+      'Revisa la conexión y vuelve a abrir esta pantalla.</p>';
   }
 
   campo.addEventListener('input', () => {
@@ -379,7 +379,7 @@ async function pintarBuscadorDePases(donde) {
       caja.innerHTML = listaAlDia
         ? '<p class="aviso-error">No encontré a nadie con eso.</p>'
         : '<p class="aviso-error">No pude cargar la lista completa, así que ' +
-          'esto puede estar incompleto. No busques por acá para dejar a ' +
+          'esto puede estar incompleto. No busques por aquí para dejar a ' +
           'alguien afuera.</p>';
       return;
     }
@@ -447,8 +447,8 @@ async function abrirCompartir() {
         '</p>'
       : '<div class="tarjeta">' +
           '<p class="vacio__texto">Ningún proveedor tiene asignado qué mandarle. ' +
-          'Abrí un proveedor en Presupuesto y elegí su paquete: después vas a ' +
-          'poder mandarle lo suyo desde acá con un toque.</p>' +
+          'Abre un proveedor en Presupuesto y elige su paquete: después vas a ' +
+          'poder mandarle lo suyo desde aquí con un toque.</p>' +
         '</div>') +
 
     /* ─── Y los paquetes sueltos, para copiar o elegir destinatario ── */

@@ -121,17 +121,17 @@ const CONFIGURACION = {
     duracion: 2600,
 
     frases: [
-      'Cada detalle que elegís hoy va a ser un recuerdo de ella para siempre.',
+      'Cada detalle que eliges hoy va a ser un recuerdo de ella para siempre.',
       'Lucila, lo estás haciendo increíble.',
       'Nadie va a acordarse del presupuesto. Se van a acordar de la noche.',
-      'Un paso por día alcanza. Ya llevás muchos.',
-      'Ania va a mirar todo esto y va a saber cuánto la querés.',
-      'Respirá. Vas bien.',
+      'Un paso por día alcanza. Ya llevas muchos.',
+      'Ania va a mirar todo esto y va a saber cuánto la quieres.',
+      'Respira. Vas bien.',
       'Organizar también es una forma de amar.',
-      'Falta menos de lo que parece, y llevás más de lo que creés.',
+      'Falta menos de lo que parece, y llevas más de lo que crees.',
       'Que la lista no te tape la fiesta: esto también es para disfrutarlo.',
       'Todo lo difícil de hoy se va a ver hermoso el 24 de octubre.',
-      'Sos la razón de que todo esto esté saliendo bien.',
+      'Eres la razón de que todo esto esté saliendo bien.',
       'Los XV son de Ania. El milagro de que ocurran es tuyo.',
     ],
   },
@@ -312,7 +312,7 @@ const CONFIGURACION = {
       titulo: 'El techo de una categoría',
       texto:
         'Es cuánto decidiste que estás dispuesta a gastar en algo: el ' +
-        'límite, no lo que llevás gastado.\n\n' +
+        'límite, no lo que llevas gastado.\n\n' +
         'Sirve para que el panel avise ANTES de pasarse, no después. ' +
         'Al llegar al 85 % la barra se pone amarilla, y si se pasa, roja.\n\n' +
         'Una categoría sin techo no avisa nunca: se puede gastar de más ' +
@@ -336,7 +336,7 @@ const CONFIGURACION = {
       texto:
         'Sentar a alguien a mano es una PROPUESTA: el acomodo automático ' +
         'puede volver a moverlo si le conviene.\n\n' +
-        'Fijar es distinto. Es decir "esta persona se queda acá pase lo ' +
+        'Fijar es distinto. Es decir "esta persona se queda aquí pase lo ' +
         'que pase", y el automático no la toca nunca más. Se ve con un ' +
         'candado al lado del nombre.\n\n' +
         'Se usa para lo que tiene un motivo que la computadora no puede ' +

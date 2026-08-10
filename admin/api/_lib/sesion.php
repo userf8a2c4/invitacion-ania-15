@@ -57,6 +57,18 @@ const INTENTOS_MAXIMOS = 8;
 /** Cuántos minutos dura el freno cuando se agotan los intentos. */
 const MINUTOS_DE_FRENO = 15;
 
+/**
+ * Techo de peticiones por IP a TODA la API del panel, no solo el login.
+ *
+ * Es generoso a propósito: nadie usando el panel a mano llega ni cerca.
+ * Está para frenar un script que martillara la API en bucle, no para
+ * molestar a Lucila un día muy activo.
+ */
+const PETICIONES_API_MAXIMAS = 300;
+
+/** En cuántos minutos se cuentan esas peticiones. */
+const MINUTOS_DE_VENTANA_API = 5;
+
 
 /* ─── 1. CREAR Y CERRAR SESIONES ──────────────────────────────────────── */
 
@@ -208,11 +220,51 @@ function usuarioActual() {
  * @return array El usuario que está usando el panel.
  */
 function exigirSesion() {
+    if (excedioLimiteDeApi()) {
+        responderMal('Demasiadas peticiones seguidas. Espera un momento.', 429);
+    }
+    anotarPeticionDeApi();
+
     $usuario = usuarioActual();
     if (!$usuario) {
-        responderMal('Tu sesión expiró. Volvé a entrar.', 401);
+        responderMal('Tu sesión expiró. Vuelve a entrar.', 401);
     }
     return $usuario;
+}
+
+/**
+ * Dice si esta IP ya pasó el techo de peticiones a la API del panel.
+ *
+ * Reutiliza la tabla `intentos_login` con una marca propia en la columna
+ * `correo` (que en este uso no es un correo, es solo una etiqueta) para
+ * no tener que crear una tabla nueva solo para esto.
+ *
+ * @return bool
+ */
+function excedioLimiteDeApi() {
+    $fila = consultarUno(
+        'SELECT COUNT(*) AS n FROM intentos_login
+         WHERE ip = :ip AND correo = :marca
+           AND cuando > DATE_SUB(NOW(), INTERVAL :min MINUTE)',
+        [':ip' => ipDeLaPeticion(), ':marca' => '__api__', ':min' => MINUTOS_DE_VENTANA_API]
+    );
+    return $fila && (int) $fila['n'] >= PETICIONES_API_MAXIMAS;
+}
+
+/**
+ * Anota una petición a la API para el techo de arriba.
+ *
+ * La limpieza de lo viejo se hace de vez en cuando y no en cada llamada,
+ * para no sumarle una consulta extra a cada petición del panel.
+ *
+ * @return void
+ */
+function anotarPeticionDeApi() {
+    insertar('intentos_login', ['ip' => ipDeLaPeticion(), 'correo' => '__api__']);
+
+    if (random_int(1, 200) === 1) {
+        ejecutar('DELETE FROM intentos_login WHERE cuando < DATE_SUB(NOW(), INTERVAL 1 DAY)');
+    }
 }
 
 /**
@@ -223,7 +275,7 @@ function exigirSesion() {
 function exigirAdministrador() {
     $usuario = exigirSesion();
     if (($usuario['rol'] ?? '') !== 'admin') {
-        responderMal('No tenés permiso para hacer esto.', 403);
+        responderMal('No tienes permiso para hacer esto.', 403);
     }
     return $usuario;
 }

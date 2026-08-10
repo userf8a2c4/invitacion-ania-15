@@ -35,7 +35,7 @@ switch ($accion) {
         // ataque por fuerza bruta no genere consultas.
         if (estaFrenado()) {
             responderMal(
-                'Demasiados intentos fallidos. Esperá ' . MINUTOS_DE_FRENO . ' minutos.',
+                'Demasiados intentos fallidos. Espera ' . MINUTOS_DE_FRENO . ' minutos.',
                 429
             );
         }
@@ -45,7 +45,7 @@ switch ($accion) {
         $contrasena = (string) ($datos['contrasena'] ?? '');
 
         if ($correo === '' || $contrasena === '') {
-            responderMal('Escribí tu correo y tu contraseña.', 400);
+            responderMal('Escribe tu correo y tu contraseña.', 400);
         }
 
         $usuario = consultarUno(
@@ -138,7 +138,7 @@ switch ($accion) {
         cerrarTodasLasSesiones($usuario['id']);
         anotarEnBitacora($usuario, 'cambió su contraseña', 'usuarios', $usuario['id']);
 
-        responderBien(['mensaje' => 'Contraseña cambiada. Volvé a entrar.']);
+        responderBien(['mensaje' => 'Contraseña cambiada. Vuelve a entrar.']);
         break;
 
     default:

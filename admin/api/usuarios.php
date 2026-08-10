@@ -69,7 +69,7 @@ if ($accion === 'primero') {
     ]);
 
     responderBien([
-        'mensaje' => 'Cuenta creada. Ya podés entrar al panel.',
+        'mensaje' => 'Cuenta creada. Ya puedes entrar al panel.',
         'id'      => $id,
     ], 201);
 }
@@ -175,7 +175,7 @@ switch ($accion) {
         $id    = campoEntero($datos, 'id', 1);
 
         if ((int) $id === (int) $yo['id']) {
-            responderMal('No podés borrar tu propia cuenta.', 400);
+            responderMal('No puedes borrar tu propia cuenta.', 400);
         }
 
         // Que no quede el panel sin ningún administrador activo.

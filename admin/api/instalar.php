@@ -182,7 +182,7 @@ responderBien([
     'cuentas_existentes'=> $cuentas,
     'siguiente_paso'    => $listo
         ? ($cuentas > 0
-            ? 'Todo listo. Entrá a https://aniaxv.com/admin/'
+            ? 'Todo listo. Entra a https://aniaxv.com/admin/'
             : 'Las tablas están creadas. Falta crear la primera cuenta.')
-        : 'Faltan tablas. Revisá la lista de fallidas.',
+        : 'Faltan tablas. Revisa la lista de fallidas.',
 ]);
