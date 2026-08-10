@@ -1718,39 +1718,56 @@
                         planta.alturaEnLaPagina < abajoDeLaVentana + 500;
       if (!estaCerca) continue;
 
-      /* ── a) La planta entera se mece con el scroll ── */
-      const respiracion = Math.sin(
-        tiempoTranscurrido * planta.velocidadDeRespiracion + planta.faseDeRespiracion
-      ) * planta.amplitudDeRespiracion;
+      /* ── a) La planta entera se mece con el scroll ──
+         ⚡ TAMBIÉN ATENUADO POR CALIDAD, igual que el resorte de los nudos
+         de acá abajo (mismo `tocaActualizarElResorte`). Antes este bloque
+         corría en TODOS los cuadros sin excepción, el único punto de toda
+         la escena que no respetaba el nivel de calidad: con 22 plantas
+         cerca de la pantalla, eran 22 senos + 22 comparaciones + hasta 22
+         escrituras de `style.transform` por cuadro, en calidad baja
+         exactamente igual que en alta.
 
-      const inclinacionDestino = limitar(
-        -velocidadDelScroll * GRADOS_POR_VELOCIDAD * planta.sensibilidad,
-        -INCLINACION_MAXIMA,
-        INCLINACION_MAXIMA
-      ) + respiracion;
+         Se agrupa con el mismo `if` que ya usan los nudos por el mismo
+         motivo que ellos: `tiempoTranscurrido` sigue avanzando con el
+         tiempo real en CADA cuadro (se actualiza más arriba, fuera de este
+         bucle), así que la fase de la respiración no se atrasa aunque el
+         resorte solo converja cada 2 o 3 cuadros — es el mismo criterio ya
+         en uso, no uno nuevo. */
+      if (tocaActualizarElResorte) {
+        const respiracion = Math.sin(
+          tiempoTranscurrido * planta.velocidadDeRespiracion + planta.faseDeRespiracion
+        ) * planta.amplitudDeRespiracion;
 
-      const aceleracion =
-        (inclinacionDestino - planta.inclinacion) * planta.rigidez -
-        planta.velocidadDeLaInclinacion * planta.amortiguacion;
+        const inclinacionDestino = limitar(
+          -velocidadDelScroll * GRADOS_POR_VELOCIDAD * planta.sensibilidad,
+          -INCLINACION_MAXIMA,
+          INCLINACION_MAXIMA
+        ) + respiracion;
 
-      planta.velocidadDeLaInclinacion += aceleracion;
-      planta.inclinacion += planta.velocidadDeLaInclinacion;
+        const aceleracion =
+          (inclinacionDestino - planta.inclinacion) * planta.rigidez -
+          planta.velocidadDeLaInclinacion * planta.amortiguacion;
 
-      /* ⚡ Solo se escribe si el ángulo cambió, Y SE COMPARA CON ENTEROS.
-         Antes esto hacía `inclinacion.toFixed(2)` para comparar, y ahí
-         estaba un error grande: toFixed() FABRICA UN STRING cada vez que se
-         llama, incluso cuando después no se escribe nada. Entre plantas,
-         nudos, flores y el relicario eran ~200 cadenas por cuadro —unas
-         12.000 por segundo— que iban derechas al recolector de basura. En el
-         perfil, "Major GC" figuraba con el 23 % del tiempo.
+        planta.velocidadDeLaInclinacion += aceleracion;
+        planta.inclinacion += planta.velocidadDeLaInclinacion;
 
-         Redondear a centésimas de grado con Math.round da un ENTERO, que se
-         compara sin reservar memoria. El string se arma solo cuando de
-         verdad hay algo nuevo que escribir. Mismo resultado en pantalla. */
-      const giroDeLaPlanta = Math.round(planta.inclinacion * 100);
-      if (giroDeLaPlanta !== planta.ultimoGiroEscrito) {
-        planta.ultimoGiroEscrito = giroDeLaPlanta;
-        planta.elemento.style.transform = `rotate(${giroDeLaPlanta / 100}deg)`;
+        /* ⚡ Solo se escribe si el ángulo cambió, Y SE COMPARA CON ENTEROS.
+           Antes esto hacía `inclinacion.toFixed(2)` para comparar, y ahí
+           estaba un error grande: toFixed() FABRICA UN STRING cada vez que
+           se llama, incluso cuando después no se escribe nada. Entre
+           plantas, nudos, flores y el relicario eran ~200 cadenas por
+           cuadro —unas 12.000 por segundo— que iban derechas al recolector
+           de basura. En el perfil, "Major GC" figuraba con el 23 % del
+           tiempo.
+
+           Redondear a centésimas de grado con Math.round da un ENTERO, que
+           se compara sin reservar memoria. El string se arma solo cuando de
+           verdad hay algo nuevo que escribir. Mismo resultado en pantalla. */
+        const giroDeLaPlanta = Math.round(planta.inclinacion * 100);
+        if (giroDeLaPlanta !== planta.ultimoGiroEscrito) {
+          planta.ultimoGiroEscrito = giroDeLaPlanta;
+          planta.elemento.style.transform = `rotate(${giroDeLaPlanta / 100}deg)`;
+        }
       }
 
       /* ── b) EL TALLO SE DOBLA ──
