@@ -152,24 +152,22 @@
         href="recursos/tipografias/im-fell-english-400-normal-latin.woff2">
 
   <!-- ═══ ESTILOS ═════════════════════════════════════════════════════
-       Se cargan en orden numérico. El orden IMPORTA: si dos archivos
-       dicen cosas distintas sobre lo mismo, gana el que va último.
-       00-tipografias va primero: declara las fuentes que el resto usa.
+       Los 14 archivos de estilos/ (00-tipografias a 13-preguntas) van
+       empaquetados en uno solo: menos peticiones al servidor, más rápido
+       en celular. Los originales siguen en estilos/, comentados en
+       español y son los que hay que editar — este archivo se regenera
+       corriendo `node herramientas/empaquetar.mjs` antes de subir.
+       Ese script respeta el orden con el que se cargaban antes (importa:
+       si dos archivos dicen cosas distintas sobre lo mismo, gana el que
+       iba último; 00-tipografias sigue yendo primero).
   ═══════════════════════════════════════════════════════════════════ -->
-  <link rel="stylesheet" href="estilos/00-tipografias.css?v=45">
-  <link rel="stylesheet" href="estilos/01-fundamentos.css?v=45">
-  <link rel="stylesheet" href="estilos/02-marco-victoriano.css?v=45">
-  <link rel="stylesheet" href="estilos/03-sobre-de-apertura.css?v=45">
-  <link rel="stylesheet" href="estilos/04-portada.css?v=45">
-  <link rel="stylesheet" href="estilos/05-cuenta-regresiva.css?v=45">
-  <link rel="stylesheet" href="estilos/06-secciones.css?v=45">
-  <link rel="stylesheet" href="estilos/07-formulario.css?v=45">
-  <link rel="stylesheet" href="estilos/08-pase-de-acceso.css?v=45">
-  <link rel="stylesheet" href="estilos/09-reproductor.css?v=45">
-  <link rel="stylesheet" href="estilos/10-cursor-y-petalos.css?v=45">
-  <link rel="stylesheet" href="estilos/12-haces-de-luz.css?v=45">
-  <link rel="stylesheet" href="estilos/11-responsivo.css?v=45">
-  <link rel="stylesheet" href="estilos/13-preguntas-frecuentes.css?v=45">
+  <link rel="stylesheet" href="estilos/_empaquetado.css?v=45">
+
+  
+  
+  
+  
+  
 
   <!-- Bibliotecas externas: envío de correos y generación del código QR.
 
@@ -1998,54 +1996,25 @@
 
 
 <!-- ═══ 14. ARCHIVOS DE CÓDIGO ══════════════════════════════════════
-     Se cargan en orden numérico, y ese orden importa: por ejemplo,
-     01-configuracion.js tiene que estar antes que todos los demás,
-     porque el resto lee los datos de ahí.
+     Los ~25 archivos de codigo/ (01-configuracion a 25-preguntas) van
+     empaquetados en uno solo: 40 peticiones menos entre CSS y JS ayudan
+     mucho en celular. Los originales siguen sueltos en codigo/, comentados
+     en español, y son los que hay que seguir editando — este archivo se
+     regenera corriendo `node herramientas/empaquetar.mjs` antes de subir.
 
-     TODOS LLEVAN "defer", Y ESO NO ROMPE EL ORDEN.
-     Es la confusión habitual con este atributo: "defer" NO significa "cada
-     uno cuando pueda". Significa "descargalos en paralelo mientras seguís
-     armando la página, y después ejecutalos TODOS EN EL ORDEN EN QUE ESTÁN
-     ESCRITOS". O sea que 01 sigue corriendo antes que 02, y se respetan los
-     dos órdenes críticos que están explicados más abajo (el 24 antes del 06,
-     y el 23 antes del 14, 18 y 19).
+     Ese script respeta el orden con el que se cargaban antes (importa: por
+     ejemplo 01-configuracion tiene que ir antes que todos, porque el resto
+     lee los datos de ahí; 24-lienzo-de-petalos antes que 06; 23-lienzo-de-luz
+     antes que 14, 18 y 19 — cada uno le pregunta al arrancar si debe crear
+     elementos o solo publicar números, y si el lienzo cargara después ya
+     habrían decidido que no hay lienzo).
 
-     Lo que se gana: sin "defer" el navegador tiene que frenar, bajar y
-     ejecutar cada archivo antes de terminar de armar la página. Son 420 KB
-     de código haciendo esperar al dibujo. Con "defer" la página se pinta
-     primero y el código llega enseguida después.
+     Antes cada archivo era un <script defer> aparte. "defer" no cambia
+     con el empaquetado: sigue significando "bajalo en paralelo mientras se
+     arma la página, y ejecutalo recién cuando el HTML ya está listo" — acá
+     simplemente hay uno solo para diferir en vez de veinticinco.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/01-configuracion.js?v=45"></script>
-<script defer src="codigo/02-utilidades.js?v=45"></script>
-<script defer src="codigo/03-sobre-de-apertura.js?v=45"></script>
-<script defer src="codigo/04-invitado-personalizado.js?v=45"></script>
-<script defer src="codigo/05-cursor-personalizado.js?v=45"></script>
-<!-- EL LIENZO DE PÉTALOS. Tres <canvas>, uno por plano de profundidad, en
-     vez de 29 divs. Va ANTES que 06-petalos-con-fisica.js porque ese
-     archivo le pregunta al arrancar si debe crear elementos o solo números.
-     Con  ?petalos=dom  vuelve el sistema de divs. -->
-<script defer src="codigo/24-lienzo-de-petalos.js?v=45"></script>
-<script defer src="codigo/06-petalos-con-fisica.js?v=45"></script>
-<script defer src="codigo/07-marco-y-enredaderas.js?v=45"></script>
-<script defer src="codigo/08-efectos-de-scroll.js?v=45"></script>
-<script defer src="codigo/09-cuenta-regresiva.js?v=45"></script>
-<script defer src="codigo/10-reproductor-de-musica.js?v=45"></script>
-<script defer src="codigo/11-formulario-confirmacion.js?v=45"></script>
-<script defer src="codigo/12-pase-de-acceso.js?v=45"></script>
-<script defer src="codigo/13-agregar-al-calendario.js?v=45"></script>
-<!-- EL LIENZO DE LUZ. Dibuja los tres sistemas de luz —velas, haces y polvo—
-     en un solo <canvas>, en vez de en ~140 elementos repartidos en 10 capas
-     con `mix-blend-mode`, que era lo que se llevaba la mitad de cada cuadro.
-
-     ⚠️ VA ANTES QUE 14, 18 Y 19 A PROPÓSITO: los tres le preguntan al
-     arrancar si deben crear elementos o solo publicar números. Si cargara
-     después, ya habrían decidido y la escena quedaría a oscuras.
-
-     Con  ?luz=dom  en la dirección, este módulo se queda dormido y vuelve el
-     sistema anterior completo, sin tocar código. -->
-<script defer src="codigo/23-lienzo-de-luz.js?v=45"></script>
-<script defer src="codigo/14-haces-de-luz.js?v=45"></script>
-<script defer src="codigo/15-registro-de-confirmaciones.js?v=45"></script>
+<script defer src="codigo/_empaquetado.js?v=45"></script>
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda).
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
      —incluso sobre el sobre de entrada— para que quien tenga un equipo
@@ -2059,23 +2028,6 @@
   </svg>
   <span class="boton-animaciones__texto">Animación</span>
 </button>
-
-<script defer src="codigo/16-volver-arriba.js?v=45"></script>
-<script defer src="codigo/17-joyas-colgantes.js?v=45"></script>
-<script defer src="codigo/18-motas-de-polvo.js?v=45"></script>
-<script defer src="codigo/19-velas.js?v=45"></script>
-<script defer src="codigo/20-boton-de-animaciones.js?v=45"></script>
-<script defer src="codigo/21-monitor-de-rendimiento.js?v=45"></script>
-<!-- Tiñe la luz que entra por los ventanales según la hora del día. Va
-     después de los haces y las motas, porque escribe sobre sus capas. -->
-<script defer src="codigo/22-luz-de-la-hora.js?v=45"></script>
-
-<!-- PREGUNTAS FRECUENTES (el botón "?" de la fila de controles).
-     El 00 tiene solo los datos —fecha, lugar, vestimenta, regalos— y el
-     25 arma el panel leyéndolos. Ese orden importa: si el 25 corriera
-     primero, no encontraría la lista de preguntas y no dibujaría nada. -->
-<script defer src="codigo/00-conocimiento-chatbot.js?v=45"></script>
-<script defer src="codigo/25-preguntas-frecuentes.js?v=45"></script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
      internet y se pueda instalar. Va al final y falla en silencio si el
