@@ -203,7 +203,8 @@ const CONFIGURACION = {
     {
       titulo: 'Del día',
       filas: [
-        ['el-dia', 'Cronograma grande y buscador de pases, para el salón'],
+        ['el-dia',    'Cronograma grande y buscador de pases, para el salón'],
+        ['escanear',  'Leer el QR del pase en la puerta y marcar quién llegó'],
       ],
     },
     {

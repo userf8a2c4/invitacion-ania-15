@@ -217,6 +217,7 @@ function abrirMenuPrincipal() {
 function nombreDeOpcionDeMenu(clave) {
   const nombres = {
     'el-dia':      'Modo día del evento',
+    'escanear':    'Escanear pases',
     'compartir':   'Compartir con proveedores',
     'importar':    'Importar desde una hoja de cálculo',
     'alarmas':     'Alarmas',
@@ -290,6 +291,10 @@ function atenderMenu(opcion) {
 
     case 'colores':
       abrirHojaDePaleta();
+      break;
+
+    case 'escanear':
+      abrirEscaner();
       break;
   }
 }
