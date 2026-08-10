@@ -156,7 +156,7 @@ async function abrirHojaDeBitacora() {
 
     if (!filas.length) {
       pintarVacio(lista, 'Todavía no hay movimientos',
-        'Acá va a quedar registrado cada cambio, con quién lo hizo.');
+        'Aquí va a quedar registrado cada cambio, con quién lo hizo.');
       return;
     }
 
@@ -211,13 +211,13 @@ function abrirHojaDeCuenta() {
     const actual = valorDe('clave-actual', cuerpo);
     const nueva  = valorDe('clave-nueva', cuerpo);
 
-    if (!actual || !nueva) { avisar('Completá los dos campos.', true); return; }
+    if (!actual || !nueva) { avisar('Completa los dos campos.', true); return; }
 
     try {
       await mandar('sesion.php?accion=cambiar', { actual: actual, nueva: nueva });
       cerrarHoja(true);
       borrarToken();
-      mostrarPantallaDeEntrada('Contraseña cambiada. Entrá con la nueva.');
+      mostrarPantallaDeEntrada('Contraseña cambiada. Entra con la nueva.');
     } catch (error) {
       avisar(error.message, true);
     }
@@ -270,6 +270,13 @@ async function encender() {
     await cargarEtiquetas();
     aplicarEtiquetas();
     arrancarLaApp();
+
+    /* La paleta, al revés: NO se espera. Ya se aplicó la del teléfono
+       apenas cargó el script (ver 33-paleta.js), así que la app ya se
+       ve pintada. Esto solo trae una versión más nueva por si Lucila
+       la cambió desde otro teléfono, y se aplica calladamente cuando
+       llegue — no vale la pena demorar el arranque por esto. */
+    sincronizarPaletaConServidor();
   } else {
     mostrarPantallaDeEntrada();
   }

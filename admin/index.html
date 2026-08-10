@@ -224,36 +224,11 @@
   </div>
 </div>
 
-<!-- Menú de los tres puntitos.
-
-     Va en DOS GRUPOS a propósito. Antes eran doce opciones seguidas, y
-     "Cerrar sesión" quedaba a un renglón de "Importar desde una
-     planilla": cosas que se hacen todas las semanas mezcladas con cosas
-     que se tocan una vez al año.
-
-     Arriba lo que se USA (herramientas de trabajo), abajo lo que se
-     CONFIGURA. -->
-<div id="menu" class="menu oculto" role="menu">
-
-  <div class="menu__titulo">Herramientas</div>
-  <button class="menu__opcion" data-menu="el-dia" role="menuitem">Modo día del evento</button>
-  <button class="menu__opcion" data-menu="compartir" role="menuitem">Compartir con proveedores</button>
-  <button class="menu__opcion" data-menu="importar" role="menuitem">Importar desde una hoja de cálculo</button>
-  <button class="menu__opcion" data-menu="alarmas" role="menuitem">Alarmas</button>
-  <button class="menu__opcion" data-menu="bitacora" role="menuitem">Historial de cambios</button>
-
-  <div class="menu__titulo">Ajustes</div>
-  <button class="menu__opcion" data-menu="cuenta"  role="menuitem">Mi cuenta</button>
-  <button class="menu__opcion" data-menu="usuarios" role="menuitem">Personas con acceso</button>
-  <button class="menu__opcion" data-menu="nuevo-admin" role="menuitem">Agregar administrador</button>
-  <button class="menu__opcion" data-menu="avisos"  role="menuitem">Avisos y recordatorios</button>
-  <button class="menu__opcion" data-menu="etiquetas" role="menuitem">Cambiar los nombres</button>
-  <!-- El de instalar se esconde solo cuando la app ya está instalada,
-       o cuando el navegador no ofrece instalarla. -->
-  <button class="menu__opcion oculto" data-menu="instalar" id="opcion-instalar"
-          role="menuitem">Instalar en la pantalla de inicio</button>
-  <button class="menu__opcion menu__opcion--peligro" data-menu="salir" role="menuitem">Cerrar sesión</button>
-</div>
+<!-- El menú ahora es una hoja más (ver codigo/05-navegacion.js,
+     abrirMenuPrincipal()), armada desde CONFIGURACION.indiceDelMenu con
+     el mismo patrón que el índice de Evento: grupos con título y una
+     línea que dice qué hace cada opción. Ya no hay HTML fijo acá — el
+     botón de los tres puntitos abre la hoja compartida (#hoja). -->
 
 <!-- El globo de ayuda que se abre al tocar un "?".
 
@@ -280,6 +255,10 @@
      El orden importa: cada archivo usa cosas de los anteriores. -->
 
 <script src="codigo/01-configuracion.js"></script>
+<!-- Va lo antes posible: aplica la paleta guardada en el teléfono apenas
+     carga, para que hasta la pantalla de login se vea con los colores
+     elegidos y no haya un parpadeo al color de fábrica. -->
+<script src="codigo/33-paleta.js"></script>
 <script src="codigo/02-utilidades.js"></script>
 <script src="codigo/03-servidor.js"></script>
 <script src="codigo/04-sesion.js"></script>

@@ -145,31 +145,91 @@ function prepararNavegacion() {
 
   /* ─── El menú de los tres puntitos ─────────────────────────────── */
 
-  const menu  = buscar('#menu');
-  const boton = buscar('#boton-menu');
-
-  boton.addEventListener('click', evento => {
-    evento.stopPropagation();
-    menu.classList.toggle('oculto');
-  });
-
-  // Tocar en cualquier otro lado lo cierra.
-  document.addEventListener('click', () => menu.classList.add('oculto'));
-  menu.addEventListener('click', evento => evento.stopPropagation());
-
-  buscarTodos('.menu__opcion').forEach(opcion => {
-    opcion.addEventListener('click', () => {
-      menu.classList.add('oculto');
-      atenderMenu(opcion.dataset.menu);
-    });
-  });
+  buscar('#boton-menu').addEventListener('click', () => abrirMenuPrincipal());
 
   /* ─── La tecla Escape cierra lo que esté abierto ────────────────── */
   document.addEventListener('keydown', evento => {
     if (evento.key !== 'Escape') return;
-    if (!menu.classList.contains('oculto')) { menu.classList.add('oculto'); return; }
     cerrarHoja();
   });
+}
+
+/**
+ * Abre el menú principal como una hoja, con el mismo patrón que el
+ * índice de Evento: grupos con título y una línea que dice qué hace
+ * cada opción, en vez de un desplegable angosto con doce renglones.
+ *
+ * Antes eran doce opciones apiladas sin más criterio que el orden en
+ * que se fueron agregando. Ahora, además, el menú se acorta solo:
+ * las filas marcadas 'soloAdmin' no aparecen si quien mira no es
+ * administradora, y "Instalar" solo aparece si el teléfono puede.
+ *
+ * @returns {void}
+ */
+function abrirMenuPrincipal() {
+  const esAdmin = USUARIO.rol === 'admin';
+
+  const yaInstalada =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true;
+  const esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const puedeInstalar = !yaInstalada && (!!INVITACION_A_INSTALAR || esIOS);
+
+  const grupos = CONFIGURACION.indiceDelMenu
+    .map(grupo => ({
+      titulo: grupo.titulo,
+      filas: grupo.filas
+        .filter(fila => !fila[2] || esAdmin)                    // soloAdmin
+        .filter(fila => fila[0] !== 'instalar' || puedeInstalar)
+        .map(fila => ({
+          clave: fila[0],
+          nombre: nombreDeOpcionDeMenu(fila[0]),
+          descripcion: fila[1],
+        })),
+    }))
+    .filter(grupo => grupo.filas.length);
+
+  const cuerpo = abrirHoja('Menú', '<div id="indice-menu"></div>' +
+    '<button class="boton boton--peligro boton--ancho" id="menu-salir" ' +
+            'style="margin-top:var(--esp-3)">Cerrar sesión</button>'
+  );
+
+  pintarIndice(buscar('#indice-menu', cuerpo), grupos, clave => {
+    cerrarHoja();
+    atenderMenu(clave);
+  });
+
+  buscar('#menu-salir', cuerpo).addEventListener('click', () => {
+    cerrarHoja();
+    salir();
+  });
+}
+
+/**
+ * El nombre visible de cada opción del menú. Vive separado de
+ * indiceDelMenu porque esa tabla ya usa la primera posición para la
+ * clave y la segunda para la descripción — un tercer texto ahí
+ * hubiera hecho ilegible cada renglón.
+ *
+ * @param {string} clave
+ * @returns {string}
+ */
+function nombreDeOpcionDeMenu(clave) {
+  const nombres = {
+    'el-dia':      'Modo día del evento',
+    'compartir':   'Compartir con proveedores',
+    'importar':    'Importar desde una hoja de cálculo',
+    'alarmas':     'Alarmas',
+    'bitacora':    'Historial de cambios',
+    'cuenta':      'Mi cuenta',
+    'usuarios':    'Personas con acceso',
+    'nuevo-admin': 'Agregar administrador',
+    'avisos':      'Avisos y recordatorios',
+    'etiquetas':   'Cambiar los nombres',
+    'colores':     'Colores del panel',
+    'instalar':    'Instalar en la pantalla de inicio',
+  };
+  return nombres[clave] || clave;
 }
 
 /**
@@ -226,6 +286,10 @@ function atenderMenu(opcion) {
 
     case 'bitacora':
       abrirHojaDeBitacora();
+      break;
+
+    case 'colores':
+      abrirHojaDePaleta();
       break;
   }
 }

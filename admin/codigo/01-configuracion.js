@@ -189,6 +189,47 @@ const CONFIGURACION = {
   ],
 
 
+  /* ─── 6b. EL MENÚ PRINCIPAL ────────────────────────────────────────── */
+  /* Antes eran doce opciones apiladas en un desplegable angosto. Ahora es
+     una hoja como las demás, con el mismo patrón que el índice de Evento
+     (que ya funcionó bien): grupos con título y una línea que dice qué
+     hace cada opción.
+
+     `soloAdmin: true` esconde la fila para una cuenta que no sea admin.
+     Es un filtro grueso por ahora (admin/entrada); cuando el organigrama
+     del Bloque 1 llegue al menú, esto se puede afinar por permiso real
+     de cada sección en vez de por rol. */
+  indiceDelMenu: [
+    {
+      titulo: 'Del día',
+      filas: [
+        ['el-dia', 'Cronograma grande y buscador de pases, para el salón'],
+      ],
+    },
+    {
+      titulo: 'Herramientas',
+      filas: [
+        ['compartir', 'Mandar los datos del evento a un proveedor por WhatsApp'],
+        ['importar',  'Cargar invitados o gastos desde una hoja de cálculo'],
+        ['alarmas',   'Ver y probar los recordatorios activos'],
+        ['bitacora',  'Quién cambió qué y cuándo', true],
+      ],
+    },
+    {
+      titulo: 'Ajustes',
+      filas: [
+        ['cuenta',     'Tu nombre, tu correo y tu contraseña'],
+        ['usuarios',   'Quién más tiene acceso al panel', true],
+        ['nuevo-admin','Agregar a alguien más', true],
+        ['avisos',     'Notificaciones de pagos y fechas en este teléfono'],
+        ['etiquetas',  'Cambiar cómo se llaman las cosas en la app', true],
+        ['colores',    'Elegir la paleta de colores del panel', true],
+        ['instalar',   'Poner el acceso directo en la pantalla de inicio'],
+      ],
+    },
+  ],
+
+
   /* ─── 7. QUÉ ES CADA SECCIÓN DE GENTE ─────────────────────────────── */
   /* Mesas, Regalos y Foráneos viven acá y no en Evento a propósito: son
      cosas sobre PERSONAS. Antes había que saltar de pestaña para ver

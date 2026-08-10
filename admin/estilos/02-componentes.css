@@ -645,55 +645,9 @@ select.campo__control {
 
 
 /* ─── 8. MENÚ ──────────────────────────────────────────────────────── */
-
-.menu {
-  position: fixed;
-  top: calc(var(--alto-encabezado) + var(--seguro-arriba) - 6px);
-  right: var(--esp-2);
-  z-index: 70;
-  min-width: 210px;
-  padding: var(--gota);
-  background: var(--fondo-elevado);
-  border: 1px solid var(--borde);
-  border-radius: var(--redondeo);
-  box-shadow: var(--sombra);
-  animation: aparecer 120ms ease;
-}
-
-.menu__opcion {
-  display: block;
-  width: 100%;
-  min-height: 44px;
-  padding: 0 var(--esp-2);
-  border: 0;
-  background: transparent;
-  color: var(--texto);
-  text-align: left;
-  font-size: 14px;
-  border-radius: var(--redondeo-chico);
-}
-.menu__opcion:active { background: var(--fondo-tarjeta); }
-.menu__opcion--peligro {
-  color: var(--alerta);
-  border-top: 1px solid var(--borde);
-  margin-top: var(--gota);
-}
-
-/* Separa Herramientas de Ajustes. El primero no lleva raya arriba
-   porque no hay nada de qué separarlo. */
-.menu__titulo {
-  padding: var(--esp-1) var(--esp-2) 4px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--texto-tenue);
-}
-.menu__titulo + .menu__opcion { margin-bottom: 0; }
-.menu__opcion + .menu__titulo {
-  margin-top: var(--gota);
-  border-top: 1px solid var(--borde);
-}
+/* El menú principal ahora es una hoja más: usa las clases .hoja y
+   .indice__* que ya existen (ver codigo/05-navegacion.js,
+   abrirMenuPrincipal()). Ya no necesita estilos propios. */
 
 
 /* ─── 9. AVISOS Y VACÍOS ───────────────────────────────────────────── */
