@@ -947,16 +947,25 @@
            ⚡ Se compara con un ENTERO antes de escribir. toFixed() fabrica un
            string cada vez que se llama, aunque el valor no haya cambiado;
            entre las 26 llamas eran decenas de cadenas por cuadro tiradas a
-           la basura. Con milésimas en entero, comparar no reserva nada. */
-        if (fuego.llama) {
+           la basura. Con milésimas en entero, comparar no reserva nada.
+
+           ⚡ EN CALIDAD BAJA, LA LLAMITA DEL SVG QUEDA QUIETA DEL TODO.
+           Antes, `debeAnimarLaEscala()` ya evitaba el `transform` (crecer/
+           encoger) en baja, pero el `style.opacity` de esta misma llamita
+           se seguía escribiendo siempre, sin excepción — la única escritura
+           al DOM de todo el sistema de velas que no respetaba la calidad.
+           El resplandor grande (el que de verdad ilumina la escena) sigue
+           titilando igual: eso lo dibuja el lienzo con solo números, no
+           cuesta nada. Lo que se congela acá es el detalle chico: el
+           dibujo de la llama en sí, dentro del candelabro, deja de
+           parpadear en el nivel más exigido, y solo ahí. */
+        if (fuego.llama && debeAnimarLaEscala()) {
           const nivelDeLlama = Math.round(brillo * 1000);
           if (nivelDeLlama !== fuego.ultimoNivelDeLlama) {
             fuego.ultimoNivelDeLlama = nivelDeLlama;
             fuego.llama.style.opacity = 0.75 + brillo * 0.25;
-            if (debeAnimarLaEscala()) {
-              fuego.llama.style.transform =
-                'scaleY(' + (0.92 + brillo * 0.13) + ') scaleX(' + (0.98 + brillo * 0.04) + ')';
-            }
+            fuego.llama.style.transform =
+              'scaleY(' + (0.92 + brillo * 0.13) + ') scaleX(' + (0.98 + brillo * 0.04) + ')';
           }
         }
 
