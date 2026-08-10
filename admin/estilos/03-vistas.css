@@ -958,3 +958,32 @@
   margin-top: var(--esp-4);
 }
 .acciones .boton { flex: 1; }
+
+
+/* ─── 7. EL ESCÁNER DE LA PUERTA ───────────────────────────────────── */
+
+.escaner__camara {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--redondeo);
+  overflow: hidden;
+  background: #000;
+}
+
+.escaner__camara video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* El marco es puro adorno: ayuda a apuntar, no recorta nada de lo que
+   ve BarcodeDetector — ese lee el cuadro entero. */
+.escaner__marco {
+  position: absolute;
+  inset: 12%;
+  border: 3px solid var(--oro);
+  border-radius: var(--redondeo-chico);
+  box-shadow: 0 0 0 999px rgba(0, 0, 0, .35);
+  pointer-events: none;
+}

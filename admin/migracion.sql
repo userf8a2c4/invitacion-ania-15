@@ -782,6 +782,26 @@ CREATE TABLE IF NOT EXISTS acompanantes (
 --
 -- Una fila por cada sección a la que se le dio 'ver' o 'editar'. La
 -- sección que no aparece acá para un usuario se trata como 'nada'.
+-- ─────────────────────────────────────────────────────────────────────
+-- LA PUERTA: QUIÉN LLEGÓ DE VERDAD
+--
+-- POR QUÉ ES UNA TABLA APARTE Y NO UNA COLUMNA EN `confirmaciones`
+-- Quién dijo que venía y quién llegó son dos preguntas distintas.
+-- Mezclarlas rompería las estadísticas de confirmación: el día del
+-- evento `confirmaciones` tiene que seguir diciendo exactamente lo
+-- mismo que decía la semana anterior.
+--
+-- Una fila por confirmación que ya cruzó la puerta. Si la fila no
+-- existe, esa confirmación todavía no llegó.
+CREATE TABLE IF NOT EXISTS llegadas (
+  id               INT AUTO_INCREMENT PRIMARY KEY,
+  confirmacion_id  INT NOT NULL,
+  llegada_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  marcado_por      INT DEFAULT NULL,
+  UNIQUE KEY una_llegada_por_confirmacion (confirmacion_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 CREATE TABLE IF NOT EXISTS permisos_usuario (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   usuario_id  INT NOT NULL,
