@@ -1996,25 +1996,66 @@
 
 
 <!-- ═══ 14. ARCHIVOS DE CÓDIGO ══════════════════════════════════════
-     Los ~25 archivos de codigo/ (01-configuracion a 25-preguntas) van
-     empaquetados en uno solo: 40 peticiones menos entre CSS y JS ayudan
-     mucho en celular. Los originales siguen sueltos en codigo/, comentados
-     en español, y son los que hay que seguir editando — este archivo se
-     regenera corriendo `node herramientas/empaquetar.mjs` antes de subir.
+     Se cargan en orden numérico, y ese orden importa: por ejemplo,
+     01-configuracion.js tiene que estar antes que todos los demás,
+     porque el resto lee los datos de ahí.
 
-     Ese script respeta el orden con el que se cargaban antes (importa: por
-     ejemplo 01-configuracion tiene que ir antes que todos, porque el resto
-     lee los datos de ahí; 24-lienzo-de-petalos antes que 06; 23-lienzo-de-luz
-     antes que 14, 18 y 19 — cada uno le pregunta al arrancar si debe crear
-     elementos o solo publicar números, y si el lienzo cargara después ya
-     habrían decidido que no hay lienzo).
+     TODOS LLEVAN "defer", Y ESO NO ROMPE EL ORDEN.
+     Es la confusión habitual con este atributo: "defer" NO significa "cada
+     uno cuando pueda". Significa "descargalos en paralelo mientras seguís
+     armando la página, y después ejecutalos TODOS EN EL ORDEN EN QUE ESTÁN
+     ESCRITOS". O sea que 01 sigue corriendo antes que 02, y se respetan los
+     dos órdenes críticos que están explicados más abajo (el 24 antes del 06,
+     y el 23 antes del 14, 18 y 19).
 
-     Antes cada archivo era un <script defer> aparte. "defer" no cambia
-     con el empaquetado: sigue significando "bajalo en paralelo mientras se
-     arma la página, y ejecutalo recién cuando el HTML ya está listo" — acá
-     simplemente hay uno solo para diferir en vez de veinticinco.
+     ⛔ Y NO, NO CONVIENE JUNTARLOS EN UN SOLO ARCHIVO. Se probó, se midió,
+     y fue peor: el puntaje de escritorio cayó de 85 a 60 y el de móvil de
+     75 a 67.
+
+     El motivo tiene que ver con cómo se mide el "tiempo de bloqueo" (Total
+     Blocking Time): no cuenta cuánto trabajo hay en total, cuenta las
+     TAREAS LARGAS — solo suma lo que exceda de 50 ms seguidos sin soltar
+     el hilo. Con 25 archivos sueltos, el navegador compila y ejecuta cada
+     uno como una tarea aparte; ninguna llega a 50 ms, así que el tiempo de
+     bloqueo quedaba casi en cero (190 ms en escritorio, 10 ms en móvil).
+     Al juntarlos en un archivo de 429 KB pasó a ser UNA sola tarea de casi
+     un segundo que el navegador no puede interrumpir: 910 ms de bloqueo en
+     escritorio, 260 ms en móvil.
+
+     O sea: tener los archivos separados no es un descuido que haya que
+     "optimizar", es lo que mantiene la página respondiendo. El CSS sí va
+     empaquetado (ver la sección de ESTILOS): el CSS no se compila ni se
+     ejecuta, así que ahí juntar no genera ninguna tarea larga.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/_empaquetado.js?v=45"></script>
+<script defer src="codigo/01-configuracion.js?v=45"></script>
+<script defer src="codigo/02-utilidades.js?v=45"></script>
+<script defer src="codigo/03-sobre-de-apertura.js?v=45"></script>
+<script defer src="codigo/04-invitado-personalizado.js?v=45"></script>
+<script defer src="codigo/05-cursor-personalizado.js?v=45"></script>
+<!-- EL LIENZO DE PÉTALOS. Va ANTES que 06-petalos-con-fisica.js porque ese
+     archivo le pregunta al arrancar si debe crear elementos o solo números.
+     Con  ?petalos=dom  vuelve el sistema de divs. -->
+<script defer src="codigo/24-lienzo-de-petalos.js?v=45"></script>
+<script defer src="codigo/06-petalos-con-fisica.js?v=45"></script>
+<script defer src="codigo/07-marco-y-enredaderas.js?v=45"></script>
+<script defer src="codigo/08-efectos-de-scroll.js?v=45"></script>
+<script defer src="codigo/09-cuenta-regresiva.js?v=45"></script>
+<script defer src="codigo/10-reproductor-de-musica.js?v=45"></script>
+<script defer src="codigo/11-formulario-confirmacion.js?v=45"></script>
+<script defer src="codigo/12-pase-de-acceso.js?v=45"></script>
+<script defer src="codigo/13-agregar-al-calendario.js?v=45"></script>
+<!-- EL LIENZO DE LUZ. Dibuja los tres sistemas de luz —velas, haces y polvo—
+     en un solo <canvas>, en vez de en ~140 elementos con `mix-blend-mode`.
+
+     ⚠️ VA ANTES QUE 14, 18 Y 19 A PROPÓSITO: los tres le preguntan al
+     arrancar si deben crear elementos o solo publicar números. Si cargara
+     después, ya habrían decidido y la escena quedaría a oscuras.
+
+     Con  ?luz=dom  este módulo se queda dormido y vuelve el sistema
+     anterior completo, sin tocar código. -->
+<script defer src="codigo/23-lienzo-de-luz.js?v=45"></script>
+<script defer src="codigo/14-haces-de-luz.js?v=45"></script>
+<script defer src="codigo/15-registro-de-confirmaciones.js?v=45"></script>
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda).
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
      —incluso sobre el sobre de entrada— para que quien tenga un equipo
@@ -2028,6 +2069,23 @@
   </svg>
   <span class="boton-animaciones__texto">Animación</span>
 </button>
+
+<script defer src="codigo/16-volver-arriba.js?v=45"></script>
+<script defer src="codigo/17-joyas-colgantes.js?v=45"></script>
+<script defer src="codigo/18-motas-de-polvo.js?v=45"></script>
+<script defer src="codigo/19-velas.js?v=45"></script>
+<script defer src="codigo/20-boton-de-animaciones.js?v=45"></script>
+<script defer src="codigo/21-monitor-de-rendimiento.js?v=45"></script>
+<!-- Tiñe la luz que entra por los ventanales según la hora del día. Va
+     después de los haces y las motas, porque escribe sobre sus capas. -->
+<script defer src="codigo/22-luz-de-la-hora.js?v=45"></script>
+
+<!-- PREGUNTAS FRECUENTES (el botón "?" de la fila de controles).
+     El 00 tiene solo los datos —fecha, lugar, vestimenta, regalos— y el
+     25 arma el panel leyéndolos. Ese orden importa: si el 25 corriera
+     primero, no encontraría la lista de preguntas y no dibujaría nada. -->
+<script defer src="codigo/00-conocimiento-chatbot.js?v=45"></script>
+<script defer src="codigo/25-preguntas-frecuentes.js?v=45"></script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
      internet y se pueda instalar. Va al final y falla en silencio si el
