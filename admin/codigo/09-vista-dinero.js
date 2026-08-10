@@ -201,6 +201,18 @@ function bloqueTotales(t) {
               '). Los montos se guardan en pesos.</p>';
   }
 
+  /* Si "Cuesta" da $0 pero hay algo planeado, no es que la fiesta
+     salga gratis: es que todavía ningún gasto tiene cargado su monto
+     REAL (el estimado y el real son campos distintos a propósito, ver
+     presupuesto.php). Sin este aviso, un $0 con gastos cargados parece
+     un error del panel. */
+  if (t.costo === 0 && t.planeado > 0) {
+    avisos += '<p class="vacio__texto">Todavía no cargaste el monto ' +
+              '<strong>real</strong> de ningún gasto — solo el estimado. ' +
+              'Lo planeado suma <strong>' + seguro(comoDinero(t.planeado, false)) +
+              '</strong>.</p>';
+  }
+
   if (t.por_pagar > 0) {
     avisos += '<p class="vacio__texto">Por pagar: <strong>' +
               seguro(comoDinero(t.por_pagar, false)) + '</strong> en ' +
@@ -359,6 +371,19 @@ function pintarGastos(cuerpo) {
             seguro(gasto.padrino_nombre) + '</span>'
         : '';
 
+      /* `monto_real` es lo que costó DE VERDAD, y se carga cuando ya se
+         sabe con certeza (a veces al pagar). Hasta entonces vale $0, y
+         mostrar eso a secas parecía un gasto sin plata cuando en
+         realidad sí había un presupuestado cargado — solo que en el
+         otro campo. Acá se avisa cuál de los dos se está mostrando. */
+      const tieneReal = Number(gasto.monto_real) > 0;
+      const cifra = tieneReal
+        ? seguro(comoDinero(gasto.monto_real, false))
+        : (Number(gasto.presupuestado) > 0
+            ? seguro(comoDinero(gasto.presupuestado, false)) +
+              ' <span style="font-size:11px;color:var(--texto-tenue)">estimado</span>'
+            : seguro(comoDinero(0, false)));
+
       return '' +
         '<button class="lista__fila" data-gasto="' + seguro(gasto.id) + '">' +
           '<span class="lista__cuerpo">' +
@@ -366,8 +391,7 @@ function pintarGastos(cuerpo) {
             '<span class="lista__pie">' + seguro(pie) + '</span>' +
             (padrino ? '<span class="menus-mini">' + padrino + '</span>' : '') +
           '</span>' +
-          '<span class="lista__lado cifra">' +
-            seguro(comoDinero(gasto.monto_real, false)) + '</span>' +
+          '<span class="lista__lado cifra">' + cifra + '</span>' +
         '</button>';
     }).join('') + botonAgregar('Nuevo gasto');
 
@@ -604,15 +628,38 @@ function pintarCotizaciones(cuerpo) {
     const grupo = porServicio[servicio];
 
     // La más barata del grupo se marca, que es la información que uno
-    // busca de un vistazo al comparar presupuestos.
-    const menor = Math.min(...grupo.map(c => Number(c.monto) || Infinity));
+    // busca de un vistazo al comparar presupuestos. Se compara con el
+    // mismo número que se muestra: precio por persona contra precio por
+    // persona, precio cerrado contra precio cerrado.
+    const menor = Math.min(...grupo.map(c =>
+      (c.tipo_precio === 'por_persona' ? Number(c.precio_pp) : Number(c.monto)) || Infinity
+    ));
 
     const filas = grupo.map(cot => {
       const monto = Number(cot.monto) || 0;
+
+      /* Las que cobran "por persona" casi nunca tienen nada cargado en
+         `monto` —ese campo es para precio CERRADO— y su plata de verdad
+         vive en `precio_pp`. Mostrar el `monto` a secas ahí daba un "$0"
+         que confundía: la cotización sí tenía un precio, solo que no en
+         ese campo. */
+      const esPorPersona = cot.tipo_precio === 'por_persona';
+      const precioPp = Number(cot.precio_pp) || 0;
+
+      const cifra = (esPorPersona && precioPp > 0)
+        ? seguro(comoDinero(precioPp, false)) + ' <span style="font-size:11px;' +
+          'color:var(--texto-tenue)">/ persona</span>'
+        : seguro(comoDinero(monto, false));
+
+      /* Y "la más barata" se compara con el mismo criterio que se
+         muestra, no siempre contra `monto`: comparar el precio cerrado
+         de una contra el por-persona de otra no dice nada. */
+      const comparable = esPorPersona ? precioPp : monto;
+
       const marcas = [];
       if (Number(cot.elegida) === 1) {
         marcas.push('<span class="etiqueta etiqueta--bien">Elegida</span>');
-      } else if (monto === menor && grupo.length > 1) {
+      } else if (comparable > 0 && comparable === menor && grupo.length > 1) {
         marcas.push('<span class="etiqueta etiqueta--info">Más barata</span>');
       }
       if (cot.vigencia && diasHasta(cot.vigencia) < 0) {
@@ -627,8 +674,7 @@ function pintarCotizaciones(cuerpo) {
               seguro(acortar(cot.que_incluye || '', 60)) + '</span>' +
             (marcas.length ? '<span class="menus-mini">' + marcas.join('') + '</span>' : '') +
           '</span>' +
-          '<span class="lista__lado cifra">' +
-            seguro(comoDinero(monto, false)) + '</span>' +
+          '<span class="lista__lado cifra">' + cifra + '</span>' +
         '</button>';
     }).join('');
 

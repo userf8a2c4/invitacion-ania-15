@@ -314,28 +314,40 @@ const SECCIONES = {
     vacio: ['Todavía no hay regalos',
             'Anota lo que llegue para no olvidarte de agradecer.'],
     alternar: 'agradecido',
-    /* Viaja al servidor pero no se muestra: es la huella del correo de
-       Amazon del que salió este regalo, y sirve para no volver a
-       ofrecerlo la próxima vez que se busquen compras. */
-    ocultos: ['correo_origen'],
+    /* Viaja al servidor pero no se muestra en la lista de campos: la
+       huella del correo de Amazon y el enlace del artículo son datos de
+       trabajo, no algo que se edite a mano seguido. */
+    ocultos: ['correo_origen', 'pedido_en_lista'],
     campos: [
-      { id: 'de_parte_de', rotulo: 'De parte de' },
-      { id: 'descripcion', rotulo: 'Qué regaló' },
+      { id: 'de_parte_de', rotulo: 'De parte de (se completa cuando se sepa)' },
+      { id: 'descripcion', rotulo: 'Qué es' },
       { id: 'origen',      rotulo: 'De dónde vino', lista: [
           ['amazon', 'Lista de Amazon'], ['directo', 'Lo trajo'],
           ['efectivo', 'Efectivo'], ['otro', 'Otro']] },
-      { id: 'monto',       rotulo: 'Valor', tipo: 'number', paso: '0.01' },
+      { id: 'monto',       rotulo: 'Valor recibido', tipo: 'number', paso: '0.01' },
+      { id: 'precio',      rotulo: 'Precio en la lista', tipo: 'number', paso: '0.01' },
+      { id: 'enlace',      rotulo: 'Enlace del artículo' },
       { id: 'recibido_en', rotulo: 'Cuándo llegó', tipo: 'date' },
+      { id: 'comprado_en', rotulo: 'Cuándo se compró (según el correo)', tipo: 'date' },
       { id: 'notas',       rotulo: 'Notas', largo: true },
     ],
-    fila: r => ({
-      titulo: r.de_parte_de,
-      pie: r.descripcion || '',
-      lado: Number(r.agradecido) === 1
-            ? '<span class="etiqueta etiqueta--bien">Agradecido</span>'
-            : '<span class="etiqueta etiqueta--ojo">Falta agradecer</span>',
-      tenue: Number(r.agradecido) === 1,
-    }),
+    fila: r => {
+      const esPendienteDeLista = Number(r.pedido_en_lista) === 1 && !r.comprado_en;
+
+      const lado = esPendienteDeLista
+        ? '<span class="etiqueta etiqueta--tenue">En la lista</span>'
+        : Number(r.agradecido) === 1
+          ? '<span class="etiqueta etiqueta--bien">Agradecido</span>'
+          : '<span class="etiqueta etiqueta--ojo">Falta agradecer</span>';
+
+      return {
+        titulo: r.de_parte_de || r.descripcion,
+        pie: r.de_parte_de ? (r.descripcion || '') :
+             (r.precio > 0 ? comoDinero(r.precio, false) : ''),
+        lado: lado,
+        tenue: esPendienteDeLista || Number(r.agradecido) === 1,
+      };
+    },
   },
 
   foraneos: {
@@ -569,9 +581,16 @@ function descripcionDeLaSeccion(clave) {
 function tarjetaMesaDeRegalos() {
   const regalos = EVENTO.regalos || [];
 
-  const recibidos    = regalos.length;
-  const sinAgradecer = regalos.filter(r => Number(r.agradecido) === 0).length;
-  const deAmazon     = regalos.filter(r => r.origen === 'amazon').length;
+  // Un artículo cargado a la lista de deseos que todavía no se compró
+  // no es un regalo recibido: no debe sumar en "Recibidos" ni en "Sin
+  // agradecer", o esos números mentirían apenas se cargara la lista.
+  const pendientesDeLista = regalos.filter(r =>
+    Number(r.pedido_en_lista) === 1 && !r.comprado_en);
+  const yaSonRegalos = regalos.filter(r => !pendientesDeLista.includes(r));
+
+  const recibidos    = yaSonRegalos.length;
+  const sinAgradecer = yaSonRegalos.filter(r => Number(r.agradecido) === 0).length;
+  const deAmazon     = yaSonRegalos.filter(r => r.origen === 'amazon').length;
 
   const enlace = CONFIGURACION.regalos.enlaceDeLaLista;
 
@@ -591,10 +610,21 @@ function tarjetaMesaDeRegalos() {
         tarjetaDato(sinAgradecer, 'Sin agradecer') +
       '</div>' +
 
+      (pendientesDeLista.length
+        ? '<p class="vacio__texto" style="margin-bottom:var(--esp-1)">' +
+            seguro(pluralizar(pendientesDeLista.length, 'artículo', 'artículos')) +
+            ' en tu lista de deseos todavía sin comprar.</p>'
+        : '') +
+
       '<a class="boton boton--principal boton--ancho" target="_blank" ' +
          'rel="noopener" href="' + seguro(enlace) + '">' +
         'Abrir la lista en Amazon' +
       '</a>' +
+
+      '<button class="boton boton--ancho" id="regalo-cargar-deseo" ' +
+              'style="margin-top:var(--esp-1)">' +
+        'Cargar un artículo de la lista' +
+      '</button>' +
 
       '<button class="boton boton--ancho" id="buscar-compras" ' +
               'style="margin-top:var(--esp-1)">' +
@@ -624,6 +654,23 @@ function tarjetaMesaDeRegalos() {
  * @returns {void}
  */
 function engancharMesaDeRegalos(donde) {
+
+  /* "Cargar un artículo de la lista" reusa el formulario genérico de
+     regalos: es la manera más rápida de sumar esto sin construir una
+     pantalla de pegado masivo aparte. pedido_en_lista viaja oculto
+     (ver SECCIONES.regalos.ocultos) para no pisar la fila "de dónde
+     vino" ni "cuándo llegó", que todavía no aplican. */
+  const botonDeseo = buscar('#regalo-cargar-deseo', donde);
+  if (botonDeseo) {
+    botonDeseo.addEventListener('click', () => {
+      formularioEvento('regalos', {
+        pedido_en_lista: 1,
+        agradecido: 0,
+        origen: 'amazon',
+      });
+    });
+  }
+
   const boton = buscar('#buscar-compras', donde);
   if (!boton) return;
 
@@ -668,23 +715,90 @@ function engancharMesaDeRegalos(donde) {
     );
 
     buscarTodos('[data-compra]', cuerpo).forEach(fila => {
-      fila.addEventListener('click', () => {
-        const c = candidatos[Number(fila.dataset.compra)];
-
-        /* Se abre el formulario de regalo con lo que se pudo deducir del
-           correo. El asunto de Amazon no dice quién compró —eso queda
-           para completar a mano—, pero sí la fecha y que vino de la
-           lista. La huella del correo se guarda para no volver a
-           ofrecerlo la próxima vez. */
-        formularioEvento('regalos', {
-          origen:        'amazon',
-          descripcion:   acortar(c.asunto, 200),
-          recibido_en:   c.fecha ? c.fecha.slice(0, 10) : '',
-          correo_origen: c.huella,
-          agradecido:    0,
-        });
-      });
+      fila.addEventListener('click', () => elegirRegaloParaLaCompra(candidatos[Number(fila.dataset.compra)]));
     });
+  });
+}
+
+/**
+ * Al tocar un aviso de compra: si hay artículos de la lista de deseos
+ * todavía sin marcar comprados, se ofrece cruzarlo contra uno de ellos
+ * (el correo no dice CUÁL artículo se compró, así que decide quien lo
+ * mira). Si ninguno corresponde, o no hay lista cargada, se da de alta
+ * como regalo nuevo — el camino de siempre.
+ *
+ * @param {Object} c - Un candidato de correo.php?accion=regalos.
+ * @returns {void}
+ */
+function elegirRegaloParaLaCompra(c) {
+  const pendientes = (EVENTO.regalos || []).filter(r =>
+    Number(r.pedido_en_lista) === 1 && !r.comprado_en);
+
+  const cargarComoNuevo = () => {
+    /* El asunto de Amazon no dice quién compró —eso queda para
+       completar a mano—, pero sí la fecha y que vino de la lista. La
+       huella del correo se guarda para no volver a ofrecerlo. */
+    formularioEvento('regalos', {
+      origen:        'amazon',
+      descripcion:   acortar(c.asunto, 200),
+      recibido_en:   c.fecha ? c.fecha.slice(0, 10) : '',
+      correo_origen: c.huella,
+      agradecido:    0,
+    });
+  };
+
+  if (!pendientes.length) { cargarComoNuevo(); return; }
+
+  const cuerpo = abrirHoja('¿Cuál artículo es?',
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+      seguro(acortar(c.asunto, 80)) +
+    '</p>' +
+    pendientes.map((r, i) =>
+      '<button class="lista__fila" data-marcar-comprado="' + i + '">' +
+        '<span class="lista__cuerpo">' +
+          '<span class="lista__titulo">' + seguro(r.descripcion) + '</span>' +
+          (r.precio > 0
+            ? '<span class="lista__pie">' + seguro(comoDinero(r.precio, false)) + '</span>'
+            : '') +
+        '</span>' +
+      '</button>'
+    ).join('') +
+    '<button class="boton boton--ancho" id="regalo-ninguno" style="margin-top:var(--esp-2)">' +
+      'No es ninguno de estos: cargar como regalo nuevo' +
+    '</button>'
+  );
+
+  buscarTodos('[data-marcar-comprado]', cuerpo).forEach(fila => {
+    fila.addEventListener('click', async () => {
+      const item = pendientes[Number(fila.dataset.marcarComprado)];
+      try {
+        await mandar('evento.php?accion=guardar&que=regalos', {
+          id:            item.id,
+          de_parte_de:   item.de_parte_de || '',
+          descripcion:   item.descripcion,
+          origen:        'amazon',
+          monto:         item.monto || 0,
+          precio:        item.precio || 0,
+          enlace:        item.enlace || '',
+          recibido_en:   item.recibido_en || '',
+          comprado_en:   c.fecha ? c.fecha.slice(0, 10) : new Date().toISOString().slice(0, 10),
+          agradecido:    Number(item.agradecido) === 1,
+          correo_origen: c.huella,
+          notas:         item.notas || '',
+        });
+        cerrarHoja(true);
+        avisar('Marcado como comprado: ' + item.descripcion);
+        ensuciarVistas('resumen');
+        await refrescarEvento();
+      } catch (error) {
+        avisar(error.message, true);
+      }
+    });
+  });
+
+  buscar('#regalo-ninguno', cuerpo).addEventListener('click', () => {
+    cerrarHoja(true);
+    cargarComoNuevo();
   });
 }
 
