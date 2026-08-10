@@ -1,53 +1,59 @@
 /* ══════════════════════════════════════════════════════════════════════
-   EMPAQUETAR · junta los CSS y los JS en un solo archivo cada uno
+   EMPAQUETAR · junta las 14 hojas de estilo en un solo archivo
    ══════════════════════════════════════════════════════════════════════
 
    PARA QUÉ SIRVE
-   index.html pedía 14 hojas de estilo y ~26 scripts por separado — 40
-   peticiones, todas al mismo servidor. En una conexión de celular, cada
-   petición nueva paga su propia ida y vuelta antes de empezar a bajar el
-   archivo. Este script junta todo el CSS en estilos/_empaquetado.css y
-   todo el JS en codigo/_empaquetado.js, y hace que index.html pida esos
-   dos en vez de los cuarenta.
+   index.html pedía 14 hojas de estilo por separado. Cada petición nueva
+   paga su propia ida y vuelta al servidor antes de empezar a bajar el
+   archivo, y eso se nota sobre todo en celular. Este script las junta
+   todas en estilos/_empaquetado.css y hace que index.html pida esa sola.
+
+   ⛔ EL JAVASCRIPT NO SE EMPAQUETA, Y ES A PROPÓSITO
+   Se probó juntar también los 26 archivos de codigo/ en uno solo, se midió,
+   y fue claramente PEOR:
+
+       escritorio  85 → 60      tiempo de bloqueo  190 ms → 910 ms
+       móvil       75 → 67      tiempo de bloqueo   10 ms → 260 ms
+
+   El motivo está en cómo se mide el "tiempo de bloqueo" (Total Blocking
+   Time): no cuenta cuánto trabajo hay en total, cuenta las TAREAS LARGAS
+   — solo suma lo que exceda de 50 ms seguidos sin soltar el hilo.
+
+   Con los archivos sueltos, el navegador compila y ejecuta cada uno como
+   una tarea independiente; ninguna llega a 50 ms, así que casi no suman.
+   Juntos en un archivo de 429 KB pasan a ser UNA sola tarea de casi un
+   segundo que el navegador no puede cortar por la mitad, y durante toda
+   esa tarea la página no responde a nada.
+
+   Con el CSS no pasa: el CSS no se compila ni se ejecuta, solo se parsea,
+   así que juntarlo no genera ninguna tarea larga — solo ahorra peticiones.
+   Por eso este script empaqueta CSS y nada más.
 
    POR QUÉ NO SE TOCAN LOS ARCHIVOS ORIGINALES
-   Los archivos fuente (estilos/00 a 13, codigo/00 a 25) siguen existiendo,
-   intactos y comentados en español: son los que se editan siempre. Este
-   script solo LEE su contenido y arma la copia empaquetada; nunca escribe
-   en ellos.
+   Los 14 archivos de estilos/ siguen existiendo, intactos y comentados en
+   español: son los que se editan siempre. Este script solo LEE su
+   contenido y arma la copia empaquetada; nunca escribe en ellos.
 
-   POR QUÉ NO ESTÁ MINIFICADO (a pesar de llamarse "empaquetado" y no
-   "minificado")
-   Achicar el CSS/JS quitando espacios y comentarios ahorraría algo más de
-   peso, pero hacerlo bien requiere un analizador de verdad — un regex
-   casero puede romper un string, una regex literal o un comentario que
-   por casualidad contiene "//" o "/*". El ahorro real acá viene de bajar
-   de 40 peticiones a 2, no de los bytes; arriesgar romper la web por un
-   par de KB no vale la pena. El .htaccess ya comprime con gzip/brotli en
-   el camino, así que el peso de red ya sale reducido igual.
+   POR QUÉ NO ESTÁ MINIFICADO
+   Achicar el CSS quitando espacios y comentarios ahorraría algo de peso,
+   pero hacerlo bien requiere un analizador de verdad. El ahorro real acá
+   viene de bajar de 14 peticiones a 1, no de los bytes; y el .htaccess ya
+   comprime con gzip/brotli en el camino.
 
    CÓMO SABE QUÉ ARCHIVOS JUNTAR, LA SEGUNDA VEZ EN ADELANTE
-   La PRIMERA vez que corre, index.html todavía tiene la lista completa de
-   <link>/<script> sueltos: de ahí se lee el orden y se guarda en
-   herramientas/_manifiesto-empaquetado.json. index.html pasa a apuntar
-   solo a los dos archivos empaquetados.
-
-   Ese manifiesto es lo que permite volver a armar el paquete más adelante
-   sin tener que deshacer index.html: las veces siguientes, este script ve
-   que index.html YA apunta al paquete, y en vez de leer ahí la lista (que
-   ya no está) la lee del manifiesto. index.html no se vuelve a tocar —
-   solo se regeneran estilos/_empaquetado.css y codigo/_empaquetado.js.
+   La PRIMERA vez, index.html todavía tiene la lista completa de <link>
+   sueltos: de ahí se lee el orden y se guarda en
+   herramientas/_manifiesto-empaquetado.json. Las veces siguientes, este
+   script ve que index.html ya apunta al paquete y lee la lista del
+   manifiesto, así puede regenerarlo sin tener que deshacer index.html.
 
    CUÁNDO CORRERLO
-   Después de subir la versión (herramientas/subir-version.mjs) y antes de
-   subir los archivos al hosting:
-
        node herramientas/subir-version.mjs
        node herramientas/empaquetar.mjs
 
-   ⚠️ SI SE EDITA CUALQUIER ARCHIVO DE estilos/ O codigo/, HAY QUE VOLVER A
-   CORRER ESTO antes de subir — si no, el cambio queda en el archivo
-   fuente pero el paquete (y por lo tanto la web) sigue sirviendo lo viejo.
+   ⚠️ SI SE EDITA CUALQUIER ARCHIVO DE estilos/, HAY QUE VOLVER A CORRER
+   ESTO antes de subir — si no, el cambio queda en el archivo fuente pero
+   la web sigue sirviendo el paquete viejo.
    ══════════════════════════════════════════════════════════════════════ */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -61,7 +67,6 @@ const rutaManifiesto = join(raiz, 'herramientas', '_manifiesto-empaquetado.json'
 const html = readFileSync(rutaIndex, 'utf8');
 
 const patronCss = /<link rel="stylesheet" href="estilos\/([\w.-]+\.css)(?:\?v=(\d+))?">/g;
-const patronJs  = /<script defer src="codigo\/([\w.-]+\.js)(?:\?v=(\d+))?"><\/script>/g;
 
 function recolectar(patron, texto) {
   const encontrados = [];
@@ -75,13 +80,11 @@ function recolectar(patron, texto) {
   return encontrados;
 }
 
-/* ─── 1. ¿De dónde sale la lista de archivos: de index.html o del manifiesto? ── */
+/* ─── 1. ¿La lista sale de index.html o del manifiesto? ────────────────── */
 let hojasDeEstilo = recolectar(patronCss, html);
-let scripts = recolectar(patronJs, html);
 
 const yaEstaEmpaquetado =
-  (hojasDeEstilo.length === 1 && hojasDeEstilo[0].archivo === '_empaquetado.css') ||
-  (scripts.length === 1 && scripts[0].archivo === '_empaquetado.js');
+  hojasDeEstilo.length === 1 && hojasDeEstilo[0].archivo === '_empaquetado.css';
 
 let hayQueReescribirIndex = true;
 
@@ -89,110 +92,80 @@ if (yaEstaEmpaquetado) {
   if (!existsSync(rutaManifiesto)) {
     console.error('✗ index.html ya apunta al paquete, pero no existe el manifiesto');
     console.error(`  (${rutaManifiesto}). Sin él no hay forma de saber qué archivos`);
-    console.error('  originales hay que volver a juntar. Si el manifiesto se perdió,');
-    console.error('  hay que reconstruir a mano la lista de <link>/<script> en');
-    console.error('  index.html (ver algún respaldo o control de versiones) y correr');
-    console.error('  este script de nuevo desde ahí.');
+    console.error('  originales hay que volver a juntar. Habría que reconstruir a mano');
+    console.error('  la lista de <link> en index.html y correr este script desde ahí.');
     process.exit(1);
   }
   const manifiesto = JSON.parse(readFileSync(rutaManifiesto, 'utf8'));
   hojasDeEstilo = manifiesto.css.map(archivo => ({ archivo, version: null }));
-  scripts = manifiesto.js.map(archivo => ({ archivo, version: null }));
   hayQueReescribirIndex = false;
-  console.log(`(leyendo la lista del manifiesto: ${hojasDeEstilo.length} CSS + ${scripts.length} JS)`);
+  console.log(`(leyendo la lista del manifiesto: ${hojasDeEstilo.length} CSS)`);
 } else {
-  if (hojasDeEstilo.length === 0 || scripts.length === 0) {
-    console.error('✗ No se encontraron <link>/<script> con el patrón esperado en index.html.');
-    console.error('  ¿Cambió el formato de esas etiquetas? Este script espera exactamente:');
+  if (hojasDeEstilo.length === 0) {
+    console.error('✗ No se encontraron <link rel="stylesheet"> con el patrón esperado.');
+    console.error('  Este script espera exactamente:');
     console.error('  <link rel="stylesheet" href="estilos/archivo.css?v=NN">');
-    console.error('  <script defer src="codigo/archivo.js?v=NN"></script>');
     process.exit(1);
   }
   /* Se guarda el manifiesto ANTES de tocar index.html, para que si algo
      falla después no quede un index.html empaquetado sin su manifiesto. */
+  const manifiestoPrevio = existsSync(rutaManifiesto)
+    ? JSON.parse(readFileSync(rutaManifiesto, 'utf8'))
+    : {};
   writeFileSync(rutaManifiesto, JSON.stringify({
+    ...manifiestoPrevio,
     css: hojasDeEstilo.map(x => x.archivo),
-    js: scripts.map(x => x.archivo),
   }, null, 2));
 }
 
-/* ─── 2. Leer cada archivo fuente y armar el contenido combinado ──────── */
-function armarPaquete(lista, carpeta, comentario) {
-  const partes = [comentario];
-  for (const { archivo } of lista) {
-    const ruta = join(raiz, carpeta, archivo);
-    if (!existsSync(ruta)) {
-      console.error(`✗ No existe ${carpeta}/${archivo} (parte del manifiesto o de index.html).`);
-      process.exit(1);
-    }
-    const contenido = readFileSync(ruta, 'utf8');
-    partes.push(`\n/* ═══ ${archivo} ═══ */\n`, contenido);
-  }
-  return partes.join('');
-}
-
-const comentarioCss =
+/* ─── 2. Leer cada archivo y armar el contenido combinado ─────────────── */
+const partes = [
   '/* Generado por herramientas/empaquetar.mjs — no editar a mano.\n' +
   '   Para cambiar algo, editar el archivo original en estilos/ y volver\n' +
-  '   a correr el script. Ver ese archivo para la explicación completa. */\n';
-const comentarioJs =
-  '/* Generado por herramientas/empaquetar.mjs — no editar a mano.\n' +
-  '   Para cambiar algo, editar el archivo original en codigo/ y volver\n' +
-  '   a correr el script. Ver ese archivo para la explicación completa. */\n';
+  '   a correr el script. Ver ese archivo para la explicación completa. */\n'
+];
 
-const cssEmpaquetado = armarPaquete(hojasDeEstilo, 'estilos', comentarioCss);
-const jsEmpaquetado  = armarPaquete(scripts, 'codigo', comentarioJs);
+for (const { archivo } of hojasDeEstilo) {
+  const ruta = join(raiz, 'estilos', archivo);
+  if (!existsSync(ruta)) {
+    console.error(`✗ No existe estilos/${archivo} (parte del manifiesto o de index.html).`);
+    process.exit(1);
+  }
+  partes.push(`\n/* ═══ ${archivo} ═══ */\n`, readFileSync(ruta, 'utf8'));
+}
 
-/* ─── 3. Versión ────────────────────────────────────────────────────────
-   Si viene de index.html (primera vez), la más alta que tenían los
-   archivos sueltos. Si viene del manifiesto (veces siguientes), la que ya
-   tenía puesta el paquete — subir-version.mjs es quien la actualiza, y ya
-   corrió antes que este script. */
+const cssEmpaquetado = partes.join('');
+
+/* ─── 3. Versión ───────────────────────────────────────────────────────── */
 let version;
 if (hayQueReescribirIndex) {
-  const versiones = [...hojasDeEstilo, ...scripts].map(x => x.version).filter(v => v !== null);
+  const versiones = hojasDeEstilo.map(x => x.version).filter(v => v !== null);
   version = versiones.length ? Math.max(...versiones) : 1;
 } else {
-  const actual = html.match(/_empaquetado\.(?:css|js)\?v=(\d+)/);
+  const actual = html.match(/_empaquetado\.css\?v=(\d+)/);
   version = actual ? Number(actual[1]) : 1;
 }
 
 writeFileSync(join(raiz, 'estilos', '_empaquetado.css'), cssEmpaquetado);
-writeFileSync(join(raiz, 'codigo', '_empaquetado.js'), jsEmpaquetado);
 
-/* ─── 4. Reescribir index.html — SOLO la primera vez ───────────────────
-   Las veces siguientes index.html ya apunta al paquete (con la versión
-   que le haya puesto subir-version.mjs) y no hace falta tocarlo. */
+/* ─── 4. Reescribir index.html — SOLO la primera vez ──────────────────── */
 if (hayQueReescribirIndex) {
-  function reemplazarPorUnaSola(html, lista, etiquetaNueva) {
-    let resultado = html.replace(lista[0].textoCompleto, etiquetaNueva);
-    for (let i = 1; i < lista.length; i++) {
-      resultado = resultado.replace('\n' + lista[i].textoCompleto, '');
-      resultado = resultado.replace(lista[i].textoCompleto, '');
-    }
-    return resultado;
-  }
-
-  let htmlNuevo = html;
-  htmlNuevo = reemplazarPorUnaSola(
-    htmlNuevo, hojasDeEstilo,
+  let htmlNuevo = html.replace(
+    hojasDeEstilo[0].textoCompleto,
     `<link rel="stylesheet" href="estilos/_empaquetado.css?v=${version}">`
   );
-  htmlNuevo = reemplazarPorUnaSola(
-    htmlNuevo, scripts,
-    `<script defer src="codigo/_empaquetado.js?v=${version}"></script>`
-  );
+  for (let i = 1; i < hojasDeEstilo.length; i++) {
+    htmlNuevo = htmlNuevo.replace('\n' + hojasDeEstilo[i].textoCompleto, '');
+    htmlNuevo = htmlNuevo.replace(hojasDeEstilo[i].textoCompleto, '');
+  }
   writeFileSync(rutaIndex, htmlNuevo);
 }
 
-console.log(`✓ Empaquetado con versión v=${version}`);
+console.log(`✓ CSS empaquetado con versión v=${version}`);
 console.log(`  estilos/_empaquetado.css  ← ${hojasDeEstilo.length} archivos (${(cssEmpaquetado.length / 1024).toFixed(0)} KB)`);
-console.log(`  codigo/_empaquetado.js    ← ${scripts.length} archivos (${(jsEmpaquetado.length / 1024).toFixed(0)} KB)`);
-if (hayQueReescribirIndex) {
-  console.log(`  index.html reescrito: ${hojasDeEstilo.length + scripts.length} etiquetas → 2`);
-} else {
-  console.log('  index.html: sin cambios (ya apuntaba al paquete)');
-}
+console.log(hayQueReescribirIndex
+  ? `  index.html reescrito: ${hojasDeEstilo.length} etiquetas → 1`
+  : '  index.html: sin cambios (ya apuntaba al paquete)');
 console.log('');
-console.log('Revisá la web local antes de subir. Los archivos sueltos de estilos/ y');
-console.log('codigo/ siguen ahí intactos — son los que hay que seguir editando.');
+console.log('El JavaScript NO se empaqueta a propósito — ver la explicación al');
+console.log('principio de este script. Los archivos de estilos/ siguen intactos.');

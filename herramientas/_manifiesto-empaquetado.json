@@ -1,4 +1,5 @@
 {
+  "_nota": "Solo CSS. El JS NO se empaqueta a propósito: se midió y empeoraba el puntaje de 85 a 60 en escritorio, porque juntarlo crea una sola tarea de ~900ms que el navegador no puede interrumpir. Ver la explicación completa en herramientas/empaquetar.mjs y en el comentario de la sección 14 de index.html.",
   "css": [
     "00-tipografias.css",
     "01-fundamentos.css",
@@ -14,33 +15,5 @@
     "12-haces-de-luz.css",
     "11-responsivo.css",
     "13-preguntas-frecuentes.css"
-  ],
-  "js": [
-    "01-configuracion.js",
-    "02-utilidades.js",
-    "03-sobre-de-apertura.js",
-    "04-invitado-personalizado.js",
-    "05-cursor-personalizado.js",
-    "24-lienzo-de-petalos.js",
-    "06-petalos-con-fisica.js",
-    "07-marco-y-enredaderas.js",
-    "08-efectos-de-scroll.js",
-    "09-cuenta-regresiva.js",
-    "10-reproductor-de-musica.js",
-    "11-formulario-confirmacion.js",
-    "12-pase-de-acceso.js",
-    "13-agregar-al-calendario.js",
-    "23-lienzo-de-luz.js",
-    "14-haces-de-luz.js",
-    "15-registro-de-confirmaciones.js",
-    "16-volver-arriba.js",
-    "17-joyas-colgantes.js",
-    "18-motas-de-polvo.js",
-    "19-velas.js",
-    "20-boton-de-animaciones.js",
-    "21-monitor-de-rendimiento.js",
-    "22-luz-de-la-hora.js",
-    "00-conocimiento-chatbot.js",
-    "25-preguntas-frecuentes.js"
   ]
 }
