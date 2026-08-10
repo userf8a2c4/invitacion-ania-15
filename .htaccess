@@ -58,6 +58,29 @@
   Require all denied
 </FilesMatch>
 
+# ─── Rutas que este sitio no tiene ──────────────────────────────────────
+# Todos los días llegan escaneos automáticos buscando WordPress: prueban
+# wp-login.php, xmlrpc.php, carpetas de plugins, un .git expuesto, un
+# vendor/ de Composer que se subió por error. Nada de eso existe acá, pero
+# sin esta regla cada intento igual arranca PHP para terminar en un 404.
+#
+# Se corta ANTES: RewriteRule con [F] responde 403 y Apache ni llama a
+# PHP. Eso es lo que separa un registro lleno de un servidor cansado.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^wp-admin        - [F,L]
+  RewriteRule ^wp-login\.php$  - [F,L]
+  RewriteRule ^wp-content      - [F,L]
+  RewriteRule ^wp-includes     - [F,L]
+  RewriteRule ^xmlrpc\.php$    - [F,L]
+  RewriteRule (^|/)\.git       - [F,L]
+  RewriteRule (^|/)vendor/     - [F,L]
+  RewriteRule phpinfo          - [F,L]
+</IfModule>
+
+# ─── Que nadie liste una carpeta sin index ──────────────────────────────
+Options -Indexes
+
 # ─── Compresión (gzip/brotli) ───────────────────────────────────────────
 <IfModule mod_deflate.c>
   AddOutputFilterByType DEFLATE text/html text/css text/plain text/xml
@@ -129,4 +152,14 @@
   <FilesMatch "\.(svg|jpg|jpeg|png|webp|ico|mp3|woff|woff2)$">
     Header set Cache-Control "public, max-age=31536000, immutable"
   </FilesMatch>
+
+  # ─── Cabeceras de seguridad ──────────────────────────────────────────
+  # Mismo criterio que admin/.htaccess. X-Frame-Options en DENY evita que
+  # la invitación se cargue dentro de un <iframe> ajeno (clickjacking);
+  # nosniff evita que el navegador adivine un tipo de archivo distinto al
+  # que el servidor dijo; Referrer-Policy evita que la URL completa viaje
+  # a otros sitios cuando alguien hace clic en un enlace de acá.
+  Header always set X-Frame-Options "DENY"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "same-origin"
 </IfModule>

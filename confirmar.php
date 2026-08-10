@@ -71,6 +71,44 @@ if (!$nombre || !filter_var($datos['correo'] ?? '', FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
+/* ─── FRENO POR IP ────────────────────────────────────────────────────── */
+/* Este es el único punto del sitio abierto a internet sin sesión: no pide
+   ni contraseña ni token. Sin freno, cualquiera puede mandar
+   confirmaciones falsas en bucle y llenar la lista de invitados de
+   basura. Reutiliza la tabla `intentos_login` del panel, con su propia
+   marca, para no tener que sumar una tabla nueva solo para esto.
+
+   Diez por hora por IP alcanza de sobra para una familia real —a veces
+   se manda, se corrige y se reenvía— y frena un script en bucle. */
+try {
+    $pdoFreno = new PDO("mysql:host=$DB_HOST;dbname=$DB_NAME;charset=utf8mb4", $DB_USER, $DB_PASSWORD,
+        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+
+    $ipFreno = substr($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0', 0, 45);
+
+    $stmt = $pdoFreno->prepare(
+        'SELECT COUNT(*) AS n FROM intentos_login
+         WHERE ip = :ip AND correo = :marca
+           AND cuando > DATE_SUB(NOW(), INTERVAL 60 MINUTE)'
+    );
+    $stmt->execute([':ip' => $ipFreno, ':marca' => '__confirmar__']);
+    $conteo = (int) ($stmt->fetch(PDO::FETCH_ASSOC)['n'] ?? 0);
+
+    if ($conteo >= 10) {
+        http_response_code(429);
+        echo json_encode(['ok' => false, 'error' => 'Demasiados envíos seguidos. Espera un rato e intenta de nuevo.']);
+        exit;
+    }
+
+    $pdoFreno->prepare('INSERT INTO intentos_login (ip, correo) VALUES (:ip, :marca)')
+             ->execute([':ip' => $ipFreno, ':marca' => '__confirmar__']);
+} catch (PDOException $e) {
+    // Si el freno mismo falla (por ejemplo, la tabla no existe todavía en
+    // una instalación vieja), no puede impedir que la confirmación real
+    // se guarde: se deja pasar y se anota en el log para revisar después.
+    error_log('[Ania XV] No se pudo aplicar el freno de confirmar.php: ' . $e->getMessage());
+}
+
 /* ─── EL CÓDIGO QR QUE YA DIBUJÓ LA WEB ──────────────────────────────── */
 /* La invitación genera el QR del pase en el navegador y nos lo manda
    como imagen. Se incrusta tal cual en el correo, así el QR del mail y
