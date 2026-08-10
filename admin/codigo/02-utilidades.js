@@ -119,7 +119,7 @@ function elegirMoneda(cual) {
  * Escribe un número como cantidad de dinero: 1500.5 → "$1,500.50"
  *
  * El número que entra SIEMPRE está en pesos, porque así se guarda todo.
- * Si la moneda elegida es el dólar, acá se hace la división — en un solo
+ * Si la moneda elegida es el dólar, aquí se hace la división — en un solo
  * lugar, para que no haya forma de que una pantalla convierta y otra no.
  *
  * @param {number} cantidad - En pesos.
@@ -204,7 +204,7 @@ function porcentaje(parte, total) {
  *
  * MySQL devuelve las fechas como '2026-10-24', sin hora. Y JavaScript,
  * cuando recibe ese formato exacto, lo interpreta como medianoche en
- * UTC — no en la hora de acá. En México (UTC-6) esa medianoche UTC son
+ * UTC — no en la hora de aquí. En México (UTC-6) esa medianoche UTC son
  * las 6 de la tarde del DÍA ANTERIOR.
  *
  * O sea que sin esto:

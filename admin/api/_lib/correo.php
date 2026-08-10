@@ -249,7 +249,7 @@ function smtpEnviar($para, $asunto, $html, $from, $fromNombre,
  * @param string $responderA
  * @return true|string
  */
-function enviarCorreo($para, $asunto, $html, $responderA = '') {
+function enviarCorreo($para, $asunto, $html, $responderA = '', $adjuntos = []) {
     return smtpEnviar(
         $para,
         $asunto,
@@ -260,6 +260,8 @@ function enviarCorreo($para, $asunto, $html, $responderA = '') {
         (int) env('SMTP_PORT', 465),
         env('SMTP_USER', ''),
         env('SMTP_PASSWORD', ''),
-        $responderA
+        $responderA,
+        [],
+        $adjuntos
     );
 }

@@ -8,8 +8,9 @@
 
    QUÉ SE LE PUEDE PEDIR
      GET  ?accion=bandeja       la lista de los últimos mensajes
-     GET  ?accion=leer&n=42     un mensaje completo
-     POST ?accion=responder     responde a uno
+     GET  ?accion=leer&n=42     un mensaje completo, con su lista de adjuntos
+     GET  ?accion=adjunto&numero=42&ruta=2   baja (o muestra) un adjunto
+     POST ?accion=responder     responde a uno, puede reenviar sus adjuntos
      POST ?accion=escribir      manda uno nuevo
      GET  ?accion=regalos       busca avisos de compra de Amazon
 
@@ -73,6 +74,40 @@ case 'leer':
     break;
 
 
+/* ─── BAJAR (O MOSTRAR) UN ADJUNTO ────────────────────────────────────── */
+
+case 'adjunto':
+    exigirMetodo('GET');
+
+    $numero = (int) ($_GET['numero'] ?? 0);
+    // Solo dígitos y puntos: es una ruta MIME (ej. "2" o "1.2"), nunca
+    // texto libre, así que no hay nada que sanitizar más que esto.
+    $ruta = preg_replace('/[^0-9.]/', '', (string) ($_GET['ruta'] ?? ''));
+
+    if ($numero < 1 || $ruta === '') responderMal('Falta decir qué adjunto.', 400);
+
+    $buzon = new BuzonImap();
+    if (!$buzon->conectar()) responderMal($buzon->error, 502);
+
+    $adjunto = $buzon->leerAdjunto($numero, $ruta);
+    $buzon->cerrar();
+
+    if (!$adjunto) responderMal('No se pudo bajar ese adjunto.', 404);
+
+    // "inline" deja que imágenes y PDF se abran dentro del panel con el
+    // visor que ya existe (ver codigo/14-archivos.js); ?descargar=1 fuerza
+    // la descarga en vez de mostrarlo.
+    $disposicion = !empty($_GET['descargar']) ? 'attachment' : 'inline';
+    $nombreSeguro = str_replace(['"', "\r", "\n"], '', $adjunto['nombre']);
+
+    header('Content-Type: ' . $adjunto['tipo']);
+    header("Content-Disposition: $disposicion; filename=\"$nombreSeguro\"");
+    header('Content-Length: ' . strlen($adjunto['datos']));
+    header('Cache-Control: no-store');
+    echo $adjunto['datos'];
+    exit;
+
+
 /* ─── RESPONDER Y ESCRIBIR ────────────────────────────────────────────── */
 
 case 'responder':
@@ -90,7 +125,30 @@ case 'escribir':
     if ($texto === '') responderMal('El mensaje está vacío.', 400);
     if ($asunto === '') $asunto = '(sin asunto)';
 
-    $resultado = enviarCorreo($para, $asunto, plantillaDeRespuesta($texto));
+    /* Reenviar adjuntos del mensaje original, si se pidió alguno. Vienen
+       como referencias {numero, ruta} — el archivo se vuelve a bajar del
+       buzón acá mismo, nunca se confía en datos binarios mandados por el
+       navegador para esto. Como máximo 5: es para reenviar el contrato o
+       la foto que llegó, no para armar un mailer de archivos pesados. */
+    $referencias = is_array($datos['adjuntos'] ?? null) ? array_slice($datos['adjuntos'], 0, 5) : [];
+    $adjuntosParaEnviar = [];
+
+    if ($referencias) {
+        $buzonAdj = new BuzonImap();
+        if ($buzonAdj->conectar()) {
+            foreach ($referencias as $ref) {
+                $n = (int) ($ref['numero'] ?? 0);
+                $r = preg_replace('/[^0-9.]/', '', (string) ($ref['ruta'] ?? ''));
+                if ($n < 1 || $r === '') continue;
+
+                $bajado = $buzonAdj->leerAdjunto($n, $r);
+                if ($bajado) $adjuntosParaEnviar[] = $bajado;
+            }
+            $buzonAdj->cerrar();
+        }
+    }
+
+    $resultado = enviarCorreo($para, $asunto, plantillaDeRespuesta($texto), '', $adjuntosParaEnviar);
 
     if ($resultado !== true) {
         responderMal('No se pudo enviar: ' . $resultado, 502);

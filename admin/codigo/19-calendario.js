@@ -424,7 +424,7 @@ function abrirFichaDelHito(destino, seccion, tipo, id) {
 function agregarEnEseDia(fecha) {
   const cuerpo = abrirHoja('Agregar el ' + comoFecha(fecha),
     '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
-      '¿Qué querés anotar este día?</p>' +
+      '¿Qué quieres anotar este día?</p>' +
 
     '<button class="boton boton--ancho" data-crear="tarea" ' +
             'style="margin-bottom:var(--esp-1)">Una tarea</button>' +

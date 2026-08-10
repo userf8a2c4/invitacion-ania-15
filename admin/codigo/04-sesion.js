@@ -163,7 +163,7 @@ function prepararEntrada() {
     const contrasena = buscar('#entrada-contrasena').value;
 
     if (!correo || !contrasena) {
-      error.textContent = 'Escribí tu correo y tu contraseña.';
+      error.textContent = 'Escribe tu correo y tu contraseña.';
       error.classList.remove('oculto');
       return;
     }

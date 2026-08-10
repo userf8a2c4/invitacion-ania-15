@@ -64,7 +64,7 @@ async function dibujarCorreo() {
 
   if (!CORREOS.length) {
     pintarVacio(lista, 'La bandeja está vacía',
-      'Acá van a aparecer los correos que lleguen a ' + (datos.buzon || 'tu buzón') + '.');
+      'Aquí van a aparecer los correos que lleguen a ' + (datos.buzon || 'tu buzón') + '.');
     return;
   }
 
@@ -85,7 +85,7 @@ function pintarBandeja(lista) {
 
   lista.innerHTML =
     (yaSabeDeslizar ? '' :
-      '<p class="pista-deslizar">Deslizá un correo hacia la izquierda ' +
+      '<p class="pista-deslizar">Desliza un correo hacia la izquierda ' +
       'para responder, marcar o borrar</p>') +
 
     CORREOS.map((m, indice) => {
@@ -293,6 +293,8 @@ async function accionDeCorreo(accion, correo, lista) {
       formularioCorreo({
         para: m.correo_de,
         asunto: /^re:/i.test(m.asunto) ? m.asunto : 'Re: ' + m.asunto,
+        adjuntosDelOriginal: m.adjuntos || [],
+        numeroDelOriginal: m.numero,
       });
     } catch (error) {
       avisar(error.message, true);
@@ -374,6 +376,8 @@ async function abrirCorreo(numero) {
       seguro(m.texto || '(sin contenido)') +
     '</div>' +
 
+    pintarAdjuntos(m) +
+
     '<div class="acciones">' +
       '<button class="boton" id="no-leido">Marcar sin leer</button>' +
       (m.correo_de
@@ -387,6 +391,8 @@ async function abrirCorreo(numero) {
       formularioCorreo({
         para: m.correo_de,
         asunto: /^re:/i.test(m.asunto) ? m.asunto : 'Re: ' + m.asunto,
+        adjuntosDelOriginal: m.adjuntos || [],
+        numeroDelOriginal: m.numero,
       });
     });
   }
@@ -404,18 +410,87 @@ async function abrirCorreo(numero) {
 }
 
 /**
+ * Da formato legible a un tamaño en bytes.
+ *
+ * @param {number} bytes
+ * @returns {string}
+ */
+function pesoLegible(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+/**
+ * Pinta la lista de adjuntos de un mensaje, con enlaces para verlo o
+ * bajarlo. Las imágenes y PDF se abren dentro del panel; el resto baja
+ * directo, que es lo único que el navegador sabe hacer con ellos.
+ *
+ * @param {Object} m - El mensaje devuelto por correo.php?accion=leer
+ * @returns {string}
+ */
+function pintarAdjuntos(m) {
+  const lista = m.adjuntos || [];
+  if (!lista.length) return '';
+
+  return '<div class="tarjeta" style="margin-top:var(--esp-2)">' +
+    '<p class="detalle__rotulo" style="margin-bottom:var(--esp-1)">' +
+      'Adjuntos (' + lista.length + ')' +
+    '</p>' +
+    lista.map(a => {
+      const url = 'correo.php?accion=adjunto&numero=' + m.numero + '&ruta=' + a.ruta;
+      const seVePorDentro = /^image\/|^application\/pdf/.test(a.tipo || '');
+
+      return '<div class="fila-adjunto" style="display:flex;align-items:center;' +
+                  'justify-content:space-between;padding:var(--esp-1) 0;' +
+                  'border-top:1px solid var(--borde)">' +
+        '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+          seguro(a.nombre) +
+          '<span style="color:var(--texto-tenue);font-size:.85em"> · ' +
+            pesoLegible(a.tamano) + '</span>' +
+        '</span>' +
+        '<span style="flex-shrink:0;margin-left:var(--esp-1)">' +
+          (seVePorDentro
+            ? '<a class="boton boton--chico" href="' + url + '" target="_blank" ' +
+                'rel="noopener">Ver</a> '
+            : '') +
+          '<a class="boton boton--chico" href="' + url + '&descargar=1">Bajar</a>' +
+        '</span>' +
+      '</div>';
+    }).join('') +
+  '</div>';
+}
+
+/**
  * Formulario para escribir o responder.
  *
- * @param {Object} [previo] - { para, asunto }
+ * @param {Object} [previo] - { para, asunto, adjuntosDelOriginal, numeroDelOriginal }
  * @returns {void}
  */
 function formularioCorreo(previo) {
   const d = previo || {};
+  const adjuntosDisponibles = d.adjuntosDelOriginal || [];
 
   const cuerpo = abrirHoja(previo ? 'Responder' : 'Escribir',
     campoTexto({ id: 'cor-para', rotulo: 'Para', tipo: 'email', valor: d.para }) +
     campoTexto({ id: 'cor-asunto', rotulo: 'Asunto', valor: d.asunto }) +
     campoLargo({ id: 'cor-texto', rotulo: 'Mensaje' }) +
+
+    (adjuntosDisponibles.length
+      ? '<p class="detalle__rotulo" style="margin-top:var(--esp-2)">' +
+          'Reenviar del correo original' +
+        '</p>' +
+        adjuntosDisponibles.map((a, i) =>
+          '<label style="display:flex;align-items:center;gap:var(--esp-1);' +
+                 'padding:var(--esp-1) 0">' +
+            '<input type="checkbox" class="cor-adjunto" value="' + i + '">' +
+            seguro(a.nombre) + ' <span style="color:var(--texto-tenue);font-size:.85em">' +
+              '(' + pesoLegible(a.tamano) + ')</span>' +
+          '</label>'
+        ).join('')
+      : '') +
+
     '<button type="button" class="boton boton--principal boton--ancho" id="enviar">' +
       'Enviar' +
     '</button>'
@@ -430,15 +505,23 @@ function formularioCorreo(previo) {
     if (!para)  { avisar('Falta el destinatario.', true); return; }
     if (!texto) { avisar('El mensaje está vacío.', true); return; }
 
+    const adjuntosElegidos = buscarTodos('.cor-adjunto', cuerpo)
+      .filter(caja => caja.checked)
+      .map(caja => {
+        const a = adjuntosDisponibles[Number(caja.value)];
+        return { numero: d.numeroDelOriginal, ruta: a.ruta };
+      });
+
     const boton = buscar('#enviar', cuerpo);
     boton.disabled = true;
     boton.textContent = 'Enviando…';
 
     try {
-      const r = await mandar('correo.php?accion=escribir', {
+      const r = await mandar('correo.php?accion=' + (previo ? 'responder' : 'escribir'), {
         para: para,
         asunto: valorDe('cor-asunto', cuerpo),
         texto: texto,
+        adjuntos: adjuntosElegidos,
       });
       cerrarHoja(true);
       avisar(r.mensaje || 'Correo enviado.');

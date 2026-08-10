@@ -301,7 +301,7 @@ function bloqueDinero(dinero) {
       '<div class="tarjeta">' +
         '<div class="tarjeta__titulo">Presupuesto</div>' +
         '<p class="vacio__texto">Todavía no cargaste ningún gasto. ' +
-        'Empezá desde la pestaña Dinero.</p>' +
+        'Empieza desde la pestaña Dinero.</p>' +
       '</div>';
   }
 
@@ -412,7 +412,7 @@ function bloqueAtencion(datos) {
     filas.push(filaDeAtencion(
       '',
       pluralizar(datos.regalos_sin_agradecer, 'regalo', 'regalos') + ' sin agradecer',
-      'Tocá para verlos',
+      'Toca para verlos',
       'evento'
     ));
   }

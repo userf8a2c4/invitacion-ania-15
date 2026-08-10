@@ -66,7 +66,7 @@ async function cargarAlarmas(donde) {
 
   if (!alarmas.length) {
     pintarVacio(donde, 'Todavía no hay alarmas',
-      'Programá una para que te avise a una hora exacta: llamar al salón, ' +
+      'Programa una para que te avise a una hora exacta: llamar al salón, ' +
       'pagar el anticipo, confirmar el pastel.');
     return;
   }
@@ -200,7 +200,7 @@ function formularioDeAlarma(alarma, despues, precargado) {
     const f = valorDe('al-fecha', cuerpo);
     const h = valorDe('al-hora', cuerpo);
 
-    if (!titulo) { avisar('Poné de qué te aviso.', true); return; }
+    if (!titulo) { avisar('Pon de qué te aviso.', true); return; }
     if (!f) { avisar('Falta el día.', true); return; }
     if (!h) { avisar('Falta la hora.', true); return; }
 
