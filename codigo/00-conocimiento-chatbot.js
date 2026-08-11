@@ -28,8 +28,8 @@ const CONOCIMIENTO_CHATBOT = {
   identidad: {
     nombre:      'Preguntas frecuentes',                          // ✏️
     presentacion: 'Todo lo que hay que saber sobre la fiesta de Ania.', // ✏️
-    limitacion:  'Acá está la información de la fiesta de Ania. '
-                + 'Para dudas más específicas, contactá directamente a los organizadores.', // ✏️
+    limitacion:  'Aquí está la información de la fiesta de Ania. '
+                + 'Para dudas más específicas, contacta directamente a los organizadores.', // ✏️
     /* Tiene que ser un buzón que exista de verdad: acá se le dice a la
        gente que escriba. info@ es el único creado en Hostinger —ver
        confirmar.php— y es el mismo que firma los correos de pase. */
@@ -76,16 +76,16 @@ const CONOCIMIENTO_CHATBOT = {
       nombre:      'Menú infantil',                                        // ✏️
       descripcion: 'Todos los niños llevan el mismo menú infantil',        // ✏️
     },
-    alergias: 'Podés indicar alergias o restricciones en el formulario de confirmación.', // ✏️
+    alergias: 'Puedes indicar alergias o restricciones en el formulario de confirmación.', // ✏️
   },
 
   /* ── CONFIRMACIÓN DE ASISTENCIA ────────────────────────────────────────
      Fechas límite y cómo confirmar.                                        */
   confirmacion: {
     fechaLimite:  '1 de octubre de 2026',                          // ✏️
-    como:         'Completá el formulario al final de la invitación en aniaxv.com', // ✏️
-    pase:         'Al confirmar recibís tu código de pase al correo electrónico', // ✏️
-    correoSpam:   'Si no encontrás el correo, revisá la carpeta de spam', // ✏️
+    como:         'Completa el formulario al final de la invitación en aniaxv.com', // ✏️
+    pase:         'Al confirmar recibes tu código de pase al correo electrónico', // ✏️
+    correoSpam:   'Si no encuentras el correo, revisa la carpeta de spam', // ✏️
   },
 
   /* ── MESA DE REGALOS ───────────────────────────────────────────────────
@@ -119,7 +119,7 @@ const CONOCIMIENTO_CHATBOT = {
     },
     {
       pregunta:  '¿Se puede ir con niños?',                        // ✏️
-      respuesta: 'Sí, hay menú infantil disponible. Indicá la cantidad de niños al confirmar.', // ✏️
+      respuesta: 'Sí, hay menú infantil disponible. Indica la cantidad de niños al confirmar.', // ✏️
     },
     {
       pregunta:  '¿Hay transporte o servicio de traslado?',        // ✏️
@@ -127,7 +127,7 @@ const CONOCIMIENTO_CHATBOT = {
     },
     {
       pregunta:  '¿Qué pasa si no puedo asistir?',                 // ✏️
-      respuesta: 'Igual podés confirmar tu inasistencia en el formulario para avisar a los organizadores.', // ✏️
+      respuesta: 'Igual puedes confirmar tu inasistencia en el formulario para avisar a los organizadores.', // ✏️
     },
     // ── Agregá más preguntas aquí con el mismo formato ──────────────────
     // {
@@ -199,7 +199,7 @@ const PREGUNTAS_FRECUENTES = [
     respuesta: () => {
       const v = CONOCIMIENTO_CHATBOT.vestimenta;
       let texto = `<b>${v.codigo}</b>.`;
-      if (v.restriccion) texto += `<br>Tené en cuenta: <b>${v.restriccion}</b>.`;
+      if (v.restriccion) texto += `<br>Ten en cuenta: <b>${v.restriccion}</b>.`;
       if (v.notas)       texto += `<br>${v.notas}`;
       return texto;
     },
@@ -237,7 +237,7 @@ const PREGUNTAS_FRECUENTES = [
       let texto = r.mensaje;
 
       if (config.enlaceDeLaLista) {
-        texto += `<br>Si querés obsequiarle algo, esta es su mesa: `
+        texto += `<br>Si quieres obsequiarle algo, esta es su mesa: `
                + `<a href="${config.enlaceDeLaLista}" target="_blank" rel="noopener">Mesa de regalos</a>.`;
       }
       if (config.aclaracion) texto += `<br>${config.aclaracion}.`;

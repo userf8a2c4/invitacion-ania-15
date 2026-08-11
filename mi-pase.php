@@ -231,7 +231,7 @@ $codigoDeLaUrl = htmlspecialchars(
   <!-- Paso 1: el código -->
   <div id="paso-codigo">
     <p style="line-height:1.6;margin-top:0">
-      Escribí el código que aparece en el correo de tu confirmación para
+      Escribe el código que aparece en el correo de tu confirmación para
       ver o cambiar tus datos.
     </p>
     <label>
@@ -274,7 +274,7 @@ $codigoDeLaUrl = htmlspecialchars(
 
       <label>
         <span class="rotulo">Alergias o algo que no puedas comer</span>
-        <textarea id="alergias" placeholder="Si no tenés, dejalo vacío"></textarea>
+        <textarea id="alergias" placeholder="Si no tienes, déjalo vacío"></textarea>
       </label>
     </div>
 
@@ -329,7 +329,7 @@ elemento('asiste').addEventListener('change', function () {
 
 elemento('entrar').addEventListener('click', function () {
   var codigo = elemento('codigo').value.trim().toUpperCase();
-  if (!codigo) { avisar('Escribí tu código.', true); return; }
+  if (!codigo) { avisar('Escribe tu código.', true); return; }
 
   var boton = this;
   boton.disabled = true;
