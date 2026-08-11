@@ -161,7 +161,7 @@
        si dos archivos dicen cosas distintas sobre lo mismo, gana el que
        iba último; 00-tipografias sigue yendo primero).
   ═══════════════════════════════════════════════════════════════════ -->
-  <link rel="stylesheet" href="estilos/_empaquetado.css?v=48">
+  <link rel="stylesheet" href="estilos/_empaquetado.css?v=49">
 
   
   
@@ -997,7 +997,7 @@
       </g>
     </svg>
 
-    <p class="sobre__indicacion">Tocá el sello para abrir</p>
+    <p class="sobre__indicacion">Toca el sello para abrir</p>
   </div>
 </div>
 
@@ -1621,18 +1621,23 @@
          y sin enmarcar se nota: termina en un rectángulo perfecto, como una
          captura pegada encima. Estas piezas lo integran sin tocar el mapa
          en sí, que sigue siendo el de verdad (se arrastra, hace zoom y se
-         actualiza solo). -->
-    <div class="mapa-marco revelar">
-      <!-- ⚠️ Este iframe NO lleva atributo src: un src vacío hace que el
-           navegador cargue esta misma página adentro del mapa. La
-           dirección real la coloca data-fuente desde la configuración. -->
-      <iframe title="Mapa del salón" loading="lazy" allowfullscreen
-              referrerpolicy="no-referrer-when-downgrade"
-              data-fuente="lugar.enlaceDelMapaIncrustado"></iframe>
+         actualiza solo).
 
-      <!-- Viñeta: funde los bordes del mapa con el fondo de la página.
-           No recibe clics, así que el mapa se sigue pudiendo arrastrar. -->
-      <span class="mapa-marco__vineta" aria-hidden="true"></span>
+         ⚠️ EL IFRAME NO ESTÁ EN EL HTML. El de Google Maps carga cientos
+         de KB de JavaScript ajeno y lo ejecuta de golpe en el hilo
+         principal apenas el scroll se acerca (aunque tenga loading="lazy":
+         eso solo retrasa la carga, no la evita). Eso es lo que se sentía
+         como un frenazo al pasar por acá. En su lugar hay un botón: el
+         iframe real recién se crea cuando alguien lo toca, con
+         codigo/26-mapa-a-pedido.js. -->
+    <div class="mapa-marco mapa-marco--a-pedido revelar">
+      <div class="mapa-marco__aviso">
+        <span class="mapa-marco__aviso-nombre" data-dato="lugar.nombre"></span>
+        <span class="mapa-marco__aviso-direccion" data-dato="lugar.direccion"></span>
+        <button class="mapa-marco__boton-ver" type="button" id="boton-ver-mapa">
+          Ver el mapa
+        </button>
+      </div>
 
       <!-- Escuadras doradas, el mismo recurso del pase y la cuenta regresiva -->
       <span class="mapa-marco__escuadra mapa-marco__escuadra--si" aria-hidden="true"></span>
@@ -2027,23 +2032,23 @@
      empaquetado (ver la sección de ESTILOS): el CSS no se compila ni se
      ejecuta, así que ahí juntar no genera ninguna tarea larga.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/01-configuracion.js?v=48"></script>
-<script defer src="codigo/02-utilidades.js?v=48"></script>
-<script defer src="codigo/03-sobre-de-apertura.js?v=48"></script>
-<script defer src="codigo/04-invitado-personalizado.js?v=48"></script>
-<script defer src="codigo/05-cursor-personalizado.js?v=48"></script>
+<script defer src="codigo/01-configuracion.js?v=49"></script>
+<script defer src="codigo/02-utilidades.js?v=49"></script>
+<script defer src="codigo/03-sobre-de-apertura.js?v=49"></script>
+<script defer src="codigo/04-invitado-personalizado.js?v=49"></script>
+<script defer src="codigo/05-cursor-personalizado.js?v=49"></script>
 <!-- EL LIENZO DE PÉTALOS. Va ANTES que 06-petalos-con-fisica.js porque ese
      archivo le pregunta al arrancar si debe crear elementos o solo números.
      Con  ?petalos=dom  vuelve el sistema de divs. -->
-<script defer src="codigo/24-lienzo-de-petalos.js?v=48"></script>
-<script defer src="codigo/06-petalos-con-fisica.js?v=48"></script>
-<script defer src="codigo/07-marco-y-enredaderas.js?v=48"></script>
-<script defer src="codigo/08-efectos-de-scroll.js?v=48"></script>
-<script defer src="codigo/09-cuenta-regresiva.js?v=48"></script>
-<script defer src="codigo/10-reproductor-de-musica.js?v=48"></script>
-<script defer src="codigo/11-formulario-confirmacion.js?v=48"></script>
-<script defer src="codigo/12-pase-de-acceso.js?v=48"></script>
-<script defer src="codigo/13-agregar-al-calendario.js?v=48"></script>
+<script defer src="codigo/24-lienzo-de-petalos.js?v=49"></script>
+<script defer src="codigo/06-petalos-con-fisica.js?v=49"></script>
+<script defer src="codigo/07-marco-y-enredaderas.js?v=49"></script>
+<script defer src="codigo/08-efectos-de-scroll.js?v=49"></script>
+<script defer src="codigo/09-cuenta-regresiva.js?v=49"></script>
+<script defer src="codigo/10-reproductor-de-musica.js?v=49"></script>
+<script defer src="codigo/11-formulario-confirmacion.js?v=49"></script>
+<script defer src="codigo/12-pase-de-acceso.js?v=49"></script>
+<script defer src="codigo/13-agregar-al-calendario.js?v=49"></script>
 <!-- EL LIENZO DE LUZ. Dibuja los tres sistemas de luz —velas, haces y polvo—
      en un solo <canvas>, en vez de en ~140 elementos con `mix-blend-mode`.
 
@@ -2053,9 +2058,9 @@
 
      Con  ?luz=dom  este módulo se queda dormido y vuelve el sistema
      anterior completo, sin tocar código. -->
-<script defer src="codigo/23-lienzo-de-luz.js?v=48"></script>
-<script defer src="codigo/14-haces-de-luz.js?v=48"></script>
-<script defer src="codigo/15-registro-de-confirmaciones.js?v=48"></script>
+<script defer src="codigo/23-lienzo-de-luz.js?v=49"></script>
+<script defer src="codigo/14-haces-de-luz.js?v=49"></script>
+<script defer src="codigo/15-registro-de-confirmaciones.js?v=49"></script>
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda).
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
      —incluso sobre el sobre de entrada— para que quien tenga un equipo
@@ -2070,22 +2075,27 @@
   <span class="boton-animaciones__texto">Animación</span>
 </button>
 
-<script defer src="codigo/16-volver-arriba.js?v=48"></script>
-<script defer src="codigo/17-joyas-colgantes.js?v=48"></script>
-<script defer src="codigo/18-motas-de-polvo.js?v=48"></script>
-<script defer src="codigo/19-velas.js?v=48"></script>
-<script defer src="codigo/20-boton-de-animaciones.js?v=48"></script>
-<script defer src="codigo/21-monitor-de-rendimiento.js?v=48"></script>
+<script defer src="codigo/16-volver-arriba.js?v=49"></script>
+<script defer src="codigo/17-joyas-colgantes.js?v=49"></script>
+<script defer src="codigo/18-motas-de-polvo.js?v=49"></script>
+<script defer src="codigo/19-velas.js?v=49"></script>
+<script defer src="codigo/20-boton-de-animaciones.js?v=49"></script>
+<script defer src="codigo/21-monitor-de-rendimiento.js?v=49"></script>
 <!-- Tiñe la luz que entra por los ventanales según la hora del día. Va
      después de los haces y las motas, porque escribe sobre sus capas. -->
-<script defer src="codigo/22-luz-de-la-hora.js?v=48"></script>
+<script defer src="codigo/22-luz-de-la-hora.js?v=49"></script>
 
 <!-- PREGUNTAS FRECUENTES (el botón "?" de la fila de controles).
      El 00 tiene solo los datos —fecha, lugar, vestimenta, regalos— y el
      25 arma el panel leyéndolos. Ese orden importa: si el 25 corriera
      primero, no encontraría la lista de preguntas y no dibujaría nada. -->
-<script defer src="codigo/00-conocimiento-chatbot.js?v=48"></script>
-<script defer src="codigo/25-preguntas-frecuentes.js?v=48"></script>
+<script defer src="codigo/00-conocimiento-chatbot.js?v=49"></script>
+<script defer src="codigo/25-preguntas-frecuentes.js?v=49"></script>
+
+<!-- EL MAPA A PEDIDO. El iframe de Google Maps recién se crea cuando se
+     toca "Ver el mapa" (ver el comentario junto a .mapa-marco--a-pedido
+     más arriba). -->
+<script defer src="codigo/26-mapa-a-pedido.js?v=49"></script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
      internet y se pueda instalar. Va al final y falla en silencio si el
