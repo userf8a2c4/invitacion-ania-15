@@ -71,10 +71,13 @@ switch ($accion) {
         responderBien([
             'token'   => $token,
             'usuario' => [
-                'id'     => (int) $usuario['id'],
-                'nombre' => $usuario['nombre'],
-                'correo' => $usuario['correo'],
-                'rol'    => $usuario['rol'],
+                'id'            => (int) $usuario['id'],
+                'nombre'        => $usuario['nombre'],
+                'correo'        => $usuario['correo'],
+                'rol'           => $usuario['rol'],
+                // Panel de métricas (Fase 7): nunca por rol, solo por
+                // correo exacto — ver esObservador().
+                'es_observador' => esObservador($usuario),
             ],
             'dias_de_sesion' => DIAS_DE_SESION,
         ]);
@@ -86,6 +89,7 @@ switch ($accion) {
     case 'quien':
         exigirMetodo('GET');
         $usuario = exigirSesion();
+        $usuario['es_observador'] = esObservador($usuario);
         responderBien(['usuario' => $usuario]);
         break;
 
