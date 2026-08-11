@@ -806,6 +806,30 @@ CREATE TABLE IF NOT EXISTS llegadas (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+-- ─────────────────────────────────────────────────────────────────────
+-- EL ASISTENTE: FRASES QUE CADA PERSONA LE ENSEÑÓ
+--
+-- NO ES UNA IA. Es un motor de intenciones determinista (Fase 4 del
+-- rediseño, ver codigo/32-asistente.js): compara lo que se escribe
+-- contra una lista de frases por acción, de fábrica más las que cada
+-- quien va enseñando. Por eso esta tabla es solo pares frase→intención,
+-- nunca texto libre que "entienda" nada por su cuenta.
+--
+-- POR QUÉ POR USUARIO
+-- Lucila y Carlos hablan distinto. Lo que uno enseña no tiene que
+-- aparecerle al otro — cada fila queda atada a quién la enseñó.
+CREATE TABLE IF NOT EXISTS comandos_usuario (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id  INT NOT NULL,
+  intencion   VARCHAR(40) NOT NULL,
+  frase       VARCHAR(200) NOT NULL,
+  creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY una_frase_por_usuario (usuario_id, frase),
+  CONSTRAINT fk_comandos_usuario
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 CREATE TABLE IF NOT EXISTS permisos_usuario (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   usuario_id  INT NOT NULL,

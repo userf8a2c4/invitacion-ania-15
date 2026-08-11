@@ -255,6 +255,7 @@ const CONFIGURACION = {
         ['etiquetas',  'Cambiar cómo se llaman las cosas en la app', true],
         ['colores',    'Elegir la paleta de colores del panel', true],
         ['fab-config', 'Elegir qué hace el botón redondo de abajo'],
+        ['comandos-asistente', 'Ver y agregar frases del asistente'],
         ['instalar',   'Poner el acceso directo en la pantalla de inicio'],
       ],
     },
