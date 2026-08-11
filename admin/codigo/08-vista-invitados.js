@@ -32,6 +32,12 @@ let FILTRO_INVITADOS = 'todos';
 /** Qué se escribió en el buscador. */
 let BUSQUEDA_INVITADOS = '';
 
+/** Si está activo el modo de selección múltiple (Fase 5 del rediseño). */
+let SELECCION_ACTIVA = false;
+
+/** Los id de confirmación marcados en modo selección. */
+let SELECCIONADOS = new Set();
+
 
 /* ─── 1. DIBUJAR LA VISTA ──────────────────────────────────────────── */
 
@@ -238,9 +244,22 @@ async function dibujarInvitados() {
     '<div id="lista-invitados"></div>' +
 
     '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-3)">' +
+      '<button class="boton" style="flex:1" id="inv-seleccionar">Seleccionar</button>' +
       '<button class="boton" style="flex:1" id="inv-descargar">Descargar</button>' +
       '<button class="boton boton--principal" style="flex:1" id="inv-nuevo">' +
         'Agregar invitado</button>' +
+    '</div>' +
+
+    /* La barra flotante de acciones en lote. Vive siempre en el DOM,
+       oculta hasta que haya algo seleccionado — más simple que armarla
+       y desarmarla cada vez que cambia la selección. */
+    '<div id="barra-seleccion" class="barra-seleccion oculto">' +
+      '<span id="seleccion-cuantos" class="barra-seleccion__cuantos"></span>' +
+      '<div class="barra-seleccion__botones">' +
+        '<button class="boton boton--chico" id="sel-mesa">Asignar mesa</button>' +
+        '<button class="boton boton--chico" id="sel-llegada">Marcar llegada</button>' +
+        '<button class="boton boton--chico boton--peligro" id="sel-cancelar">Cancelar</button>' +
+      '</div>' +
     '</div>';
 
   const lista = buscar('#lista-invitados', vista);
@@ -304,6 +323,20 @@ function engancharInvitados(vista) {
       pintarListaDeInvitados();
     });
   });
+
+  const botonSeleccionar = buscar('#inv-seleccionar', vista);
+  botonSeleccionar.addEventListener('click', () => {
+    SELECCION_ACTIVA = !SELECCION_ACTIVA;
+    if (!SELECCION_ACTIVA) SELECCIONADOS.clear();
+    botonSeleccionar.textContent = SELECCION_ACTIVA ? 'Cancelar selección' : 'Seleccionar';
+    pintarListaDeInvitados();
+    actualizarBarraSeleccion();
+  });
+
+  buscar('#sel-cancelar', vista).addEventListener('click', salirDeSeleccion);
+
+  buscar('#sel-mesa', vista).addEventListener('click', () => asignarMesaEnLote());
+  buscar('#sel-llegada', vista).addEventListener('click', () => marcarLlegadaEnLote());
 }
 
 
@@ -345,9 +378,63 @@ function pintarListaDeInvitados() {
 
   buscarTodos('[data-invitado]', lista).forEach(boton => {
     boton.addEventListener('click', () => {
-      abrirDetalleDeInvitado(Number(boton.dataset.invitado));
+      const id = Number(boton.dataset.invitado);
+      if (SELECCION_ACTIVA) {
+        alternarSeleccion(id);
+      } else {
+        abrirDetalleDeInvitado(id);
+      }
     });
   });
+}
+
+/**
+ * Prende o apaga una confirmación en la selección múltiple.
+ *
+ * @param {number} id
+ * @returns {void}
+ */
+function alternarSeleccion(id) {
+  if (SELECCIONADOS.has(id)) {
+    SELECCIONADOS.delete(id);
+  } else {
+    SELECCIONADOS.add(id);
+  }
+  pintarListaDeInvitados();
+  actualizarBarraSeleccion();
+}
+
+/**
+ * Muestra u oculta la barra flotante según haya algo seleccionado, y
+ * actualiza el contador.
+ *
+ * @returns {void}
+ */
+function actualizarBarraSeleccion() {
+  const barra = buscar('#barra-seleccion');
+  if (!barra) return;
+
+  const cuantos = SELECCIONADOS.size;
+  barra.classList.toggle('oculto', !SELECCION_ACTIVA || cuantos === 0);
+
+  const texto = buscar('#seleccion-cuantos', barra);
+  if (texto) texto.textContent = pluralizar(cuantos, 'seleccionado', 'seleccionados');
+}
+
+/**
+ * Sale del modo selección y limpia lo marcado.
+ *
+ * @returns {void}
+ */
+function salirDeSeleccion() {
+  SELECCION_ACTIVA = false;
+  SELECCIONADOS.clear();
+
+  const boton = buscar('#inv-seleccionar');
+  if (boton) boton.textContent = 'Seleccionar';
+
+  pintarListaDeInvitados();
+  actualizarBarraSeleccion();
 }
 
 /**
@@ -390,20 +477,31 @@ function filaDeInvitado(fila) {
   const asiste = Number(fila.asiste) === 1;
   const gente  = (Number(fila.adultos) || 0) + (Number(fila.ninos) || 0);
 
+  const alergiaBuscada = paraBuscar(fila.alergias || '');
+  const nada = ['', 'ninguna', 'ninguno', 'no', 'n/a', '-'];
+  const tieneAlergia = asiste && !nada.includes(alergiaBuscada);
+
   const pie = [];
-  if (asiste && gente) pie.push(pluralizar(gente, 'persona', 'personas'));
-  if (fila.correo)     pie.push(fila.correo);
+  if (asiste && gente)  pie.push(pluralizar(gente, 'persona', 'personas'));
+  if (asiste && fila.mesa) pie.push(fila.mesa);
+  if (!asiste && fila.correo) pie.push(fila.correo);
+
+  const marcado = SELECCIONADOS.has(Number(fila.id));
 
   return '' +
     '<button class="lista__fila" data-invitado="' + seguro(fila.id) + '">' +
-      '<span class="punto punto--' + (asiste ? 'si' : 'no') + '"></span>' +
+      (SELECCION_ACTIVA
+        ? '<span class="lista__casilla' + (marcado ? ' lista__casilla--marcada' : '') + '"></span>'
+        : '<span class="punto punto--' + (asiste ? 'si' : 'no') + '"></span>') +
       '<span class="lista__cuerpo">' +
         '<span class="lista__titulo">' + seguro(fila.nombre || 'Sin nombre') + '</span>' +
         '<span class="lista__pie">' + seguro(pie.join(' · ')) + '</span>' +
       '</span>' +
-      (fila.codigo && asiste
-        ? '<span class="lista__lado codigo-pase">' + seguro(fila.codigo) + '</span>'
-        : '') +
+      (tieneAlergia
+        ? '<span class="etiqueta etiqueta--alerta lista__lado">Alergia</span>'
+        : (fila.codigo && asiste && !SELECCION_ACTIVA
+            ? '<span class="lista__lado codigo-pase">' + seguro(fila.codigo) + '</span>'
+            : '')) +
     '</button>';
 }
 
@@ -463,6 +561,12 @@ function abrirDetalleDeInvitado(id) {
           '</button>' +
         '</div>'
       : '') +
+    (asiste && fila.codigo
+      ? '<div class="acciones">' +
+          '<button class="boton boton--ancho" id="marcar-llegada-invitado">' +
+            'Marcar llegada</button>' +
+        '</div>'
+      : '') +
     (asiste && gente ? '<div id="bloque-acompanantes"></div>' : '') +
     (INVITADOS_EDITABLES
       ? '<div class="acciones">' +
@@ -504,6 +608,20 @@ function abrirDetalleDeInvitado(id) {
     });
   }
 
+  const botonLlegada = buscar('#marcar-llegada-invitado', cuerpo);
+  if (botonLlegada) {
+    botonLlegada.addEventListener('click', async () => {
+      try {
+        const r = await mandar('llegadas.php?accion=marcar', { codigo: fila.codigo });
+        cerrarHoja(true);
+        avisar(r.mensaje || 'Llegada marcada.');
+        ensuciarVistas('hoy', 'resumen');
+      } catch (error) {
+        avisar(error.message, true);
+      }
+    });
+  }
+
   if (!INVITADOS_EDITABLES) return;
 
   buscar('#editar-invitado', cuerpo).addEventListener('click', () => {
@@ -526,6 +644,117 @@ function abrirDetalleDeInvitado(id) {
       avisar(error.message, true);
     }
   });
+}
+
+
+/**
+ * Abre un selector de mesa y la asigna a todas las confirmaciones
+ * marcadas en modo selección. No reusa elegirMesaPara() porque esa
+ * está armada para una sola persona a la vez — acá se elige la mesa
+ * una vez y se aplica en lote.
+ *
+ * @returns {Promise<void>}
+ */
+async function asignarMesaEnLote() {
+  if (!SELECCIONADOS.size) return;
+
+  try {
+    if (!MESAS) MESAS = await traer('mesas.php?accion=todo');
+  } catch (error) {
+    avisar(error.message, true);
+    return;
+  }
+
+  if (!MESAS.mesas.length) {
+    avisar('Todavía no armaste ninguna mesa. Ve a Evento → Mesas.', true);
+    return;
+  }
+
+  const ids     = Array.from(SELECCIONADOS);
+  const cuantos = ids.length;
+
+  const cuerpo = abrirHoja('Asignar mesa a ' + pluralizar(cuantos, 'persona', 'personas'),
+    MESAS.mesas.map(mesa =>
+      '<button class="lista__fila" data-mesa="' + seguro(mesa.id) + '">' +
+        '<span class="lista__cuerpo">' +
+          '<span class="lista__titulo">' + seguro(mesa.nombre) + '</span>' +
+          '<span class="lista__pie">' + seguro(mesa.ocupados + ' de ' + mesa.capacidad) + '</span>' +
+        '</span>' +
+      '</button>'
+    ).join('')
+  );
+
+  buscarTodos('[data-mesa]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', async () => {
+      const mesaId = Number(boton.dataset.mesa);
+      cerrarHoja(true);
+
+      let listas = 0;
+      for (const id of ids) {
+        try {
+          await mandar('mesas.php?accion=sentar', { confirmacion_id: id, mesa_id: mesaId });
+          listas++;
+        } catch (error) {
+          // Un rechazo (mesa llena, por ejemplo) no debe frenar al resto.
+        }
+      }
+
+      avisar(
+        listas === cuantos
+          ? 'Se asignó mesa a ' + pluralizar(listas, 'persona', 'personas') + '.'
+          : 'Se asignó a ' + listas + ' de ' + cuantos + '. Revisa los que quedaron fuera.',
+        listas !== cuantos
+      );
+
+      MESAS = null;
+      ensuciarVistas('resumen', 'evento');
+      salirDeSeleccion();
+      dibujarGente();
+    });
+  });
+}
+
+/**
+ * Marca la llegada de todas las confirmaciones marcadas en modo
+ * selección que tengan código de pase.
+ *
+ * @returns {Promise<void>}
+ */
+async function marcarLlegadaEnLote() {
+  if (!SELECCIONADOS.size) return;
+
+  const ids      = Array.from(SELECCIONADOS);
+  const filas    = ids.map(id => INVITADOS.find(f => Number(f.id) === id)).filter(Boolean);
+  const conCodigo = filas.filter(f => f.codigo);
+
+  if (!conCodigo.length) {
+    avisar('Ninguno de los seleccionados tiene pase para marcar llegada.', true);
+    return;
+  }
+
+  if (!confirmarAccion(
+    '¿Marcar llegada de ' + pluralizar(conCodigo.length, 'persona', 'personas') + '?'
+  )) return;
+
+  let listas = 0;
+  for (const fila of conCodigo) {
+    try {
+      await mandar('llegadas.php?accion=marcar', { codigo: fila.codigo });
+      listas++;
+    } catch (error) {
+      // Un pase ya marcado no debe frenar al resto.
+    }
+  }
+
+  const saltados = filas.length - conCodigo.length;
+  avisar(
+    'Se marcó llegada de ' + pluralizar(listas, 'persona', 'personas') + '.' +
+    (saltados ? ' ' + saltados + ' sin pase, se saltaron.' : '')
+  );
+
+  ensuciarVistas('hoy', 'resumen');
+  salirDeSeleccion();
+  dibujarGente();
 }
 
 

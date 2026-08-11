@@ -213,11 +213,97 @@
 .plano {
   display: grid;
   gap: 5px;
-  margin-bottom: var(--esp-2);
   padding: var(--esp-2);
   background: var(--fondo-hundido);
   border: 1px solid var(--borde);
   border-radius: var(--redondeo);
+}
+
+/* El interruptor "Ver / Editar" del plano (Fase 5). En "ver" nada se
+   arrastra por accidente; en "editar" se habilita soltar gente sobre
+   una mesa. */
+.modo-plano {
+  display: flex;
+  gap: 4px;
+  margin-bottom: var(--esp-2);
+  padding: 4px;
+  background: var(--fondo-hundido);
+  border-radius: var(--redondeo-chico);
+  width: fit-content;
+}
+.modo-plano__opcion {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: var(--redondeo-chico);
+  background: none;
+  color: var(--texto-suave);
+  font-size: 13px;
+  font-weight: 600;
+}
+.modo-plano__opcion.activo {
+  background: var(--oro);
+  color: var(--texto-sobre-principal);
+}
+
+/* El marco con zoom y desplazamiento (Fase 5). El exterior recorta lo
+   que se sale y recibe los toques de pan/pinch; el lienzo de adentro
+   es al que se le aplica el transform. */
+.plano-lienzo-exterior {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: var(--esp-2);
+  border-radius: var(--redondeo);
+  touch-action: none;
+}
+.plano-lienzo {
+  transform-origin: 0 0;
+  /* Nada de transition acá: seguir al dedo tiene que ser instantáneo,
+     no animado — una transición metería un retraso perceptible. */
+}
+
+.plano-controles {
+  position: absolute;
+  right: var(--esp-2);
+  bottom: var(--esp-2);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 2;
+}
+.plano-controles .boton-icono {
+  width: 34px;
+  height: 34px;
+  background: var(--fondo-elevado);
+  border: 1px solid var(--borde);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* El objetivo de un arrastre en curso, para que quede claro dónde va a
+   caer antes de soltar. */
+.plano__mesa--objetivo {
+  border-color: var(--oro) !important;
+  box-shadow: 0 0 0 2px var(--oro);
+}
+
+/* El "fantasma" que sigue al dedo mientras se arrastra a alguien desde
+   "Sin mesa" hasta una mesa del plano. Vive suelto en <body>, no
+   adentro del plano, porque tiene que poder salirse de su recorte
+   mientras se mueve. */
+.plano-fantasma {
+  position: fixed;
+  z-index: 999;
+  transform: translate(-50%, -140%);
+  padding: 6px 12px;
+  border-radius: var(--redondeo-chico);
+  background: var(--oro);
+  color: var(--texto-sobre-principal);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .4);
 }
 
 /* Todo lo que no es una mesa: tarima, pista, bufet, baños, barra. Van
@@ -987,6 +1073,47 @@
 }
 .punto--si { background: var(--bien); }
 .punto--no { background: var(--alerta); }
+
+/* La casilla del modo selección múltiple (Fase 5), en el mismo lugar
+   donde va el punto de color cuando no se está seleccionando. */
+.lista__casilla {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 2px solid var(--borde);
+  flex-shrink: 0;
+}
+.lista__casilla--marcada {
+  background: var(--oro);
+  border-color: var(--oro);
+}
+
+/* La barra flotante de acciones en lote: fija abajo, sobre la barra de
+   navegación, para que la selección siempre quede a mano del pulgar. */
+.barra-seleccion {
+  position: sticky;
+  bottom: var(--esp-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-2);
+  margin-top: var(--esp-3);
+  padding: var(--esp-3);
+  background: var(--fondo-elevado);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+}
+.barra-seleccion__cuantos {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.barra-seleccion__botones {
+  display: flex;
+  gap: var(--esp-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 
 /* El código de pase, en monoespaciada para que se lea letra por letra
    al compararlo con el que muestra el invitado en la entrada. */
