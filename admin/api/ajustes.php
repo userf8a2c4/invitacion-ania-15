@@ -11,7 +11,14 @@
    QUÉ SE LE PUEDE PEDIR
      GET  ?accion=obtener&clave=paleta   el valor guardado, o null
      POST ?accion=guardar                {clave, valor}, solo admin
-   ══════════════════════════════════════════════════════════════════════ */
+
+   LA EXCEPCIÓN: 'fab_<id-de-usuario>'
+   El sandwich de herramientas rápidas del botón flotante (Fase 1 del
+   rediseño, ver codigo/29-fab.js) es de CADA PERSONA, no del evento:
+   lo que Carlos elige no tiene por qué ser lo que Lucila elige. Por
+   eso una cuenta sin rol admin puede guardar esa clave puntual, pero
+   solo la que lleva su propio id — nunca la de otra cuenta ni
+   cualquier otra clave del evento. */
 
 require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
@@ -47,13 +54,18 @@ case 'obtener':
 
 case 'guardar':
     exigirMetodo('POST');
-    exigirAdministrador();
 
     $datos = cuerpoJson();
     $clave = campoTexto($datos, 'clave', 60);
     $valor = campoTexto($datos, 'valor', 5000);
 
     if ($clave === '') responderMal('Falta decir qué ajuste.', 400);
+
+    // La única clave que una cuenta sin rol admin puede tocar es la
+    // suya propia del sandwich del FAB. Cualquier otra sigue siendo
+    // del evento, y del evento decide quien administra.
+    $esSuPropioFab = $clave === 'fab_' . (int) ($yo['id'] ?? 0);
+    if (!$esSuPropioFab) exigirAdministrador();
 
     $existe = consultarUno('SELECT clave FROM ajustes WHERE clave = :c', [':c' => $clave]);
     if ($existe) {

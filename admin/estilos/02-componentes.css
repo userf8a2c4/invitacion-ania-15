@@ -91,6 +91,11 @@
 }
 .boton-icono:active { background: color-mix(in srgb, var(--oro) 12%, transparent); }
 
+/* El icono de sincronizar (05-navegacion.js, sincronizarAhora()) gira
+   mientras manda lo que había quedado en la cola. */
+.boton-icono--girando .icono { animation: girar 900ms linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+
 /* Botón flotante de notas.
  *
  * SE ESCONDE AL BAJAR Y VUELVE AL SUBIR. Antes tapaba el último botón de

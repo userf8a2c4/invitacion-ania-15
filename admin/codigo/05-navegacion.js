@@ -18,7 +18,7 @@
 
 
 /** Cuál pestaña se está viendo. */
-let VISTA_ACTUAL = 'resumen';
+let VISTA_ACTUAL = 'hoy';
 
 /** Qué vistas ya pidieron sus datos alguna vez. */
 const VISTAS_CARGADAS = {};
@@ -28,9 +28,29 @@ const VISTAS_CARGADAS = {};
  *
  * Tener esto en una tabla y no en un montón de "if" hace que agregar una
  * vista nueva sea agregar un renglón acá.
+ *
+ * SIGUEN ESTANDO LAS OCHO, NO SOLO LAS CUATRO DE LA BARRA DE ABAJO.
+ * Resumen, Gente, Correo, Presupuesto y Evento ya no tienen botón
+ * propio abajo desde el rediseño — se llega a ellas desde Planificar,
+ * desde los accesos de Resumen, o desde un atajo del icono de la app
+ * (?ir=dinero). irA() no distingue "pestaña de la barra" de "pestaña a
+ * la que se llega desde otra": para el resto del código no cambió
+ * nada.
  */
 const VISTAS = {
+  /* "Hoy" es la puerta de entrada ahora: qué está pasando y qué hay
+     que hacer en este momento. Ver codigo/30-vista-hoy.js. */
+  hoy:       { titulo: 'Hoy',       dibujar: () => dibujarHoy() },
   resumen:   { titulo: 'Resumen',   dibujar: () => dibujarResumen() },
+  /* El índice de herramientas: Gente, Mesas, Dinero, Correo, Tareas,
+     Contactos… todo lo que antes eran pestañas sueltas. Ver
+     codigo/31-vista-planificar.js. */
+  planificar:{ titulo: 'Planificar', dibujar: () => dibujarPlanificar() },
+  /* Lo que antes era el menú de los tres puntitos, ahora como pestaña
+     en vez de hoja — mismo contenido, mismo atenderMenu(). Ver
+     codigo/05-navegacion.js más abajo, dibujarMas(). */
+  mas:       { titulo: 'Más',       dibujar: () => dibujarMas() },
+
   /* La clave sigue siendo 'invitados' porque la usan los atajos del
      icono y ensuciarVistas(). Lo que se ve en pantalla es "Gente", y
      adentro están las confirmaciones y la agenda de contactos. */
@@ -47,6 +67,18 @@ const VISTAS = {
      No va al servidor: solo repinta lo que ya está en memoria. */
   evento:    { titulo: 'Evento',    dibujar: () => dibujarEvento(),
                alVolver: () => volverAlIndiceDeEvento() },
+};
+
+/* Gente, Correo, Presupuesto y Evento ya no tienen botón propio en la
+   barra: se llega a ellos desde Planificar. Para que la barra no se
+   quede sin ninguna pestaña marcada al entrar a uno de esos —lo que se
+   vería como "me perdí"—, esta tabla dice qué botón de abajo hay que
+   dejar encendido en su lugar. */
+const PADRE_DE_VISTA = {
+  invitados: 'planificar',
+  correo:    'planificar',
+  dinero:    'planificar',
+  evento:    'planificar',
 };
 
 
@@ -71,9 +103,11 @@ function irA(cual, recargar) {
     seccion.classList.toggle('activa', seccion.dataset.vista === cual);
   });
 
-  // Y en los botones de abajo.
+  // Y en los botones de abajo. Si "cual" no tiene botón propio (Gente,
+  // Correo, Presupuesto, Evento), se enciende el de su padre.
+  const paraLaBarra = PADRE_DE_VISTA[cual] || cual;
   buscarTodos('.navegacion__boton').forEach(boton => {
-    boton.classList.toggle('activa', boton.dataset.ir === cual);
+    boton.classList.toggle('activa', boton.dataset.ir === paraLaBarra);
   });
 
   ponerTitulo(vista.titulo);
@@ -143,9 +177,11 @@ function prepararNavegacion() {
     });
   });
 
-  /* ─── El menú de los tres puntitos ─────────────────────────────── */
-
-  buscar('#boton-menu').addEventListener('click', () => abrirMenuPrincipal());
+  /* ─── Sincronizar a mano ─────────────────────────────────────────── */
+  const botonSync = buscar('#boton-sincronizar');
+  if (botonSync) {
+    botonSync.addEventListener('click', () => sincronizarAhora(botonSync));
+  }
 
   /* ─── La tecla Escape cierra lo que esté abierto ────────────────── */
   document.addEventListener('keydown', evento => {
@@ -155,18 +191,24 @@ function prepararNavegacion() {
 }
 
 /**
- * Abre el menú principal como una hoja, con el mismo patrón que el
- * índice de Evento: grupos con título y una línea que dice qué hace
- * cada opción, en vez de un desplegable angosto con doce renglones.
+ * Pinta la pestaña "Más": todo lo que antes era el menú de los tres
+ * puntitos, ahora como una pestaña más en vez de una hoja que tapaba
+ * la pantalla. Mismo patrón que el índice de Evento: grupos con
+ * título y una línea que dice qué hace cada opción.
  *
- * Antes eran doce opciones apiladas sin más criterio que el orden en
- * que se fueron agregando. Ahora, además, el menú se acorta solo:
- * las filas marcadas 'soloAdmin' no aparecen si quien mira no es
- * administradora, y "Instalar" solo aparece si el teléfono puede.
+ * El menú se acorta solo: las filas marcadas 'soloAdmin' no aparecen
+ * si quien mira no es administradora, y "Instalar" solo aparece si el
+ * teléfono puede.
  *
  * @returns {void}
  */
-function abrirMenuPrincipal() {
+function dibujarMas() {
+  const vista = buscar('#vista-mas');
+  // Si la sesión venció justo mientras se tocaba "Más", USUARIO ya
+  // puede estar en null: manejarSesionVencida() (03-servidor.js) se
+  // encarga de mandar al login, así que acá no hay nada que pintar.
+  if (!vista || !USUARIO) return;
+
   const esAdmin = USUARIO.rol === 'admin';
 
   const yaInstalada =
@@ -189,20 +231,13 @@ function abrirMenuPrincipal() {
     }))
     .filter(grupo => grupo.filas.length);
 
-  const cuerpo = abrirHoja('Menú', '<div id="indice-menu"></div>' +
-    '<button class="boton boton--peligro boton--ancho" id="menu-salir" ' +
-            'style="margin-top:var(--esp-3)">Cerrar sesión</button>'
-  );
+  vista.innerHTML = '<div id="indice-mas"></div>' +
+    '<button class="boton boton--peligro boton--ancho" id="mas-salir" ' +
+            'style="margin-top:var(--esp-3)">Cerrar sesión</button>';
 
-  pintarIndice(buscar('#indice-menu', cuerpo), grupos, clave => {
-    cerrarHoja();
-    atenderMenu(clave);
-  });
+  pintarIndice(buscar('#indice-mas', vista), grupos, clave => atenderMenu(clave));
 
-  buscar('#menu-salir', cuerpo).addEventListener('click', () => {
-    cerrarHoja();
-    salir();
-  });
+  buscar('#mas-salir', vista).addEventListener('click', () => salir());
 }
 
 /**
@@ -228,6 +263,7 @@ function nombreDeOpcionDeMenu(clave) {
     'avisos':      'Avisos y recordatorios',
     'etiquetas':   'Cambiar los nombres',
     'colores':     'Colores del panel',
+    'fab-config':  'Mis herramientas rápidas',
     'instalar':    'Instalar en la pantalla de inicio',
   };
   return nombres[clave] || clave;
@@ -295,6 +331,10 @@ function atenderMenu(opcion) {
 
     case 'escanear':
       abrirEscaner();
+      break;
+
+    case 'fab-config':
+      abrirConfiguracionDelFab();
       break;
   }
 }

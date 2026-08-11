@@ -493,7 +493,12 @@ function actualizarBurbujas(datos) {
     .filter(c => Number(c.techo) > 0 && Number(c.gastado) > Number(c.techo))
     .length;
 
-  ponerBurbuja('#burbuja-dinero', pagos + sobregiros);
+  // Antes vivía en la pestaña Presupuesto; con las cuatro pestañas
+  // nuevas (Fase 1 del rediseño), Presupuesto ya no tiene botón propio
+  // abajo — se llega desde Planificar. El aviso de "algo de dinero
+  // necesita atención" se muda a la pestaña Resumen, que es quien
+  // ahora contesta esa pregunta.
+  ponerBurbuja('#burbuja-resumen', pagos + sobregiros);
 }
 
 /**
