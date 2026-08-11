@@ -52,9 +52,17 @@
   --color-oro-apagado:      #6e5824;
   --color-oro-sombra:       #4a3818;   /* bronce/oliva de los recovecos */
 
+  /* --color-oro-texto: SOLO para texto que se lee (notas, pie, citas).
+     --color-oro-apagado se queda como está para bordes, flechas e iconos
+     —donde su tono terroso es justo lo que se quiere—, pero como TEXTO
+     no alcanzaba el contraste mínimo de lectura ni con la penumbra
+     rebajada. Este es el mismo dorado que --color-oro, con nombre propio
+     para dejar clara la intención de cada uso. */
+  --color-oro-texto:        #c1a049;
+
   /* Claros: el texto */
   --color-marfil:           #f5efe6;
-  --color-marfil-apagado:   #c8bfb0;
+  --color-marfil-apagado:   #ddd5c8;
 
   /* Bordes preparados (para no repetir el rgba a mano) */
   --borde-oro-tenue:        rgba(201, 168, 76, .35);

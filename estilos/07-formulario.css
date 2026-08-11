@@ -109,7 +109,7 @@
 
 .nota-campo {
   font-size: .85rem;
-  color: var(--color-oro-apagado);
+  color: var(--color-oro-texto);
   font-style: italic;
   margin-top: .4rem;
 }
@@ -149,7 +149,7 @@
 .fila-persona__nombre small {
   display: block;
   font-size: .72em;
-  color: var(--color-oro-apagado);
+  color: var(--color-oro-texto);
   letter-spacing: .05em;
 }
 
@@ -194,7 +194,7 @@
   font-family: var(--tipo-detalle);
   font-size: .72rem;
   letter-spacing: .08em;
-  color: var(--color-oro-apagado);
+  color: var(--color-oro-texto);
   margin-top: .1rem;
 }
 
@@ -345,7 +345,7 @@
 .enlace-sutil {
   background: none;
   border: none;
-  color: var(--color-oro-apagado);
+  color: var(--color-oro-texto);
   font-family: var(--tipo-texto);
   font-size: .85rem;
   text-decoration: underline;

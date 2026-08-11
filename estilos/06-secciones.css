@@ -73,7 +73,7 @@
   font-family: var(--tipo-texto);
   font-size: .9rem;
   letter-spacing: .15em;
-  color: var(--color-oro-apagado);
+  color: var(--color-oro-texto);
   text-align: right;
   font-style: normal;
 }
@@ -112,7 +112,7 @@
 .tarjeta-regalo p { margin: 0; font-size: 1rem; }
 .tarjeta-regalo__nota {
   font-size: .95rem;
-  color: var(--color-oro-apagado);
+  color: var(--color-oro-texto);
   font-style: italic;
 }
 
@@ -185,6 +185,60 @@
   box-shadow: inset 0 0 0 1px rgba(201, 168, 76, .14),
                     0 0 24px rgba(196, 150, 70, .13),   /* calor de vela */
                     0 18px 40px rgba(0, 0, 0, .55);
+}
+
+/* PANEL "A PEDIDO" · lo que se ve antes de tocar "Ver el mapa".
+   Mismas proporciones que el iframe real, para que no salte el layout
+   cuando se reemplace por él. */
+.mapa-marco--a-pedido {
+  min-height: 380px;
+  background: var(--color-carbon);
+}
+
+.mapa-marco__aviso {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .6rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.mapa-marco__aviso-nombre {
+  font-family: var(--tipo-titulos);
+  font-size: 1.15rem;
+  color: var(--color-oro-claro);
+}
+
+.mapa-marco__aviso-direccion {
+  max-width: 32ch;
+  font-size: .85rem;
+  line-height: 1.5;
+  color: var(--color-marfil-apagado);
+}
+
+.mapa-marco__boton-ver {
+  margin-top: .6rem;
+  padding: .7rem 1.6rem;
+  background: transparent;
+  border: 1px solid var(--borde-oro-fuerte);
+  border-radius: 999px;
+  font-family: var(--tipo-detalle);
+  font-size: .8rem;
+  letter-spacing: .08em;
+  color: var(--color-oro);
+  cursor: pointer;
+  transition: background-color .25s ease, color .25s ease;
+}
+
+.mapa-marco__boton-ver:hover,
+.mapa-marco__boton-ver:focus-visible {
+  background: var(--color-oro);
+  color: var(--color-negro);
 }
 
 .mapa-marco iframe {
@@ -282,7 +336,7 @@
   font-family: var(--tipo-detalle);
   font-size: .8rem;
   letter-spacing: .2em;
-  color: var(--color-oro-apagado);
+  color: var(--color-oro-texto);
 }
 #pie-de-pagina .rosa { color: var(--color-sangre); }
 

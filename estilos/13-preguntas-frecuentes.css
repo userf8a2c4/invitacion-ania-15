@@ -179,7 +179,7 @@ body.sobre-visible #boton-qa { display: none; }
   font-size: .68rem;
   letter-spacing: .14em;
   text-transform: uppercase;
-  color: var(--color-oro-apagado);
+  color: var(--color-oro-texto);
 }
 
 #boton-cerrar-qa {
