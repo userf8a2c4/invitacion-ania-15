@@ -533,10 +533,53 @@ function pintarPadrinos(cuerpo) {
 
   buscarTodos('[data-padrino]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
-      formularioPadrino(DINERO.padrinos.find(p => String(p.id) === boton.dataset.padrino));
+      abrirDetalleDePadrino(
+        DINERO.padrinos.find(p => String(p.id) === boton.dataset.padrino));
     });
   });
   buscar('#agregar', cuerpo).addEventListener('click', () => formularioPadrino());
+}
+
+/**
+ * Ficha de solo lectura de un padrino, antes de editar. Mismo patrón que
+ * abrirDetalleDeInvitado() (08-vista-invitados.js).
+ *
+ * @param {Object} padrino
+ * @returns {void}
+ */
+function abrirDetalleDePadrino(padrino) {
+  const monto = padrino.tipo_aporte === 'especie'
+    ? 'En especie' + (padrino.monto > 0 ? ' (aprox. ' + comoDinero(padrino.monto, false) + ')' : '')
+    : comoDinero(padrino.monto, false);
+
+  const estados = { hablado: 'Hablado', confirmado: 'Confirmado en firme', entregado: 'Ya entregó' };
+
+  const detalle = [
+    ['Apadrina', padrino.apadrina || '—'],
+    ['Aporte', monto],
+    ['Estado', estados[padrino.estado] || padrino.estado || '—'],
+    ['Teléfono', padrino.telefono || '—'],
+    ['Correo', padrino.correo || '—'],
+    ['Notas', padrino.notas || '—'],
+  ].map(r =>
+    '<span class="detalle__rotulo">' + seguro(r[0]) + '</span>' +
+    '<span class="detalle__valor">' + seguro(r[1]) + '</span>'
+  ).join('');
+
+  const cuerpo = abrirHoja(padrino.nombre,
+    '<div class="detalle">' + detalle + '</div>' +
+    '<div class="acciones" style="margin-top:var(--esp-3)">' +
+      '<button class="boton boton--peligro" id="detalle-borrar">Borrar</button>' +
+      '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
+    '</div>'
+  );
+
+  buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioPadrino(padrino));
+
+  buscar('#detalle-borrar', cuerpo).addEventListener('click', () => {
+    if (!confirmarAccion('¿Borrar esto? No se puede deshacer.')) return;
+    guardarDinero('borrar_padrino', { id: padrino.id }, 'Eliminado.');
+  });
 }
 
 /**
@@ -587,7 +630,7 @@ function pintarProveedores(cuerpo) {
 
   buscarTodos('[data-proveedor]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
-      formularioProveedor(
+      abrirDetalleDeProveedor(
         DINERO.proveedores.find(p => String(p.id) === boton.dataset.proveedor));
     });
   });
@@ -1120,6 +1163,54 @@ function formularioPadrino(padrino) {
   }, 'padrino', padrino);
 }
 
+
+/**
+ * Ficha de solo lectura de un proveedor, antes de editar. Mismo patrón
+ * que abrirDetalleDeInvitado() (08-vista-invitados.js).
+ *
+ * @param {Object} proveedor
+ * @returns {void}
+ */
+function abrirDetalleDeProveedor(proveedor) {
+  const estados = {
+    candidato: 'Candidato', contratado: 'Contratado',
+    pagado: 'Pagado por completo', cancelado: 'Cancelado',
+  };
+  const falta = (Number(proveedor.monto_total) || 0) - (Number(proveedor.anticipo) || 0);
+
+  const detalle = [
+    ['Servicio', proveedor.servicio || '—'],
+    ['Estado', estados[proveedor.estado] || proveedor.estado || '—'],
+    ['Monto total', comoDinero(proveedor.monto_total, false)],
+    ['Anticipo pagado', comoDinero(proveedor.anticipo, false)],
+    ['Falta', falta > 0 ? comoDinero(falta, false) : '—'],
+    ['Contacto', proveedor.contacto || '—'],
+    ['Teléfono', proveedor.telefono || '—'],
+    ['Correo', proveedor.correo || '—'],
+    ['Notas', proveedor.notas || '—'],
+  ].map(r =>
+    '<span class="detalle__rotulo">' + seguro(r[0]) + '</span>' +
+    '<span class="detalle__valor">' + seguro(r[1]) + '</span>'
+  ).join('');
+
+  const cuerpo = abrirHoja(proveedor.nombre,
+    '<div class="detalle">' + detalle + '</div>' +
+    botonesDeContacto(proveedor) +
+    '<div class="acciones" style="margin-top:var(--esp-3)">' +
+      '<button class="boton boton--peligro" id="detalle-borrar">Borrar</button>' +
+      '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
+    '</div>'
+  );
+
+  engancharBotonesDeContacto(cuerpo, proveedor);
+
+  buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioProveedor(proveedor));
+
+  buscar('#detalle-borrar', cuerpo).addEventListener('click', () => {
+    if (!confirmarAccion('¿Borrar esto? No se puede deshacer.')) return;
+    guardarDinero('borrar_proveedor', { id: proveedor.id }, 'Eliminado.');
+  });
+}
 
 function formularioProveedor(proveedor) {
   const d = proveedor || {};

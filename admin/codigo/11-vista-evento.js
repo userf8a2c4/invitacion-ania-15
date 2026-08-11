@@ -855,7 +855,7 @@ function pintarSeccionGenerica(cuerpo, clave) {
 
   buscarTodos('[data-ev-id]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
-      formularioEvento(clave,
+      abrirDetalleGenerico(clave,
         registros.find(r => String(r.id) === boton.dataset.evId));
     });
   });
@@ -874,6 +874,68 @@ function pintarSeccionGenerica(cuerpo, clave) {
   });
 
   buscar('#ev-nuevo', cuerpo).addEventListener('click', () => formularioEvento(clave));
+}
+
+/**
+ * Ficha de solo lectura de cualquier sección genérica (Regalos, Foráneos…),
+ * antes de entrar a editar. Mismo patrón que abrirDetalleDeInvitado()
+ * (08-vista-invitados.js): primero se lee, y solo un botón aparte lleva
+ * al formulario — así tocar una fila para mirarla no arriesga cambiar
+ * algo sin querer. Genérica porque las secciones de SECCIONES ya
+ * describen sus campos con rótulo y tipo; no hace falta una función
+ * por sección.
+ *
+ * @param {string} clave
+ * @param {Object} registro
+ * @returns {void}
+ */
+function abrirDetalleGenerico(clave, registro) {
+  const config = SECCIONES[clave];
+
+  const comoTexto = campo => {
+    const valor = registro[campo.id];
+    if (valor === undefined || valor === null || valor === '') return '—';
+
+    if (campo.lista) {
+      const opcion = campo.lista.find(o => String(o[0]) === String(valor));
+      return opcion ? opcion[1] : String(valor);
+    }
+    if (campo.tipo === 'date') return comoFecha(valor);
+    // Los montos se marcan con paso 0.01 en la descripción del campo.
+    if (campo.tipo === 'number' && campo.paso === '0.01') {
+      return comoDinero(valor, false);
+    }
+    return String(valor);
+  };
+
+  const detalle = config.campos.map(campo =>
+    '<span class="detalle__rotulo">' + seguro(campo.rotulo) + '</span>' +
+    '<span class="detalle__valor">' + seguro(comoTexto(campo)) + '</span>'
+  ).join('');
+
+  const cuerpo = abrirHoja(registro.id ? (config.fila(registro).titulo || config.titulo) : config.titulo,
+    '<div class="detalle">' + detalle + '</div>' +
+    '<div class="acciones" style="margin-top:var(--esp-3)">' +
+      '<button class="boton boton--peligro" id="detalle-borrar">Borrar</button>' +
+      '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
+    '</div>'
+  );
+
+  buscar('#detalle-editar', cuerpo).addEventListener('click', () => {
+    formularioEvento(clave, registro);
+  });
+
+  buscar('#detalle-borrar', cuerpo).addEventListener('click', async () => {
+    if (!confirmarAccion('¿Borrar esto? No se puede deshacer.')) return;
+    try {
+      await mandar('evento.php?accion=borrar&que=' + clave, { id: registro.id });
+      cerrarHoja(true);
+      avisar('Eliminado.');
+      await refrescarEvento();
+    } catch (error) {
+      avisar(error.message, true);
+    }
+  });
 }
 
 /**
