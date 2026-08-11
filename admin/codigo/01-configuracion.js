@@ -259,6 +259,17 @@ const CONFIGURACION = {
         ['instalar',   'Poner el acceso directo en la pantalla de inicio'],
       ],
     },
+    {
+      /* Solo aparece para la cuenta observadora (ver esObservador() en
+         api/_lib/sesion.php y el filtro en dibujarMas(),
+         05-navegacion.js) — ni siquiera para otra cuenta admin. Va en
+         su propio grupo para que no se confunda con un ajuste del
+         evento: esto es sobre CÓMO SE USA el panel, no sobre la fiesta. */
+      titulo: 'Solo para ti',
+      filas: [
+        ['metricas', 'Qué pantallas se usan, qué cuesta más pasos, y qué tanto le entiende el asistente a Lucila'],
+      ],
+    },
   ],
 
 

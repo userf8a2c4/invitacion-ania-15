@@ -288,6 +288,11 @@ async function encender() {
     sincronizarPaletaConServidor();
     sincronizarSandwichConServidor();
     sincronizarFrasesConServidor();
+
+    // Deja guardada una copia de cada sección por si se corta la señal
+    // más tarde (Fase 8 del rediseño). Mismo criterio: no se espera, no
+    // se avisa, trabaja calladamente por detrás.
+    precalentarCopias();
   } else {
     mostrarPantallaDeEntrada();
   }
