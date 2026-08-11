@@ -1,144 +1,29 @@
 /* ══════════════════════════════════════════════════════════════════════
-   25 · HOY, EL DÍA DEL EVENTO Y COMPARTIR
+   25 · EL DÍA DEL EVENTO Y COMPARTIR
 
    QUÉ HAY EN ESTE ARCHIVO
-   Tres pantallas que responden preguntas distintas del mismo día:
+   Dos pantallas:
 
-     · HOY          → "¿qué tengo que hacer ahora?"
      · EL DÍA       → el cronograma en pantalla completa, para el 24
      · COMPARTIR    → mandarle a cada proveedor lo suyo
 
-   POR QUÉ "HOY" NO ES EL RESUMEN
-   El Resumen muestra el estado completo. Está bien para sentarse a
-   mirar cómo viene todo, pero es demasiado para el momento en que uno
-   abre la app con una mano mientras habla por teléfono con el salón.
-   Acá van tres cosas y nada más.
+   Y dos ayudas que siguen viviendo acá porque las usa la pestaña Hoy
+   (30-vista-hoy.js): bloqueAQuienLlamar() y bloqueListaFinal().
+
+   DÓNDE SE FUE EL BLOQUE "HOY" QUE ANTES ESTABA ACÁ
+   Con el rediseño, "Hoy" pasó a ser su propia pestaña con una pantalla
+   completa (30-vista-hoy.js) en vez de un widget que se pintaba arriba
+   del Resumen. Ese widget (la función pintarHoy() de antes) ya no
+   existe: la pantalla nueva pide hoy.php directamente.
 
    ÍNDICE
-     1. Hoy
+     1. Ayudas que usa la pestaña Hoy
      2. El día del evento
      3. Compartir
    ══════════════════════════════════════════════════════════════════════ */
 
 
-/** Lo que devolvió hoy.php. */
-let HOY = null;
-
-/** Cuántos pendientes se muestran. Más que esto ya no se lee. */
-const CUANTOS_PENDIENTES = 4;
-
-
-/* ─── 1. HOY ───────────────────────────────────────────────────────── */
-
-/**
- * Pinta el bloque de "hoy" arriba del Resumen.
- *
- * @param {Element} donde
- * @returns {Promise<void>}
- */
-async function pintarHoy(donde) {
-  try {
-    HOY = await traer('hoy.php');
-  } catch (error) {
-    /* ANTES ESTO BORRABA EL BLOQUE SIN DECIR NADA, y con él se iba el
-       botón para abrir el cronograma. El 24 de octubre, un error de red
-       de un segundo escondía justo la pantalla que hace falta.
-
-       Ahora se avisa y se ofrece reintentar. Y el acceso al modo del
-       día no depende de esta llamada: está también en Evento y en el
-       menú. */
-    pintarError(donde, error.message, () => pintarHoy(donde));
-    return;
-  }
-
-  const pendientes = HOY.pendientes || [];
-  const primeros = pendientes.slice(0, CUANTOS_PENDIENTES);
-  const restantes = pendientes.length - primeros.length;
-
-  const colores = {
-    pago: 'alerta', tarea: 'ojo', agenda: 'info',
-    ensayo: 'info', vestido: 'oro', alarma: 'oro',
-  };
-
-  /* El día del evento la pantalla cambia de cara: deja de preguntar qué
-     hacer y pasa a ser el cronograma.
-
-     Los días previos el botón aparece igual, más discreto. Sirve para
-     repasar el cronograma la noche anterior —que es cuando de verdad se
-     repasa— y para que el 24 nadie tenga que descubrir un botón que ve
-     por primera vez. */
-  const faltan = Number(HOY.dias_para_la_fiesta);
-  const yaCasi = !HOY.es_el_dia && faltan >= 0 &&
-                 faltan <= CONFIGURACION.avisos.diasParaElModoDelDia;
-
-  donde.innerHTML =
-    (HOY.es_el_dia || yaCasi
-      ? '<button class="boton boton--ancho ' +
-                (HOY.es_el_dia ? 'boton--principal' : '') + '" id="hoy-es-el-dia" ' +
-                'style="margin-bottom:var(--esp-2);min-height:52px;font-size:16px">' +
-          (HOY.es_el_dia
-            ? 'Hoy son los XV · Abrir el cronograma'
-            : 'Ver el cronograma del día') +
-        '</button>'
-      : '') +
-
-    '<div class="tarjeta">' +
-      '<div style="display:flex;justify-content:space-between;align-items:baseline">' +
-        '<div class="tarjeta__titulo" style="margin:0">Hoy</div>' +
-        (HOY.atrasados
-          ? '<span class="etiqueta etiqueta--alerta">' +
-            seguro(pluralizar(HOY.atrasados, 'atrasado', 'atrasados')) + '</span>'
-          : '') +
-      '</div>' +
-
-      (primeros.length
-        ? '<div style="margin-top:var(--esp-2)">' +
-            primeros.map(p =>
-              '<button class="alerta-fila' +
-                (p.urgencia === 0 ? ' alerta-fila--urgente' : '') + '" ' +
-                'data-hoy="' + seguro(p.ir_a + '|' + p.seccion) + '">' +
-                '<span class="hito__marca hito__marca--' +
-                  (colores[p.tipo] || 'tenue') + '" ' +
-                  'style="position:static;box-shadow:none"></span>' +
-                '<span class="alerta-fila__texto">' + seguro(p.texto) +
-                  (p.detalle
-                    ? '<span class="alerta-fila__pie" style="display:block">' +
-                      seguro(p.detalle) + '</span>'
-                    : '') +
-                '</span>' +
-              '</button>'
-            ).join('') +
-            (restantes > 0
-              ? '<p class="vacio__texto" style="text-align:center">y ' +
-                seguro(restantes) + ' más esta semana</p>'
-              : '') +
-          '</div>'
-        : '<p class="vacio__texto" style="margin-top:var(--esp-1)">' +
-          'Nada urgente hoy. Buen día para adelantar algo tranquila.</p>') +
-    '</div>' +
-
-    bloqueAQuienLlamar(HOY.a_quien_llamar) +
-    bloqueListaFinal(HOY.lista_final, HOY.dias_para_la_fiesta);
-
-  /* ─── Enganches ─────────────────────────────────────────────────── */
-  buscarTodos('[data-hoy]', donde).forEach(boton => {
-    boton.addEventListener('click', () => {
-      const [destino, seccion] = boton.dataset.hoy.split('|');
-      if (!destino) { abrirAlarmas(); return; }
-
-      /* Evento va por su propia función: entrar a esa pestaña vuelve al
-         índice, así que asignar SECCION_EVENTO acá no alcanzaría —el
-         dibujado la pisaría antes de que se vea. */
-      if (destino === 'evento' && seccion) { irASeccionDeEvento(seccion); return; }
-
-      if (destino === 'dinero' && seccion) SECCION_DINERO = seccion;
-      irA(destino, true);
-    });
-  });
-
-  const elDia = buscar('#hoy-es-el-dia', donde);
-  if (elDia) elDia.addEventListener('click', abrirModoDelDia);
-}
+/* ─── 1. AYUDAS QUE USA LA PESTAÑA HOY ─────────────────────────────── */
 
 /**
  * A quién conviene llamar hoy.

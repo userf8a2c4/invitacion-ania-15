@@ -2,19 +2,22 @@
    07 · VISTA RESUMEN
 
    QUÉ HACE ESTE ARCHIVO
-   Dibuja el tablero: la primera pantalla que se ve al abrir la app.
+   El centro de control ejecutivo: en menos de tres segundos hay que
+   entender el estado del evento y qué necesita atención hoy.
 
-   QUÉ SE MUESTRA Y EN QUÉ ORDEN
-     1. Cuántos días faltan.
-     2. Los invitados en números.
-     3. El dinero: lo que cuesta contra lo que sale del bolsillo.
-     4. Lo que necesita atención: pagos por vencer, tareas atrasadas,
-        categorías pasadas de presupuesto, fechas cercanas.
+   QUÉ SE MUESTRA Y EN QUÉ ORDEN (Fase 3 del rediseño)
+     1. La tarjeta ejecutiva: confirmados, pendientes, % de presupuesto
+        usado y la tarea más crítica. Cuatro números, no treinta.
+     2. "Necesita tu atención": lo más urgente de verdad, hasta 6 filas.
+        Si no hay nada, un estado vacío tranquilo.
+     3. Accesos rápidos a lo que se usa casi todos los días.
+     4. Los invitados y el dinero en detalle, y "Qué viene" — para
+        cuando uno se sienta a mirar cómo va todo, no solo a resolver.
 
-   EL CRITERIO DEL ORDEN
-   Arriba lo que se mira de reojo (días, invitados). Abajo lo que exige
-   hacer algo. Si al abrir la app no hay nada abajo, es que todo está en
-   orden — y eso también es información.
+   POR QUÉ "HOY" YA NO VIVE ACÁ
+   Antes el bloque de hoy.php estaba arriba de todo. Desde el rediseño
+   tiene su propia pestaña (30-vista-hoy.js) con una pantalla entera
+   pensada para eso; repetirlo acá era mostrar lo mismo dos veces.
    ══════════════════════════════════════════════════════════════════════ */
 
 
@@ -35,25 +38,23 @@ async function dibujarResumen() {
     throw error;
   }
 
-  const partes = [];
+  ponerTitulo('Resumen', textoDeCuentaAtras(datos.dias_para_la_fiesta));
 
-  /* "Hoy" va PRIMERO, antes que cualquier número. Es la única pregunta
-     que hay que contestar al abrir la app; el resto es contexto. */
-  partes.push('<div id="bloque-hoy"></div>');
-  partes.push(bloqueCuentaAtras(datos.dias_para_la_fiesta));
-  partes.push(bloqueInvitados(datos.invitados));
-  partes.push(bloqueDinero(datos.dinero));
-  partes.push(bloqueAtencion(datos));
-  partes.push(bloqueLineaDeTiempo(datos.linea_de_tiempo));
+  const pendientes = listaDeAtencion(datos);
+
+  const partes = [
+    bloqueEjecutivo(datos, pendientes),
+    bloqueAtencion(pendientes),
+    bloqueAccesosRapidos(),
+    bloqueInvitados(datos.invitados),
+    bloqueDinero(datos.dinero),
+    bloqueLineaDeTiempo(datos.linea_de_tiempo),
+  ];
 
   vista.innerHTML = partes.filter(Boolean).join('');
 
   actualizarBurbujas(datos);
   engancharResumen(vista);
-
-  /* Se pide aparte y sin esperarlo: si hoy.php tardara, el Resumen ya
-     está pintado y el bloque aparece encima cuando llega. */
-  pintarHoy(buscar('#bloque-hoy', vista));
 }
 
 
@@ -166,32 +167,107 @@ function comoFechaCorta(fecha) {
 /* ─── LOS BLOQUES ──────────────────────────────────────────────────── */
 
 /**
- * Cuántos días faltan para la fiesta.
+ * El subtítulo del encabezado: "24 días para la fiesta", "¡Hoy!",
+ * etc. Antes esto era un bloque grande propio (cuenta-atras); desde el
+ * rediseño va en el encabezado, junto al título "Resumen" — la misma
+ * idea que ya usa la pestaña Hoy con su fecha corta.
  *
  * @param {number} dias
- * @returns {string} HTML
+ * @returns {string}
  */
-function bloqueCuentaAtras(dias) {
+function textoDeCuentaAtras(dias) {
   const n = Number(dias) || 0;
 
-  let numero, texto;
+  if (n > 0)  return (n === 1 ? '1 día' : n + ' días') + ' para la fiesta';
+  if (n === 0) return '¡Hoy son los XV!';
+  return (Math.abs(n) === 1 ? '1 día' : Math.abs(n) + ' días') + ' desde la fiesta';
+}
 
-  if (n > 0) {
-    numero = n;
-    texto  = (n === 1 ? 'día' : 'días') + ' para los XV de ' +
-             CONFIGURACION.fiesta.nombre;
-  } else if (n === 0) {
-    numero = '¡Hoy!';
-    texto  = CONFIGURACION.fiesta.lugar;
-  } else {
-    numero = Math.abs(n);
-    texto  = (Math.abs(n) === 1 ? 'día' : 'días') + ' desde la fiesta';
-  }
+/**
+ * La tarjeta ejecutiva: cuatro cifras, no treinta. Es lo primero que
+ * hay que entender al abrir la app — el resto de la pantalla es
+ * detalle para quien quiera profundizar.
+ *
+ * @param {Object} datos - La respuesta entera de estadisticas.php.
+ * @param {Array} pendientes - Lo que devuelve listaDeAtencion(), SIN recortar.
+ * @returns {string} HTML
+ */
+function bloqueEjecutivo(datos, pendientes) {
+  const invitados = datos.invitados || {};
+  const dinero = datos.dinero || {};
+
+  const porcentajeUsado = (dinero.hay && dinero.presupuestado > 0)
+    ? Math.round((dinero.costo / dinero.presupuestado) * 100)
+    : null;
+
+  // La tarea más crítica: la primera tarea (no pago, no cita) de la
+  // lista ya ordenada por urgencia real.
+  const tareaCritica = pendientes.find(p => p.esTarea);
 
   return '' +
-    '<div class="cuenta-atras">' +
-      '<div class="cuenta-atras__numero">' + seguro(numero) + '</div>' +
-      '<div class="cuenta-atras__texto">' + seguro(texto) + '</div>' +
+    '<div class="tarjeta rejilla-ejecutiva">' +
+      '<button class="rejilla-ejecutiva__dato" data-lleva-a="invitados">' +
+        '<span class="rejilla-ejecutiva__numero">' +
+          seguro(invitados.hay ? invitados.si_asisten : '—') +
+        '</span>' +
+        '<span class="rejilla-ejecutiva__rotulo">Confirmados</span>' +
+      '</button>' +
+
+      '<button class="rejilla-ejecutiva__dato' +
+             (pendientes.length ? ' rejilla-ejecutiva__dato--alerta' : '') + '">' +
+        '<span class="rejilla-ejecutiva__numero">' + seguro(pendientes.length) + '</span>' +
+        '<span class="rejilla-ejecutiva__rotulo">Pendientes</span>' +
+      '</button>' +
+
+      '<button class="rejilla-ejecutiva__dato" data-lleva-a="dinero">' +
+        '<span class="rejilla-ejecutiva__numero">' +
+          (porcentajeUsado === null ? '—' : seguro(porcentajeUsado) + '%') +
+        '</span>' +
+        '<span class="rejilla-ejecutiva__rotulo">Del presupuesto</span>' +
+      '</button>' +
+
+      '<button class="rejilla-ejecutiva__dato" data-lleva-a="evento">' +
+        '<span class="rejilla-ejecutiva__numero rejilla-ejecutiva__numero--chico">' +
+          (tareaCritica ? seguro(acortar(tareaCritica.texto.replace(/^Tarea( atrasada)?: /, ''), 26))
+                        : 'Ninguna') +
+        '</span>' +
+        '<span class="rejilla-ejecutiva__rotulo">Tarea crítica</span>' +
+      '</button>' +
+    '</div>';
+}
+
+/**
+ * Los accesos rápidos a lo que se usa casi todos los días. El resto de
+ * las herramientas vive en Planificar; acá solo lo de uso diario.
+ *
+ * Vive en el módulo (no adentro de la función) porque engancharResumen()
+ * necesita la MISMA lista para saber qué ejecutar en cada botón — un
+ * solo lugar donde agregar un acceso nuevo, no dos que se puedan
+ * desincronizar.
+ */
+const ACCESOS_RAPIDOS = [
+  { clave: 'gente',     nombre: 'Gente',     ir: () => irA('invitados') },
+  { clave: 'mesas',     nombre: 'Mesas',     ir: () => verPlanoDeMesas() },
+  { clave: 'dinero',    nombre: 'Dinero',    ir: () => irA('dinero') },
+  { clave: 'correo',    nombre: 'Correo',    ir: () => irA('correo') },
+  { clave: 'tareas',    nombre: 'Tareas',    ir: () => { SECCION_EVENTO = 'tareas'; irA('evento', true); } },
+  { clave: 'contactos', nombre: 'Contactos', ir: () => { SECCION_GENTE = 'contactos'; irA('invitados', true); } },
+];
+
+/**
+ * El HTML de la rejilla de accesos rápidos.
+ *
+ * @returns {string} HTML
+ */
+function bloqueAccesosRapidos() {
+  return '' +
+    '<div class="tarjeta__titulo" style="margin:var(--esp-3) 0 var(--esp-2)">Accesos rápidos</div>' +
+    '<div class="rejilla-accesos">' +
+      ACCESOS_RAPIDOS.map(a =>
+        '<button class="rejilla-accesos__boton" data-acceso="' + a.clave + '">' +
+          seguro(a.nombre) +
+        '</button>'
+      ).join('') +
     '</div>';
 }
 
@@ -344,12 +420,27 @@ function bloqueDinero(dinero) {
 }
 
 /**
- * Lo que necesita atención: pagos, tareas, sobregiros, fechas.
+ * Arma la lista de lo que necesita atención, YA ordenada por urgencia
+ * real y recortada a lo que de verdad se puede leer.
+ *
+ * POR QUÉ SEPARADO DEL HTML
+ * bloqueEjecutivo() necesita "la tarea más crítica" y bloqueAtencion()
+ * necesita la lista completa — las dos parten de esta misma función
+ * para no calcular la urgencia dos veces ni arriesgarse a que se
+ * desincronicen.
+ *
+ * EL ORDEN
+ * Antes las filas salían agrupadas por origen (primero categorías,
+ * después pagos, después tareas…): un pago atrasado por un mes podía
+ * aparecer más abajo que una cita informativa de la semana que viene,
+ * solo porque "agenda" se agregaba después en el código. Acá se
+ * ordena por urgencia de verdad: 0 = atrasado, 1 = esta semana,
+ * 2 = el resto — mismo criterio que ya usa hoy.php.
  *
  * @param {Object} datos - La respuesta entera de estadisticas.php.
- * @returns {string} HTML
+ * @returns {Array<{urgencia:number, tono:string, texto:string, pie:string, irA:string}>}
  */
-function bloqueAtencion(datos) {
+function listaDeAtencion(datos) {
   const filas = [];
 
   /* ─── Categorías pasadas de su techo ─────────────────────────────── */
@@ -363,91 +454,112 @@ function bloqueAtencion(datos) {
     if (parte < CONFIGURACION.dinero.avisarDesde) return;
 
     const pasado = gastado > techo;
-    filas.push(filaDeAtencion(
-      pasado ? 'urgente' : '',
-      seguro(categoria.nombre) +
+    filas.push({
+      urgencia: pasado ? 0 : 1,
+      tono: pasado ? 'urgente' : '',
+      texto: seguro(categoria.nombre) +
         (pasado ? ' se pasó del presupuesto' : ' está por pasarse'),
-      comoDinero(gastado, false) + ' de ' + comoDinero(techo, false),
-      'dinero'
-    ));
+      pie: comoDinero(gastado, false) + ' de ' + comoDinero(techo, false),
+      irA: 'dinero',
+    });
   });
 
   /* ─── Pagos por vencer ───────────────────────────────────────────── */
   (datos.pagos || []).forEach(pago => {
     const dias = diasHasta(pago.fecha_limite);
-    filas.push(filaDeAtencion(
-      dias < 0 ? 'urgente' : '',
-      (dias < 0 ? 'Pago atrasado: ' : 'Pago: ') +
+    filas.push({
+      urgencia: dias < 0 ? 0 : (dias <= 3 ? 1 : 2),
+      tono: dias < 0 ? 'urgente' : '',
+      texto: (dias < 0 ? 'Pago atrasado: ' : 'Pago: ') +
         seguro(pago.concepto || pago.gasto || 'sin concepto'),
-      comoDinero(pago.monto, false) + ' · vence ' + comoCuando(pago.fecha_limite),
-      'dinero'
-    ));
+      pie: comoDinero(pago.monto, false) + ' · vence ' + comoCuando(pago.fecha_limite),
+      irA: 'dinero',
+      esTarea: false,
+    });
   });
 
   /* ─── Tareas ─────────────────────────────────────────────────────── */
   (datos.tareas || []).forEach(tarea => {
     const dias = diasHasta(tarea.fecha_limite);
-    filas.push(filaDeAtencion(
-      dias < 0 ? 'urgente' : '',
-      (dias < 0 ? 'Tarea atrasada: ' : 'Tarea: ') + seguro(tarea.titulo),
-      (tarea.responsable ? seguro(tarea.responsable) + ' · ' : '') +
+    filas.push({
+      urgencia: dias < 0 ? 0 : (dias <= 3 ? 1 : 2),
+      tono: dias < 0 ? 'urgente' : '',
+      texto: (dias < 0 ? 'Tarea atrasada: ' : 'Tarea: ') + seguro(tarea.titulo),
+      pie: (tarea.responsable ? seguro(tarea.responsable) + ' · ' : '') +
         comoCuando(tarea.fecha_limite),
-      'evento'
-    ));
+      irA: 'evento',
+      esTarea: true,
+      dias: dias,
+    });
   });
 
   /* ─── Agenda ─────────────────────────────────────────────────────── */
   (datos.agenda || []).forEach(cita => {
-    filas.push(filaDeAtencion(
-      'bien',
-      seguro(cita.titulo),
-      comoCuando(cita.fecha) +
-        (cita.lugar ? ' · ' + seguro(cita.lugar) : ''),
-      'evento'
-    ));
+    const dias = diasHasta(cita.fecha);
+    filas.push({
+      urgencia: dias <= 3 ? 1 : 2,
+      tono: 'bien',
+      texto: seguro(cita.titulo),
+      pie: comoCuando(cita.fecha) + (cita.lugar ? ' · ' + seguro(cita.lugar) : ''),
+      irA: 'evento',
+    });
   });
 
   /* ─── Regalos sin agradecer ──────────────────────────────────────── */
   if (datos.regalos_sin_agradecer > 0) {
-    filas.push(filaDeAtencion(
-      '',
-      pluralizar(datos.regalos_sin_agradecer, 'regalo', 'regalos') + ' sin agradecer',
-      'Toca para verlos',
-      'evento'
-    ));
+    filas.push({
+      urgencia: 2,
+      tono: '',
+      texto: pluralizar(datos.regalos_sin_agradecer, 'regalo', 'regalos') + ' sin agradecer',
+      pie: 'Toca para verlos',
+      irA: 'evento',
+    });
   }
 
-  if (!filas.length) {
+  filas.sort((a, b) => a.urgencia - b.urgencia);
+  return filas;
+}
+
+/**
+ * El HTML de "Necesita tu atención" — o el estado vacío, tranquilo,
+ * cuando no hay nada.
+ *
+ * @param {Array} pendientes - Lo que devuelve listaDeAtencion().
+ * @returns {string} HTML
+ */
+function bloqueAtencion(pendientes) {
+  if (!pendientes.length) {
     return '' +
-      '<div class="tarjeta">' +
-        '<div class="tarjeta__titulo">Pendientes</div>' +
-        '<p class="vacio__texto">Nada urgente por ahora.</p>' +
+      '<div class="tarjeta" style="border-color:var(--bien);margin-top:var(--esp-2)">' +
+        '<p class="vacio__texto" style="color:var(--bien);text-align:center">' +
+          'Todo bajo control. No hay nada urgente ahora.' +
+        '</p>' +
       '</div>';
   }
 
+  // Hasta 6: una lista de veinte pendientes es una lista que no se lee,
+  // y ya está la pestaña Planificar para ver todo el detalle. El total
+  // real (sin recortar) ya se mostró arriba, en la tarjeta ejecutiva.
   return '' +
-    '<div class="tarjeta__titulo" style="margin:var(--esp-4) 0 var(--esp-2)">' +
-      'Necesita atención' +
+    '<div class="tarjeta__titulo" style="margin:var(--esp-3) 0 var(--esp-2)">' +
+      'Necesita tu atención' +
     '</div>' +
-    filas.join('');
+    pendientes.slice(0, 6).map(filaDeAtencion).join('');
 }
 
 /**
  * Una fila de la lista de pendientes.
  *
- * @param {string} tono - 'urgente', 'bien', o vacío.
- * @param {string} texto - Ya escapado.
- * @param {string} pie - Ya escapado.
- * @param {string} irA - A qué pestaña lleva al tocarla.
+ * @param {Object} p - Una fila de listaDeAtencion().
  * @returns {string} HTML
  */
-function filaDeAtencion(tono, texto, pie, irA) {
-  const clase = 'alerta-fila' + (tono ? ' alerta-fila--' + tono : '');
+function filaDeAtencion(p) {
+  const clase = 'alerta-fila' + (p.tono ? ' alerta-fila--' + p.tono : '');
 
   return '' +
-    '<button class="' + clase + '" data-lleva-a="' + seguro(irA) + '">' +
-      '<span class="alerta-fila__texto">' + texto +
-        '<span class="alerta-fila__pie" style="display:block">' + pie + '</span>' +
+    '<button class="' + clase + '" data-lleva-a="' + seguro(p.irA) + '">' +
+      '<span class="alerta-fila__texto">' + p.texto +
+        '<span class="alerta-fila__pie" style="display:block">' + p.pie + '</span>' +
       '</span>' +
     '</button>';
 }
@@ -464,6 +576,13 @@ function filaDeAtencion(tono, texto, pie, irA) {
 function engancharResumen(vista) {
   buscarTodos('[data-lleva-a]', vista).forEach(fila => {
     fila.addEventListener('click', () => irA(fila.dataset.llevaA));
+  });
+
+  // Los accesos rápidos, algunos con sub-sección propia (ver
+  // ACCESOS_RAPIDOS más arriba).
+  buscarTodos('[data-acceso]', vista).forEach(boton => {
+    const acceso = ACCESOS_RAPIDOS.find(a => a.clave === boton.dataset.acceso);
+    if (acceso) boton.addEventListener('click', () => acceso.ir());
   });
 
   // Los hitos de la línea de tiempo llevan además a su sub-sección.
