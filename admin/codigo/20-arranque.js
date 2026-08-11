@@ -243,6 +243,7 @@ async function encender() {
   prepararEntrada();
   prepararNavegacion();
   prepararHoja();
+  prepararVisorDeArchivo();
   prepararAyuda();
   prepararBotonFlotante();
   prepararFab();

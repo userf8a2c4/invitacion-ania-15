@@ -345,7 +345,8 @@ async function pintarArchivosDe(donde, tipo, id) {
   }
 
   buscarTodos('[data-ver-archivo]', donde).forEach(boton => {
-    boton.addEventListener('click', () => abrirArchivo(boton.dataset.verArchivo));
+    const archivo = archivos.find(a => String(a.id) === boton.dataset.verArchivo);
+    boton.addEventListener('click', () => abrirArchivo(boton.dataset.verArchivo, archivo));
   });
 
   buscarTodos('[data-borrar-archivo]', donde).forEach(boton => {
@@ -363,16 +364,20 @@ async function pintarArchivosDe(donde, tipo, id) {
 }
 
 /**
- * Abre un archivo protegido.
+ * Abre un archivo protegido en el visor compartido (imagen o PDF).
  *
  * El endpoint exige el token en la cabecera, así que no se puede poner
  * la URL directa en una pestaña nueva: hay que bajarlo con fetch y
- * abrirlo desde la memoria del navegador.
+ * abrirlo desde la memoria del navegador. Antes se abría con
+ * window.open(url,'_blank'), que en el teléfono es una pestaña nueva sin
+ * forma cómoda de acercarse a un detalle — ahora usa el mismo visor con
+ * zoom por doble-toque que Correo (ver abrirVisorDeArchivo(), 06-piezas.js).
  *
  * @param {number|string} id
+ * @param {Object} [archivo] - { nombre_real, tipo_mime }, para el título y el zoom.
  * @returns {Promise<void>}
  */
-async function abrirArchivo(id) {
+async function abrirArchivo(id, archivo) {
   const token = tokenGuardado();
   if (!token) { manejarSesionVencida(); return; }
 
@@ -388,11 +393,16 @@ async function abrirArchivo(id) {
 
     const bolsa = await respuesta.blob();
     const url   = URL.createObjectURL(bolsa);
+    const tipo  = (archivo && archivo.tipo_mime) || bolsa.type;
 
-    window.open(url, '_blank');
-
-    // Se libera después, para darle tiempo a la pestaña nueva a leerlo.
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    if (/^image\/|^application\/pdf/.test(tipo)) {
+      abrirVisorDeArchivo(url, tipo, archivo && archivo.nombre_real);
+    } else {
+      // Cualquier otro tipo: el navegador no sabe mostrarlo, así que se
+      // deja el camino de siempre.
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
 
   } catch (error) {
     avisar('No se pudo abrir el archivo.', true);
