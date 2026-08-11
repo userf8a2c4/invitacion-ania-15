@@ -36,6 +36,15 @@ switch ($accion) {
 case 'todo':
     exigirMetodo('GET');
 
+    /* Presupuestos múltiples (Fase 7 del rediseño). Si la instalación
+       todavía no corrió la migración, se sigue como antes —un solo
+       presupuesto implícito— en vez de romper la pantalla. */
+    $tienePresupuestos = existeTabla('presupuestos')
+                       && in_array('presupuesto_id', columnasDe('categorias_gasto'), true)
+                       && in_array('presupuesto_id', columnasDe('gastos'), true);
+
+    $activo = $tienePresupuestos ? presupuestoActivo() : null;
+
     /* Categorías con lo gastado de cada una. El LEFT JOIN es a propósito:
        una categoría sin gastos todavía tiene que aparecer igual, con su
        techo, para poder cargarle el primero. */
@@ -45,13 +54,18 @@ case 'todo':
                 COALESCE(SUM(g.presupuestado), 0)  AS planeado,
                 COUNT(g.id)                        AS cuantos_gastos
          FROM categorias_gasto c
-         LEFT JOIN gastos g ON g.categoria_id = c.id
-         GROUP BY c.id, c.nombre, c.techo, c.orden
-         ORDER BY c.orden, c.nombre'
+         LEFT JOIN gastos g ON g.categoria_id = c.id' .
+        ($tienePresupuestos ? ' WHERE c.presupuesto_id = :activo' : '') .
+        ' GROUP BY c.id, c.nombre, c.techo, c.orden
+         ORDER BY c.orden, c.nombre',
+        $tienePresupuestos ? [':activo' => $activo] : []
     );
 
     /* Gastos con el nombre de su categoría, proveedor y padrino ya
-       resueltos, para que la app no tenga que cruzarlos a mano. */
+       resueltos, para que la app no tenga que cruzarlos a mano. Filtrados
+       por presupuesto directo en g.presupuesto_id, no a través de la
+       categoría: un gasto sin categoría también tiene que quedar del
+       lado correcto. */
     $gastos = consultarTodo(
         'SELECT g.*,
                 c.nombre AS categoria_nombre,
@@ -61,15 +75,26 @@ case 'todo':
          FROM gastos g
          LEFT JOIN categorias_gasto c ON c.id = g.categoria_id
          LEFT JOIN proveedores p      ON p.id = g.proveedor_id
-         LEFT JOIN padrinos pa        ON pa.id = g.padrino_id
-         ORDER BY g.creado_en DESC'
+         LEFT JOIN padrinos pa        ON pa.id = g.padrino_id' .
+        ($tienePresupuestos ? ' WHERE g.presupuesto_id = :activo' : '') .
+        ' ORDER BY g.creado_en DESC',
+        $tienePresupuestos ? [':activo' => $activo] : []
     );
 
+    /* Los pagos heredan el presupuesto del gasto al que están atados —no
+       tienen columna propia, a propósito (ver plan). Un pago suelto, sin
+       gasto_id, no pertenece a ningún presupuesto en particular y se
+       muestra siempre: es más seguro mostrar de más que esconder un pago
+       real. */
     $pagos = consultarTodo(
         'SELECT p.*, g.concepto AS gasto_concepto
          FROM pagos p
-         LEFT JOIN gastos g ON g.id = p.gasto_id
-         ORDER BY p.estado, p.fecha_limite IS NULL, p.fecha_limite'
+         LEFT JOIN gastos g ON g.id = p.gasto_id' .
+        ($tienePresupuestos
+            ? ' WHERE p.gasto_id IS NULL OR g.presupuesto_id = :activo'
+            : '') .
+        ' ORDER BY p.estado, p.fecha_limite IS NULL, p.fecha_limite',
+        $tienePresupuestos ? [':activo' => $activo] : []
     );
 
     /* Padrinos, con la suma de lo que cubren en gastos. Un padrino puede
@@ -93,7 +118,8 @@ case 'todo':
 
     /* ─── Los totales ─────────────────────────────────────────────────
        Se calculan en SQL y no sumando en PHP porque MySQL lo hace sobre
-       la tabla entera de una sola pasada. */
+       la tabla entera de una sola pasada. Filtrados por presupuesto
+       activo, igual que la lista de gastos de arriba. */
     $totales = consultarUno(
         'SELECT
            COALESCE(SUM(presupuestado), 0) AS planeado,
@@ -102,24 +128,41 @@ case 'todo':
                              THEN monto_real ELSE 0 END), 0) AS propio,
            COALESCE(SUM(CASE WHEN padrino_id IS NOT NULL
                              THEN monto_real ELSE 0 END), 0) AS de_padrinos
-         FROM gastos'
+         FROM gastos' .
+        ($tienePresupuestos ? ' WHERE presupuesto_id = :activo' : ''),
+        $tienePresupuestos ? [':activo' => $activo] : []
     );
 
     $porPagar = consultarUno(
-        "SELECT COALESCE(SUM(monto), 0) AS monto, COUNT(*) AS cuantos
-         FROM pagos WHERE estado = 'pendiente'"
+        "SELECT COALESCE(SUM(p.monto), 0) AS monto, COUNT(*) AS cuantos
+         FROM pagos p LEFT JOIN gastos g ON g.id = p.gasto_id
+         WHERE p.estado = 'pendiente'" .
+        ($tienePresupuestos ? ' AND (p.gasto_id IS NULL OR g.presupuesto_id = :activo)' : ''),
+        $tienePresupuestos ? [':activo' => $activo] : []
     );
 
     $pagado = consultarUno(
-        "SELECT COALESCE(SUM(monto), 0) AS monto FROM pagos WHERE estado = 'pagado'"
+        "SELECT COALESCE(SUM(p.monto), 0) AS monto
+         FROM pagos p LEFT JOIN gastos g ON g.id = p.gasto_id
+         WHERE p.estado = 'pagado'" .
+        ($tienePresupuestos ? ' AND (p.gasto_id IS NULL OR g.presupuesto_id = :activo)' : ''),
+        $tienePresupuestos ? [':activo' => $activo] : []
     );
 
+    // Los padrinos son globales (no cuelgan de un presupuesto): apadrinan
+    // a la boda entera, no a un plan en particular.
     $padrinosPendientes = consultarUno(
         "SELECT COALESCE(SUM(monto), 0) AS monto, COUNT(*) AS cuantos
          FROM padrinos WHERE estado <> 'entregado' AND tipo_aporte = 'dinero'"
     );
 
+    $presupuestos = $tienePresupuestos
+        ? consultarTodo('SELECT * FROM presupuestos ORDER BY creado_en')
+        : [];
+
     responderBien([
+        'presupuestos'       => $presupuestos,
+        'presupuesto_activo' => $activo,
         'totales' => [
             'planeado'      => (float) $totales['planeado'],
             'costo'         => (float) $totales['costo'],
@@ -154,6 +197,13 @@ case 'guardar_categoria':
     ];
     if ($valores['nombre'] === '') responderMal('La categoría necesita un nombre.', 400);
 
+    // Solo al CREAR: una categoría no cambia de presupuesto al editarla,
+    // eso sería mover dinero de un plan a otro sin querer.
+    if (!campoEntero($datos, 'id', 0)
+        && in_array('presupuesto_id', columnasDe('categorias_gasto'), true)) {
+        $valores['presupuesto_id'] = presupuestoActivo();
+    }
+
     responderBien(guardarFila('categorias_gasto', $datos, $valores, $yo, 'categoría'));
     break;
 
@@ -187,6 +237,11 @@ case 'guardar_gasto':
         'notas'         => campoTexto($datos, 'notas', 2000),
     ];
     if ($valores['concepto'] === '') responderMal('El gasto necesita un concepto.', 400);
+
+    if (!campoEntero($datos, 'id', 0)
+        && in_array('presupuesto_id', columnasDe('gastos'), true)) {
+        $valores['presupuesto_id'] = presupuestoActivo();
+    }
 
     responderBien(guardarFila('gastos', $datos, $valores, $yo, 'gasto'));
     break;
@@ -402,6 +457,44 @@ case 'borrar_cotizacion':
     break;
 
 
+/* ─── PRESUPUESTOS (Fase 7 del rediseño) ──────────────────────────────── */
+
+case 'listar_presupuestos':
+    exigirMetodo('GET');
+    if (!existeTabla('presupuestos')) { responderBien(['presupuestos' => []]); break; }
+    responderBien([
+        'presupuestos' => consultarTodo('SELECT * FROM presupuestos ORDER BY creado_en'),
+    ]);
+    break;
+
+case 'crear_presupuesto':
+    exigirMetodo('POST');
+    $datos  = cuerpoJson();
+    $nombre = campoTexto($datos, 'nombre', 80);
+    if ($nombre === '') responderMal('El presupuesto necesita un nombre.', 400);
+
+    $nuevo = insertar('presupuestos', ['nombre' => $nombre, 'activo' => 0]);
+    anotarEnBitacora($yo, 'creó un presupuesto', 'presupuestos', $nuevo, $nombre);
+    responderBien(['id' => $nuevo, 'mensaje' => 'Presupuesto creado.']);
+    break;
+
+case 'activar_presupuesto':
+    exigirMetodo('POST');
+    $datos = cuerpoJson();
+    $id    = campoEntero($datos, 'id', 1);
+
+    $existe = consultarUno('SELECT id, nombre FROM presupuestos WHERE id = :id', [':id' => $id]);
+    if (!$existe) responderMal('Ese presupuesto no existe.', 404);
+
+    // Uno solo activo a la vez: se apagan todos y se prende el elegido.
+    ejecutar('UPDATE presupuestos SET activo = 0');
+    ejecutar('UPDATE presupuestos SET activo = 1 WHERE id = :id', [':id' => $id]);
+
+    anotarEnBitacora($yo, 'cambió el presupuesto activo', 'presupuestos', $id, $existe['nombre']);
+    responderBien(['mensaje' => 'Ahora estás viendo "' . $existe['nombre'] . '".']);
+    break;
+
+
 default:
     responderMal('Acción desconocida.', 404);
 }
@@ -442,6 +535,19 @@ function guardarFila($tabla, $datos, $valores, $yo, $comoSeLlama) {
     anotarEnBitacora($yo, 'creó un ' . $comoSeLlama, $tabla, $nuevo,
                      (string) ($valores['nombre'] ?? $valores['concepto'] ?? ''));
     return ['id' => $nuevo, 'creado' => true];
+}
+
+/**
+ * El id del presupuesto activo, o 1 (el principal) si por lo que sea
+ * ninguno está marcado —no debería pasar, pero un dato así de central
+ * no puede devolver null y romper todo lo que cuelga de él.
+ *
+ * @return int
+ */
+function presupuestoActivo() {
+    if (!existeTabla('presupuestos')) return 1;
+    $fila = consultarUno("SELECT id FROM presupuestos WHERE activo = 1 LIMIT 1");
+    return $fila ? (int) $fila['id'] : 1;
 }
 
 /**

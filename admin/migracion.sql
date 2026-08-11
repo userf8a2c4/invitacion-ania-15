@@ -187,6 +187,24 @@ CREATE TABLE IF NOT EXISTS suscripciones_push (
 -- 2. DINERO
 -- ══════════════════════════════════════════════════════════════════════
 
+-- Los distintos escenarios de presupuesto que Lucila puede mantener a la
+-- vez ("Plan A", "Plan B con menos invitados"…). Uno solo está activo:
+-- ese es el que se ve y se edita en el panel. categorias_gasto y gastos
+-- (más abajo) cuelgan de acá con presupuesto_id.
+CREATE TABLE IF NOT EXISTS presupuestos (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  nombre     VARCHAR(80) NOT NULL,
+  activo     TINYINT(1) NOT NULL DEFAULT 0,
+  creado_en  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- El primero, ya activo, para que las categorías y gastos que ya
+-- existían en una instalación vieja tengan dónde caer (ver
+-- presupuesto_id DEFAULT 1 en instalar.php).
+INSERT IGNORE INTO presupuestos (id, nombre, activo)
+VALUES (1, 'Presupuesto principal', 1);
+
+
 -- Categorías con TECHO. De acá salen las alertas de sobregiro.
 CREATE TABLE IF NOT EXISTS categorias_gasto (
   id      INT AUTO_INCREMENT PRIMARY KEY,
@@ -842,28 +860,27 @@ CREATE TABLE IF NOT EXISTS permisos_usuario (
 
 
 -- ─────────────────────────────────────────────────────────────────────
--- PANEL DE MÉTRICAS: QUÉ USA LUCILA DE VERDAD, Y QUÉ LE CUESTA (Fase 8)
+-- PANEL DE MÉTRICAS: QUÉ USA LUCILA DE VERDAD (Fase 7 del rediseño)
 --
--- Solo la cuenta observadora (esObservador(), _lib/sesion.php) puede
--- LEER esto. Cualquier cuenta logueada puede ESCRIBIR —cada quien
--- registra su propio uso—, nunca leer el de otro desde acá.
+-- Solo la cuenta observadora (ver esObservador() en _lib/sesion.php,
+-- api/metricas.php) puede LEER esto. CUALQUIER cuenta puede ESCRIBIR
+-- —cada quien registra su propio uso—, nunca leer el de otro desde acá:
+-- el filtro por usuario_id, si hace falta, lo aplica metricas.php.
 --
--- No es solo "qué se toca": el payload también trae duración de
--- pantalla, si un formulario se abandonó sin guardar, errores que la
--- persona vio, y una marca de sesión de uso para reconstruir la
--- secuencia real de trabajo. Ver codigo/38-metricas.js.
+-- LIGERO A PROPÓSITO: se anotan acciones significativas (abrir una
+-- ficha, asignar mesa, marcar llegada…), no cada movimiento. Ver la
+-- lista de los diez eventos elegidos en codigo/38-metricas.js.
 CREATE TABLE IF NOT EXISTS eventos_uso (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   usuario_id  INT NOT NULL,
-  -- 'vista' | 'accion' | 'busqueda' | 'asistente' | 'friccion' | 'error'
+  -- 'vista' | 'accion' | 'busqueda' | 'asistente' | 'friccion'
   tipo        VARCHAR(20) NOT NULL,
-  -- 'abrir_ficha_invitado', 'permanencia', 'formulario_abandonado'…
+  -- 'abrir_ficha_invitado', 'asignar_mesa', 'frase_asistente'…
   nombre      VARCHAR(60) NOT NULL,
-  -- Detalle libre en JSON. Sin columnas fijas a propósito: cada tipo de
-  -- evento trae lo suyo, y forzar un esquema rígido multiplicaría
-  -- columnas casi siempre vacías por cada evento nuevo. Siempre incluye
-  -- _sesion (id de la sesión de uso en curso) y contexto automático
-  -- (sin_senal, dias_para_evento, ancho_pantalla).
+  -- Detalle libre en JSON: {"pantalla":"gente","id":45,"nombre":"..."}.
+  -- Sin tabla de columnas fijas a propósito: cada evento trae lo suyo, y
+  -- forzar un esquema rígido acá multiplicaría columnas casi siempre
+  -- vacías por cada tipo de evento nuevo.
   payload     TEXT,
   pantalla    VARCHAR(40) NOT NULL DEFAULT '',
   creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

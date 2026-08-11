@@ -362,6 +362,7 @@ function formularioTarea(tarea) {
       detalle:      valorDe('tar-detalle', cuerpo),
     };
     if (esEdicion) carga.id = tarea.id;
+    else registrarEvento('accion', 'crear_tarea');
 
     guardarPlan('guardar_tarea', carga, refrescarVistaEvento);
   });

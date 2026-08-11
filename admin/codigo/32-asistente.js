@@ -417,7 +417,10 @@ function abrirAsistente() {
     // invitado). Si algún patrón se hace cargo, no sigue al camino de
     // las frases fijas.
     const seHizoCargo = await intentarConEntidad(texto, resultado);
-    if (seHizoCargo) return;
+    if (seHizoCargo) {
+      registrarEvento('asistente', 'frase_exitosa', { texto: texto.trim() });
+      return;
+    }
 
     const coincidencias = buscarCoincidencias(texto);
     const mejor = coincidencias[0];
@@ -427,13 +430,18 @@ function abrirAsistente() {
       // este catálogo es destructiva ni masiva —todas abren una
       // pantalla o navegan—, así que no hace falta pedir confirmación
       // antes de correrla.
+      registrarEvento('asistente', 'frase_exitosa', { texto: texto.trim() });
       cerrarHoja(true);
       mejor.intencion.ejecutar();
       return;
     }
 
     if (coincidencias.length) {
-      // Confianza media o baja: se pregunta, y si confirma se enseña.
+      // Confianza media o baja: cuenta como "no entendió a la primera",
+      // igual que el caso sin ninguna coincidencia — en los dos tuvo
+      // que reformular o elegir a mano.
+      registrarEvento('asistente', 'frase_fallida', { texto: texto.trim() });
+
       resultado.innerHTML =
         '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
           'No estoy segura. ¿Quisiste decir…' +
@@ -456,6 +464,8 @@ function abrirAsistente() {
       });
       return;
     }
+
+    registrarEvento('asistente', 'frase_fallida', { texto: texto.trim() });
 
     resultado.innerHTML =
       '<p class="aviso-error">No conozco esa frase todavía. Probá con otras ' +

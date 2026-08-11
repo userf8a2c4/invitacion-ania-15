@@ -846,6 +846,7 @@ function engancharArrastreHaciaElPlano(cuerpo, refrescar) {
             confirmacion_id: idPersona,
             mesa_id: Number(mesa.dataset.planoMesa),
           });
+          registrarEvento('accion', 'asignar_mesa', { desde: 'arrastre' });
           avisar(r.mensaje);
           if (r.se_excede) avisar(r.aviso, true);
           refrescar();
@@ -1148,6 +1149,7 @@ function elegirMesaPara(confirmacionId, refrescar) {
           confirmacion_id: confirmacionId,
           mesa_id: Number(boton.dataset.mesa),
         });
+        registrarEvento('accion', 'asignar_mesa', { desde: 'selector' });
         cerrarHoja(true);
         avisar(r.mensaje);
         if (r.se_excede) avisar(r.aviso, true);

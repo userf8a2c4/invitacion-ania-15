@@ -88,7 +88,7 @@ switch ($accion) {
                 'nombre'        => $usuario['nombre'],
                 'correo'        => $usuario['correo'],
                 'rol'           => $usuario['rol'],
-                // Panel de métricas (Fase 8): nunca por rol, solo por
+                // Panel de métricas (Fase 7): nunca por rol, solo por
                 // correo exacto — ver esObservador().
                 'es_observador' => esObservador($usuario),
             ],
