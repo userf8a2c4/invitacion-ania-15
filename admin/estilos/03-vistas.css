@@ -396,34 +396,10 @@
 
 /* ─── 4. VISTA RESUMEN ─────────────────────────────────────────────── */
 
-/* La cuenta regresiva, arriba de todo.
- *
- * COMPACTA A PROPÓSITO. Antes ocupaba casi un tercio de la pantalla y
- * empujaba el presupuesto y los pendientes fuera de la vista, obligando
- * a hacer scroll en la pantalla que justamente tiene que responder todo
- * de un vistazo. El número sigue siendo lo más grande, pero ya no es lo
- * único que entra. */
-.cuenta-atras {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: var(--esp-2);
-  padding: var(--esp-1) var(--esp-2) var(--esp-2);
-}
-
-.cuenta-atras__numero {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 34px;
-  font-weight: 400;
-  line-height: 1;
-  color: var(--oro);
-  font-variant-numeric: tabular-nums;
-}
-
-.cuenta-atras__texto {
-  font-size: 13px;
-  color: var(--texto-tenue);
-}
+/* Los días para la fiesta ya no viven en un bloque propio acá: desde
+   la Fase 3 del rediseño van en el subtítulo del encabezado
+   (textoDeCuentaAtras(), codigo/07-vista-resumen.js), mismo criterio
+   que ya usa la pestaña Hoy con su fecha corta. */
 
 /* En el Resumen todo va más apretado que en el resto de la app: es la
    pantalla que tiene que contestar "¿cómo vamos?" sin hacer scroll. */
@@ -526,6 +502,76 @@
   font-size: 18px;
   margin-bottom: var(--esp-1);
 }
+
+/* ─── LA TARJETA EJECUTIVA DE RESUMEN (Fase 3 del rediseño) ────────── */
+/* Cuatro cifras en una rejilla de dos por dos: lo primero que hay que
+   entender al abrir la app, antes que cualquier detalle. */
+
+.rejilla-ejecutiva {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--esp-2);
+}
+
+.rejilla-ejecutiva__dato {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--esp-2) 4px;
+  border: 0;
+  background: var(--fondo-hundido);
+  border-radius: var(--redondeo-chico);
+  color: var(--texto);
+}
+
+.rejilla-ejecutiva__numero {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+/* La tarea crítica es texto, no un número: no puede competir en tamaño
+   con las tres cifras de al lado sin desbordar la celda. */
+.rejilla-ejecutiva__numero--chico {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.rejilla-ejecutiva__rotulo {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--texto-tenue);
+}
+
+.rejilla-ejecutiva__dato--alerta .rejilla-ejecutiva__numero { color: var(--ojo); }
+
+/* ─── LOS ACCESOS RÁPIDOS DE RESUMEN ────────────────────────────────── */
+
+.rejilla-accesos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--esp-2);
+  margin-bottom: var(--esp-3);
+}
+
+.rejilla-accesos__boton {
+  min-height: 52px;
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo-chico);
+  background: var(--fondo-tarjeta);
+  color: var(--texto);
+  font-size: 13px;
+  font-weight: 600;
+}
+.rejilla-accesos__boton:active { background: var(--fondo-elevado); }
 
 /* Cada aviso del Resumen: un pago que vence, una tarea atrasada. */
 .alerta-fila {
