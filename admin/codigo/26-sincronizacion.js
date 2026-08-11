@@ -64,8 +64,13 @@ function anotarSiLlego(llego) {
   // Solo se repinta si cambió de verdad, para no tocar el DOM al pedo.
   if (antes !== SIN_LLEGADA) actualizarBannerConexion();
 
-  // Volvió la señal: se aprovecha para mandar lo que haya esperando.
-  if (antes && llego) sincronizarCola();
+  // Volvió la señal: se aprovecha para mandar lo que haya esperando, y
+  // para refrescar en silencio lo que se va a necesitar si se vuelve a
+  // cortar (ver precalentarCopias()).
+  if (antes && llego) {
+    sincronizarCola();
+    precalentarCopias();
+  }
 }
 
 
@@ -218,6 +223,24 @@ async function tirarLasCopiasVencidas() {
     }
   } catch (error) {
     // Ídem.
+  }
+}
+
+
+/**
+ * La marca de tiempo más nueva entre todas las copias guardadas, para
+ * decir "de cuándo son los datos" en el banner sin conexión aunque
+ * todavía no se haya intentado abrir ninguna vista en particular.
+ *
+ * @returns {Promise<number|null>}
+ */
+async function ultimaLecturaGuardadaEn() {
+  try {
+    const todas = await conAlmacen('lecturas', 'readonly', s => s.getAll());
+    if (!todas.length) return null;
+    return Math.max(...todas.map(f => f.guardado_en || 0));
+  } catch (error) {
+    return null;
   }
 }
 
@@ -505,8 +528,15 @@ async function actualizarBannerConexion() {
      también porque avisa apenas se apaga el wifi, sin esperar a que
      falle una petición. */
   if (SIN_LLEGADA || !navigator.onLine) {
-    banner.textContent = 'Sin conexión — viendo la última copia guardada. ' +
-                          'Lo que cambies se manda solo cuando vuelva la señal.';
+    const guardadoEn = await ultimaLecturaGuardadaEn();
+    const antiguedad = guardadoEn
+      ? ' Datos de las ' + new Date(guardadoEn).toLocaleTimeString(
+          CONFIGURACION.dinero.region, { hour: '2-digit', minute: '2-digit' }) + '.'
+      : '';
+
+    banner.textContent = 'Sin conexión — viendo la última copia guardada.' +
+                          antiguedad +
+                          ' Lo que cambies se manda solo cuando vuelva la señal.';
     banner.classList.remove('oculto', 'banner-conexion--sincronizando');
     return;
   }
@@ -539,6 +569,69 @@ async function actualizarBannerConexion() {
 
   banner.classList.add('oculto');
 }
+
+/* ─── 6. PRECALENTAR (Fase 8 del rediseño) ─────────────────────────── */
+
+/* El caché de arriba es genérico y funciona bien, pero solo guarda copia
+   de lo que se pidió online alguna vez en los últimos 7 días. Mesas, por
+   ejemplo, es una sección dentro de Gente que encadena dos pedidos
+   (evento.php + mesas.php) — si nunca se abrió con señal, no hay nada
+   que mostrar sin ella. Esta función pide en silencio, por detrás, las
+   rutas que arman cada sección, para que abrirlas sin conexión muestre
+   la última copia en vez de un error.
+
+   Correo queda afuera a propósito: abre una conexión IMAP real y tarda
+   segundos — precalentarlo en cada arranque castigaría el arranque por
+   una sección que además no sirve de nada sin red. */
+
+/** Las rutas que hace falta tener guardadas para que cada sección abra
+    sin señal. Ver 26-sincronizacion.js:26 (por qué acá y no en 03). */
+const RUTAS_A_PRECALENTAR = [
+  'evento.php?accion=todo',
+  'mesas.php?accion=todo',
+  'confirmaciones.php?accion=listar',
+  'estadisticas.php',
+  'presupuesto.php?accion=todo',
+  'planificador.php?accion=todo',
+  'hoy.php',
+  'contactos.php?accion=todos',
+  'llegadas.php?accion=ultimas&cuantas=10',
+];
+
+/** Para no lanzar dos precalentamientos a la vez (arranque + reconexión
+    casi juntos, por ejemplo). */
+let _precalentando = false;
+
+/**
+ * Pide en segundo plano las rutas de RUTAS_A_PRECALENTAR, una por una,
+ * para que queden guardadas por si se pierde la señal. No bloquea nada,
+ * no avisa nada, y una ruta que falle no frena a las demás.
+ *
+ * @returns {Promise<void>}
+ */
+async function precalentarCopias() {
+  if (_precalentando || SIN_LLEGADA) return;
+  _precalentando = true;
+
+  try {
+    for (const ruta of RUTAS_A_PRECALENTAR) {
+      try {
+        // sinSesion:false (el respaldo) exige token, que es justo lo que
+        // hace falta: sin sesión no hay nada propio que precalentar.
+        await traer(ruta);
+      } catch (error) {
+        // Una ruta caída (sección sin datos todavía, permiso, lo que
+        // sea) no debe frenar el resto.
+      }
+      // Pausa corta entre una y otra: nueve pedidos de golpe se sienten
+      // en una red de salón compartida, aunque sea en silencio.
+      await new Promise(resolver => setTimeout(resolver, 400));
+    }
+  } finally {
+    _precalentando = false;
+  }
+}
+
 
 window.addEventListener('online',  () => { actualizarBannerConexion(); sincronizarCola(); });
 window.addEventListener('offline', () => actualizarBannerConexion());

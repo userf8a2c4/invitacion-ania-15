@@ -31,11 +31,13 @@ switch ($accion) {
     case 'entrar':
         exigirMetodo('POST');
 
-        // El freno se revisa ANTES de tocar la base de datos, para que un
-        // ataque por fuerza bruta no genere consultas.
-        if (estaFrenado()) {
+        // El corte seco se revisa ANTES de tocar la base de datos, para
+        // que un script en bucle no genere ni una consulta. El umbral es
+        // alto a propósito (INTENTOS_ANTES_DE_CORTAR_SECO): esto es para
+        // frenar un ataque, no para juzgar si alguien acertó o no.
+        if (estaFrenadoDelTodo()) {
             responderMal(
-                'Demasiados intentos fallidos. Espera ' . MINUTOS_DE_FRENO . ' minutos.',
+                'Demasiados intentos seguidos. Espera ' . MINUTOS_DE_FRENO . ' minutos.',
                 429
             );
         }
@@ -60,7 +62,18 @@ switch ($accion) {
              || (int) $usuario['activo'] !== 1
              || !contrasenaCorrecta($contrasena, $usuario['password_hash']);
 
+        /* El freno normal se evalúa ACÁ, después de saber si la
+         * contraseña era correcta, y solo importa cuando de verdad
+         * falló. Frenar a alguien que acaba de escribir la contraseña
+         * bien no protege nada —si la sabe, ya está adentro— y era
+         * justo lo que volvía inusable el panel con el bug anterior. */
         if ($malo) {
+            if (estaFrenadoPorFallos()) {
+                responderMal(
+                    'Demasiados intentos fallidos. Espera ' . MINUTOS_DE_FRENO . ' minutos.',
+                    429
+                );
+            }
             anotarIntentoFallido($correo);
             responderMal('Correo o contraseña incorrectos.', 401);
         }

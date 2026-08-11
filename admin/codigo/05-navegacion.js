@@ -20,6 +20,9 @@
 /** Cuál pestaña se está viendo. */
 let VISTA_ACTUAL = 'hoy';
 
+/** Cuándo se entró a la vista actual (Fase 8: cuánto dura cada una). */
+let VISTA_ENTRO_EN = null;
+
 /** Qué vistas ya pidieron sus datos alguna vez. */
 const VISTAS_CARGADAS = {};
 
@@ -95,6 +98,17 @@ const PADRE_DE_VISTA = {
 function irA(cual, recargar) {
   const vista = VISTAS[cual];
   if (!vista) return;
+
+  // Fase 8: cuánto duró la pantalla que se deja. irA() es el único
+  // lugar por donde se cambia de vista, así que un solo gancho acá
+  // cubre las ocho sin instrumentar cada dibujarX() por separado.
+  if (VISTA_ACTUAL && VISTA_ENTRO_EN) {
+    const segundos = Math.round((Date.now() - VISTA_ENTRO_EN) / 1000);
+    if (segundos >= 1) {
+      registrarEvento('vista', 'permanencia', { pantalla: VISTA_ACTUAL, segundos: segundos });
+    }
+  }
+  VISTA_ENTRO_EN = Date.now();
 
   VISTA_ACTUAL = cual;
 

@@ -95,6 +95,11 @@ async function pedir(ruta, opciones) {
   const config = opciones || {};
   const metodo = config.metodo || 'GET';
 
+  // Fase 8: cuánto tarda de verdad cada endpoint. Arranca acá, antes de
+  // cualquier otra cosa, para que el tiempo de espera del token o del
+  // AbortController no se le sume a lo que tarda el servidor.
+  const empezoEn = Date.now();
+
   const cabeceras = {};
   if (config.cuerpo) cabeceras['Content-Type'] = 'application/json';
 
@@ -188,6 +193,15 @@ async function pedir(ruta, opciones) {
      camino hasta él. Si veníamos de una racha sin señal, esto además
      dispara el envío de lo que haya quedado en la cola. */
   anotarSiLlego(true);
+
+  /* Fase 8: solo se anota lo que tardó de verdad — de otro modo la
+     tabla se infla con miles de filas de 200ms que no dicen nada nuevo.
+     metricas.php queda afuera a propósito: es la propia llamada que
+     mandaría este evento, y medirse a sí misma no aporta nada. */
+  const tardoMs = Date.now() - empezoEn;
+  if (tardoMs > 1500 && !ruta.startsWith('metricas.php')) {
+    registrarEvento('accion', 'endpoint_lento', { ruta: ruta, ms: tardoMs });
+  }
 
   /* La respuesta debería ser JSON siempre. Si no lo es, casi seguro que
      el servidor devolvió una página de error de Apache o de PHP: se
