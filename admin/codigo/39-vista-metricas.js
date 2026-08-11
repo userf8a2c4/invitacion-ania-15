@@ -1,11 +1,13 @@
 /* ══════════════════════════════════════════════════════════════════════
-   39 · PANEL DE MÉTRICAS (Fase 7 del rediseño)
+   39 · PANEL DE MÉTRICAS (Fase 8 del rediseño)
 
    QUÉ HACE ESTE ARCHIVO
    La hoja "Métricas de uso", visible solo para la cuenta observadora
    (ver esObservador(), api/_lib/sesion.php, y el filtro en dibujarMas(),
-   05-navegacion.js). Resume los eventos que ya viene anotando
-   registrarEvento() (38-metricas.js) y arma la descarga en .txt.
+   05-navegacion.js). Resume los eventos que anota registrarEvento()
+   (38-metricas.js) — no solo qué se toca, sino qué cuesta: ranking de
+   fricción, tendencia por día, tiempo por pantalla, endpoints lentos, y
+   completitud del evento como contexto para interpretar todo lo demás.
 
    POR QUÉ EL .TXT SE ARMA ACÁ Y NO EN EL SERVIDOR
    Mismo criterio que ya usa 13-exportar.js: los datos ya están (o se
@@ -14,8 +16,7 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 
-/** El resumen que se está mostrando ahora mismo, para no volver a
-    pedirlo al cambiar de rango si ya se tiene. */
+/** El rango que se está mostrando ahora mismo. */
 let METRICAS_RANGO_DIAS = 7;
 
 /**
@@ -61,14 +62,18 @@ async function cargarYPintarMetricas(cuerpo, dias) {
       tarjetaDato(r.total_eventos, 'Eventos') +
       tarjetaDato(r.usuarios_activos, 'Usuarios activos') +
       tarjetaDato(r.frases_fallidas.length, 'Frases sin entender') +
-      tarjetaDato(sumaDeFricciones(r.fricciones), 'Posibles fricciones') +
+      tarjetaDato(r.ranking_friccion.reduce((s, f) => s + Number(f.cuantos), 0), 'Fricciones') +
     '</div>' +
 
+    bloqueCompletitud(r.completitud) +
+    bloqueTendencia(r.tendencia_por_dia) +
+    bloqueRankingDeFriccion(r.ranking_friccion) +
+    bloqueTiempoPorPantalla(r.tiempo_por_pantalla) +
     bloqueTopDeMetricas('Pantallas más usadas', r.top_pantallas) +
     bloqueTopDeMetricas('Acciones más frecuentes', r.top_acciones) +
+    bloqueEndpointsLentos(r.endpoints_lentos) +
     bloqueFrasesDeMetricas('Frases que el asistente entendió', r.frases_ok, 'bien') +
     bloqueFrasesDeMetricas('Frases que no entendió', r.frases_fallidas, 'alerta') +
-    bloqueFriccionesDeMetricas(r.fricciones) +
 
     '<button class="boton boton--principal boton--ancho" id="metricas-descargar" ' +
             'style="margin-top:var(--esp-3)">Descargar métricas (.txt)</button>';
@@ -82,13 +87,152 @@ async function cargarYPintarMetricas(cuerpo, dias) {
 }
 
 /**
- * Suma cuántas fricciones hay en total, para la tarjeta resumen.
+ * Qué tan completo está el evento — el contexto sin el cual el resto de
+ * los números no se puede interpretar (poca actividad puede ser "ya
+ * está todo cargado", no "no se usa").
  *
- * @param {Object} fricciones - { nombre: cuantos }
- * @returns {number}
+ * @param {Object} c - { mesas_pct, acompanantes_pct, pagos_al_dia_pct }
+ * @returns {string} HTML
  */
-function sumaDeFricciones(fricciones) {
-  return Object.values(fricciones || {}).reduce((suma, n) => suma + Number(n), 0);
+function bloqueCompletitud(c) {
+  if (!c || (c.mesas_pct === null && c.acompanantes_pct === null && c.pagos_al_dia_pct === null)) {
+    return '';
+  }
+
+  const pct = v => v === null ? '—' : v + '%';
+
+  return '' +
+    '<div class="tarjeta__titulo" style="margin-bottom:var(--esp-2)">Completitud del evento</div>' +
+    '<div class="rejilla-datos" style="margin-bottom:var(--esp-3)">' +
+      tarjetaDato(pct(c.mesas_pct), 'Con mesa') +
+      tarjetaDato(pct(c.acompanantes_pct), 'Acompañantes nombrados') +
+      tarjetaDato(pct(c.pagos_al_dia_pct), 'Pagos al día') +
+    '</div>';
+}
+
+/**
+ * Eventos por día — contesta "¿cuándo trabaja?" de un vistazo, como una
+ * barra horizontal simple por fila (sin librería de gráficos).
+ *
+ * @param {Array<{dia:string, cuantos:number}>} filas
+ * @returns {string} HTML
+ */
+function bloqueTendencia(filas) {
+  if (!filas || filas.length < 2) return '';
+
+  const maximo = Math.max(...filas.map(f => Number(f.cuantos))) || 1;
+
+  return '' +
+    '<div class="tarjeta__titulo" style="margin-bottom:var(--esp-2)">Cuándo se usa</div>' +
+    '<div class="tarjeta">' +
+      filas.map(f => {
+        const pct = Math.max(4, Math.round(Number(f.cuantos) / maximo * 100));
+        return '' +
+          '<div style="margin-bottom:var(--esp-1)">' +
+            '<div style="display:flex;justify-content:space-between;font-size:12px;' +
+                 'color:var(--texto-tenue);margin-bottom:2px">' +
+              '<span>' + seguro(comoFecha(f.dia)) + '</span><span>' + seguro(f.cuantos) + '</span>' +
+            '</div>' +
+            '<div class="barra"><div class="barra__relleno" style="width:' + pct + '%"></div></div>' +
+          '</div>';
+      }).join('') +
+    '</div>';
+}
+
+/**
+ * El ranking de fricción: lo único de verdad accionable. Abandonos,
+ * errores y búsquedas vacías, todo junto y ordenado por cuánto pasa —
+ * no separado por tipo, porque lo que importa es DÓNDE, no cómo se
+ * llame el evento.
+ *
+ * @param {Array} filas
+ * @returns {string} HTML
+ */
+function bloqueRankingDeFriccion(filas) {
+  if (!filas || !filas.length) {
+    return '<p class="vacio__texto" style="margin:var(--esp-2) 0;color:var(--bien)">' +
+      'Sin señales de fricción en este rango.</p>';
+  }
+
+  const etiquetas = {
+    formulario_abandonado: 'Formulario abandonado',
+    abrir_cerrar_repetido: 'Abrir y cerrar lo mismo varias veces',
+    busqueda_vacia:        'Búsqueda sin resultado',
+    aviso:                 'Error visto (aviso)',
+    pantalla:               'Error visto (pantalla)',
+  };
+
+  return '' +
+    '<div class="tarjeta__titulo" style="margin-bottom:var(--esp-2)">' +
+      'Dónde hay más fricción' +
+    '</div>' +
+    '<div class="tarjeta">' +
+      filas.map(f =>
+        '<div class="comparador__renglon">' +
+          '<span>' + seguro(etiquetas[f.nombre] || f.nombre) +
+            (f.pantalla ? ' <span class="vacio__texto">· ' + seguro(nombreLegibleDeMetrica(f.pantalla)) +
+              '</span>' : '') +
+          '</span>' +
+          '<span class="etiqueta etiqueta--ojo">' + seguro(f.cuantos) + '</span>' +
+        '</div>'
+      ).join('') +
+    '</div>';
+}
+
+/**
+ * Tiempo total y promedio por pantalla.
+ *
+ * @param {Array} filas
+ * @returns {string} HTML
+ */
+function bloqueTiempoPorPantalla(filas) {
+  if (!filas || !filas.length) return '';
+
+  return '' +
+    '<div class="tarjeta__titulo" style="margin:var(--esp-3) 0 var(--esp-2)">Tiempo por pantalla</div>' +
+    '<div class="tarjeta">' +
+      filas.slice(0, 8).map(f =>
+        '<div class="comparador__renglon">' +
+          '<span>' + seguro(nombreLegibleDeMetrica(f.pantalla)) + '</span>' +
+          '<span class="cifra">' + seguro(minutosYSegundos(f.total_seg)) +
+            ' <span class="vacio__texto">(~' + f.promedio_seg + 's c/u)</span></span>' +
+        '</div>'
+      ).join('') +
+    '</div>';
+}
+
+/**
+ * Los endpoints que tardaron más de lo esperado.
+ *
+ * @param {Array} filas
+ * @returns {string} HTML
+ */
+function bloqueEndpointsLentos(filas) {
+  if (!filas || !filas.length) return '';
+
+  return '' +
+    '<div class="tarjeta__titulo" style="margin:var(--esp-3) 0 var(--esp-2)">Endpoints lentos</div>' +
+    '<div class="tarjeta">' +
+      filas.slice(0, 8).map(f =>
+        '<div class="comparador__renglon">' +
+          '<span>' + seguro(f.ruta) + ' <span class="vacio__texto">×' + f.veces + '</span></span>' +
+          '<span class="cifra">' + f.promedio_ms + 'ms <span class="vacio__texto">' +
+            '(peor ' + f.peor_ms + 'ms)</span></span>' +
+        '</div>'
+      ).join('') +
+    '</div>';
+}
+
+/**
+ * Segundos a "Xm Ys" legible.
+ *
+ * @param {number} total
+ * @returns {string}
+ */
+function minutosYSegundos(total) {
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return m ? m + 'm ' + s + 's' : s + 's';
 }
 
 /**
@@ -141,34 +285,7 @@ function bloqueFrasesDeMetricas(titulo, filas, tono) {
 }
 
 /**
- * Los puntos de fricción detectados, en lenguaje llano.
- *
- * @param {Object} fricciones - { nombre: cuantos }
- * @returns {string} HTML
- */
-function bloqueFriccionesDeMetricas(fricciones) {
-  const claves = Object.keys(fricciones || {});
-  if (!claves.length) {
-    return '<p class="vacio__texto" style="margin-top:var(--esp-3);color:var(--bien)">' +
-      'Sin señales de fricción en este rango.</p>';
-  }
-
-  return '' +
-    '<div class="tarjeta__titulo" style="margin:var(--esp-3) 0 var(--esp-2)">' +
-      'Posibles puntos de fricción' +
-    '</div>' +
-    '<div class="tarjeta">' +
-      claves.map(clave =>
-        '<div class="comparador__renglon">' +
-          '<span>' + seguro(nombreLegibleDeMetrica(clave)) + '</span>' +
-          '<span class="etiqueta etiqueta--ojo">' + seguro(fricciones[clave]) + '</span>' +
-        '</div>'
-      ).join('') +
-    '</div>';
-}
-
-/**
- * El nombre técnico de un evento, en palabras.
+ * El nombre técnico de un evento o pantalla, en palabras.
  *
  * @param {string} clave
  * @returns {string}
@@ -183,16 +300,16 @@ function nombreLegibleDeMetrica(clave) {
     crear_editar_acompanante: 'Crear o editar acompañante',
     marcar_pago: 'Marcar pago',
     crear_tarea: 'Crear tarea',
-    busqueda_vacia: 'Búsquedas que no encontraron nada',
-    abrir_cerrar_repetido: 'Abrir y cerrar lo mismo varias veces seguidas',
+    endpoint_lento: 'Endpoint lento',
   };
   return nombres[clave] || clave;
 }
 
 /**
- * Pide los eventos crudos del rango y arma el .txt, con el mismo
- * formato que describe panel-metricas-observabilidad.txt: pensado para
- * pegarse directo en Claude Code y pedirle un análisis.
+ * Pide los eventos crudos del rango y arma el .txt: encabezado, resumen
+ * rápido, tendencia, tiempo por pantalla, ranking de fricción, top
+ * pantallas/acciones, frases del asistente, y eventos detallados —
+ * pensado para pegarse directo en Claude Code.
  *
  * @param {number} dias
  * @returns {Promise<void>}
@@ -221,6 +338,7 @@ async function descargarMetricas(dias) {
   const pantallaTop = resumen.top_pantallas[0];
   const accionTop = resumen.top_acciones[0];
   const totalVistas = resumen.top_pantallas.reduce((s, f) => s + Number(f.cuantos), 0) || 1;
+  const totalFriccion = resumen.ranking_friccion.reduce((s, f) => s + Number(f.cuantos), 0);
 
   const lineas = [];
   lineas.push('═'.repeat(60));
@@ -241,7 +359,39 @@ async function descargarMetricas(dias) {
     ? nombreLegibleDeMetrica(accionTop.nombre) + ' (' + accionTop.cuantos + ')'
     : '—'));
   lineas.push('- Frases de asistente no entendidas: ' + resumen.frases_fallidas.length);
-  lineas.push('- Posibles fricciones detectadas: ' + sumaDeFricciones(resumen.fricciones));
+  lineas.push('- Posibles fricciones detectadas: ' + totalFriccion);
+  if (resumen.completitud) {
+    const c = resumen.completitud;
+    lineas.push('- Completitud: mesas ' + (c.mesas_pct ?? '—') + '% · acompañantes ' +
+      (c.acompanantes_pct ?? '—') + '% · pagos al día ' + (c.pagos_al_dia_pct ?? '—') + '%');
+  }
+  lineas.push('');
+
+  lineas.push('## TENDENCIA POR DÍA');
+  if (resumen.tendencia_por_dia.length) {
+    resumen.tendencia_por_dia.forEach(f => lineas.push('- ' + f.dia + ': ' + f.cuantos + ' eventos'));
+  } else {
+    lineas.push('(sin datos suficientes en este rango)');
+  }
+  lineas.push('');
+
+  lineas.push('## DÓNDE HAY MÁS FRICCIÓN');
+  if (resumen.ranking_friccion.length) {
+    resumen.ranking_friccion.forEach(f =>
+      lineas.push('- ' + f.nombre + (f.pantalla ? ' en ' + f.pantalla : '') + ': ' + f.cuantos + ' casos'));
+  } else {
+    lineas.push('(sin señales de fricción en este rango)');
+  }
+  lineas.push('');
+
+  lineas.push('## TIEMPO POR PANTALLA');
+  if (resumen.tiempo_por_pantalla.length) {
+    resumen.tiempo_por_pantalla.forEach(f =>
+      lineas.push('- ' + nombreLegibleDeMetrica(f.pantalla) + ': ' + minutosYSegundos(f.total_seg) +
+        ' total, ~' + f.promedio_seg + 's por visita'));
+  } else {
+    lineas.push('(sin datos suficientes en este rango)');
+  }
   lineas.push('');
 
   lineas.push('## TOP PANTALLAS');
@@ -257,6 +407,16 @@ async function descargarMetricas(dias) {
   });
   lineas.push('');
 
+  lineas.push('## ENDPOINTS LENTOS (más de 1.5s)');
+  if (resumen.endpoints_lentos.length) {
+    resumen.endpoints_lentos.forEach(f =>
+      lineas.push('- ' + f.ruta + ': ' + f.veces + ' veces, promedio ' + f.promedio_ms +
+        'ms, peor ' + f.peor_ms + 'ms'));
+  } else {
+    lineas.push('(nada por encima del umbral en este rango)');
+  }
+  lineas.push('');
+
   lineas.push('## FRASES DEL ASISTENTE');
   lineas.push('Usadas con éxito:');
   if (resumen.frases_ok.length) {
@@ -269,16 +429,6 @@ async function descargarMetricas(dias) {
     resumen.frases_fallidas.forEach(f => lineas.push('- "' + f.texto + '"  ' + f.cuantos));
   } else {
     lineas.push('(ninguna en este rango)');
-  }
-  lineas.push('');
-
-  lineas.push('## POSIBLES PUNTOS DE FRICCIÓN');
-  const clavesFriccion = Object.keys(resumen.fricciones || {});
-  if (clavesFriccion.length) {
-    clavesFriccion.forEach(clave =>
-      lineas.push('- ' + nombreLegibleDeMetrica(clave) + ': ' + resumen.fricciones[clave] + ' casos'));
-  } else {
-    lineas.push('(sin señales de fricción en este rango)');
   }
   lineas.push('');
 
