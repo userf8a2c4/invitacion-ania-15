@@ -65,9 +65,9 @@
      Fusionar FONDO con los otros dos significa que esos pétalos dejan de
      estar DETRÁS del contenido (z-1) y pasan a estar DELANTE (z-50), igual
      que ya están los de FRENTE. Parece más arriesgado que fusionar medio
-     con frente, pero no lo es: los de FRENTE miden 36-62 px con opacidad
+     con frente, pero no lo es: los de FRENTE miden 48-84 px con opacidad
      0,70-1 y YA pasan por delante de todo el texto — nunca molestaron. Los
-     de FONDO son los más CHICOS (13-26 px) y los más TENUES (opacidad
+     de FONDO son los más CHICOS (18-35 px) y los más TENUES (opacidad
      0,30-0,55) de los tres planos: si los grandes y opacos no estorban la
      lectura, los chicos y casi transparentes, menos.
 

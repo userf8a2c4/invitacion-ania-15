@@ -74,20 +74,19 @@
   /* Cada plano tiene su propio tamaño y su propia transparencia. Eso es
      lo que hace que se lean como distancias distintas y no como tres
      grupos del mismo tamaño superpuestos. */
-  /* ⚠️ LOS TAMAÑOS SUBIERON, Y NO ES CAPRICHO.
-     Eran [7,15] / [12,22] / [20,34] y en una pantalla grande se leían como
-     MIGAJAS, no como pétalos: a 7 px un pétalo de rosa es un punto. Los
-     dibujos tienen forma y nervadura, y a ese tamaño no se veía ninguna de
-     las dos cosas.
-
-     Se subieron alrededor de un 75 %, conservando la proporción entre los
-     tres planos: el de frente sigue siendo casi el triple que el del fondo,
-     que es lo que crea la sensación de profundidad. No cuesta rendimiento:
-     son la misma cantidad de elementos, solo más grandes. */
+  /* ⚠️ LOS TAMAÑOS SUBIERON DOS VECES, Y NO ES CAPRICHO.
+     Primero eran [7,15] / [12,22] / [20,34] y se leían como MIGAJAS: a
+     7 px un pétalo de rosa es un punto, sin forma ni nervadura visible.
+     Se subieron a [13,26] / [22,40] / [36,62] y todavía se sentían
+     chicos. Esta segunda subida (~35 % más) sigue conservando la misma
+     proporción entre los tres planos —el de frente sigue siendo casi el
+     triple que el del fondo, que es lo que crea la sensación de
+     profundidad—. No cuesta rendimiento: son la misma cantidad de
+     elementos, solo más grandes. */
   const RASGOS_DEL_PLANO = {
-    fondo:  { contenedor: '#petalos-fondo',  tamaño: [13, 26], opacidad: [.30, .55], caida: [14, 30] },
-    medio:  { contenedor: '#petalos-medio',  tamaño: [22, 40], opacidad: [.60, .90], caida: [18, 40] },
-    frente: { contenedor: '#petalos-frente', tamaño: [36, 62], opacidad: [.70, 1],   caida: [26, 54] },
+    fondo:  { contenedor: '#petalos-fondo',  tamaño: [18, 35], opacidad: [.30, .55], caida: [14, 30] },
+    medio:  { contenedor: '#petalos-medio',  tamaño: [30, 54], opacidad: [.60, .90], caida: [18, 40] },
+    frente: { contenedor: '#petalos-frente', tamaño: [48, 84], opacidad: [.70, 1],   caida: [26, 54] },
   };
 
   /** Cuánto tira la gravedad hacia abajo (píxeles por segundo, al cuadrado). */
