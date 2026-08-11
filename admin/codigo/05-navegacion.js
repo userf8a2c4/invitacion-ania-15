@@ -130,7 +130,9 @@ function irA(cual, recargar) {
   // invitados, la vista nueva no debe abrirse por la mitad.
   buscar('#contenido').scrollTo({ top: 0 });
 
-  // Evento del panel de métricas (Fase 8): qué pantallas se visitan.
+  // Evento 1 de 10 del panel de métricas (Fase 7): qué pantallas se
+  // visitan y con qué frecuencia. Un solo gancho acá cubre TODAS las
+  // vistas, en vez de instrumentar cada dibujarX() por separado.
   registrarEvento('vista', cual);
 
   if (recargar || !VISTAS_CARGADAS[cual]) {

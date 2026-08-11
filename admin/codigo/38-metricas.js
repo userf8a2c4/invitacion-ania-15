@@ -1,46 +1,42 @@
 /* ══════════════════════════════════════════════════════════════════════
-   38 · REGISTRAR MÉTRICAS DE USO (Fase 8 del rediseño)
+   38 · REGISTRAR MÉTRICAS DE USO (Fase 7 del rediseño)
 
    QUÉ HACE ESTE ARCHIVO
    Una sola función, registrarEvento(), que el resto del código llama en
-   los puntos que de verdad importan. Nunca interrumpe ni avisa si algo
-   falla: es telemetría, no una acción que la persona esté esperando.
-
-   NO SOLO "QUÉ SE TOCA". Cada evento sale con contexto automático (sin
-   señal, días para el evento, ancho de pantalla) y un id de sesión de
-   uso, para que el resumen pueda reconstruir la secuencia real de
-   trabajo y no solo una nube de eventos sueltos.
+   los diez puntos que de verdad importan (ver la lista abajo). Nunca
+   interrumpe ni avisa si algo falla: es telemetría, no una acción que
+   la persona esté esperando.
 
    POR QUÉ NO HACE FALTA UNA COLA PROPIA
    mandar() (03-servidor.js) ya encola sola cualquier POST que falle por
    falta de señal (ver encolarEscritura(), 26-sincronizacion.js) y la
-   reintenta cuando vuelve la conexión — se reusa tal cual.
+   reintenta cuando vuelve la conexión — se reusa tal cual, sin inventar
+   un segundo mecanismo de guardado offline solo para esto.
 
-   ÍNDICE
-     1. La sesión de uso
-     2. Registrar un evento
-     3. Fricción: abrir/cerrar lo mismo varias veces
+   LOS DIEZ EVENTOS (panel-metricas-observabilidad.txt)
+    1. vista                    — cambio de pestaña (irA(), 05-navegacion.js)
+    2. accion:abrir_ficha_invitado
+    3. accion:asignar_mesa
+    4. accion:marcar_llegada
+    5. accion:crear_editar_acompanante
+    6. accion:marcar_pago
+    7. accion:crear_tarea
+    8. busqueda:busqueda_vacia   — solo cuando el resultado queda vacío
+    9. asistente:frase_exitosa / frase_fallida
+   10. friccion:abrir_cerrar_repetido
    ══════════════════════════════════════════════════════════════════════ */
 
 
-/* ─── 1. LA SESIÓN DE USO ──────────────────────────────────────────── */
-
-/* Sin esto, los eventos son una nube: con esto se puede reconstruir el
-   camino real ("Resumen → Gente → Mesas → Resumen → Gente" = está
-   buscando algo que no encuentra). Se genera una vez al cargar la
-   página y viaja en cada evento. */
-const SESION_DE_USO = (window.crypto && crypto.randomUUID)
-  ? crypto.randomUUID()
-  : 's-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
-
-
-/* ─── 2. REGISTRAR UN EVENTO ────────────────────────────────────────── */
+/** Cuándo se abrió cada hoja por última vez y cuántas veces seguidas
+    (para detectar el evento 10, abrir_cerrar_repetido), por clave libre
+    que cada llamador elige (el nombre de la ficha, por ejemplo). */
+const RASTRO_DE_ABRIR_CERRAR = {};
 
 /**
  * Anota un evento de uso. Nunca lanza, nunca avisa: si falla, se pierde
  * ese renglón de métricas y nada más — la app sigue exactamente igual.
  *
- * @param {string} tipo - 'vista' | 'accion' | 'busqueda' | 'asistente' | 'friccion' | 'error'
+ * @param {string} tipo - 'vista' | 'accion' | 'busqueda' | 'asistente' | 'friccion'
  * @param {string} nombre
  * @param {Object} [payload]
  * @returns {void}
@@ -49,23 +45,10 @@ function registrarEvento(tipo, nombre, payload) {
   try {
     if (typeof USUARIO === 'undefined' || !USUARIO) return;
 
-    const carga = Object.assign(
-      {
-        _sesion: SESION_DE_USO,
-        // Contexto automático, gratis en cada evento: separa "modo
-        // planificación" de "día del evento" sin que cada llamador
-        // tenga que acordarse de mandarlo.
-        _sin_senal: typeof SIN_LLEGADA !== 'undefined' ? !!SIN_LLEGADA : null,
-        _dias_para_el_evento: diasParaElEvento(),
-        _ancho_pantalla: window.innerWidth,
-      },
-      payload || {}
-    );
-
     mandar('metricas.php?accion=registrar', {
       tipo: tipo,
       nombre: nombre,
-      payload: carga,
+      payload: payload || undefined,
       pantalla: (typeof VISTA_ACTUAL !== 'undefined' && VISTA_ACTUAL) || '',
     }).catch(() => {});
   } catch (error) {
@@ -74,39 +57,16 @@ function registrarEvento(tipo, nombre, payload) {
 }
 
 /**
- * Cuántos días faltan para la fiesta, redondeado. Negativo después del
- * 24 de octubre — sirve igual, para saber que ya se está viviendo el
- * día o el después.
+ * Marca que se abrió una hoja identificada por `clave`, y avisa si es
+ * la tercera vez o más en menos de 60 segundos sin nada de por medio
+ * — la señal de fricción que pide el documento ("entrar a una ficha,
+ * salir, volver a entrar").
  *
- * @returns {number|null}
- */
-function diasParaElEvento() {
-  try {
-    const fecha = new Date(CONFIGURACION.fiesta.fechaYHora);
-    return Math.round((fecha - new Date()) / 86400000);
-  } catch (error) {
-    return null;
-  }
-}
-
-
-/* ─── 3. FRICCIÓN: ABRIR/CERRAR LO MISMO VARIAS VECES ──────────────── */
-
-/** Cuándo se abrió cada cosa por última vez y cuántas veces seguidas,
-    por clave libre que cada llamador elige (el nombre de la ficha, por
-    ejemplo). */
-const RASTRO_DE_ABRIR_CERRAR = {};
-
-/**
- * Marca que se abrió algo identificado por `clave`, y avisa si es la
- * tercera vez o más en menos de 60 segundos — la señal de fricción de
- * "entrar a una ficha, salir, volver a entrar".
- *
- * @param {string} clave - Algo estable para eso, ej. 'invitado-45'.
+ * @param {string} clave - Algo estable para esa ficha, ej. 'invitado-45'.
  * @returns {void}
  */
 function registrarAbrirDeNuevo(clave) {
-  const ahora = Date.now();
+  const ahora = Date.now ? Date.now() : new Date().getTime();
   const rastro = RASTRO_DE_ABRIR_CERRAR[clave];
 
   if (rastro && ahora - rastro.ultima < 60000) {

@@ -162,6 +162,15 @@ $agregarColumna('regalos', 'pedido_en_lista', 'TINYINT(1) NOT NULL DEFAULT 0');
 // pantalla Hoy: la alerta de "pase repetido").
 $agregarColumna('llegadas', 'intentos', 'INT NOT NULL DEFAULT 0');
 
+/* Presupuestos múltiples (Fase 7 del rediseño). DEFAULT 1 no es solo el
+   valor para las filas nuevas: en una ALTER TABLE, MySQL lo usa también
+   para rellenar las filas que YA existían — así, todo lo que ya estaba
+   cargado en una instalación vieja queda atado de una sola vez al
+   presupuesto 1 ("Presupuesto principal", ver migracion.sql), sin
+   necesitar un UPDATE aparte. */
+$agregarColumna('categorias_gasto', 'presupuesto_id', 'INT NOT NULL DEFAULT 1');
+$agregarColumna('gastos', 'presupuesto_id', 'INT NOT NULL DEFAULT 1');
+
 
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 
@@ -175,7 +184,7 @@ $tablasEsperadas = [
     'incompatibilidades', 'corte_honor', 'ensayos', 'asistencia_ensayos',
     'regalos', 'foraneos', 'ceremonia', 'requisitos_ceremonia', 'musica',
     'citas_arreglo', 'tomas_foto', 'acompanantes', 'permisos_usuario', 'llegadas',
-    'comandos_usuario', 'eventos_uso',
+    'comandos_usuario', 'presupuestos', 'eventos_uso',
 ];
 
 $faltantes = [];
