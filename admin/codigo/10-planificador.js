@@ -314,8 +314,14 @@ function pintarTareas(donde) {
  */
 function formularioTarea(tarea) {
   const d = tarea || {};
+  // Con id es una edición de verdad. Sin id —una precarga, como la que
+  // arma el asistente (34-asistente-datos.js) con el título y la fecha
+  // ya puestos— es un alta: mismo criterio que ya usa formularioEvento()
+  // en 11-vista-evento.js para no confundir "datos sugeridos" con
+  // "esto ya existe en la base".
+  const esEdicion = !!(tarea && tarea.id);
 
-  const cuerpo = abrirHoja(tarea ? 'Editar tarea' : 'Nueva tarea',
+  const cuerpo = abrirHoja(esEdicion ? 'Editar tarea' : 'Nueva tarea',
     campoTexto({ id: 'tar-titulo', rotulo: 'Qué hay que hacer', valor: d.titulo }) +
     campoTexto({ id: 'tar-responsable', rotulo: 'Quién', valor: d.responsable }) +
 
@@ -340,7 +346,7 @@ function formularioTarea(tarea) {
                  ] }) +
 
     campoLargo({ id: 'tar-detalle', rotulo: 'Detalle', valor: d.detalle }) +
-    pieDeFormulario('Guardar', !!tarea)
+    pieDeFormulario('Guardar', esEdicion)
   );
 
   buscar('#pie-guardar', cuerpo).addEventListener('click', () => {
@@ -355,7 +361,7 @@ function formularioTarea(tarea) {
       estado:       valorDe('tar-estado', cuerpo),
       detalle:      valorDe('tar-detalle', cuerpo),
     };
-    if (tarea) carga.id = tarea.id;
+    if (esEdicion) carga.id = tarea.id;
 
     guardarPlan('guardar_tarea', carga, refrescarVistaEvento);
   });

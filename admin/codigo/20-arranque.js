@@ -270,19 +270,23 @@ async function encender() {
     await cargarEtiquetas();
     aplicarEtiquetas();
 
-    // El sandwich del FAB es por cuenta: recién acá se sabe quién es
-    // USUARIO, así que recién acá se puede leer su localStorage.
+    // El sandwich del FAB y las frases del asistente son por cuenta:
+    // recién acá se sabe quién es USUARIO, así que recién acá se puede
+    // leer su localStorage.
     cargarSandwichGuardadoEnElTelefono();
+    cargarFrasesAprendidasEnElTelefono();
 
     arrancarLaApp();
 
-    /* La paleta y el sandwich, al revés que las etiquetas: NO se
-       esperan. Ya se aplicó lo que había en el teléfono, así que la
-       app ya se ve lista. Esto solo trae una versión más nueva por si
-       se cambió desde otro teléfono, y se aplica calladamente cuando
-       llegue — no vale la pena demorar el arranque por esto. */
+    /* La paleta, el sandwich y las frases aprendidas, al revés que las
+       etiquetas: NO se esperan. Ya se aplicó lo que había en el
+       teléfono, así que la app ya se ve lista. Esto solo trae una
+       versión más nueva por si se cambió desde otro teléfono, y se
+       aplica calladamente cuando llegue — no vale la pena demorar el
+       arranque por esto. */
     sincronizarPaletaConServidor();
     sincronizarSandwichConServidor();
+    sincronizarFrasesConServidor();
   } else {
     mostrarPantallaDeEntrada();
   }

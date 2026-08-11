@@ -7,11 +7,9 @@
    elige, a un toque de distancia desde cualquier pantalla.
 
    TOQUE SIMPLE CONTRA TOQUE LARGO
-   Los dos abren el mismo "sandwich" de herramientas por ahora. Cuando
-   exista el asistente (Fase 4 del rediseño), el toque simple va a abrir
-   el asistente y el toque largo va a seguir abriendo el sandwich —tal
-   como pide el documento—, pero mientras el asistente no existe, las dos
-   formas hacen lo mismo: sería peor ofrecer un atajo a algo que no está.
+   El toque simple abre el asistente (32-asistente.js): escribís qué
+   necesitás y lo hace. El toque largo abre este sandwich: hasta tres
+   herramientas fijas, un toque y listo, sin escribir nada.
 
    ES POR PERSONA, NO DEL EVENTO
    Lo que Carlos elige no tiene por qué ser lo que elige Lucila. Se
@@ -116,7 +114,7 @@ async function abrirMarcarPagoRapido() {
   cuerpo.innerHTML = pendientes.map(p =>
     '<button class="lista__fila" data-pago-rapido="' + seguro(p.id) + '">' +
       '<span class="lista__cuerpo">' +
-        '<span class="lista__titulo">' + seguro(p.concepto || p.gasto || 'Pago') + '</span>' +
+        '<span class="lista__titulo">' + seguro(p.concepto || p.gasto_concepto || 'Pago') + '</span>' +
         '<span class="lista__pie">' +
           (p.fecha_limite ? seguro(comoFecha(String(p.fecha_limite).slice(0, 10))) : 'Sin fecha') +
         '</span>' +
@@ -222,8 +220,9 @@ async function guardarSandwich(claves) {
 const MILISEGUNDOS_TOQUE_LARGO = 480;
 
 /**
- * Engancha el FAB: toque simple y toque largo, los dos abren el
- * sandwich por ahora (ver la nota grande al principio del archivo).
+ * Engancha el FAB: toque simple abre el asistente (32-asistente.js),
+ * toque largo abre el sandwich de herramientas — tal como pide el
+ * documento del rediseño.
  *
  * @returns {void}
  */
@@ -251,10 +250,9 @@ function prepararFab() {
 
   boton.addEventListener('click', () => {
     // El toque largo ya disparó su propia acción; el click que el
-    // navegador manda igual al soltar no debe abrir el sandwich dos
-    // veces.
+    // navegador manda igual al soltar no debe abrir nada dos veces.
     if (disparadoPorLargo) { disparadoPorLargo = false; return; }
-    abrirSandwich();
+    abrirAsistente();
   });
 }
 

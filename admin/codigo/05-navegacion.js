@@ -264,6 +264,7 @@ function nombreDeOpcionDeMenu(clave) {
     'etiquetas':   'Cambiar los nombres',
     'colores':     'Colores del panel',
     'fab-config':  'Mis herramientas rápidas',
+    'comandos-asistente': 'Comandos del asistente',
     'instalar':    'Instalar en la pantalla de inicio',
   };
   return nombres[clave] || clave;
@@ -335,6 +336,10 @@ function atenderMenu(opcion) {
 
     case 'fab-config':
       abrirConfiguracionDelFab();
+      break;
+
+    case 'comandos-asistente':
+      abrirComandosDelAsistente();
       break;
   }
 }
