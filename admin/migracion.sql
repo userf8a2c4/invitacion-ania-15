@@ -839,3 +839,36 @@ CREATE TABLE IF NOT EXISTS permisos_usuario (
   CONSTRAINT fk_permisos_usuario
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ─────────────────────────────────────────────────────────────────────
+-- PANEL DE MÉTRICAS: QUÉ USA LUCILA DE VERDAD, Y QUÉ LE CUESTA (Fase 8)
+--
+-- Solo la cuenta observadora (esObservador(), _lib/sesion.php) puede
+-- LEER esto. Cualquier cuenta logueada puede ESCRIBIR —cada quien
+-- registra su propio uso—, nunca leer el de otro desde acá.
+--
+-- No es solo "qué se toca": el payload también trae duración de
+-- pantalla, si un formulario se abandonó sin guardar, errores que la
+-- persona vio, y una marca de sesión de uso para reconstruir la
+-- secuencia real de trabajo. Ver codigo/38-metricas.js.
+CREATE TABLE IF NOT EXISTS eventos_uso (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id  INT NOT NULL,
+  -- 'vista' | 'accion' | 'busqueda' | 'asistente' | 'friccion' | 'error'
+  tipo        VARCHAR(20) NOT NULL,
+  -- 'abrir_ficha_invitado', 'permanencia', 'formulario_abandonado'…
+  nombre      VARCHAR(60) NOT NULL,
+  -- Detalle libre en JSON. Sin columnas fijas a propósito: cada tipo de
+  -- evento trae lo suyo, y forzar un esquema rígido multiplicaría
+  -- columnas casi siempre vacías por cada evento nuevo. Siempre incluye
+  -- _sesion (id de la sesión de uso en curso) y contexto automático
+  -- (sin_senal, dias_para_evento, ancho_pantalla).
+  payload     TEXT,
+  pantalla    VARCHAR(40) NOT NULL DEFAULT '',
+  creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_usuario_y_fecha (usuario_id, creado_en),
+  KEY por_tipo_y_nombre (tipo, nombre),
+  CONSTRAINT fk_eventos_uso
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

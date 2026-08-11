@@ -54,8 +54,37 @@ const DIAS_MAXIMOS_DE_SESION = 365;
 /** Intentos fallidos de login permitidos antes de frenar. */
 const INTENTOS_MAXIMOS = 8;
 
+/**
+ * Corte seco: a partir de acá no se mira ni la contraseña.
+ *
+ * El freno normal (INTENTOS_MAXIMOS) se evalúa DESPUÉS de comprobar la
+ * contraseña, para que quien la sabe pueda entrar aunque haya fallado
+ * antes (ver api/sesion.php). Eso significa una consulta a la base por
+ * intento — aceptable para una persona, no para un script en bucle.
+ *
+ * Este segundo techo, mucho más alto, sí corta antes de tocar la base:
+ * nadie escribiendo a mano llega a cincuenta intentos en un cuarto de
+ * hora, y un ataque automatizado los pasa en segundos.
+ */
+const INTENTOS_ANTES_DE_CORTAR_SECO = 50;
+
 /** Cuántos minutos dura el freno cuando se agotan los intentos. */
 const MINUTOS_DE_FRENO = 15;
+
+/**
+ * La marca que distingue, dentro de `intentos_login`, las filas que
+ * cuentan peticiones a la API de las que cuentan intentos de login
+ * fallidos. La tabla hace las dos cosas para no crear una segunda casi
+ * idéntica (ver excedioLimiteDeApi más abajo).
+ *
+ * ⚠️ QUIEN CUENTE INTENTOS DE LOGIN TIENE QUE EXCLUIR ESTA MARCA.
+ * Olvidarlo fue un error real: estaFrenado() contaba TODAS las filas de
+ * la IP, así que las peticiones normales del panel —varias por
+ * pantalla— llenaban el contador de login. Bastaban unos segundos de
+ * uso para que el siguiente ingreso quedara bloqueado quince minutos,
+ * con la contraseña correcta y sin un solo intento fallido de verdad.
+ */
+const MARCA_DE_PETICION_API = '__api__';
 
 /**
  * Techo de peticiones por IP a TODA la API del panel, no solo el login.
@@ -260,7 +289,8 @@ function excedioLimiteDeApi() {
         'SELECT COUNT(*) AS n FROM intentos_login
          WHERE ip = :ip AND correo = :marca
            AND cuando > DATE_SUB(NOW(), INTERVAL :min MINUTE)',
-        [':ip' => ipDeLaPeticion(), ':marca' => '__api__', ':min' => MINUTOS_DE_VENTANA_API]
+        [':ip' => ipDeLaPeticion(), ':marca' => MARCA_DE_PETICION_API,
+         ':min' => MINUTOS_DE_VENTANA_API]
     );
     return $fila && (int) $fila['n'] >= PETICIONES_API_MAXIMAS;
 }
@@ -274,10 +304,15 @@ function excedioLimiteDeApi() {
  * @return void
  */
 function anotarPeticionDeApi() {
-    insertar('intentos_login', ['ip' => ipDeLaPeticion(), 'correo' => '__api__']);
+    insertar('intentos_login', ['ip' => ipDeLaPeticion(), 'correo' => MARCA_DE_PETICION_API]);
 
+    /* Cada petición autenticada anota una fila acá — con el techo de 300
+       cada 5 minutos, son muchas filas por hora. Dos horas de margen
+       alcanza de sobra (la ventana más larga que se mira es la de 15
+       minutos del freno de login) y evita que la tabla crezca sin freno,
+       que fue justo lo que agravó el bug de arriba. */
     if (random_int(1, 200) === 1) {
-        ejecutar('DELETE FROM intentos_login WHERE cuando < DATE_SUB(NOW(), INTERVAL 1 DAY)');
+        ejecutar('DELETE FROM intentos_login WHERE cuando < DATE_SUB(NOW(), INTERVAL 2 HOUR)');
     }
 }
 
@@ -388,6 +423,32 @@ function tieneEspecial($usuario, $clave) {
     return (int) $usuario[$columna] === 1;
 }
 
+/**
+ * Dice si esta cuenta es la observadora del panel de métricas (Fase 8)
+ * — la de Carlos, el constructor, no la de nadie más.
+ *
+ * A PROPÓSITO NO USA EL MISMO CRITERIO QUE tieneEspecial(): esa función
+ * le da acceso automático a CUALQUIER cuenta con rol 'admin', y acá se
+ * pide justo lo contrario — que sea SOLO una cuenta puntual, aunque
+ * Lucila también tenga rol admin. Por eso se compara contra un correo
+ * exacto guardado en el .env del servidor (OBSERVADOR_CORREO), nunca
+ * contra el rol.
+ *
+ * Sin esa variable configurada, nadie es observador — por defecto
+ * cerrado, no abierto, que es lo correcto para algo pedido "solo para
+ * mi cuenta".
+ *
+ * @param array $usuario
+ * @return bool
+ */
+function esObservador($usuario) {
+    $correoObservador = env('OBSERVADOR_CORREO', '');
+    if ($correoObservador === '') return false;
+
+    return mb_strtolower((string) ($usuario['correo'] ?? '')) ===
+           mb_strtolower($correoObservador);
+}
+
 
 /* ─── 3. CONTRASEÑAS ──────────────────────────────────────────────────── */
 
@@ -439,17 +500,41 @@ function problemaDeContrasena($contrasena) {
 /* ─── 4. FRENO DE INTENTOS DE LOGIN ───────────────────────────────────── */
 
 /**
- * Dice si esta IP está frenada por fallar demasiadas veces.
- *
- * Sin esto, alguien puede probar contraseñas en automático toda la noche.
+ * El corte seco: para antes de mirar la contraseña, igual que hacía el
+ * freno único de antes. Cuenta TODO lo de esta IP —intentos de login y
+ * marcas de API por igual— porque acá el objetivo es nada más frenar un
+ * script que martillara el endpoint en bucle, no juzgar si alguien sabe
+ * la contraseña.
  *
  * @return bool
  */
-function estaFrenado() {
+function estaFrenadoDelTodo() {
     $fila = consultarUno(
         'SELECT COUNT(*) AS n FROM intentos_login
          WHERE ip = :ip AND cuando > DATE_SUB(NOW(), INTERVAL :min MINUTE)',
         [':ip' => ipDeLaPeticion(), ':min' => MINUTOS_DE_FRENO]
+    );
+    return $fila && (int) $fila['n'] >= INTENTOS_ANTES_DE_CORTAR_SECO;
+}
+
+/**
+ * El freno normal, por contraseñas equivocadas de verdad.
+ *
+ * A PROPÓSITO excluye la marca de API (MARCA_DE_PETICION_API): esas
+ * filas no son intentos de login, y contarlas fue el bug que bloqueaba
+ * a alguien por el simple hecho de usar el panel. Se llama DESPUÉS de
+ * comprobar la contraseña, y solo importa si era la incorrecta — ver
+ * api/sesion.php.
+ *
+ * @return bool
+ */
+function estaFrenadoPorFallos() {
+    $fila = consultarUno(
+        'SELECT COUNT(*) AS n FROM intentos_login
+         WHERE ip = :ip AND correo <> :marca
+           AND cuando > DATE_SUB(NOW(), INTERVAL :min MINUTE)',
+        [':ip' => ipDeLaPeticion(), ':marca' => MARCA_DE_PETICION_API,
+         ':min' => MINUTOS_DE_FRENO]
     );
     return $fila && (int) $fila['n'] >= INTENTOS_MAXIMOS;
 }
@@ -470,12 +555,19 @@ function anotarIntentoFallido($correo) {
 }
 
 /**
- * Borra los intentos de esta IP tras un login exitoso.
+ * Borra los intentos FALLIDOS de esta IP tras un login exitoso.
+ *
+ * No toca las marcas de API (MARCA_DE_PETICION_API): esas siguen su
+ * propia cuenta para el techo general de peticiones, que no tiene nada
+ * que ver con haber entrado bien o mal.
  *
  * @return void
  */
 function limpiarIntentos() {
-    ejecutar('DELETE FROM intentos_login WHERE ip = :ip', [':ip' => ipDeLaPeticion()]);
+    ejecutar(
+        'DELETE FROM intentos_login WHERE ip = :ip AND correo <> :marca',
+        [':ip' => ipDeLaPeticion(), ':marca' => MARCA_DE_PETICION_API]
+    );
 }
 
 /**

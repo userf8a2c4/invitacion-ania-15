@@ -28,6 +28,10 @@ let AL_CERRAR_HOJA = null;
 /** Cómo estaban los campos al abrir, para detectar lo escrito sin guardar. */
 let LO_QUE_HABIA_AL_ABRIR = '';
 
+/** El título con el que se abrió la hoja actual (Fase 8: para saber qué
+    formulario es el que se abandona). */
+let HOJA_TITULO_ACTUAL = '';
+
 /**
  * Abre la hoja con un título y un contenido.
  *
@@ -45,6 +49,7 @@ function abrirHoja(titulo, contenido, alCerrar) {
   const cuerpo = buscar('#hoja-cuerpo');
 
   buscar('#hoja-titulo').textContent = titulo;
+  HOJA_TITULO_ACTUAL = titulo;
 
   cuerpo.innerHTML = '';
   if (typeof contenido === 'string') {
@@ -86,9 +91,20 @@ function cerrarHoja(forzar) {
    *
    * El código llama a cerrarHoja(true) después de guardar: ahí no hay
    * nada que preguntar porque ya está guardado. */
-  if (!forzar && loEscritoEnLaHoja() !== LO_QUE_HABIA_AL_ABRIR) {
+  const huboAlgoEscrito = loEscritoEnLaHoja() !== LO_QUE_HABIA_AL_ABRIR;
+
+  if (!forzar && huboAlgoEscrito) {
     if (!confirmarAccion('Escribiste cosas que todavía no se guardaron.\n\n' +
                          '¿Cerrar igual y perderlas?')) return;
+  }
+
+  /* Fase 8, la señal más valiosa que antes no existía: qué formulario se
+   * empieza y no se termina. forzar=true solo pasa después de una acción
+   * ya completada (guardar, borrar…) en todo el resto del código — así
+   * que un cierre SIN forzar y CON algo escrito es, por definición, un
+   * abandono: se tocó algo y se dejó a medias. */
+  if (huboAlgoEscrito && !forzar) {
+    registrarEvento('friccion', 'formulario_abandonado', { titulo: HOJA_TITULO_ACTUAL });
   }
 
   hoja.classList.add('oculto');
@@ -314,6 +330,11 @@ let RELOJ_TOSTADA = null;
  *   avisar('No se pudo guardar', true);
  */
 function avisar(texto, esMalo) {
+  // Fase 8: qué errores ve la persona de verdad. Sirve para encontrar
+  // la validación que se repite —eso es un formulario que no se
+  // entiende, no gente que se equivoca seguido.
+  if (esMalo) registrarEvento('error', 'aviso', { texto: texto });
+
   const tostada = buscar('#tostada');
 
   tostada.textContent = texto;
@@ -371,6 +392,8 @@ function pintarVacio(donde, titulo, texto) {
  * @returns {void}
  */
 function pintarError(donde, mensaje, reintentar) {
+  registrarEvento('error', 'pantalla', { texto: mensaje });
+
   donde.innerHTML =
     '<div class="vacio">' +
       '<p class="vacio__titulo">No se pudo cargar</p>' +

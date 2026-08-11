@@ -175,7 +175,7 @@ $tablasEsperadas = [
     'incompatibilidades', 'corte_honor', 'ensayos', 'asistencia_ensayos',
     'regalos', 'foraneos', 'ceremonia', 'requisitos_ceremonia', 'musica',
     'citas_arreglo', 'tomas_foto', 'acompanantes', 'permisos_usuario', 'llegadas',
-    'comandos_usuario',
+    'comandos_usuario', 'eventos_uso',
 ];
 
 $faltantes = [];

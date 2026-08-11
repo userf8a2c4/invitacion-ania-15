@@ -20,6 +20,9 @@
 /** Cuál pestaña se está viendo. */
 let VISTA_ACTUAL = 'hoy';
 
+/** Cuándo se entró a la vista actual (Fase 8: cuánto dura cada una). */
+let VISTA_ENTRO_EN = null;
+
 /** Qué vistas ya pidieron sus datos alguna vez. */
 const VISTAS_CARGADAS = {};
 
@@ -96,6 +99,17 @@ function irA(cual, recargar) {
   const vista = VISTAS[cual];
   if (!vista) return;
 
+  // Fase 8: cuánto duró la pantalla que se deja. irA() es el único
+  // lugar por donde se cambia de vista, así que un solo gancho acá
+  // cubre las ocho sin instrumentar cada dibujarX() por separado.
+  if (VISTA_ACTUAL && VISTA_ENTRO_EN) {
+    const segundos = Math.round((Date.now() - VISTA_ENTRO_EN) / 1000);
+    if (segundos >= 1) {
+      registrarEvento('vista', 'permanencia', { pantalla: VISTA_ACTUAL, segundos: segundos });
+    }
+  }
+  VISTA_ENTRO_EN = Date.now();
+
   VISTA_ACTUAL = cual;
 
   // Mover la clase "activa" en las secciones.
@@ -115,6 +129,9 @@ function irA(cual, recargar) {
   // El contenido vuelve arriba: si se venía de scrollear la lista de
   // invitados, la vista nueva no debe abrirse por la mitad.
   buscar('#contenido').scrollTo({ top: 0 });
+
+  // Evento del panel de métricas (Fase 8): qué pantallas se visitan.
+  registrarEvento('vista', cual);
 
   if (recargar || !VISTAS_CARGADAS[cual]) {
     VISTAS_CARGADAS[cual] = true;
@@ -223,6 +240,9 @@ function dibujarMas() {
       filas: grupo.filas
         .filter(fila => !fila[2] || esAdmin)                    // soloAdmin
         .filter(fila => fila[0] !== 'instalar' || puedeInstalar)
+        // Panel de métricas: solo la cuenta observadora, ni siquiera
+        // otra cuenta admin (ver esObservador(), api/_lib/sesion.php).
+        .filter(fila => fila[0] !== 'metricas' || USUARIO.es_observador)
         .map(fila => ({
           clave: fila[0],
           nombre: nombreDeOpcionDeMenu(fila[0]),
@@ -266,6 +286,7 @@ function nombreDeOpcionDeMenu(clave) {
     'fab-config':  'Mis herramientas rápidas',
     'comandos-asistente': 'Comandos del asistente',
     'instalar':    'Instalar en la pantalla de inicio',
+    'metricas':    'Métricas de uso',
   };
   return nombres[clave] || clave;
 }
@@ -340,6 +361,10 @@ function atenderMenu(opcion) {
 
     case 'comandos-asistente':
       abrirComandosDelAsistente();
+      break;
+
+    case 'metricas':
+      abrirMetricas();
       break;
   }
 }
