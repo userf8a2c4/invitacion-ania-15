@@ -56,6 +56,11 @@
   }
 
   document.body.classList.add('sobre-visible');
+  // También en <html>: el bloqueo de scroll con overflow:hidden solo en
+  // <body> no es fiable en todos los navegadores —algunos siguen usando
+  // <html> como el elemento que de verdad se desplaza—, y ahí es donde se
+  // veía una barra de scroll moviéndose sin poder ir a ningún lado.
+  document.documentElement.classList.add('sobre-visible');
 
   /** Evita que el sobre se abra dos veces si alguien hace doble clic. */
   let yaSeEstaAbriendo = false;
@@ -276,6 +281,7 @@
     // …y recién ahí sacamos la capa y devolvemos el scroll.
     sobre.classList.add('oculto');
     document.body.classList.remove('sobre-visible');
+    document.documentElement.classList.remove('sobre-visible');
 
     // Avisamos que la invitación ya es visible, por si algún otro archivo
     // quiere empezar sus animaciones justo en este momento.

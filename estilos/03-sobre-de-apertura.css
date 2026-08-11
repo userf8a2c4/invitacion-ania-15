@@ -44,7 +44,11 @@
               visibility 1.1s;
 }
 
-/* Mientras la web está detrás del sobre no se puede hacer scroll. */
+/* Mientras la web está detrás del sobre no se puede hacer scroll.
+   En <html> Y en <body>: según el navegador, el que de verdad se
+   desplaza es uno u otro, y con solo uno de los dos se veía una barra
+   de scroll moviéndose sola sin poder ir a ningún lado. */
+html.sobre-visible,
 body.sobre-visible { overflow: hidden; }
 
 /* Cuando termina la animación, el sobre desaparece por completo. */
