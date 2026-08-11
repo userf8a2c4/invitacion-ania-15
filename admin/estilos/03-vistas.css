@@ -1091,8 +1091,17 @@
 /* La barra flotante de acciones en lote: fija abajo, sobre la barra de
    navegación, para que la selección siempre quede a mano del pulgar. */
 .barra-seleccion {
-  position: sticky;
-  bottom: var(--esp-2);
+  /* Fija sobre la barra de navegación, no adentro del flujo normal:
+     así queda siempre a mano del pulgar sin importar cuánto se haya
+     desplazado la lista, igual que el FAB. */
+  position: fixed;
+  left: var(--esp-2);
+  right: var(--esp-2);
+  /* Más arriba que el FAB (48px + su propio margen), para que la
+     selección en lote no quede tapada por el botón flotante que vive
+     en esa misma esquina. */
+  bottom: calc(var(--alto-navegacion) + var(--seguro-abajo) + 66px);
+  z-index: 25;
   display: flex;
   align-items: center;
   justify-content: space-between;
