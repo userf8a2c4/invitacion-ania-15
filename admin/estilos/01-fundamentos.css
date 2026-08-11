@@ -135,16 +135,21 @@ html {
 
 body {
   background:
-    /* Un estampado victoriano-dark, sutil a propósito: un fleurón
-       pequeño en el mismo dorado envejecido del detalle victoriano
-       (--acento-victoriano), repetido cada 200px a muy baja opacidad
-       (6% las líneas, 10% el puntito del centro). Es textura, no
-       decoración — de cerca se nota, de lejos solo se siente que el
-       fondo tiene más carácter que un color plano. El color va
-       hardcodeado en el SVG a propósito: es el mismo criterio que
-       --acento-victoriano, un detalle de estilo de la casa que no
-       cambia con el personalizador de colores (33-paleta.js). */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cg fill='none' stroke='%239c7a3a' stroke-width='1' opacity='0.06'%3E%3Cpath d='M100 16 C132 38 132 82 100 100 C68 82 68 38 100 16 Z'/%3E%3Cpath d='M100 100 C132 118 132 162 100 184 C68 162 68 118 100 100 Z'/%3E%3Cpath d='M16 100 C38 68 82 68 100 100 C82 132 38 132 16 100 Z'/%3E%3Cpath d='M184 100 C162 68 118 68 100 100 C118 132 162 132 184 100 Z'/%3E%3C/g%3E%3Ccircle cx='100' cy='100' r='2.5' fill='%239c7a3a' opacity='0.1'/%3E%3C/svg%3E"),
+    /* Un enrejado ogivo (el "ogee lattice" del damasco victoriano de
+       verdad: dos óvalos apuntados que se cruzan, como en un papel
+       tapiz de casa vieja de lujo) en el mismo dorado envejecido del
+       detalle victoriano (--acento-victoriano). A escala grande —300px—
+       para que se sienta como papel tapiz y no como un timbre repetido
+       chico. Tres capas de opacidad, como en el damasco real: el trazo
+       del enrejado casi invisible (4.5%), un medallón en cada cruce
+       (11%), y un punto más chico en cada nodo (8%) — esa jerarquía es
+       lo que da profundidad en vez de verse plano. Nunca sobre
+       tarjetas ni texto: es el fondo general, detrás de todo.
+
+       El color va hardcodeado en el SVG a propósito, igual que
+       --acento-victoriano: es un detalle de estilo de la casa, fijo,
+       que no cambia con el personalizador de colores (33-paleta.js). */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cg fill='none' stroke='%239c7a3a' stroke-width='1' opacity='0.045'%3E%3Cpath d='M150 0 C70 60 40 110 40 150 C40 190 70 240 150 300 C230 240 260 190 260 150 C260 110 230 60 150 0 Z'/%3E%3Cpath d='M0 150 C60 70 110 40 150 40 C190 40 240 70 300 150 C240 230 190 260 150 260 C110 260 60 230 0 150 Z'/%3E%3C/g%3E%3Cg fill='%239c7a3a'%3E%3Ccircle cx='150' cy='150' r='3.5' opacity='0.11'/%3E%3Ccircle cx='150' cy='0' r='1.8' opacity='0.08'/%3E%3Ccircle cx='150' cy='300' r='1.8' opacity='0.08'/%3E%3Ccircle cx='0' cy='150' r='1.8' opacity='0.08'/%3E%3Ccircle cx='300' cy='150' r='1.8' opacity='0.08'/%3E%3C/g%3E%3C/svg%3E"),
     var(--fondo);
   background-repeat: repeat;
   color: var(--texto);
