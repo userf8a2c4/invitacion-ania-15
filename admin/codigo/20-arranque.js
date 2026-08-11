@@ -245,13 +245,13 @@ async function encender() {
   prepararHoja();
   prepararAyuda();
   prepararBotonFlotante();
+  prepararFab();
 
   /* Va acá y no dentro de la app porque el navegador dispara el aviso de
      "se puede instalar" muy temprano, a veces antes de que se abra la
      sesión. Si se enganchara después, ese aviso ya se habría perdido. */
   prepararInstalacion();
 
-  buscar('#boton-nota').addEventListener('click', abrirHojaDeNota);
   buscar('#boton-buscar').addEventListener('click', abrirBuscadorGlobal);
 
   /* Se comprueba la sesión Y se espera la frase al mismo tiempo, no uno
@@ -269,14 +269,20 @@ async function encender() {
        cambiarían solas un segundo más tarde. */
     await cargarEtiquetas();
     aplicarEtiquetas();
+
+    // El sandwich del FAB es por cuenta: recién acá se sabe quién es
+    // USUARIO, así que recién acá se puede leer su localStorage.
+    cargarSandwichGuardadoEnElTelefono();
+
     arrancarLaApp();
 
-    /* La paleta, al revés: NO se espera. Ya se aplicó la del teléfono
-       apenas cargó el script (ver 33-paleta.js), así que la app ya se
-       ve pintada. Esto solo trae una versión más nueva por si Lucila
-       la cambió desde otro teléfono, y se aplica calladamente cuando
+    /* La paleta y el sandwich, al revés que las etiquetas: NO se
+       esperan. Ya se aplicó lo que había en el teléfono, así que la
+       app ya se ve lista. Esto solo trae una versión más nueva por si
+       se cambió desde otro teléfono, y se aplica calladamente cuando
        llegue — no vale la pena demorar el arranque por esto. */
     sincronizarPaletaConServidor();
+    sincronizarSandwichConServidor();
   } else {
     mostrarPantallaDeEntrada();
   }
@@ -291,7 +297,7 @@ async function encender() {
  * @returns {void}
  */
 function prepararBotonFlotante() {
-  const boton = buscar('#boton-nota');
+  const boton = buscar('#boton-accion');
   const contenido = buscar('#contenido');
   if (!boton || !contenido) return;
 

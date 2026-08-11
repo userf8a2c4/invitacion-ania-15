@@ -189,6 +189,35 @@ const CONFIGURACION = {
   ],
 
 
+  /* ─── 6a. PLANIFICAR: EL ÍNDICE DE HERRAMIENTAS ───────────────────── */
+  /* Desde el rediseño, Gente / Correo / Presupuesto / Evento ya no
+     tienen botón propio abajo: se llega a ellas desde acá. La clave
+     de cada fila es la misma clave de VISTAS (05-navegacion.js), así
+     que dibujarPlanificar() (31-vista-planificar.js) solo necesita
+     llamar irA(clave) — no hay nada nuevo que mantener sincronizado. */
+  indicePlanificar: [
+    {
+      titulo: 'Personas',
+      filas: [
+        ['invitados', 'Confirmaciones, mesas, regalos, foráneos y contactos'],
+      ],
+    },
+    {
+      titulo: 'El dinero y el correo',
+      filas: [
+        ['dinero', 'Presupuesto, gastos, pagos y cotizaciones'],
+        ['correo', 'La bandeja de info@aniaxv.com'],
+      ],
+    },
+    {
+      titulo: 'El evento',
+      filas: [
+        ['evento', 'Tareas, agenda, ceremonia, música, corte de honor y el día'],
+      ],
+    },
+  ],
+
+
   /* ─── 6b. EL MENÚ PRINCIPAL ────────────────────────────────────────── */
   /* Antes eran doce opciones apiladas en un desplegable angosto. Ahora es
      una hoja como las demás, con el mismo patrón que el índice de Evento
@@ -225,6 +254,7 @@ const CONFIGURACION = {
         ['avisos',     'Notificaciones de pagos y fechas en este teléfono'],
         ['etiquetas',  'Cambiar cómo se llaman las cosas en la app', true],
         ['colores',    'Elegir la paleta de colores del panel', true],
+        ['fab-config', 'Elegir qué hace el botón redondo de abajo'],
         ['instalar',   'Poner el acceso directo en la pantalla de inicio'],
       ],
     },

@@ -463,6 +463,32 @@ async function sincronizarCola() {
   }
 }
 
+/**
+ * Sincroniza a pedido, con el giro del ícono mientras dura.
+ *
+ * Usada por el botón del encabezado (05-navegacion.js) y por la
+ * herramienta "Sincronizar ahora" del sandwich del FAB (29-fab.js):
+ * un solo lugar para no repetir la misma lógica dos veces.
+ *
+ * sincronizarCola() nunca tira error (si no hay señal, deja todo
+ * esperando en silencio) y ya avisa sola cuando manda algo. Esta
+ * función solo agrega el único caso que ella no cubre: decir que no
+ * había nada pendiente, para quien igual quiere la confirmación.
+ *
+ * @param {Element} [boton] - Si viene, gira mientras sincroniza.
+ * @returns {Promise<void>}
+ */
+async function sincronizarAhora(boton) {
+  if (boton) boton.classList.add('boton-icono--girando');
+
+  const antes = await contarCola();
+  await sincronizarCola();
+  await actualizarBannerConexion();
+  if (antes <= 0) avisar('Ya estaba todo al día.');
+
+  if (boton) boton.classList.remove('boton-icono--girando');
+}
+
 
 /* ─── 5. EL AVISO DE ARRIBA ────────────────────────────────────────── */
 
