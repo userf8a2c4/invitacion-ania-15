@@ -49,7 +49,7 @@
 .boton--principal {
   background: var(--oro);
   border-color: var(--oro);
-  color: #1a0d02;
+  color: var(--texto-sobre-principal);
   font-weight: 600;
 }
 
@@ -89,7 +89,7 @@
   color: var(--texto-suave);
   border-radius: 50%;
 }
-.boton-icono:active { background: rgba(212, 168, 67, .12); }
+.boton-icono:active { background: color-mix(in srgb, var(--oro) 12%, transparent); }
 
 /* Botón flotante de notas.
  *
@@ -107,7 +107,7 @@
   border: 0;
   border-radius: 50%;
   background: var(--oro);
-  color: #1a0d02;
+  color: var(--texto-sobre-principal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -269,7 +269,7 @@ select.campo__control {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: .02em;
-  background: rgba(212, 168, 67, .14);
+  background: color-mix(in srgb, var(--oro) 14%, transparent);
   color: var(--oro);
   white-space: nowrap;
 }
@@ -277,11 +277,11 @@ select.campo__control {
 /* Los estados usan color de fondo tenue y texto fuerte: se distinguen
    sin gritar, y siguen legibles para quien no diferencia bien los
    colores porque cada uno lleva además su propio texto. */
-.etiqueta--bien   { background: rgba(95, 174, 106, .16); color: var(--bien); }
-.etiqueta--ojo    { background: rgba(217, 154, 60, .16); color: var(--ojo); }
-.etiqueta--alerta { background: rgba(207, 91, 82, .16);  color: var(--alerta); }
-.etiqueta--info   { background: rgba(91, 147, 196, .16); color: var(--info); }
-.etiqueta--tenue  { background: rgba(138, 117, 80, .14); color: var(--texto-tenue); }
+.etiqueta--bien   { background: color-mix(in srgb, var(--bien) 16%, transparent); color: var(--bien); }
+.etiqueta--ojo    { background: color-mix(in srgb, var(--ojo) 16%, transparent); color: var(--ojo); }
+.etiqueta--alerta { background: color-mix(in srgb, var(--alerta) 16%, transparent);  color: var(--alerta); }
+.etiqueta--info   { background: color-mix(in srgb, var(--info) 16%, transparent); color: var(--info); }
+.etiqueta--tenue  { background: color-mix(in srgb, var(--texto-tenue) 14%, transparent); color: var(--texto-tenue); }
 
 .burbuja {
   position: absolute;
@@ -292,7 +292,7 @@ select.campo__control {
   padding: 0 4px;
   border-radius: 999px;
   background: var(--oro);
-  color: #1a0d02;
+  color: var(--texto-sobre-principal);
   font-size: 10px;
   font-weight: 700;
   font-style: normal;
@@ -466,7 +466,7 @@ select.campo__control {
   padding: 0 6px;
   border-radius: 999px;
   background: var(--oro);
-  color: #1a0d02;
+  color: var(--texto-sobre-principal);
   font-size: 11px;
   font-weight: 700;
   line-height: 20px;
@@ -654,8 +654,8 @@ select.campo__control {
 
 .aviso-error {
   padding: var(--esp-1) var(--esp-2);
-  background: rgba(207, 91, 82, .12);
-  border: 1px solid rgba(207, 91, 82, .4);
+  background: color-mix(in srgb, var(--alerta) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--alerta) 40%, transparent);
   border-radius: var(--redondeo-chico);
   color: var(--alerta);
   font-size: 13px;
@@ -685,14 +685,14 @@ select.campo__control {
   padding: 6px var(--esp-2);
   text-align: center;
   font-size: 12.5px;
-  background: rgba(207, 91, 82, .16);
+  background: color-mix(in srgb, var(--alerta) 16%, transparent);
   color: var(--alerta);
-  border-bottom: 1px solid rgba(207, 91, 82, .3);
+  border-bottom: 1px solid color-mix(in srgb, var(--alerta) 30%, transparent);
 }
 .banner-conexion--sincronizando {
-  background: rgba(212, 168, 67, .16);
+  background: color-mix(in srgb, var(--oro) 16%, transparent);
   color: var(--oro);
-  border-bottom-color: rgba(212, 168, 67, .3);
+  border-bottom-color: color-mix(in srgb, var(--oro) 30%, transparent);
 }
 
 /* Lo que se ve cuando una lista todavía no tiene nada. Un vacío bien
