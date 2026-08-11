@@ -558,6 +558,7 @@ function pintarPagos(cuerpo) {
     casilla.addEventListener('change', async () => {
       try {
         await mandar('presupuesto.php?accion=marcar_pagado', { id: casilla.dataset.pagar });
+        registrarEvento('accion', 'marcar_pago');
         ensuciarVistas('resumen');
         dibujarDinero();
       } catch (error) {

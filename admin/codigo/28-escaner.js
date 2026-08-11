@@ -280,6 +280,7 @@ function pintarTarjetaDeLaPuerta(datos, donde) {
       const marcado = await mandar('llegadas.php?accion=marcar', {
         codigo: datos.codigo || '',
       });
+      registrarEvento('accion', 'marcar_llegada', { en_lote: false, desde: 'escaner' });
       pintarTarjetaDeLaPuerta(marcado._offline ? { ...datos, ya_llego: true } : marcado, donde);
       if (navigator.vibrate) navigator.vibrate([60, 40, 60]);
     } catch (error) {

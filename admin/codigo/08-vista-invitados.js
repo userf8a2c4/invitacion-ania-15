@@ -518,6 +518,9 @@ function abrirDetalleDeInvitado(id) {
   const fila = INVITADOS.find(f => Number(f.id) === Number(id));
   if (!fila) return;
 
+  registrarEvento('accion', 'abrir_ficha_invitado', { id: fila.id });
+  registrarAbrirDeNuevo('invitado-' + fila.id);
+
   const asiste = Number(fila.asiste) === 1;
   const gente  = (Number(fila.adultos) || 0) + (Number(fila.ninos) || 0);
 
@@ -613,6 +616,7 @@ function abrirDetalleDeInvitado(id) {
     botonLlegada.addEventListener('click', async () => {
       try {
         const r = await mandar('llegadas.php?accion=marcar', { codigo: fila.codigo });
+        registrarEvento('accion', 'marcar_llegada', { id: fila.id, en_lote: false });
         cerrarHoja(true);
         avisar(r.mensaje || 'Llegada marcada.');
         ensuciarVistas('hoy', 'resumen');
@@ -699,6 +703,8 @@ async function asignarMesaEnLote() {
         }
       }
 
+      if (listas) registrarEvento('accion', 'asignar_mesa', { desde: 'lote', cuantos: listas });
+
       avisar(
         listas === cuantos
           ? 'Se asignó mesa a ' + pluralizar(listas, 'persona', 'personas') + '.'
@@ -745,6 +751,8 @@ async function marcarLlegadaEnLote() {
       // Un pase ya marcado no debe frenar al resto.
     }
   }
+
+  if (listas) registrarEvento('accion', 'marcar_llegada', { cuantos: listas, en_lote: true });
 
   const saltados = filas.length - conCodigo.length;
   avisar(
@@ -982,6 +990,7 @@ function formularioDeAcompanante(confirmacionId, cupan, alGuardar) {
         menu:     valorDe('acomp-menu', cuerpo),
         alergias: valorDe('acomp-alergias', cuerpo),
       });
+      registrarEvento('accion', 'crear_editar_acompanante');
       cerrarHoja(true);
       avisar('Agregado.');
       alGuardar();

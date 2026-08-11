@@ -259,6 +259,9 @@ function buscarEnTodo(loEscrito) {
 /** Los resultados de la última búsqueda, para poder abrirlos. */
 let RESULTADOS_BUSQUEDA = [];
 
+/** El temporizador que evita anotar cada letra de una búsqueda vacía. */
+let BUSQUEDA_VACIA_TIMER = null;
+
 /**
  * Abre el buscador global.
  *
@@ -316,6 +319,15 @@ function pintarResultados(donde, loEscrito) {
   if (!grupos.length) {
     pintarVacio(donde, 'No encontré nada',
       'Prueba con otra palabra, o con una parte del nombre.');
+
+    // Evento 8 del panel de métricas: cuánto no encuentra el buscador.
+    // Con un pequeño retraso, para no anotar cada letra de una palabra
+    // que a mitad de camino todavía no tiene resultados.
+    clearTimeout(BUSQUEDA_VACIA_TIMER);
+    BUSQUEDA_VACIA_TIMER = setTimeout(() => {
+      registrarEvento('busqueda', 'busqueda_vacia', { texto: loEscrito });
+    }, 800);
+
     return;
   }
 

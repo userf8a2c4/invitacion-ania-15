@@ -388,6 +388,32 @@ function tieneEspecial($usuario, $clave) {
     return (int) $usuario[$columna] === 1;
 }
 
+/**
+ * Dice si esta cuenta es la observadora del panel de métricas (Fase 7
+ * del rediseño) — la de Carlos, el constructor, no la de nadie más.
+ *
+ * A PROPÓSITO NO USA EL MISMO CRITERIO QUE tieneEspecial(): esa función
+ * le da acceso automático a CUALQUIER cuenta con rol 'admin', y acá el
+ * documento pide justo lo contrario — que sea SOLO una cuenta puntual,
+ * aunque Lucila también tenga rol admin. Por eso se compara contra un
+ * correo exacto guardado en el .env del servidor (OBSERVADOR_CORREO),
+ * nunca contra el rol.
+ *
+ * Sin esa variable configurada, nadie es observador — por defecto
+ * cerrado, no abierto, que es lo correcto para algo que se pidió "solo
+ * para mi cuenta".
+ *
+ * @param array $usuario
+ * @return bool
+ */
+function esObservador($usuario) {
+    $correoObservador = env('OBSERVADOR_CORREO', '');
+    if ($correoObservador === '') return false;
+
+    return mb_strtolower((string) ($usuario['correo'] ?? '')) ===
+           mb_strtolower($correoObservador);
+}
+
 
 /* ─── 3. CONTRASEÑAS ──────────────────────────────────────────────────── */
 

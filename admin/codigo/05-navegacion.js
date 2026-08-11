@@ -116,6 +116,11 @@ function irA(cual, recargar) {
   // invitados, la vista nueva no debe abrirse por la mitad.
   buscar('#contenido').scrollTo({ top: 0 });
 
+  // Evento 1 de 10 del panel de métricas (Fase 7): qué pantallas se
+  // visitan y con qué frecuencia. Un solo gancho acá cubre TODAS las
+  // vistas, en vez de instrumentar cada dibujarX() por separado.
+  registrarEvento('vista', cual);
+
   if (recargar || !VISTAS_CARGADAS[cual]) {
     VISTAS_CARGADAS[cual] = true;
     const resultado = vista.dibujar();
@@ -223,6 +228,9 @@ function dibujarMas() {
       filas: grupo.filas
         .filter(fila => !fila[2] || esAdmin)                    // soloAdmin
         .filter(fila => fila[0] !== 'instalar' || puedeInstalar)
+        // Panel de métricas: solo la cuenta observadora, ni siquiera
+        // otra cuenta admin (ver esObservador(), api/_lib/sesion.php).
+        .filter(fila => fila[0] !== 'metricas' || USUARIO.es_observador)
         .map(fila => ({
           clave: fila[0],
           nombre: nombreDeOpcionDeMenu(fila[0]),
@@ -266,6 +274,7 @@ function nombreDeOpcionDeMenu(clave) {
     'fab-config':  'Mis herramientas rápidas',
     'comandos-asistente': 'Comandos del asistente',
     'instalar':    'Instalar en la pantalla de inicio',
+    'metricas':    'Métricas de uso',
   };
   return nombres[clave] || clave;
 }
@@ -340,6 +349,10 @@ function atenderMenu(opcion) {
 
     case 'comandos-asistente':
       abrirComandosDelAsistente();
+      break;
+
+    case 'metricas':
+      abrirMetricas();
       break;
   }
 }
