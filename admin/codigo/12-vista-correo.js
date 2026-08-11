@@ -407,6 +407,58 @@ async function abrirCorreo(numero) {
       avisar(error.message, true);
     }
   });
+
+  const adjuntos = m.adjuntos || [];
+
+  buscarTodos('[data-ver-adjunto]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', () =>
+      abrirAdjunto(m.numero, adjuntos[Number(boton.dataset.verAdjunto)], false));
+  });
+
+  buscarTodos('[data-bajar-adjunto]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', () =>
+      abrirAdjunto(m.numero, adjuntos[Number(boton.dataset.bajarAdjunto)], true));
+  });
+}
+
+/**
+ * Baja un adjunto con el token de sesión y lo muestra en el visor
+ * compartido (imagen o PDF), o fuerza la descarga.
+ *
+ * @param {number} numero - El número de mensaje en el buzón.
+ * @param {Object} adjunto - { nombre, ruta, tipo, tamano }
+ * @param {boolean} forzarDescarga
+ * @returns {Promise<void>}
+ */
+async function abrirAdjunto(numero, adjunto, forzarDescarga) {
+  const token = tokenGuardado();
+  if (!token) { manejarSesionVencida(); return; }
+
+  avisar(forzarDescarga ? 'Bajando…' : 'Abriendo…');
+
+  try {
+    const url = CONFIGURACION.servidor.base + 'correo.php?accion=adjunto&numero=' +
+                numero + '&ruta=' + encodeURIComponent(adjunto.ruta) +
+                (forzarDescarga ? '&descargar=1' : '');
+
+    const respuesta = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    if (!respuesta.ok) { avisar('No se pudo abrir el adjunto.', true); return; }
+
+    const bolsa    = await respuesta.blob();
+    const blobUrl  = URL.createObjectURL(bolsa);
+
+    if (forzarDescarga) {
+      const enlace = document.createElement('a');
+      enlace.href = blobUrl;
+      enlace.download = adjunto.nombre || 'archivo';
+      enlace.click();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } else {
+      abrirVisorDeArchivo(blobUrl, adjunto.tipo, adjunto.nombre);
+    }
+  } catch (error) {
+    avisar('No se pudo abrir el adjunto.', true);
+  }
 }
 
 /**
@@ -434,12 +486,16 @@ function pintarAdjuntos(m) {
   const lista = m.adjuntos || [];
   if (!lista.length) return '';
 
+  /* ⚠️ NO son <a href="correo.php?...">: ese endpoint exige el token de
+     sesión en la cabecera Authorization, y un enlace normal no la manda
+     — el botón "Ver" tocaba y devolvía 401. Acá se engancha en
+     abrirCorreo() con adjuntoAlDedo() (fetch + token), igual que ya
+     resuelve esto abrirArchivo() en 14-archivos.js. */
   return '<div class="tarjeta" style="margin-top:var(--esp-2)">' +
     '<p class="detalle__rotulo" style="margin-bottom:var(--esp-1)">' +
       'Adjuntos (' + lista.length + ')' +
     '</p>' +
-    lista.map(a => {
-      const url = 'correo.php?accion=adjunto&numero=' + m.numero + '&ruta=' + a.ruta;
+    lista.map((a, i) => {
       const seVePorDentro = /^image\/|^application\/pdf/.test(a.tipo || '');
 
       return '<div class="fila-adjunto" style="display:flex;align-items:center;' +
@@ -452,10 +508,9 @@ function pintarAdjuntos(m) {
         '</span>' +
         '<span style="flex-shrink:0;margin-left:var(--esp-1)">' +
           (seVePorDentro
-            ? '<a class="boton boton--chico" href="' + url + '" target="_blank" ' +
-                'rel="noopener">Ver</a> '
+            ? '<button class="boton boton--chico" data-ver-adjunto="' + i + '">Ver</button> '
             : '') +
-          '<a class="boton boton--chico" href="' + url + '&descargar=1">Bajar</a>' +
+          '<button class="boton boton--chico" data-bajar-adjunto="' + i + '">Bajar</button>' +
         '</span>' +
       '</div>';
     }).join('') +

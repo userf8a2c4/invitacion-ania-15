@@ -945,8 +945,11 @@
 }
 
 .comparador__incluye {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
   font-size: 12px;
-  color: var(--bien);
   margin-top: var(--esp-1);
 }
 

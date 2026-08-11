@@ -76,8 +76,16 @@ if (existeTabla('confirmaciones')) {
     ];
 
     /* Desglose de menús. Se cuenta sobre la columna resumen_menus, que
-       guarda un texto tipo "2 pollo, 1 vegetariano". Se hace en PHP y no
-       en SQL porque el formato es texto libre y varía. */
+       guarda un texto tipo "2 pollo · 1 vegetariano". Se hace en PHP y no
+       en SQL porque el formato es texto libre y varía.
+
+       ⚠️ El separador es " · " (el mismo que arma armarResumenDeMenus()
+       en codigo/11-formulario-confirmacion.js de la invitación), NO una
+       coma. Separar por coma hacía que todo el texto de una confirmación
+       con varios menús cayera en un solo trozo: el regex de abajo solo
+       reconocía el primer número y el resto —incluido el menú
+       siguiente— quedaba pegado al nombre. Vegetariano e Infantil nunca
+       sumaban a su propia categoría. */
     if (in_array('resumen_menus', $columnas, true) && $tieneAsiste) {
         $filas = consultarTodo(
             'SELECT resumen_menus FROM confirmaciones WHERE asiste = 1'
@@ -85,7 +93,7 @@ if (existeTabla('confirmaciones')) {
 
         $porMenu = [];
         foreach ($filas as $fila) {
-            foreach (explode(',', (string) $fila['resumen_menus']) as $trozo) {
+            foreach (explode(' · ', (string) $fila['resumen_menus']) as $trozo) {
                 $trozo = trim($trozo);
                 if ($trozo === '') continue;
 

@@ -256,8 +256,15 @@ function columnaDeCotizacion(c, esLaMasBarata, masBarata) {
         : '') +
 
       (c.incluidos.length
-        ? '<div class="comparador__incluye">Incluye ' + c.incluidos.length +
-          ' cosas</div>'
+        ? '<div class="comparador__incluye">' +
+            c.incluidos.slice(0, 4).map(i =>
+              '<span class="etiqueta etiqueta--bien">' + seguro(i) + '</span>'
+            ).join(' ') +
+            (c.incluidos.length > 4
+              ? ' <span class="vacio__texto">+' + (c.incluidos.length - 4) +
+                ' más</span>'
+              : '') +
+          '</div>'
         : '') +
 
       '<button class="boton boton--chico boton--ancho" data-ver-cot="' +

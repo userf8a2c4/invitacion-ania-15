@@ -154,6 +154,149 @@ function loEscritoEnLaHoja() {
 }
 
 
+/* ─── 1B. EL VISOR DE ARCHIVOS (Fase 7 del rediseño) ────────────────── */
+
+/* Correo y Archivos comparten esta capa para mostrar una imagen o un PDF
+   sin salir del panel. Antes cada uno abría el archivo con
+   window.open(url,'_blank'): en el teléfono eso es una pestaña nueva sin
+   forma cómoda de acercarse a un detalle, y en el caso del correo ni
+   siquiera funcionaba (ver abrirAdjunto() en 12-vista-correo.js, el
+   enlace directo no podía mandar el token de sesión). */
+
+/** La URL de blob que está mostrando el visor, para liberarla al cerrar. */
+let VISOR_ARCHIVO_URL = null;
+
+/**
+ * Abre el visor con una imagen o un PDF ya descargado como blob.
+ *
+ * @param {string} url - Un object URL (URL.createObjectURL), no una URL remota.
+ * @param {string} tipo - El MIME type, para decidir cómo mostrarlo.
+ * @param {string} nombre - Nombre del archivo, para el título y la descarga.
+ * @returns {void}
+ */
+function abrirVisorDeArchivo(url, tipo, nombre) {
+  const visor  = buscar('#visor-archivo');
+  const cuerpo = buscar('#visor-archivo-cuerpo');
+
+  VISOR_ARCHIVO_URL = url;
+  buscar('#visor-archivo-nombre').textContent = nombre || '';
+
+  const bajar = buscar('#visor-archivo-bajar');
+  bajar.href = url;
+  bajar.download = nombre || 'archivo';
+
+  const esImagen = /^image\//.test(tipo || '');
+
+  cuerpo.innerHTML = esImagen
+    ? '<img id="visor-archivo-img" src="' + url + '" alt="' + seguro(nombre || '') + '">'
+    : '<iframe src="' + url + '" title="' + seguro(nombre || 'Documento') + '"></iframe>';
+
+  if (esImagen) engancharZoomDeImagen(buscar('#visor-archivo-img', cuerpo));
+
+  visor.classList.remove('oculto');
+  document.body.style.overflow = 'hidden';
+}
+
+/**
+ * Cierra el visor y libera la memoria del blob.
+ *
+ * @returns {void}
+ */
+function cerrarVisorDeArchivo() {
+  const visor = buscar('#visor-archivo');
+  visor.classList.add('oculto');
+  buscar('#visor-archivo-cuerpo').innerHTML = '';
+  document.body.style.overflow = '';
+
+  if (VISOR_ARCHIVO_URL) {
+    URL.revokeObjectURL(VISOR_ARCHIVO_URL);
+    VISOR_ARCHIVO_URL = null;
+  }
+}
+
+/**
+ * Doble-toque para alternar zoom 1× / 2.5× sobre el punto tocado, y
+ * arrastre con un dedo cuando está en zoom. Mismo mecanismo de Pointer
+ * Events que engancharZoomYPanDelPlano() en 17-mesas.js — se adapta acá
+ * en vez de reinventarlo, con la variante de que el zoom se dispara con
+ * doble-toque en lugar de pellizco (más natural para una sola imagen).
+ *
+ * @param {Element} img
+ * @returns {void}
+ */
+function engancharZoomDeImagen(img) {
+  if (!img) return;
+
+  const ZOOM_ACERCADO = 2.5;
+  let escala = 1;
+  let x = 0, y = 0;
+  let arrastrando = false;
+  let ultimoPunto = null;
+
+  const aplicar = () => {
+    img.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + escala + ')';
+  };
+
+  img.addEventListener('dblclick', evento => {
+    evento.preventDefault();
+    alternarZoom(evento.clientX, evento.clientY);
+  });
+
+  // El equivalente táctil de dblclick: dos toques rápidos y cercanos.
+  let ultimoToque = 0;
+  img.addEventListener('pointerup', evento => {
+    if (evento.pointerType !== 'touch') return;
+    const ahora = Date.now ? Date.now() : new Date().getTime();
+    if (ahora - ultimoToque < 300) alternarZoom(evento.clientX, evento.clientY);
+    ultimoToque = ahora;
+  });
+
+  function alternarZoom(clientX, clientY) {
+    if (escala > 1) {
+      escala = 1; x = 0; y = 0;
+    } else {
+      const rect = img.getBoundingClientRect();
+      // Centra el acercamiento en el punto tocado, no en el centro de
+      // la imagen: tocar dos veces sobre una firma la deja ahí mismo.
+      const px = (clientX - rect.left) / rect.width;
+      const py = (clientY - rect.top) / rect.height;
+      escala = ZOOM_ACERCADO;
+      x = (0.5 - px) * rect.width * (ZOOM_ACERCADO - 1);
+      y = (0.5 - py) * rect.height * (ZOOM_ACERCADO - 1);
+    }
+    aplicar();
+  }
+
+  img.addEventListener('pointerdown', evento => {
+    if (escala <= 1) return;
+    arrastrando = true;
+    ultimoPunto = { x: evento.clientX, y: evento.clientY };
+    img.setPointerCapture(evento.pointerId);
+  });
+
+  img.addEventListener('pointermove', evento => {
+    if (!arrastrando || !ultimoPunto) return;
+    x += evento.clientX - ultimoPunto.x;
+    y += evento.clientY - ultimoPunto.y;
+    ultimoPunto = { x: evento.clientX, y: evento.clientY };
+    aplicar();
+  });
+
+  const soltar = () => { arrastrando = false; ultimoPunto = null; };
+  img.addEventListener('pointerup', soltar);
+  img.addEventListener('pointercancel', soltar);
+}
+
+/**
+ * Engancha los botones de cerrar del visor. Se llama una sola vez.
+ *
+ * @returns {void}
+ */
+function prepararVisorDeArchivo() {
+  buscar('#visor-archivo-cerrar').addEventListener('click', () => cerrarVisorDeArchivo());
+}
+
+
 /* ─── 2. MENSAJITOS ────────────────────────────────────────────────── */
 
 /** El reloj del mensajito actual, para poder cancelarlo. */
