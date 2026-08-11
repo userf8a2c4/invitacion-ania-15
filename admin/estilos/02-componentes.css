@@ -610,6 +610,10 @@ select.campo__control {
   background: var(--fondo-elevado);
   border-top-left-radius: var(--redondeo-hoja);
   border-top-right-radius: var(--redondeo-hoja);
+  /* El filo dorado apagado: un solo detalle victoriano, discreto, en el
+     borde que más se ve —el que separa la hoja del resto de la
+     pantalla— y en ningún otro lado de la hoja. */
+  border-top: 2px solid var(--acento-victoriano);
   box-shadow: var(--sombra-alta);
   animation: subir 220ms cubic-bezier(.2, .8, .3, 1);
 
@@ -762,10 +766,22 @@ select.campo__control {
   padding: var(--esp-5) var(--esp-3);
   color: var(--texto-tenue);
 }
+/* El detalle victoriano: una línea dorada apagada antes del título,
+   como un pequeño ornamento — no un icono, pero cumple el mismo papel
+   de "acá no hay nada roto, solo vacío todavía". */
 .vacio__titulo {
   color: var(--texto-suave);
   font-weight: 500;
   margin-bottom: var(--gota);
+}
+.vacio__titulo::before {
+  content: '';
+  display: block;
+  width: 28px;
+  height: 2px;
+  margin: 0 auto var(--esp-1);
+  background: var(--acento-victoriano);
+  opacity: .6;
 }
 .vacio__texto { font-size: 13px; }
 

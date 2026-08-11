@@ -23,13 +23,16 @@
 /* ─── 1. VARIABLES ─────────────────────────────────────────────────── */
 
 :root {
-  /* Fondos, del más hondo al más cercano. Morado casi negro: esta
-     sección es de Lucila, no de Ania — la invitación pública mantiene
-     su propia paleta, ver /estilos/ en la raíz del sitio. */
-  --fondo:          #0F0A14;
-  --fondo-elevado:  #241A31;
-  --fondo-tarjeta:  #1A1224;
-  --fondo-hundido:  #0A0710;
+  /* Fondos, del más hondo al más cercano. Negro con un dejo de morado,
+     no morado oscuro: se acerca al negro casi puro de la invitación
+     (--color-negro-profundo en /estilos/01-fundamentos.css de la raíz)
+     para que la sección de Lucila se sienta victoriana-dark igual que
+     aniaxv.com, sin copiarle la paleta —esta sigue siendo morada, no
+     dorada. */
+  --fondo:          #08050C;
+  --fondo-elevado:  #1E1628;
+  --fondo-tarjeta:  #150F1C;
+  --fondo-hundido:  #050308;
 
   /* El morado: el color de Lucila. Los nombres de variable (--oro…)
      quedan igual a propósito, para no tener que tocar los otros dos
@@ -38,6 +41,15 @@
   --oro-claro:  #8B5FBF;
   --oro-apagado:#4A2C7A;
   --borde:      rgba(255, 255, 255, .08);
+
+  /* El detalle victoriano: un oro envejecido, igual de apagado que el
+     --color-oro de la invitación, para adornos puntuales (ver más
+     abajo). A PROPÓSITO fuera del sistema de 3 variables que maneja el
+     personalizador de colores (33-paleta.js): es un detalle de estilo
+     de la casa, no algo que Lucila deba elegir, y por eso nunca se usa
+     en botones ni en texto interactivo — ahí el morado ya significa
+     "toca aquí" y dos colores de acción confundirían. */
+  --acento-victoriano: #9c7a3a;
 
   /* Texto. */
   --texto:        #F5F0FA;

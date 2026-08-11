@@ -38,8 +38,10 @@
 /* ─── 1. LOS COLORES ORIGINALES Y LAS PALETAS LISTAS ───────────────── */
 
 /** Los que trae la app de fábrica (estilos/01-fundamentos.css): el
-    morado de Lucila, con el fondo casi negro que le va detrás. */
-const PALETA_ORIGINAL = { principal: '#6B3FA0', fondo: '#0F0A14', alerta: '#FF4D6A' };
+    morado de Lucila, con un fondo casi negro —más cerca del negro de la
+    invitación que del morado oscuro que traía antes— para que la
+    sección se sienta victoriana-dark, a juego con aniaxv.com. */
+const PALETA_ORIGINAL = { principal: '#6B3FA0', fondo: '#08050C', alerta: '#FF4D6A' };
 
 /* La mayoría de la gente no quiere elegir colores: quiere elegir un
    look. Estas son cinco combinaciones ya probadas; abajo, para quien
@@ -49,7 +51,7 @@ const PALETA_ORIGINAL = { principal: '#6B3FA0', fondo: '#0F0A14', alerta: '#FF4D
    morado pasara a ser el color de fábrica. Queda acá para quien la
    prefiera — no se perdió, solo dejó de ser la que trae por defecto. */
 const PALETAS_LISTAS = [
-  { nombre: 'Morado (original)',        principal: '#6B3FA0', fondo: '#0F0A14', alerta: '#FF4D6A' },
+  { nombre: 'Morado (original)',        principal: '#6B3FA0', fondo: '#08050C', alerta: '#FF4D6A' },
   { nombre: 'Dorado y café (clásico)',  principal: '#d4a843', fondo: '#140a04', alerta: '#cf5b52' },
   { nombre: 'Rosa y crema',             principal: '#c98a9c', fondo: '#2b1418', alerta: '#cf5b52' },
   { nombre: 'Vino y dorado',            principal: '#b3893f', fondo: '#2a0e14', alerta: '#d97b3c' },

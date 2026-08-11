@@ -442,6 +442,10 @@
   padding: var(--esp-1) var(--esp-2);
   background: var(--fondo-hundido);
   border: 1px solid var(--borde);
+  /* El divisor victoriano: un filo apagado arriba, discreto, para
+     separar la leyenda del plano sin competir con los colores que
+     explica. */
+  border-top: 1px solid var(--acento-victoriano);
   border-radius: var(--redondeo-chico);
 }
 
