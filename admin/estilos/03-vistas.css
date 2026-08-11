@@ -255,6 +255,10 @@
 .plano__fijo--entrada { border-color: var(--oro-apagado); }
 
 .plano__mesa {
+  /* Ancla para las sillitas de .plano__sillas, que se ubican con
+     left/top en % — sin esto flotaban apiladas en vez de rodear la
+     mesa, porque no tenían contra qué posicionarse. */
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -278,23 +282,99 @@
 .plano__mesa--con-gente { border-color: var(--oro-apagado); }
 .plano__mesa--completa  {
   border-color: var(--bien);
-  background: rgba(95, 174, 106, .12);
+  background: color-mix(in srgb, var(--bien) 12%, transparent);
 }
 .plano__mesa--pasada    {
   border-color: var(--alerta);
-  background: rgba(207, 91, 82, .14);
+  background: color-mix(in srgb, var(--alerta) 14%, transparent);
 }
 
 .plano__nombre {
   font-size: 13px;
   font-weight: 700;
   line-height: 1;
+  /* Va encima de las sillitas, no debajo: si no, un anillo de 10
+     sillas tapa el nombre que es lo primero que hay que leer. */
+  position: relative;
+  z-index: 1;
 }
 
 .plano__cuenta {
   font-size: 10px;
   color: var(--texto-tenue);
   line-height: 1;
+  position: relative;
+  z-index: 1;
+}
+
+/* El anillo de sillitas alrededor de la mesa (codigo/17-mesas.js,
+   sillasDeLaMesa()). Cada .plano__silla ya trae su left/top en línea,
+   calculado en JS con trigonometría; acá solo se define su forma. */
+.plano__sillas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.plano__silla {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  /* Centra el puntito sobre su coordenada left/top, en vez de que la
+     esquina superior izquierda sea la que cae ahí. */
+  transform: translate(-50%, -50%);
+}
+
+.plano__silla--llena { background: var(--oro); }
+.plano__silla--vacia {
+  background: transparent;
+  border: 1px solid var(--borde);
+}
+
+/* Hasta dos nombres de quién está sentado, para no tener que abrir la
+   mesa solo para saber si son "los primos" o "los del trabajo". */
+.plano__nombres {
+  position: relative;
+  z-index: 1;
+  font-size: 9px;
+  color: var(--texto-tenue);
+  line-height: 1.1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* La leyenda del plano: qué significa cada color de mesa y cada punto
+   (codigo/17-mesas.js, leyendaDelPlano()). */
+.leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-1) var(--esp-2);
+  margin: var(--esp-1) 0 var(--esp-2);
+  padding: var(--esp-1) var(--esp-2);
+  background: var(--fondo-hundido);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo-chico);
+}
+
+.leyenda__item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--texto-tenue);
+}
+
+/* Reusa las mismas clases plano__mesa--* como muestra de color, para
+   que la leyenda no pueda desincronizarse del plano de arriba: si el
+   color de "Completa" cambia, cambia en los dos lugares a la vez. */
+.leyenda__muestra {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
 
@@ -309,7 +389,7 @@
 .filtro.activo {
   background: var(--oro);
   border-color: var(--oro);
-  color: #1a0d02;
+  color: var(--texto-sobre-principal);
   font-weight: 600;
 }
 
@@ -560,7 +640,7 @@
 /* El día de la fiesta se ve distinto desde lejos: es el punto al que
    apunta todo lo demás. */
 .cal__dia--fiesta {
-  background: rgba(212, 168, 67, .16);
+  background: color-mix(in srgb, var(--oro) 16%, transparent);
   border-color: var(--oro);
 }
 
@@ -641,7 +721,7 @@
 /* La más barata se distingue sin necesidad de leer los números. */
 .comparador__columna--gana {
   border-color: var(--bien);
-  background: rgba(95, 174, 106, .06);
+  background: color-mix(in srgb, var(--bien) 6%, transparent);
 }
 
 .comparador__titulo {
@@ -758,7 +838,7 @@
 
 /* Lo que está pasando ahora salta a la vista sin buscarlo. */
 .momento--ahora {
-  background: rgba(212, 168, 67, .12);
+  background: color-mix(in srgb, var(--oro) 12%, transparent);
   border-left: 3px solid var(--oro);
   border-radius: var(--redondeo-chico);
 }

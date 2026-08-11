@@ -23,29 +23,41 @@
 /* ─── 1. VARIABLES ─────────────────────────────────────────────────── */
 
 :root {
-  /* Fondos, del más hondo al más cercano. */
-  --fondo:          #140a04;
-  --fondo-elevado:  #221306;
-  --fondo-tarjeta:  #2a1809;
-  --fondo-hundido:  #0d0603;
+  /* Fondos, del más hondo al más cercano. Morado casi negro: esta
+     sección es de Lucila, no de Ania — la invitación pública mantiene
+     su propia paleta, ver /estilos/ en la raíz del sitio. */
+  --fondo:          #0F0A14;
+  --fondo-elevado:  #241A31;
+  --fondo-tarjeta:  #1A1224;
+  --fondo-hundido:  #0A0710;
 
-  /* Oro: el color de marca. */
-  --oro:        #d4a843;
-  --oro-claro:  #f0dca2;
-  --oro-apagado:#a07830;
-  --borde:      #4a3110;
+  /* El morado: el color de Lucila. Los nombres de variable (--oro…)
+     quedan igual a propósito, para no tener que tocar los otros dos
+     archivos de estilos enteros — solo cambia lo que hay adentro. */
+  --oro:        #6B3FA0;
+  --oro-claro:  #8B5FBF;
+  --oro-apagado:#4A2C7A;
+  --borde:      rgba(255, 255, 255, .08);
 
   /* Texto. */
-  --texto:        #f5e6c8;
-  --texto-suave:  #c9b48c;
-  --texto-tenue:  #8a7550;
+  --texto:        #F5F0FA;
+  --texto-suave:  #B8A9C9;
+  --texto-tenue:  #7A6B8A;
+
+  /* El texto QUE VA ENCIMA de --oro (botones llenos, FAB, chips
+     activos). No es lo mismo que --texto: --oro puede ser claro u
+     oscuro según la paleta que Lucila elija (ver codigo/33-paleta.js),
+     así que este valor se recalcula junto con los demás — nunca a
+     mano, nunca hardcodeado en un componente. Blanco acá es el valor
+     de arranque, antes de que 33-paleta.js corra la primera vez. */
+  --texto-sobre-principal: #F5F0FA;
 
   /* Colores con significado. Se usan SOLO para estados, nunca de adorno:
      si el rojo apareciera decorando, dejaría de leerse como alarma. */
-  --bien:    #5fae6a;
-  --ojo:     #d99a3c;
-  --alerta:  #cf5b52;
-  --info:    #5b93c4;
+  --bien:    #3DDC97;
+  --ojo:     #F5A623;
+  --alerta:  #FF4D6A;
+  --info:    #5B8DEF;
 
   /* Medidas. Todo el espaciado sale de estas seis para que nada quede
      a ojo y el conjunto se vea parejo. */
