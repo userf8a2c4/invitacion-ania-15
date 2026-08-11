@@ -38,6 +38,18 @@ let MESAS = null;
 /** Si se está viendo el plano del salón o la lista: 'plano' o 'lista'. */
 let VISTA_DE_MESAS = recordado('vista-de-mesas', 'plano');
 
+/** Modo del plano: 'ver' (solo mirar) o 'editar' (se puede arrastrar
+    gente a una mesa). Arranca siempre en 'ver' para que nada se mueva
+    sin querer al abrir la pantalla (Fase 5 del rediseño). */
+let MODO_PLANO = 'ver';
+
+/** El zoom y desplazamiento actuales del plano, en pantalla. */
+let ZOOM_PLANO = { escala: 1, x: 0, y: 0 };
+
+/** Estado del arrastre en curso desde "Sin mesa" hacia una mesa, o null
+    si no se está arrastrando nada. */
+let ARRASTRE_PLANO = null;
+
 
 /* ─── 1. DATOS Y DIBUJADO ──────────────────────────────────────────── */
 
@@ -151,19 +163,51 @@ function bloqueDelPlano(mesas) {
   ).concat(ubicadas.map(m => celdaDeMesaEnElPlano(m))).join('');
 
   return '' +
-    '<div class="plano" style="grid-template-columns:repeat(' +
-         salon.columnas + ',1fr)">' + celdas + '</div>' +
+    bloqueModoDelPlano() +
+
+    '<div class="plano-lienzo-exterior" id="plano-lienzo-exterior">' +
+      '<div class="plano-lienzo" id="plano-lienzo">' +
+        '<div class="plano" style="grid-template-columns:repeat(' +
+             salon.columnas + ',1fr)">' + celdas + '</div>' +
+      '</div>' +
+      '<div class="plano-controles">' +
+        '<button class="boton-icono" id="plano-acercar" aria-label="Acercar">+</button>' +
+        '<button class="boton-icono" id="plano-alejar" aria-label="Alejar">−</button>' +
+        '<button class="boton-icono" id="plano-restablecer" aria-label="Restablecer">⟲</button>' +
+      '</div>' +
+    '</div>' +
 
     leyendaDelPlano() +
 
     '<p class="vacio__texto" style="text-align:center;margin-bottom:var(--esp-3)">' +
-      'Toca una mesa para ver quién se sienta ahí.' +
+      (MODO_PLANO === 'editar'
+        ? 'Arrastra a alguien de "Sin mesa" hasta una mesa, o toca una mesa para verla.'
+        : 'Toca una mesa para ver quién se sienta ahí.') +
     '</p>' +
 
     (sinUbicar.length
       ? '<div class="tarjeta__titulo">Sin lugar en el plano</div>' +
         bloqueDeLasMesas(sinUbicar)
       : '');
+}
+
+/**
+ * El interruptor "ver / editar" del plano. En "ver" nada se puede
+ * arrastrar sin querer; en "editar" se habilita el arrastre desde
+ * "Sin mesa" hacia las mesas del plano.
+ *
+ * @returns {string} HTML
+ */
+function bloqueModoDelPlano() {
+  return '' +
+    '<div class="modo-plano">' +
+      '<button class="modo-plano__opcion' +
+        (MODO_PLANO === 'ver' ? ' activo' : '') + '" data-modo-plano="ver">' +
+        'Ver</button>' +
+      '<button class="modo-plano__opcion' +
+        (MODO_PLANO === 'editar' ? ' activo' : '') + '" data-modo-plano="editar">' +
+        'Editar</button>' +
+    '</div>';
 }
 
 /**
@@ -592,6 +636,226 @@ function engancharMesas(cuerpo) {
       const mesa = (EVENTO.mesas || []).find(m =>
         String(m.id) === boton.dataset.editarMesa);
       if (mesa) formularioEvento('mesas', mesa);
+    });
+  });
+
+  const modoPlano = buscar('.modo-plano', cuerpo);
+  if (modoPlano) {
+    buscarTodos('[data-modo-plano]', modoPlano).forEach(boton => {
+      boton.addEventListener('click', () => {
+        MODO_PLANO = boton.dataset.modoPlano;
+        pintarMesas(cuerpo);
+      });
+    });
+  }
+
+  const lienzoExterior = buscar('#plano-lienzo-exterior', cuerpo);
+  if (lienzoExterior) {
+    engancharZoomYPanDelPlano(cuerpo);
+    if (MODO_PLANO === 'editar') engancharArrastreHaciaElPlano(cuerpo, refrescar);
+  }
+}
+
+
+/* ─── 1C. ZOOM, DESPLAZAMIENTO Y ARRASTRE DEL PLANO (Fase 5) ───────── */
+
+/**
+ * Zoom y pan del plano con el dedo: un dedo para mover, dos para
+ * pinchar y acercar. Se usan Pointer Events y no el scroll nativo del
+ * navegador porque la grilla del plano se autoajusta y el
+ * overflow:auto normal no da un zoom fluido y controlado.
+ *
+ * @param {Element} cuerpo
+ * @returns {void}
+ */
+function engancharZoomYPanDelPlano(cuerpo) {
+  const exterior = buscar('#plano-lienzo-exterior', cuerpo);
+  const lienzo   = buscar('#plano-lienzo', cuerpo);
+  if (!exterior || !lienzo) return;
+
+  ZOOM_PLANO = { escala: 1, x: 0, y: 0 };
+  aplicarTransformDelPlano(lienzo);
+
+  const punteros = new Map();
+  let distanciaInicial = 0;
+  let escalaInicial = 1;
+  let ultimoPunto = null;
+
+  const distanciaEntre = () => {
+    const pts = Array.from(punteros.values());
+    return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+  };
+
+  exterior.addEventListener('pointerdown', evento => {
+    // Si el toque empezó sobre una mesa o un botón, se deja que ese
+    // elemento reciba el toque normal (abrir la mesa, arrastrar, etc.):
+    // el pan solo actúa cuando se toca el fondo del plano.
+    if (evento.target.closest('.plano__mesa, .plano-controles')) return;
+
+    exterior.setPointerCapture(evento.pointerId);
+    punteros.set(evento.pointerId, { x: evento.clientX, y: evento.clientY });
+
+    if (punteros.size === 1) {
+      ultimoPunto = { x: evento.clientX, y: evento.clientY };
+    } else if (punteros.size === 2) {
+      distanciaInicial = distanciaEntre();
+      escalaInicial = ZOOM_PLANO.escala;
+    }
+  });
+
+  exterior.addEventListener('pointermove', evento => {
+    if (!punteros.has(evento.pointerId)) return;
+    punteros.set(evento.pointerId, { x: evento.clientX, y: evento.clientY });
+
+    if (punteros.size === 2) {
+      const nueva = distanciaEntre();
+      if (distanciaInicial > 0) {
+        ZOOM_PLANO.escala = Math.min(3, Math.max(0.5,
+          escalaInicial * (nueva / distanciaInicial)));
+        aplicarTransformDelPlano(lienzo);
+      }
+    } else if (punteros.size === 1 && ultimoPunto) {
+      ZOOM_PLANO.x += evento.clientX - ultimoPunto.x;
+      ZOOM_PLANO.y += evento.clientY - ultimoPunto.y;
+      ultimoPunto = { x: evento.clientX, y: evento.clientY };
+      aplicarTransformDelPlano(lienzo);
+    }
+  });
+
+  const soltar = evento => {
+    punteros.delete(evento.pointerId);
+    if (punteros.size < 2) distanciaInicial = 0;
+    if (punteros.size === 1) {
+      const restante = Array.from(punteros.values())[0];
+      ultimoPunto = restante;
+    } else {
+      ultimoPunto = null;
+    }
+  };
+  exterior.addEventListener('pointerup', soltar);
+  exterior.addEventListener('pointercancel', soltar);
+
+  const cambiarZoom = factor => {
+    ZOOM_PLANO.escala = Math.min(3, Math.max(0.5, ZOOM_PLANO.escala * factor));
+    aplicarTransformDelPlano(lienzo);
+  };
+
+  buscar('#plano-acercar', cuerpo).addEventListener('click', () => cambiarZoom(1.25));
+  buscar('#plano-alejar', cuerpo).addEventListener('click', () => cambiarZoom(0.8));
+  buscar('#plano-restablecer', cuerpo).addEventListener('click', () => {
+    ZOOM_PLANO = { escala: 1, x: 0, y: 0 };
+    aplicarTransformDelPlano(lienzo);
+  });
+}
+
+/**
+ * Aplica el zoom y desplazamiento actuales al lienzo del plano.
+ *
+ * @param {Element} lienzo
+ * @returns {void}
+ */
+function aplicarTransformDelPlano(lienzo) {
+  lienzo.style.transform =
+    'translate(' + ZOOM_PLANO.x + 'px,' + ZOOM_PLANO.y + 'px) scale(' + ZOOM_PLANO.escala + ')';
+}
+
+/**
+ * Arrastrar a alguien de "Sin mesa" hasta una mesa del plano, solo en
+ * modo editar. No se usa drag-and-drop nativo de HTML5 porque no
+ * funciona con el dedo en pantallas táctiles: se arma a mano con
+ * Pointer Events, un elemento "fantasma" que sigue al dedo, y
+ * document.elementFromPoint() para saber sobre qué mesa se soltó.
+ *
+ * El toque corto (sin mover) sigue abriendo el selector de mesa de
+ * siempre — solo un arrastre real dispara el suelte directo.
+ *
+ * @param {Element} cuerpo
+ * @param {Function} refrescar
+ * @returns {void}
+ */
+function engancharArrastreHaciaElPlano(cuerpo, refrescar) {
+  const UMBRAL_ARRASTRE = 10; // px antes de considerarlo arrastre y no toque.
+
+  buscarTodos('[data-sentar]', cuerpo).forEach(fila => {
+    fila.addEventListener('pointerdown', evento => {
+      const id = Number(fila.dataset.sentar);
+      const persona = (MESAS.sin_sentar || []).find(p => p.id === id);
+      if (!persona) return;
+
+      ARRASTRE_PLANO = {
+        id, persona,
+        inicioX: evento.clientX, inicioY: evento.clientY,
+        movido: false,
+        fantasma: null,
+      };
+
+      const seguirDedo = e => {
+        if (!ARRASTRE_PLANO) return;
+        const dx = e.clientX - ARRASTRE_PLANO.inicioX;
+        const dy = e.clientY - ARRASTRE_PLANO.inicioY;
+
+        if (!ARRASTRE_PLANO.movido && Math.hypot(dx, dy) > UMBRAL_ARRASTRE) {
+          ARRASTRE_PLANO.movido = true;
+          const fantasma = document.createElement('div');
+          fantasma.className = 'plano-fantasma';
+          fantasma.textContent = persona.nombre;
+          document.body.appendChild(fantasma);
+          ARRASTRE_PLANO.fantasma = fantasma;
+        }
+
+        if (ARRASTRE_PLANO.movido && ARRASTRE_PLANO.fantasma) {
+          ARRASTRE_PLANO.fantasma.style.left = e.clientX + 'px';
+          ARRASTRE_PLANO.fantasma.style.top  = e.clientY + 'px';
+
+          buscarTodos('.plano__mesa', cuerpo).forEach(m =>
+            m.classList.remove('plano__mesa--objetivo'));
+          const debajo = document.elementFromPoint(e.clientX, e.clientY);
+          const mesa = debajo && debajo.closest('.plano__mesa');
+          if (mesa) mesa.classList.add('plano__mesa--objetivo');
+        }
+      };
+
+      const soltarDedo = async e => {
+        document.removeEventListener('pointermove', seguirDedo);
+        document.removeEventListener('pointerup', soltarDedo);
+
+        if (!ARRASTRE_PLANO) return;
+
+        if (ARRASTRE_PLANO.fantasma) ARRASTRE_PLANO.fantasma.remove();
+        buscarTodos('.plano__mesa', cuerpo).forEach(m =>
+          m.classList.remove('plano__mesa--objetivo'));
+
+        if (!ARRASTRE_PLANO.movido) {
+          // No se movió: fue un toque normal, se abre el selector de
+          // siempre en vez de intentar interpretar un arrastre.
+          const idSuelto = ARRASTRE_PLANO.id;
+          ARRASTRE_PLANO = null;
+          elegirMesaPara(idSuelto, refrescar);
+          return;
+        }
+
+        const debajo = document.elementFromPoint(e.clientX, e.clientY);
+        const mesa = debajo && debajo.closest('[data-plano-mesa]');
+        const idPersona = ARRASTRE_PLANO.id;
+        ARRASTRE_PLANO = null;
+
+        if (!mesa) return;
+
+        try {
+          const r = await mandar('mesas.php?accion=sentar', {
+            confirmacion_id: idPersona,
+            mesa_id: Number(mesa.dataset.planoMesa),
+          });
+          avisar(r.mensaje);
+          if (r.se_excede) avisar(r.aviso, true);
+          refrescar();
+        } catch (error) {
+          avisar(error.message, true);
+        }
+      };
+
+      document.addEventListener('pointermove', seguirDedo);
+      document.addEventListener('pointerup', soltarDedo);
     });
   });
 }
