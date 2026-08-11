@@ -135,6 +135,13 @@ $TABLAS = [
     ],
     'regalos' => [
         'orden'  => 'pedido_en_lista DESC, agradecido, recibido_en DESC, id DESC',
+        // Si la instalación todavía no corrió instalar.php, esta columna
+        // no existe y el ORDER BY de arriba tira un error de SQL. Sin
+        // este respaldo, ESE error mataba toda la respuesta de
+        // ?accion=todo —incluidas Mesas y Foráneos, que ni siquiera
+        // dependen de esta columna— porque son nueve tablas en el mismo
+        // bucle y la primera que falla corta a las demás.
+        'orden_si_falta_migracion' => 'agradecido, recibido_en DESC, id DESC',
         'campos' => [
             'de_parte_de'     => ['texto', 150],
             'descripcion'     => ['texto', 300],
@@ -182,28 +189,50 @@ case 'todo':
 
     $resultado = [];
     foreach ($TABLAS as $tabla => $config) {
-        $resultado[$tabla] = consultarTodo(
-            "SELECT * FROM `$tabla` ORDER BY " . $config['orden']
-        );
+        $orden = $config['orden'];
+
+        /* Degradar sin romper: si esta tabla todavía no tiene la columna
+           que el orden de fábrica necesita (instalar.php no corrió, o
+           no corrió TODAVÍA en este servidor), se usa un orden de
+           respaldo que solo pide columnas base. Así una migración a
+           medio correr no tumba las nueve tablas de esta pantalla, solo
+           deja mal ordenada la que le falta algo. */
+        if (isset($config['orden_si_falta_migracion'])
+            && preg_match('/^[a-z_]+/', $orden, $m)
+            && !in_array($m[0], columnasDe($tabla), true)) {
+            $orden = $config['orden_si_falta_migracion'];
+        }
+
+        $resultado[$tabla] = consultarTodo("SELECT * FROM `$tabla` ORDER BY " . $orden);
     }
 
     /* La ceremonia es una sola fila, no una lista. Si todavía no existe,
        se devuelve un objeto vacío para que el formulario pueda abrirse
-       igual y crearla al guardar. */
-    $ceremonia = consultarUno('SELECT * FROM ceremonia ORDER BY id LIMIT 1');
+       igual y crearla al guardar. Y si la TABLA todavía no existe —
+       instalación sin migrar— se devuelve lo mismo en vez de tronar. */
+    $ceremonia = existeTabla('ceremonia')
+        ? consultarUno('SELECT * FROM ceremonia ORDER BY id LIMIT 1')
+        : null;
     $resultado['ceremonia'] = $ceremonia ?: new stdClass();
 
     /* Las mesas con cuántos lugares llevan ocupados. Se calcula acá y no
-       en la app porque hace falta cruzar dos tablas. */
-    $resultado['ocupacion'] = consultarTodo(
-        'SELECT m.id, m.nombre, m.capacidad,
-                COALESCE(SUM(a.lugares), 0) AS ocupados,
-                COUNT(a.id)                 AS grupos
-         FROM mesas m
-         LEFT JOIN asignacion_mesas a ON a.mesa_id = m.id
-         GROUP BY m.id, m.nombre, m.capacidad
-         ORDER BY m.nombre'
-    );
+       en la app porque hace falta cruzar dos tablas. Sin
+       asignacion_mesas (instalación sin migrar) se devuelve la
+       ocupación en cero en vez de tronar: Mesas se ve vacía, no rota. */
+    $resultado['ocupacion'] = existeTabla('asignacion_mesas')
+        ? consultarTodo(
+            'SELECT m.id, m.nombre, m.capacidad,
+                    COALESCE(SUM(a.lugares), 0) AS ocupados,
+                    COUNT(a.id)                 AS grupos
+             FROM mesas m
+             LEFT JOIN asignacion_mesas a ON a.mesa_id = m.id
+             GROUP BY m.id, m.nombre, m.capacidad
+             ORDER BY m.nombre'
+        )
+        : array_map(function ($m) {
+            return ['id' => $m['id'], 'nombre' => $m['nombre'],
+                    'capacidad' => $m['capacidad'], 'ocupados' => 0, 'grupos' => 0];
+        }, $resultado['mesas']);
 
     responderBien($resultado);
     break;
