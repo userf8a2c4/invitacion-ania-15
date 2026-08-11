@@ -154,6 +154,8 @@ function bloqueDelPlano(mesas) {
     '<div class="plano" style="grid-template-columns:repeat(' +
          salon.columnas + ',1fr)">' + celdas + '</div>' +
 
+    leyendaDelPlano() +
+
     '<p class="vacio__texto" style="text-align:center;margin-bottom:var(--esp-3)">' +
       'Toca una mesa para ver quién se sienta ahí.' +
     '</p>' +
@@ -162,6 +164,41 @@ function bloqueDelPlano(mesas) {
       ? '<div class="tarjeta__titulo">Sin lugar en el plano</div>' +
         bloqueDeLasMesas(sinUbicar)
       : '');
+}
+
+/**
+ * La leyenda del plano: qué significa cada color y cada punto.
+ *
+ * "Como el original" (la planilla de Lucila) tenía su propia leyenda de
+ * colores; esta es la versión de la app, con los mismos cuatro estados
+ * más el significado de las sillitas.
+ *
+ * @returns {string} HTML
+ */
+function leyendaDelPlano() {
+  const item = (claseMesa, texto) =>
+    '<span class="leyenda__item">' +
+      '<span class="leyenda__muestra plano__mesa--' + claseMesa + '"></span>' +
+      seguro(texto) +
+    '</span>';
+
+  return '' +
+    '<div class="leyenda">' +
+      item('vacia', 'Vacía') +
+      item('con-gente', 'Con gente') +
+      item('completa', 'Completa') +
+      item('pasada', 'Se pasó') +
+      '<span class="leyenda__item">' +
+        '<span class="plano__silla plano__silla--llena" ' +
+             'style="position:static;display:inline-block"></span>' +
+        'Silla ocupada' +
+      '</span>' +
+      '<span class="leyenda__item">' +
+        '<span class="plano__silla plano__silla--vacia" ' +
+             'style="position:static;display:inline-block"></span>' +
+        'Silla libre' +
+      '</span>' +
+    '</div>';
 }
 
 /**
@@ -192,11 +229,75 @@ function celdaDeMesaEnElPlano(mesa) {
             'style="grid-row:' + mesa.fila + ';grid-column:' + mesa.columna + '" ' +
             'aria-label="' + seguro(mesa.nombre + ': ' + mesa.ocupados +
                                     ' de ' + mesa.capacidad) + '">' +
+      sillasDeLaMesa(mesa) +
       '<span class="plano__nombre">' + seguro(corto) + '</span>' +
+      nombresEnLaCelda(mesa) +
       '<span class="plano__cuenta">' +
         seguro(mesa.ocupados + '/' + mesa.capacidad) +
       '</span>' +
     '</button>';
+}
+
+/**
+ * El anillo de sillitas alrededor de la mesa: llenas las ocupadas,
+ * vacías las libres. De un vistazo se ve dónde hay lugar sin leer un
+ * número — que es justo lo que un número por sí solo no dice.
+ *
+ * Se ponen en círculo con trigonometría simple (ángulo según la
+ * posición de cada silla), igual que se dibujarían alrededor de una
+ * mesa redonda de verdad.
+ *
+ * @param {Object} mesa
+ * @returns {string} HTML
+ */
+function sillasDeLaMesa(mesa) {
+  // Más de 10 sillas ya no se leen bien en una celda de teléfono: a
+  // partir de ahí se confía en el número de abajo, no en los puntos.
+  const total = Math.min(mesa.capacidad, 10);
+  if (total < 1) return '';
+
+  const sillas = [];
+  for (let i = 0; i < total; i++) {
+    const angulo = (i / total) * 2 * Math.PI - Math.PI / 2;
+    const x = 50 + 46 * Math.cos(angulo);
+    const y = 50 + 46 * Math.sin(angulo);
+    const llena = i < mesa.ocupados;
+
+    sillas.push(
+      '<span class="plano__silla plano__silla--' + (llena ? 'llena' : 'vacia') + '" ' +
+           'style="left:' + x.toFixed(1) + '%;top:' + y.toFixed(1) + '%"></span>'
+    );
+  }
+  return '<span class="plano__sillas" aria-hidden="true">' + sillas.join('') + '</span>';
+}
+
+/**
+ * Hasta dos nombres de quiénes están sentados, para no tener que abrir
+ * la mesa solo para saber si son "los primos" o "los del trabajo".
+ *
+ * @param {Object} mesa
+ * @returns {string} HTML
+ */
+function nombresEnLaCelda(mesa) {
+  const invitados = mesa.invitados || [];
+  if (!invitados.length) return '';
+
+  const primeros = invitados.slice(0, 2).map(i => primerNombre(i.nombre));
+  const resto = invitados.length - primeros.length;
+
+  return '<span class="plano__nombres">' +
+    seguro(primeros.join(', ') + (resto > 0 ? ' +' + resto : '')) +
+  '</span>';
+}
+
+/**
+ * El primer nombre de pila, para que quepa en la celda.
+ *
+ * @param {string} nombreCompleto
+ * @returns {string}
+ */
+function primerNombre(nombreCompleto) {
+  return String(nombreCompleto || '').trim().split(/\s+/)[0] || '';
 }
 
 /**
