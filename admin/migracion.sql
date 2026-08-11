@@ -187,6 +187,24 @@ CREATE TABLE IF NOT EXISTS suscripciones_push (
 -- 2. DINERO
 -- ══════════════════════════════════════════════════════════════════════
 
+-- Los distintos escenarios de presupuesto que Lucila puede mantener a la
+-- vez ("Plan A", "Plan B con menos invitados"…). Uno solo está activo:
+-- ese es el que se ve y se edita en el panel. categorias_gasto y gastos
+-- (más abajo) cuelgan de acá con presupuesto_id.
+CREATE TABLE IF NOT EXISTS presupuestos (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  nombre     VARCHAR(80) NOT NULL,
+  activo     TINYINT(1) NOT NULL DEFAULT 0,
+  creado_en  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- El primero, ya activo, para que las categorías y gastos que ya
+-- existían en una instalación vieja tengan dónde caer (ver
+-- presupuesto_id DEFAULT 1 en instalar.php).
+INSERT IGNORE INTO presupuestos (id, nombre, activo)
+VALUES (1, 'Presupuesto principal', 1);
+
+
 -- Categorías con TECHO. De acá salen las alertas de sobregiro.
 CREATE TABLE IF NOT EXISTS categorias_gasto (
   id      INT AUTO_INCREMENT PRIMARY KEY,

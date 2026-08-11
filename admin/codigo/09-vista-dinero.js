@@ -46,6 +46,7 @@ async function dibujarDinero() {
   }
 
   vista.innerHTML =
+    bloqueSelectorDePresupuesto(DINERO.presupuestos, DINERO.presupuesto_activo) +
     bloqueTotales(DINERO.totales) +
 
     '<div class="buscador">' +
@@ -93,6 +94,11 @@ async function dibujarDinero() {
   });
 
   buscar('#exportar-dinero', vista).addEventListener('click', abrirHojaDeDescarga);
+
+  const cambiarPresupuesto = buscar('#presupuesto-cambiar', vista);
+  if (cambiarPresupuesto) {
+    cambiarPresupuesto.addEventListener('click', abrirSelectorDePresupuesto);
+  }
 
   const buscador = buscar('#buscar-dinero', vista);
   buscador.value = BUSQUEDA_DINERO;
@@ -168,6 +174,96 @@ function botonSeccion(clave, texto, cuantos) {
   const numero = cuantos ? ' (' + cuantos + ')' : '';
   return '<button class="filtro' + activo + '" data-seccion="' + clave + '">' +
          seguro(texto + numero) + '</button>';
+}
+
+/**
+ * La barra de "qué presupuesto estás viendo" (Fase 7 del rediseño).
+ * No se muestra nada si la instalación todavía no corrió la migración
+ * (`presupuestos` llega vacío) — es el mismo criterio de degradar sin
+ * romper que ya usa el resto del panel con columnas nuevas.
+ *
+ * @param {Array} presupuestos
+ * @param {number} activoId
+ * @returns {string} HTML
+ */
+function bloqueSelectorDePresupuesto(presupuestos, activoId) {
+  // Vacío = la instalación no corrió la migración todavía: no se
+  // muestra nada, mismo criterio que el resto del panel con columnas
+  // nuevas. Con la migración corrida, siempre hay al menos uno (el
+  // principal) — la barra queda visible para poder crear el segundo.
+  if (!presupuestos || !presupuestos.length) return '';
+
+  const activo = presupuestos.find(p => Number(p.id) === Number(activoId));
+
+  return '' +
+    '<button class="tarjeta" id="presupuesto-cambiar" style="width:100%;' +
+            'text-align:left;display:flex;align-items:center;' +
+            'justify-content:space-between;margin-bottom:var(--esp-2)">' +
+      '<span>' +
+        '<span class="vacio__texto" style="display:block">Viendo presupuesto</span>' +
+        '<strong>' + seguro(activo ? activo.nombre : 'Presupuesto principal') + '</strong>' +
+      '</span>' +
+      '<span class="etiqueta etiqueta--tenue">Cambiar</span>' +
+    '</button>';
+}
+
+/**
+ * Hoja para elegir qué presupuesto está activo, o crear uno nuevo.
+ *
+ * @returns {void}
+ */
+function abrirSelectorDePresupuesto() {
+  const presupuestos = DINERO.presupuestos || [];
+  const activoId = Number(DINERO.presupuesto_activo);
+
+  const cuerpo = abrirHoja('Presupuestos',
+    presupuestos.map(p =>
+      '<button class="lista__fila" data-activar-presupuesto="' + seguro(p.id) + '">' +
+        '<span class="lista__cuerpo">' +
+          '<span class="lista__titulo">' + seguro(p.nombre) + '</span>' +
+        '</span>' +
+        (Number(p.id) === activoId
+          ? '<span class="etiqueta etiqueta--bien">Activo</span>'
+          : '') +
+      '</button>'
+    ).join('') +
+
+    campoTexto({ id: 'presu-nombre', rotulo: 'Nuevo presupuesto',
+                 pista: 'Plan A, Plan B con menos invitados…' }) +
+    '<button class="boton boton--principal boton--ancho" id="presu-crear">' +
+      'Crear y activar' +
+    '</button>'
+  );
+
+  buscarTodos('[data-activar-presupuesto]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', async () => {
+      const id = Number(boton.dataset.activarPresupuesto);
+      if (id === activoId) { cerrarHoja(true); return; }
+      try {
+        const r = await mandar('presupuesto.php?accion=activar_presupuesto', { id: id });
+        cerrarHoja(true);
+        avisar(r.mensaje);
+        dibujarDinero();
+      } catch (error) {
+        avisar(error.message, true);
+      }
+    });
+  });
+
+  buscar('#presu-crear', cuerpo).addEventListener('click', async () => {
+    const nombre = valorDe('presu-nombre', cuerpo);
+    if (!nombre) { avisar('Ponle un nombre al presupuesto.', true); return; }
+
+    try {
+      const r = await mandar('presupuesto.php?accion=crear_presupuesto', { nombre: nombre });
+      await mandar('presupuesto.php?accion=activar_presupuesto', { id: r.id });
+      cerrarHoja(true);
+      avisar('Presupuesto creado y activado.');
+      dibujarDinero();
+    } catch (error) {
+      avisar(error.message, true);
+    }
+  });
 }
 
 /**
