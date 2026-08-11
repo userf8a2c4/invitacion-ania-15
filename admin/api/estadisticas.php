@@ -31,8 +31,9 @@ exigirMetodo('GET');
  * bolsillo, lo que falta que entreguen los padrinos. Cerrar una puerta
  * y dejar la ventana abierta no es cerrar nada.
  *
- * Se sigue el patrón que ya usa contactos.php. */
-$vePlata = ($yo['rol'] ?? '') === 'admin';
+ * Se sigue el patrón que ya usa contactos.php, con el permiso especial
+ * del organigrama (Bloque 1) en vez de mirar solo el rol. */
+$vePlata = tieneEspecial($yo, 'ver_dinero');
 
 /** Con cuántos días de anticipación se considera "próximo" algo. */
 $DIAS_PROXIMOS = 14;

@@ -798,6 +798,10 @@ CREATE TABLE IF NOT EXISTS llegadas (
   confirmacion_id  INT NOT NULL,
   llegada_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   marcado_por      INT DEFAULT NULL,
+  -- Cuántas veces se intentó escanear este pase DESPUÉS de que ya había
+  -- entrado. En 0, nunca se repitió. Es lo que arma la alerta "pase
+  -- usado dos veces" de la pantalla Hoy (Fase 2 del rediseño).
+  intentos         INT NOT NULL DEFAULT 0,
   UNIQUE KEY una_llegada_por_confirmacion (confirmacion_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
