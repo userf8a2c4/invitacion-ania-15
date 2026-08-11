@@ -18,6 +18,7 @@
      GET  ?accion=consultar&codigo=XV-…   quién es y si ya llegó
      POST ?accion=marcar                  {codigo} — deja pasar
      GET  ?accion=resumen                 cuántos llegaron de cuántos
+     GET  ?accion=ultimas&cuantas=10      las últimas en cruzar la puerta
    ══════════════════════════════════════════════════════════════════════ */
 
 require_once __DIR__ . '/_lib/bd.php';
@@ -74,11 +75,19 @@ case 'marcar':
     // el mismo QR casi al mismo tiempo, la segunda inserción choca y acá
     // se detecta como "ya había llegado" en vez de fallar con un 500.
     $yaHabia = consultarUno(
-        'SELECT llegada_en FROM llegadas WHERE confirmacion_id = :id',
+        'SELECT id, llegada_en FROM llegadas WHERE confirmacion_id = :id',
         [':id' => $fila['id']]
     );
 
-    if (!$yaHabia) {
+    if ($yaHabia) {
+        // Un pase que se vuelve a leer DESPUÉS de haber entrado es
+        // justo lo que la pantalla Hoy tiene que gritar: alguien puede
+        // haberlo reenviado por WhatsApp para meter al doble de gente.
+        ejecutar('UPDATE llegadas SET intentos = intentos + 1 WHERE id = :id',
+                 [':id' => $yaHabia['id']]);
+        error_log('[Ania XV · llegadas] Pase reintentado tras ya haber entrado: ' .
+                  ($fila['nombre'] ?? $codigo));
+    } else {
         try {
             insertar('llegadas', [
                 'confirmacion_id' => $fila['id'],
@@ -111,6 +120,10 @@ case 'resumen':
          WHERE c.asiste = 1'
     );
 
+    $filaReintentos = consultarUno(
+        'SELECT COUNT(*) AS n FROM llegadas WHERE intentos > 0'
+    );
+
     // "llegaron" cuenta CONFIRMACIONES marcadas, no personas: una familia
     // de 4 que cruza junta se marca una vez. Para el contador grande de
     // Hoy alcanza con eso — contar personas exigiría saber cuántas de
@@ -118,7 +131,49 @@ case 'resumen':
     responderBien([
         'confirmaciones_llegaron' => (int) ($filaLlegaron['n'] ?? 0),
         'personas_esperadas'      => (int) ($filaAsistian['n'] ?? 0),
+        'pases_reintentados'      => (int) ($filaReintentos['n'] ?? 0),
     ]);
+    break;
+
+
+/* ─── ÚLTIMAS LLEGADAS ─────────────────────────────────────────────────── */
+
+case 'ultimas':
+    exigirMetodo('GET');
+
+    $cuantas = campoEntero($_GET, 'cuantas', 1, 30, 10);
+
+    $conMesa = existeTabla('asignacion_mesas') && existeTabla('mesas');
+    $selectMesa = $conMesa ? ', m.nombre AS mesa' : '';
+    $joinMesa = $conMesa
+        ? ' LEFT JOIN asignacion_mesas am ON am.confirmacion_id = c.id
+            LEFT JOIN mesas m ON m.id = am.mesa_id'
+        : '';
+
+    $filas = consultarTodo(
+        "SELECT l.llegada_en, l.intentos, c.nombre, c.alergias $selectMesa
+         FROM llegadas l
+         JOIN confirmaciones c ON c.id = l.confirmacion_id
+         $joinMesa
+         ORDER BY l.llegada_en DESC
+         LIMIT $cuantas"
+    );
+
+    $resultado = array_map(function ($f) {
+        $alergia = trim((string) ($f['alergias'] ?? ''));
+        $tieneAlergia = $alergia !== '' &&
+            !in_array(mb_strtolower($alergia), ['ninguna', 'ninguno', 'no', 'n/a', '-'], true);
+
+        return [
+            'nombre'      => $f['nombre'] ?? '',
+            'llegada_en'  => $f['llegada_en'] ?? null,
+            'mesa'        => $f['mesa'] ?? '',
+            'tiene_alergia' => $tieneAlergia,
+            'reintentado' => (int) ($f['intentos'] ?? 0) > 0,
+        ];
+    }, $filas);
+
+    responderBien(['ultimas' => $resultado]);
     break;
 
 

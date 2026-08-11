@@ -465,6 +465,68 @@
    importa cuando se decide si algo se puede o no. */
 .dinero-resumen__cifra--propio { color: var(--oro); }
 
+
+/* ─── LA TARJETA DE ESTADO DE HOY (Fase 2 del rediseño) ────────────── */
+/* Mismo criterio que .dinero-resumen: números grandes, rótulo chico
+   arriba. Acá son tres en vez de dos, y más grandes (32-40px pide el
+   documento) porque esta pantalla se mira de pie y de lejos. */
+
+.hoy-estado__conexion {
+  font-size: 11px;
+  color: var(--texto-tenue);
+  margin: 0 0 var(--esp-2);
+}
+.hoy-estado__conexion--sin-senal { color: var(--ojo); }
+
+.hoy-estado__cifras {
+  display: flex;
+  gap: var(--esp-2);
+}
+
+.hoy-estado__cifra {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  border-radius: var(--redondeo-chico);
+  /* Sin cursor visual en las que no llevan a nada: solo "Mesas" y
+     "Alergias" tienen data-hoy-ir y de verdad se pueden tocar. */
+  padding: 4px;
+}
+
+.hoy-estado__numero {
+  font-size: 34px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto);
+  line-height: 1.1;
+}
+
+.hoy-estado__de {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--texto-tenue);
+}
+
+.hoy-estado__rotulo {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--texto-tenue);
+  margin-top: 2px;
+}
+
+/* Alergias activas: si hay alguna, el número se ve en el color de
+   alerta — es el único de los tres donde "más" es peor, no mejor. */
+.hoy-estado__cifra--alerta .hoy-estado__numero { color: var(--alerta); }
+
+/* El botón de "Escanear pase": el control más importante del día del
+   evento, más grande que cualquier otro botón de la app. */
+.hoy-accion-principal {
+  min-height: 64px;
+  font-size: 18px;
+  margin-bottom: var(--esp-1);
+}
+
 /* Cada aviso del Resumen: un pago que vence, una tarea atrasada. */
 .alerta-fila {
   display: flex;

@@ -31,8 +31,10 @@ exigirMetodo('GET');
 /* Si ve el dinero o no. Mismo motivo que en estadisticas.php: las
    cifras que presupuesto.php protege salían por acá sin ningún
    control —pagos pendientes, montos de padrinos, cuánto falta pagar—.
-   Se sigue el patrón de contactos.php. */
-$vePlata = ($yo['rol'] ?? '') === 'admin';
+   Se sigue el patrón de contactos.php, ahora con el permiso especial
+   del organigrama (Bloque 1) en vez de solo mirar el rol: una cuenta
+   de Tesorería sin ser admin también tiene que poder ver esto. */
+$vePlata = tieneEspecial($yo, 'ver_dinero');
 
 const DIA_DE_LA_FIESTA = '2026-10-24';
 
@@ -281,6 +283,65 @@ if ($diasQueFaltan >= 0 && $diasQueFaltan <= 14) {
 }
 
 
+/* ─── LA TARJETA DE ESTADO DE LA PANTALLA HOY ─────────────────────────── */
+
+/* Fase 2 del rediseño: las tres cifras grandes de arriba de Hoy —
+   llegaron/mesas/alergias— en un solo bloque, para que esa pantalla
+   siga siendo UNA sola petición y sirva con mala señal (ver la nota
+   grande al principio del archivo sobre por qué todo va junto). */
+$dia = [
+    'llegaron'   => 0,
+    'esperados'  => 0,
+    'mesas_ocupadas' => 0,
+    'mesas_total'     => 0,
+    'alergias_activas' => 0,
+    'pases_reintentados' => 0,
+];
+
+if (existeTabla('llegadas') && existeTabla('confirmaciones')) {
+    $filaLlegaron = consultarUno(
+        'SELECT COUNT(*) AS n FROM llegadas l
+         JOIN confirmaciones c ON c.id = l.confirmacion_id
+         WHERE c.asiste = 1'
+    );
+    $filaEsperados = consultarUno(
+        'SELECT COALESCE(SUM(adultos + ninos), 0) AS n FROM confirmaciones WHERE asiste = 1'
+    );
+    $filaReintentos = consultarUno('SELECT COUNT(*) AS n FROM llegadas WHERE intentos > 0');
+
+    $dia['llegaron']  = (int) ($filaLlegaron['n'] ?? 0);
+    $dia['esperados']  = (int) ($filaEsperados['n'] ?? 0);
+    $dia['pases_reintentados'] = (int) ($filaReintentos['n'] ?? 0);
+}
+
+if (existeTabla('mesas')) {
+    $filaMesasTotal = consultarUno('SELECT COUNT(*) AS n FROM mesas');
+    $dia['mesas_total'] = (int) ($filaMesasTotal['n'] ?? 0);
+
+    if (existeTabla('asignacion_mesas')) {
+        // Una mesa "ocupada" es una que ya tiene a alguien sentado, no
+        // necesariamente completa: es la pregunta que hace falta para
+        // saber cuánto salón queda por llenar de un vistazo.
+        $filaMesasOcupadas = consultarUno(
+            'SELECT COUNT(DISTINCT mesa_id) AS n FROM asignacion_mesas'
+        );
+        $dia['mesas_ocupadas'] = (int) ($filaMesasOcupadas['n'] ?? 0);
+    }
+}
+
+if (existeTabla('confirmaciones')) {
+    $columnas = columnasDe('confirmaciones');
+    if (in_array('alergias', $columnas, true) && in_array('asiste', $columnas, true)) {
+        $filaAlergias = consultarUno(
+            "SELECT COUNT(*) AS n FROM confirmaciones
+             WHERE asiste = 1 AND alergias <> '' AND alergias IS NOT NULL
+               AND LOWER(alergias) NOT IN ('ninguna', 'ninguno', 'no', 'n/a', '-')"
+        );
+        $dia['alergias_activas'] = (int) ($filaAlergias['n'] ?? 0);
+    }
+}
+
+
 /* ─── RESPONDER ───────────────────────────────────────────────────────── */
 
 // Primero lo atrasado, después lo de hoy, después la semana.
@@ -289,6 +350,7 @@ usort($pendientes, function ($a, $b) {
 });
 
 responderBien([
+    'dia' => $dia,
     'dias_para_la_fiesta' => $diasQueFaltan,
     // Se devuelven todos, pero la app muestra los primeros: una lista de
     // quince pendientes es una lista que nadie lee.

@@ -158,6 +158,10 @@ $agregarColumna('regalos', 'enlace', "VARCHAR(500) NOT NULL DEFAULT ''");
 $agregarColumna('regalos', 'comprado_en', 'DATE DEFAULT NULL');
 $agregarColumna('regalos', 'pedido_en_lista', 'TINYINT(1) NOT NULL DEFAULT 0');
 
+// Cuántas veces se reintentó un pase ya usado (Fase 2 del rediseño,
+// pantalla Hoy: la alerta de "pase repetido").
+$agregarColumna('llegadas', 'intentos', 'INT NOT NULL DEFAULT 0');
+
 
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 
