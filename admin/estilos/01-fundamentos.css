@@ -134,7 +134,19 @@ html {
 }
 
 body {
-  background: var(--fondo);
+  background:
+    /* Un estampado victoriano-dark, sutil a propósito: un fleurón
+       pequeño en el mismo dorado envejecido del detalle victoriano
+       (--acento-victoriano), repetido cada 200px a muy baja opacidad
+       (6% las líneas, 10% el puntito del centro). Es textura, no
+       decoración — de cerca se nota, de lejos solo se siente que el
+       fondo tiene más carácter que un color plano. El color va
+       hardcodeado en el SVG a propósito: es el mismo criterio que
+       --acento-victoriano, un detalle de estilo de la casa que no
+       cambia con el personalizador de colores (33-paleta.js). */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cg fill='none' stroke='%239c7a3a' stroke-width='1' opacity='0.06'%3E%3Cpath d='M100 16 C132 38 132 82 100 100 C68 82 68 38 100 16 Z'/%3E%3Cpath d='M100 100 C132 118 132 162 100 184 C68 162 68 118 100 100 Z'/%3E%3Cpath d='M16 100 C38 68 82 68 100 100 C82 132 38 132 16 100 Z'/%3E%3Cpath d='M184 100 C162 68 118 68 100 100 C118 132 162 132 184 100 Z'/%3E%3C/g%3E%3Ccircle cx='100' cy='100' r='2.5' fill='%239c7a3a' opacity='0.1'/%3E%3C/svg%3E"),
+    var(--fondo);
+  background-repeat: repeat;
   color: var(--texto);
 
   /* Letra del sistema: la que el teléfono ya tiene cargada. Se ve nativa
