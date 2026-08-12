@@ -62,18 +62,18 @@ switch ($accion) {
              || (int) $usuario['activo'] !== 1
              || !contrasenaCorrecta($contrasena, $usuario['password_hash']);
 
-        /* El freno normal se evalúa ACÁ, después de saber si la
-         * contraseña era correcta, y solo importa cuando de verdad
-         * falló. Frenar a alguien que acaba de escribir la contraseña
-         * bien no protege nada —si la sabe, ya está adentro— y era
-         * justo lo que volvía inusable el panel con el bug anterior. */
+        /* Ya NO se frena por contraseñas equivocadas —eso era la molestia
+         * real: alguien tipeando mal un par de veces terminaba esperando
+         * 15 minutos igual, aunque el bug de la Fase 8.1 ya no mezclara
+         * los intentos con el tráfico normal de la API. Se sigue
+         * ANOTANDO cada intento fallido (por si algún día hace falta
+         * revisar quién probó qué), pero no bloquea a nadie.
+         *
+         * La única defensa que queda es estaFrenadoDelTodo(), arriba:
+         * el corte duro por volumen total de pedidos (50 en 15 minutos,
+         * cuente lo que cuente), que sí frena un script en bucle sin
+         * estorbarle nunca a una persona escribiendo a mano. */
         if ($malo) {
-            if (estaFrenadoPorFallos()) {
-                responderMal(
-                    'Demasiados intentos fallidos. Espera ' . MINUTOS_DE_FRENO . ' minutos.',
-                    429
-                );
-            }
             anotarIntentoFallido($correo);
             responderMal('Correo o contraseña incorrectos.', 401);
         }
