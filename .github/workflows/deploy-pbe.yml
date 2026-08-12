@@ -3,7 +3,7 @@ name: Deploy PBE to Hostinger
 on:
   push:
     branches:
-      - pbe
+      - Private-Beta-Enviroment---PBE
   workflow_dispatch:
 
 jobs:
