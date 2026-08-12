@@ -109,19 +109,21 @@ html, body {
   margin: 0;
   padding: 0;
 
-  /* ⚠️ EL dvh ARREGLA QUE LA BARRA DE ABAJO SE MUEVA SOLA.
+  /* ⚠️ MIN-HEIGHT, NO HEIGHT — esto era el bug real del fondo que no
+   * se repetía: con height:100dvh a secas, la CAJA de html/body queda
+   * clavada en el alto de una sola pantalla. El contenido más largo se
+   * desborda igual (se ve, se puede scrollear), pero el fondo de body
+   * —que se pinta dentro de su propia caja— se corta ahí mismo. De ese
+   * punto para abajo solo quedaba a la vista el color sólido de html.
+   * Con min-height, la caja crece con el contenido (nunca menos de una
+   * pantalla) y el fondo la sigue.
    *
-   * Con height:100% el alto se mide contra el "viewport de layout", que
-   * en el teléfono NO cambia cuando la barra de direcciones del
-   * navegador se esconde al hacer scroll. Resultado: la navegación
-   * fija quedaba anclada al alto viejo y se veía flotando más arriba de
-   * donde debía, distinto según la pantalla.
-   *
-   * dvh = dynamic viewport height: sigue al alto REAL, barra o no barra.
-   * El 100% de la línea de arriba queda como respaldo para navegadores
-   * viejos que no entienden dvh. */
-  height: 100%;
-  height: 100dvh;
+   * dvh = dynamic viewport height: sigue al alto REAL del teléfono,
+   * haya barra de direcciones visible o no. El 100% de la línea de
+   * abajo queda como respaldo para navegadores viejos que no entienden
+   * dvh. */
+  min-height: 100%;
+  min-height: 100dvh;
 }
 
 html {
