@@ -140,14 +140,24 @@ body {
      de detalle/lujo que quería (gatos negros con ojos de gema, filigrana
      dorada con relieve, murciélagos, damasco morado con sombreado real).
 
-     fixed + cover: la imagen llena la pantalla una vez, sin estirarse
-     con el largo de cada pantalla ni repetirse con costuras visibles
-     (no es un tile garantizado sin cortes). El color sólido de abajo es
-     el respaldo mientras carga o si algún día falta el archivo — nunca
-     se ve una pantalla sin fondo. */
-  background:
-    url('../recursos/fondo-gotico-victoriano.webp') center / cover no-repeat fixed,
-    var(--fondo);
+     REPITE, no "cover": con cover+fixed la imagen se veía una sola vez
+     y en pantallas largas se cortaba, dejando el resto en el color
+     liso de abajo. Repetida, la propia grilla de medallones que ya
+     trae la imagen sigue armando el mosaico sin importar cuánto se
+     desplace la pantalla — puede notarse alguna costura leve donde
+     empalma una copia con la siguiente, pero es preferible a que se
+     corte.
+
+     El velo negro al 50% (el linear-gradient de arriba, primera capa)
+     oscurece la imagen sin tocar el color de fondo real ni el
+     contenido: por eso va como una capa MÁS del fondo y no como
+     filter en el body —filter afectaría también a todo lo de adentro,
+     no solo al papel tapiz. */
+  background-image:
+    linear-gradient(rgba(0, 0, 0, .5), rgba(0, 0, 0, .5)),
+    url('../recursos/fondo-gotico-victoriano.webp');
+  background-repeat: no-repeat, repeat;
+  background-color: var(--fondo);
   color: var(--texto);
 
   /* Letra del sistema: la que el teléfono ya tiene cargada. Se ve nativa
