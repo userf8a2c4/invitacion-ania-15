@@ -509,10 +509,17 @@ function problemaDeContrasena($contrasena) {
  * @return bool
  */
 function estaFrenadoDelTodo() {
+    // Excluye la marca de API, igual que estaFrenadoPorFallos(): contar
+    // todo junto era el mismo bug de siempre, solo que con un techo más
+    // alto (50) que igual usar la app en casa —más la precarga en
+    // segundo plano de la Fase 8.2— alcanza a rozar sin que nadie haya
+    // escrito una contraseña ni una sola vez.
     $fila = consultarUno(
         'SELECT COUNT(*) AS n FROM intentos_login
-         WHERE ip = :ip AND cuando > DATE_SUB(NOW(), INTERVAL :min MINUTE)',
-        [':ip' => ipDeLaPeticion(), ':min' => MINUTOS_DE_FRENO]
+         WHERE ip = :ip AND correo <> :marca
+           AND cuando > DATE_SUB(NOW(), INTERVAL :min MINUTE)',
+        [':ip' => ipDeLaPeticion(), ':marca' => MARCA_DE_PETICION_API,
+         ':min' => MINUTOS_DE_FRENO]
     );
     return $fila && (int) $fila['n'] >= INTENTOS_ANTES_DE_CORTAR_SECO;
 }
