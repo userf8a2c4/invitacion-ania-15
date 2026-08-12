@@ -26,7 +26,7 @@
 /* ⚠️ SUBÍ ESTE NÚMERO CADA VEZ QUE CAMBIES CÓDIGO DEL PANEL.
    Si no, el teléfono sigue mostrando la copia guardada de la versión
    anterior y parece que el cambio "no se subió". */
-const VERSION = 'ania-admin-v45';
+const VERSION = 'ania-admin-v47';
 
 /* Lo mínimo para que la app arranque sin red. Se guarda al instalar. */
 const ARMAZON = [
@@ -39,6 +39,10 @@ const ARMAZON = [
      están guardados, la app instalada queda con el icono genérico. */
   './recursos/icono-admin-192.png',
   './recursos/icono-admin-512.png',
+  /* El fondo victoriano de Lucila (Fase 7.5): se precarga acá para que
+     se vea desde la primerísima apertura sin señal, en vez de un hueco
+     en blanco hasta que el teléfono lo pida una vez online. */
+  './recursos/fondo-gotico-victoriano.webp',
 ];
 
 
