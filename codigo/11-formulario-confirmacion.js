@@ -42,6 +42,23 @@
 
   if (!formulario) return;
 
+  /* La biblioteca del QR (codigo/12-pase-de-acceso.js) ya no se carga
+     sola al entrar a la web: se pide apenas alguien toca el formulario,
+     de fondo, sin bloquear nada. Así, para cuando llegue al botón de
+     confirmar —que tarda, como mínimo, lo que lleva llenar los campos—
+     ya está lista y no se nota ninguna espera.
+
+     ⚠️ EL "typeof" VA DENTRO DEL LISTENER, NO ACÁ AFUERA. Este archivo
+     (11) se ejecuta ANTES que 12-pase-de-acceso.js en el orden de
+     index.html, así que a esta altura cargarQRCode todavía no existe.
+     Revisarlo recién cuando el evento dispara —bien después de que
+     todos los <script defer> ya corrieron— es lo que lo hace andar.
+     { once: true } porque con una vez alcanza: la promesa ya queda
+     guardada adentro de cargarQRCode(). */
+  formulario.addEventListener('focusin', () => {
+    if (typeof cargarQRCode === 'function') cargarQRCode();
+  }, { once: true });
+
   /** La respuesta que significa "sí, voy" en la lista desplegable. */
   const RESPUESTA_AFIRMATIVA = 'Sí, asistiré';
 

@@ -50,7 +50,7 @@ async function enviarAlServidor(datos) {
 
     if (datos.asiste && datos.codigo &&
         typeof generarQrParaElCorreo === 'function') {
-      const qr = generarQrParaElCorreo(datos.codigo);
+      const qr = await generarQrParaElCorreo(datos.codigo);
       if (qr) carga.qrPng = qr;
     }
 

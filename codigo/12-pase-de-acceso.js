@@ -53,22 +53,59 @@ function generarCodigoDePase(textoBase) {
 
 /* ─── 2. DIBUJAR EL CÓDIGO QR ──────────────────────────────────────── */
 
+/* ⚡ LA BIBLIOTECA DEL QR SE CARGA BAJO DEMANDA, NO EN EL <head>.
+   Antes index.html traía qrcodejs con <script defer> en TODA visita,
+   aunque solo hace falta cuando alguien confirma o vuelve a ver su pase
+   —normalmente ni bien entra a la web, y muchas veces nunca—. Es el mismo
+   caso que el iframe de Google Maps: un recurso de terceros que se
+   descargaba y ejecutaba para todo el mundo, para un uso que casi nadie
+   toca en el momento de cargar.
+
+   Ahora se inyecta con JS recién cuando hace falta (ver cargarQRCode()) y,
+   además, se dispara temprano de fondo apenas alguien empieza a llenar el
+   formulario (codigo/11-formulario-confirmacion.js), para que cuando
+   llegue al botón de confirmar ya esté lista y no se note ninguna espera. */
+let promesaDeQRCode = null;
+
+/**
+ * Carga qrcodejs si todavía no está, sin repetir la descarga si ya se
+ * pidió antes (dos llamadas casi simultáneas comparten la misma promesa).
+ * @returns {Promise<void>}
+ */
+function cargarQRCode() {
+  if (typeof QRCode !== 'undefined') return Promise.resolve();
+  if (promesaDeQRCode) return promesaDeQRCode;
+
+  promesaDeQRCode = new Promise(resolver => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    // Sin internet o si el CDN falla, se resuelve igual: quien llama ya
+    // sabe seguir sin QR (el código escrito abajo se lee perfectamente).
+    script.onload  = () => resolver();
+    script.onerror = () => resolver();
+    document.head.appendChild(script);
+  });
+  return promesaDeQRCode;
+}
+
 /**
  * Dibuja el código QR dentro de la tarjeta.
  *
- * Usa una biblioteca externa (qrcodejs) que se carga desde internet en
- * el index.html. Si no hay conexión, la biblioteca no existe: por eso
+ * Usa una biblioteca externa (qrcodejs), cargada bajo demanda por
+ * cargarQRCode(). Si no hay conexión, la biblioteca no llega: por eso
  * está el if. En ese caso el pase igual sirve, porque el código escrito
  * abajo se lee perfectamente.
  *
  * @param {string} textoDelCodigo - Lo que se codifica en el QR.
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function dibujarCodigoQR(textoDelCodigo) {
+async function dibujarCodigoQR(textoDelCodigo) {
   const contenedorDelQR = buscar('#codigo-qr');
   if (!contenedorDelQR) return;
 
   contenedorDelQR.innerHTML = '';   // borra el QR anterior, si había
+
+  await cargarQRCode();
 
   if (typeof QRCode === 'undefined') {
     console.info('No se pudo cargar la biblioteca del QR (¿estás sin internet?). ' +
@@ -102,11 +139,14 @@ function dibujarCodigoQR(textoDelCodigo) {
  * EL CÓDIGO ES EXACTAMENTE EL MISMO: cambia el color, no el contenido.
  *
  * @param {string} textoDelCodigo - El mismo que se dibuja en la tarjeta.
- * @returns {string} Una imagen PNG como texto ("data:image/png;base64,…"),
- *                   o cadena vacía si no se pudo generar.
+ * @returns {Promise<string>} Una imagen PNG como texto
+ *                             ("data:image/png;base64,…"), o cadena vacía
+ *                             si no se pudo generar.
  */
-function generarQrParaElCorreo(textoDelCodigo) {
-  if (typeof QRCode === 'undefined' || !textoDelCodigo) return '';
+async function generarQrParaElCorreo(textoDelCodigo) {
+  if (!textoDelCodigo) return '';
+  await cargarQRCode();
+  if (typeof QRCode === 'undefined') return '';
 
   // Se dibuja en un contenedor suelto que nunca entra en la página.
   const cajaInvisible = document.createElement('div');
