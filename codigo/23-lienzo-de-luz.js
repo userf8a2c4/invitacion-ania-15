@@ -69,8 +69,12 @@
 
      Los haces y las motas van en coordenadas de ventana porque sus capas
      eran `position: fixed`: no se mueven con el scroll, la luz entra
-     siempre por el mismo sitio de la pantalla. */
-  window.LienzoDeLuz = { activo: USAR_LIENZO, fuentes: [], haces: [], motas: [] };
+     siempre por el mismo sitio de la pantalla.
+
+     `fauna` (luciérnagas y termitas, codigo/27-fauna-nocturna.js) va en
+     coordenadas de DOCUMENTO, como las fuentes: están ancladas a
+     elementos de la página, no pegadas a la ventana. */
+  window.LienzoDeLuz = { activo: USAR_LIENZO, fuentes: [], haces: [], motas: [], fauna: [] };
 
   if (!USAR_LIENZO) return;
 
@@ -393,6 +397,28 @@
         pincel.globalAlpha = m.alfa > 1 ? 1 : m.alfa;
         const lado = m.radio * 2;
         pincel.drawImage(SELLO_MOTA, m.x - m.radio, m.y - m.radio, lado, lado);
+      }
+
+      /* LUCIÉRNAGAS Y TERMITAS (codigo/27-fauna-nocturna.js). En
+         coordenadas de DOCUMENTO —como las fuentes—, así que se les resta
+         el scroll. Reutilizan el sello de las motas: son la misma idea,
+         un puntito con halo, y así no hace falta crear un degradado
+         nuevo para 2 a 6 bichos que apenas se notan. */
+      if (window.LienzoDeLuz.animarLaFauna) {
+        window.LienzoDeLuz.animarLaFauna((performance.now() - momentoDeInicio) / 1000);
+      }
+      const fauna = window.LienzoDeLuz.fauna;
+      for (let i = 0; i < fauna.length; i++) {
+        const c = fauna[i];
+        if (c.alfa <= 0.004) continue;
+
+        const y = c.y - desplazamiento;
+        if (y < -MARGEN - c.radio || y > altoCss + MARGEN + c.radio) continue;
+        if (c.x < -MARGEN - c.radio || c.x > anchoCss + MARGEN + c.radio) continue;
+
+        pincel.globalAlpha = c.alfa > 1 ? 1 : c.alfa;
+        const lado = c.radio * 2;
+        pincel.drawImage(SELLO_MOTA, c.x - c.radio, y - c.radio, lado, lado);
       }
     }
 
