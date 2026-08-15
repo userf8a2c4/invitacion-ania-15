@@ -161,7 +161,7 @@
        si dos archivos dicen cosas distintas sobre lo mismo, gana el que
        iba último; 00-tipografias sigue yendo primero).
   ═══════════════════════════════════════════════════════════════════ -->
-  <link rel="stylesheet" href="estilos/_empaquetado.css?v=52">
+  <link rel="stylesheet" href="estilos/_empaquetado.css?v=53">
 
   
   
@@ -169,24 +169,30 @@
   
   
 
-  <!-- Bibliotecas externas: envío de correos y generación del código QR.
+  <!-- ⚠️ ACÁ NO VA NINGÚN <script> DE TERCEROS, Y ES A PROPÓSITO.
 
-       ⚠️ CON "defer" Y NO BLOQUEANDO. Antes estos dos <script> iban acá SIN
-       defer: son de un CDN externo, así que si la conexión tarda en
-       llegar a ellos (o algún bloqueador de anuncios los frena), el
-       navegador se queda esperando ANTES de poder dibujar el <body>
-       —nada de música, nada de animaciones, nada de nada— aunque el resto
-       de la web no tenga ninguna culpa. Con "defer" se descargan en
-       segundo plano mientras el resto de la página sigue su curso, y
-       recién se ejecutan cuando el HTML ya terminó de parsearse (en el
-       mismo orden en que están escritos). Sale ganando siempre: ninguno de
-       los dos se usa al cargar la página —emailjs.send() se llama al
-       confirmar el formulario (11-formulario-confirmacion.js) y
-       new QRCode() al mostrar el pase (12-pase-de-acceso.js), los dos bien
-       después de que la persona ya interactuó—, así que no hay apuro por
-       tenerlos ANTES que el resto. -->
-  <script defer src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+       Hasta hace poco acá cargaban DOS bibliotecas externas en cada
+       visita: EmailJS y qrcodejs. Revisando el código a fondo aparecieron
+       dos cosas:
+
+       1) EmailJS estaba MUERTO. El envío de correos hace tiempo que lo
+          hace confirmar.php en el servidor (ver codigo/15-registro-de-
+          confirmaciones.js), y `emailjs.send()` ya no se llama en NINGÚN
+          lugar del código —se verificó con una búsqueda en todo el
+          proyecto—. La web bajaba y ejecutaba una biblioteca entera, en
+          cada visita, para nada. Se borró directamente.
+
+       2) qrcodejs SÍ se usa (para el QR del pase), pero casi nunca hace
+          falta al cargar la página: recién se necesita si la persona
+          confirma o ya había confirmado antes. Ahora se pide bajo demanda
+          desde codigo/12-pase-de-acceso.js (función cargarQRCode()), y
+          codigo/11-formulario-confirmacion.js dispara esa descarga de
+          fondo apenas alguien toca el formulario —para cuando llegue al
+          botón de confirmar, ya está lista—.
+
+       Resultado: una visita típica (la que nunca llega a confirmar, o
+       llega mucho después) ya no baja NINGÚN byte de estas dos
+       bibliotecas. -->
 </head>
 
 <body>
@@ -2032,23 +2038,23 @@
      empaquetado (ver la sección de ESTILOS): el CSS no se compila ni se
      ejecuta, así que ahí juntar no genera ninguna tarea larga.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/01-configuracion.js?v=52"></script>
-<script defer src="codigo/02-utilidades.js?v=52"></script>
-<script defer src="codigo/03-sobre-de-apertura.js?v=52"></script>
-<script defer src="codigo/04-invitado-personalizado.js?v=52"></script>
-<script defer src="codigo/05-cursor-personalizado.js?v=52"></script>
+<script defer src="codigo/01-configuracion.js?v=53"></script>
+<script defer src="codigo/02-utilidades.js?v=53"></script>
+<script defer src="codigo/03-sobre-de-apertura.js?v=53"></script>
+<script defer src="codigo/04-invitado-personalizado.js?v=53"></script>
+<script defer src="codigo/05-cursor-personalizado.js?v=53"></script>
 <!-- EL LIENZO DE PÉTALOS. Va ANTES que 06-petalos-con-fisica.js porque ese
      archivo le pregunta al arrancar si debe crear elementos o solo números.
      Con  ?petalos=dom  vuelve el sistema de divs. -->
-<script defer src="codigo/24-lienzo-de-petalos.js?v=52"></script>
-<script defer src="codigo/06-petalos-con-fisica.js?v=52"></script>
-<script defer src="codigo/07-marco-y-enredaderas.js?v=52"></script>
-<script defer src="codigo/08-efectos-de-scroll.js?v=52"></script>
-<script defer src="codigo/09-cuenta-regresiva.js?v=52"></script>
-<script defer src="codigo/10-reproductor-de-musica.js?v=52"></script>
-<script defer src="codigo/11-formulario-confirmacion.js?v=52"></script>
-<script defer src="codigo/12-pase-de-acceso.js?v=52"></script>
-<script defer src="codigo/13-agregar-al-calendario.js?v=52"></script>
+<script defer src="codigo/24-lienzo-de-petalos.js?v=53"></script>
+<script defer src="codigo/06-petalos-con-fisica.js?v=53"></script>
+<script defer src="codigo/07-marco-y-enredaderas.js?v=53"></script>
+<script defer src="codigo/08-efectos-de-scroll.js?v=53"></script>
+<script defer src="codigo/09-cuenta-regresiva.js?v=53"></script>
+<script defer src="codigo/10-reproductor-de-musica.js?v=53"></script>
+<script defer src="codigo/11-formulario-confirmacion.js?v=53"></script>
+<script defer src="codigo/12-pase-de-acceso.js?v=53"></script>
+<script defer src="codigo/13-agregar-al-calendario.js?v=53"></script>
 <!-- EL LIENZO DE LUZ. Dibuja los tres sistemas de luz —velas, haces y polvo—
      en un solo <canvas>, en vez de en ~140 elementos con `mix-blend-mode`.
 
@@ -2058,15 +2064,15 @@
 
      Con  ?luz=dom  este módulo se queda dormido y vuelve el sistema
      anterior completo, sin tocar código. -->
-<script defer src="codigo/23-lienzo-de-luz.js?v=52"></script>
+<script defer src="codigo/23-lienzo-de-luz.js?v=53"></script>
 <!-- FAUNA NOCTURNA: luciérnagas y termitas, dibujadas por el lienzo de
      arriba. Va después de 23 (que crea window.LienzoDeLuz) — el orden
      respecto de 19-velas.js no importa, porque este módulo espera el
      evento 'invitacion-visible' antes de buscar los candelabros, que
      19-velas.js recién crea ahí. -->
-<script defer src="codigo/27-fauna-nocturna.js?v=52"></script>
-<script defer src="codigo/14-haces-de-luz.js?v=52"></script>
-<script defer src="codigo/15-registro-de-confirmaciones.js?v=52"></script>
+<script defer src="codigo/27-fauna-nocturna.js?v=53"></script>
+<script defer src="codigo/14-haces-de-luz.js?v=53"></script>
+<script defer src="codigo/15-registro-de-confirmaciones.js?v=53"></script>
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda).
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
      —incluso sobre el sobre de entrada— para que quien tenga un equipo
@@ -2081,27 +2087,27 @@
   <span class="boton-animaciones__texto">Animación</span>
 </button>
 
-<script defer src="codigo/16-volver-arriba.js?v=52"></script>
-<script defer src="codigo/17-joyas-colgantes.js?v=52"></script>
-<script defer src="codigo/18-motas-de-polvo.js?v=52"></script>
-<script defer src="codigo/19-velas.js?v=52"></script>
-<script defer src="codigo/20-boton-de-animaciones.js?v=52"></script>
-<script defer src="codigo/21-monitor-de-rendimiento.js?v=52"></script>
+<script defer src="codigo/16-volver-arriba.js?v=53"></script>
+<script defer src="codigo/17-joyas-colgantes.js?v=53"></script>
+<script defer src="codigo/18-motas-de-polvo.js?v=53"></script>
+<script defer src="codigo/19-velas.js?v=53"></script>
+<script defer src="codigo/20-boton-de-animaciones.js?v=53"></script>
+<script defer src="codigo/21-monitor-de-rendimiento.js?v=53"></script>
 <!-- Tiñe la luz que entra por los ventanales según la hora del día. Va
      después de los haces y las motas, porque escribe sobre sus capas. -->
-<script defer src="codigo/22-luz-de-la-hora.js?v=52"></script>
+<script defer src="codigo/22-luz-de-la-hora.js?v=53"></script>
 
 <!-- PREGUNTAS FRECUENTES (el botón "?" de la fila de controles).
      El 00 tiene solo los datos —fecha, lugar, vestimenta, regalos— y el
      25 arma el panel leyéndolos. Ese orden importa: si el 25 corriera
      primero, no encontraría la lista de preguntas y no dibujaría nada. -->
-<script defer src="codigo/00-conocimiento-chatbot.js?v=52"></script>
-<script defer src="codigo/25-preguntas-frecuentes.js?v=52"></script>
+<script defer src="codigo/00-conocimiento-chatbot.js?v=53"></script>
+<script defer src="codigo/25-preguntas-frecuentes.js?v=53"></script>
 
 <!-- EL MAPA A PEDIDO. El iframe de Google Maps recién se crea cuando se
      toca "Ver el mapa" (ver el comentario junto a .mapa-marco--a-pedido
      más arriba). -->
-<script defer src="codigo/26-mapa-a-pedido.js?v=52"></script>
+<script defer src="codigo/26-mapa-a-pedido.js?v=53"></script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
      internet y se pueda instalar. Va al final y falla en silencio si el
