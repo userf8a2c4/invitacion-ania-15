@@ -132,7 +132,7 @@
   }
 
   if (zonaDelRelicario) {
-    const cuantasLuciernagas = Math.floor(numeroAlAzar(1, 4));
+    const cuantasLuciernagas = Math.floor(numeroAlAzar(2, 7));
     for (let i = 0; i < cuantasLuciernagas; i++) crearCriatura('luciernaga', zonaDelRelicario);
   }
 
