@@ -293,6 +293,11 @@
   const CADA_CUANTO_REPINTAR = 45;
   let ultimoRepintado = 0;
 
+  /** El scroll con el que se dibujó el último cuadro. Ver la nota grande
+   *  en pintarLaLuz(): si cambió, el throttle se salta para que la luz
+   *  no se quede atrás de la llama real (DOM) durante el scroll. */
+  let ultimoDesplazamientoDibujado = null;
+
   /* ⚠️ SE APAGABAN LAS ANIMACIONES Y LA LUZ SE QUEDABA CONGELADA.
      hayAlgoQueMirar() agrupa tres motivos bajo un mismo "no dibujes":
      sobre todavía cerrado, pestaña de fondo, o animaciones apagadas a
@@ -446,11 +451,39 @@
     }
     yaSeDibujoElEstadoQuieto = false;
 
-    if (ahora - ultimoRepintado < CADA_CUANTO_REPINTAR) {
+    /* ⚠️ EL DESFASE DE LA LLAMA AL HACER SCROLL, Y POR QUÉ EL THROTTLE DE
+       ARRIBA LO CAUSABA.
+       Las velas (DOM: la mecha, la llamita del SVG) se mueven con el
+       scroll NATIVO del navegador, a la frecuencia real de la pantalla
+       —60, 90, 120 Hz—. Pero el resplandor que las rodea es este canvas,
+       y este canvas se repinta cada 45 ms (~22 fps) A PROPÓSITO, porque
+       el titileo que lo alimenta (velas, haces, motas) solo cambia esa
+       seguido: repintar más rápido dibujaba el mismo resplandor varias
+       veces.
+
+       El problema es que esa cuenta no incluye el SCROLL: la posición
+       del resplandor también depende de cuánto se scrolleó, y esa sí
+       cambia cada cuadro nativo. Con el throttle a ciegas, al scrollear
+       rápido la llama (DOM) ya se movió y el resplandor (canvas) todavía
+       muestra dónde estaba hace dos o tres cuadros: se ve como si la luz
+       se quedara atrás un instante.
+
+       La solución: SOLO se respeta el throttle cuando el scroll no se
+       movió desde el último repintado. En cuanto se detecta que sí, se
+       dibuja YA —el resplandor sigue al scroll cuadro a cuadro, igual
+       que la llama—, y el throttle vuelve a mandar apenas el scroll se
+       queda quieto. Estampar el canvas es barato (ver el resto de este
+       archivo): la ventana en la que esto corre a más fps es la del
+       gesto de scroll, que dura instantes. */
+    const desplazamientoActual = scrollActualY();
+    const seMovioElScroll = desplazamientoActual !== ultimoDesplazamientoDibujado;
+
+    if (!seMovioElScroll && ahora - ultimoRepintado < CADA_CUANTO_REPINTAR) {
       requestAnimationFrame(pintarLaLuz);
       return;
     }
     ultimoRepintado = ahora;
+    ultimoDesplazamientoDibujado = desplazamientoActual;
     dibujarUnCuadro(true);
 
     requestAnimationFrame(pintarLaLuz);
