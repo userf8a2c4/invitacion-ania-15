@@ -78,12 +78,25 @@
      Primero eran [7,15] / [12,22] / [20,34] y se leían como MIGAJAS: a
      7 px un pétalo de rosa es un punto, sin forma ni nervadura visible.
      Se subieron a [13,26] / [22,40] / [36,62] y todavía se sentían
-     chicos. Esta segunda subida (~35 % más) sigue conservando la misma
-     proporción entre los tres planos —el de frente sigue siendo casi el
-     triple que el del fondo, que es lo que crea la sensación de
-     profundidad—. No cuesta rendimiento: son la misma cantidad de
-     elementos, solo más grandes. */
-  const RASGOS_DEL_PLANO = {
+     chicos, así que subieron otra vez a [18,35] / [30,54] / [48,84].
+
+     Pero esos son px FIJOS, y las rosas del marco NO lo son: la
+     enredadera se achica con --marco-grosor (un clamp que depende del
+     ancho de pantalla), así que en un teléfono las rosas terminan siendo
+     3 veces más chicas que en escritorio mientras el pétalo se queda
+     igual de grande — un pétalo de 84px tapando una rosa diminuta.
+
+     Por eso, igual que REPARTO_POR_PLANO de arriba, el tamaño también
+     depende de esPantallaChica: en móvil se bajan a ~55%, proporción
+     parecida a la que ya tienen las rosas achicadas. Mismas tres
+     proporciones entre planos en los dos casos. Costo: cero (son las
+     mismas constantes de siempre) y hasta BAJA en móvil, porque hay
+     menos área de pétalo para pintar por cuadro. */
+  const RASGOS_DEL_PLANO = esPantallaChica ? {
+    fondo:  { contenedor: '#petalos-fondo',  tamaño: [10, 19], opacidad: [.30, .55], caida: [14, 30] },
+    medio:  { contenedor: '#petalos-medio',  tamaño: [16, 30], opacidad: [.60, .90], caida: [18, 40] },
+    frente: { contenedor: '#petalos-frente', tamaño: [26, 46], opacidad: [.70, 1],   caida: [26, 54] },
+  } : {
     fondo:  { contenedor: '#petalos-fondo',  tamaño: [18, 35], opacidad: [.30, .55], caida: [14, 30] },
     medio:  { contenedor: '#petalos-medio',  tamaño: [30, 54], opacidad: [.60, .90], caida: [18, 40] },
     frente: { contenedor: '#petalos-frente', tamaño: [48, 84], opacidad: [.70, 1],   caida: [26, 54] },
