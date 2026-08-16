@@ -223,7 +223,13 @@
       // flashes (por eso el pow), la termita solo titila apenas.
       const onda = Math.sin(tSegundos * c.frecuenciaDeParpadeo + c.faseDeParpadeo);
       const forma = c.tipo === 'luciernaga' ? Math.pow(Math.max(0, onda), 3) : (onda * 0.35 + 0.65);
-      c.alfa = c.picoDeAlfa * forma;
+
+      // De día no se ven: codigo/22-luz-de-la-hora.js ya sabe qué tan de
+      // noche es (0 al mediodía, 1 de noche cerrada) con la hora real del
+      // dispositivo. Multiplicar por ese número, en vez de un reloj
+      // propio, de paso da un fundido suave al atardecer/amanecer.
+      const deNoche = window.LuzDeLaHora ? window.LuzDeLaHora.deNoche : 0;
+      c.alfa = c.picoDeAlfa * forma * deNoche;
     }
   }
 

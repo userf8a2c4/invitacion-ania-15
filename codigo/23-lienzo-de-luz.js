@@ -491,4 +491,31 @@
 
   requestAnimationFrame(pintarLaLuz);
 
+  /* ⚡ TODAVÍA QUEDABA UNA VUELTA DE COLA, Y ESTO LA SACA.
+     El fix de arriba (seMovioElScroll) hace que el canvas se repinte en
+     cuanto pintarLaLuz nota que el scroll cambió — pero pintarLaLuz corre
+     dentro de un requestAnimationFrame, que es UN turno más del hilo
+     principal detrás de todo lo demás que también usa rAF (el vaivén de
+     las plantas, las joyas colgantes, el monitor de rendimiento…). El
+     scroll nativo lo mueve el COMPOSITOR, un hilo aparte que no espera
+     ese turno. En un cuadro cargado, ese turno de más ya se nota.
+
+     Este listener dibuja DIRECTO desde el propio evento 'scroll', en el
+     mismo turno en que el navegador ya avisó que la posición cambió, sin
+     esperar la vuelta completa de pintarLaLuz. Es seguro hacerlo acá:
+     dibujar en un canvas no fuerza layout ni reflow, así que no cuesta lo
+     que costaría, por ejemplo, leer un getBoundingClientRect() en el
+     mismo lugar.
+
+     Con equipos muy cargados igual puede quedar algo de desfase —es el
+     límite de sincronizar un canvas con el scroll por JavaScript, no algo
+     que un ajuste más vaya a borrar del todo—, pero esto lo deja en el
+     mínimo posible dentro de esta arquitectura. */
+  window.addEventListener('scroll', () => {
+    if (!hayAlgoQueMirar()) return;
+    dibujarUnCuadro(true);
+    ultimoRepintado = performance.now();
+    ultimoDesplazamientoDibujado = scrollActualY();
+  }, { passive: true });
+
 })();
