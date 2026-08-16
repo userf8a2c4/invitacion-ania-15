@@ -346,8 +346,21 @@ function hayAlgoQueMirar() {
    ser una consulta al navegador a ser una simple variable.
    ---------------------------------------------------------------- */
 
-let _scrollGuardadoX = window.scrollX;
-let _scrollGuardadoY = window.scrollY;
+/* ⚡ ACÁ NO SE LE PREGUNTA AL NAVEGADOR, NI SIQUIERA UNA VEZ.
+   Esto arrancaba leyendo window.scrollX/Y de entrada, "por las dudas".
+   Pero ese primer vistazo se hace ANTES de que el navegador termine de
+   acomodar la página —está recién parseando el HTML—, así que la
+   consulta lo obliga a resolver todo el layout de golpe: un reprocesamiento
+   forzado medido en 127ms, en la carga inicial, el peor momento posible
+   para perder tiempo.
+
+   Se arranca asumiendo 0 (correcto en la enorme mayoría de las cargas: una
+   página nueva siempre abre arriba de todo) y los oyentes de scroll/resize
+   de acá abajo corrigen el valor apenas hay algo real que corregir — sin
+   forzar nunca un cálculo que el navegador todavía no había hecho por su
+   cuenta. */
+let _scrollGuardadoX = 0;
+let _scrollGuardadoY = 0;
 
 window.addEventListener('scroll', () => {
   _scrollGuardadoX = window.scrollX;
