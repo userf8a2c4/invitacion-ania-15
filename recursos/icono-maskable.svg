@@ -19,6 +19,16 @@
       <stop offset="50%"  stop-color="#c1a049"/>
       <stop offset="100%" stop-color="#8a6a2c"/>
     </linearGradient>
+    <!-- La foto de la firma es amarillo puro, no el dorado antiguo del
+         resto de la web: acá solo se usa su silueta (canal alfa) como
+         máscara, y el color lo pone el degradado de arriba. El <image>
+         de adentro va agrandado y corrido: ver la explicación completa
+         en recursos/icono.svg (la tinta está pegada al borde izquierdo
+         de la foto, así que dibujarla completa centrada se veía corrida). -->
+    <mask id="mascara-firma" maskUnits="userSpaceOnUse"
+          x="20" y="16" width="24" height="32" mask-type="alpha">
+      <image href="logo-dibujado-por-lucila.png" x="20" y="14.47" width="26.22" height="35.37"/>
+    </mask>
   </defs>
 
   <!-- Fondo a sangre (el sistema le dará la forma) -->
@@ -38,14 +48,11 @@
     <path d="M14 27 A 23 23 0 0 1 50 27" fill="none" stroke="#d9738a"
           stroke-width="1.4" stroke-opacity=".35" stroke-linecap="round"/>
     <ellipse cx="24" cy="21" rx="6" ry="3.4" fill="#f0aab6" opacity=".28"/>
-    <g transform="translate(32 33) scale(0.34) translate(-49 -50)"
-       fill="none" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M10 80 C 14 74,20 74,26 78 C 32 60,42 32,52 12
-               C 62 34,73 62,88 88 C 79 75,66 64,42 64 C 34 64,29 68,26 74"
-            stroke="#3a0c17" stroke-width="9" stroke-opacity=".7" transform="translate(1.5 2)"/>
-      <path d="M10 80 C 14 74,20 74,26 78 C 32 60,42 32,52 12
-               C 62 34,73 62,88 88 C 79 75,66 64,42 64 C 34 64,29 68,26 74"
-            stroke="url(#cera-a-oro)" stroke-width="8"/>
-    </g>
+    <!-- La "A" que dibujó Lucila para su hija (ver recursos/icono.svg,
+         misma imagen, misma máscara, mismo criterio: la gota de cera
+         queda de fondo). -->
+    <rect x="20" y="16" width="24" height="32" fill="url(#cera-a-oro)"
+          mask="url(#mascara-firma)"
+          style="filter: drop-shadow(1px 1.5px 1px rgba(58,12,23,.8))"/>
   </g>
 </svg>
