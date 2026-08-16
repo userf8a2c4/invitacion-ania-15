@@ -71,8 +71,13 @@
   display: block;
   margin-top: 1.5rem;
   font-family: var(--tipo-texto);
-  font-size: .9rem;
-  letter-spacing: .15em;
+  /* En una sola línea siempre: una firma partida a la mitad se ve
+     descuidada. El tamaño se achica con el ancho de pantalla —clamp,
+     no un breakpoint fijo— para que en el celular más angosto siga
+     entrando sin arriesgar layout. */
+  font-size: clamp(.68rem, 2.6vw + .3rem, .9rem);
+  letter-spacing: clamp(.04em, 1vw, .15em);
+  white-space: nowrap;
   color: var(--color-oro-texto);
   text-align: right;
   font-style: normal;

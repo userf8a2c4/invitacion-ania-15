@@ -128,6 +128,12 @@
       picoDeAlfa: esLuciernaga ? numeroAlAzar(0.75, 1) : numeroAlAzar(0.35, 0.55),
       seDibuja: true,
       alfa: 0,
+
+      // El sobresalto (sección 5B): arranca siempre en calma.
+      estado: 'calma',
+      anguloDeEscape: 0,
+      finDelSobresalto: 0,
+      faseDelTembleque: numeroAlAzar(0, Math.PI * 2),
     });
   }
 
@@ -168,13 +174,62 @@
      cubre mouse y dedo a la vez, passive para no trabar el scroll. */
   let mouseX = -9999, mouseY = -9999;
   document.addEventListener('pointermove', e => { mouseX = e.clientX; mouseY = e.clientY; }, { passive: true });
-  document.addEventListener('pointerdown', e => { mouseX = e.clientX; mouseY = e.clientY; }, { passive: true });
+  document.addEventListener('pointerdown', e => {
+    mouseX = e.clientX; mouseY = e.clientY;
+    // Un toque es un instante: si se espera al próximo cuadro del lienzo
+    // (hasta 45ms de por medio) para recién ahí notar el toque, a veces
+    // el dedo ya se levantó. Revisar acá, en el momento exacto del toque,
+    // es lo que hace que el sobresalto se sienta inmediato.
+    intentarSobresaltar(e.clientX, e.clientY);
+  }, { passive: true });
   document.addEventListener('mouseleave', () => { mouseX = -9999; mouseY = -9999; });
   document.addEventListener('pointerup',    e => { if (e.pointerType === 'touch') { mouseX = -9999; mouseY = -9999; } });
 
-  /** Qué tan lejos empieza a notarse el cursor. Chico a propósito: son
-   *  bichos diminutos, no pétalos, y el gesto tiene que ser sutil. */
+  /** Qué tan lejos empieza a notarse el cursor/dedo. */
   const RADIO_DE_INFLUENCIA = 70;
+
+  /* ─── 4B. EL SOBRESALTO, COMO UN INSECTO DE VERDAD ──────────────────
+     Antes el toque apenas empujaba al bicho un par de píxeles —tan poco
+     que lo único que se notaba era el vuelo normal hacia su destino de
+     siempre, que por vivir del mismo lado de la pantalla, se leía como
+     "siempre se va para la izquierda". No era un bug de dirección: el
+     empujón casi no existía.
+
+     Ahora es un estado aparte. Al entrar en sobresalto se elige un rumbo
+     de escape con aleatoriedad DE VERDAD —contrario al dedo, más un
+     ángulo al azar de hasta ±70°, así nunca escapa dos veces igual—, se
+     vuela varias veces más rápido que en calma, con un tembleque
+     perpendicular al rumbo para que se vea nervioso y no una línea
+     recta, y a los pocos cientos de milisegundos vuelve solo al vuelo
+     tranquilo de siempre, con un destino nuevo. Nunca sale de su propia
+     zona de vuelo: solo se mueve más rápido y errático adentro de ella. */
+  const DURACION_MINIMA_DEL_SOBRESALTO = 0.5;
+  const DURACION_MAXIMA_DEL_SOBRESALTO = 0.8;
+  const FACTOR_DE_VELOCIDAD_DEL_SOBRESALTO = 6;
+  const ANGULO_DE_ALEATORIEDAD = Math.PI * 0.4;   // hasta ±72°
+
+  /**
+   * Si hay alguna criatura cerca de (xVentana, yVentana), la sobresalta.
+   * @param {number} xVentana - coordenadas de VENTANA (como e.clientX).
+   * @param {number} yVentana
+   * @returns {void}
+   */
+  function intentarSobresaltar(xVentana, yVentana) {
+    const scroll = scrollActualY();
+    for (const c of criaturas) {
+      if (!c.seDibuja || c.estado === 'sobresaltada') continue;
+
+      const dx = c.x - xVentana;
+      const dy = (c.y - scroll) - yVentana;
+      const distancia = Math.hypot(dx, dy);
+      if (distancia >= RADIO_DE_INFLUENCIA || distancia < 0.01) continue;
+
+      const rumboBase = Math.atan2(dy, dx);   // ya apunta lejos del toque
+      c.anguloDeEscape = rumboBase + numeroAlAzar(-ANGULO_DE_ALEATORIEDAD, ANGULO_DE_ALEATORIEDAD);
+      c.estado = 'sobresaltada';
+      c.finDelSobresalto = tAnterior + numeroAlAzar(DURACION_MINIMA_DEL_SOBRESALTO, DURACION_MAXIMA_DEL_SOBRESALTO);
+    }
+  }
 
 
   /* ─── 5. EL VUELO ─────────────────────────────────────────────────── */
@@ -194,29 +249,50 @@
     for (const c of criaturas) {
       if (!c.seDibuja) { c.alfa = 0; continue; }
 
-      // Rumbo hacia el destino actual; al llegar, se elige otro al azar
-      // dentro de la misma zona. Así el recorrido nunca se repite igual.
-      let dx = c.destinoX - c.x, dy = c.destinoY - c.y;
-      let distancia = Math.hypot(dx, dy);
-      if (distancia < c.radioDeLlegada) {
-        const nuevo = nuevoDestino(c.zona);
-        c.destinoX = nuevo.x; c.destinoY = nuevo.y;
-        dx = c.destinoX - c.x; dy = c.destinoY - c.y;
-        distancia = Math.hypot(dx, dy) || 1;
-      }
-      if (dt > 0 && distancia > 0.01) {
-        c.x += (dx / distancia) * c.velocidad * dt;
-        c.y += (dy / distancia) * c.velocidad * dt;
+      // Detección normal, por si el toque empezó lejos y se arrastró
+      // cerca (el pointerdown de la sección 4B ya cubre el toque directo).
+      const distMouse = Math.hypot(c.x - mouseX, (c.y - scroll) - mouseY);
+      if (c.estado !== 'sobresaltada' && distMouse < RADIO_DE_INFLUENCIA && distMouse > 0.01) {
+        intentarSobresaltar(mouseX, mouseY);
       }
 
-      // El toque/mouse lo aparta un instante (coordenadas de VENTANA).
-      const distMouseX = c.x - mouseX;
-      const distMouseY = (c.y - scroll) - mouseY;
-      const distMouse = Math.hypot(distMouseX, distMouseY);
-      if (distMouse < RADIO_DE_INFLUENCIA && distMouse > 0.01) {
-        const empuje = (1 - distMouse / RADIO_DE_INFLUENCIA) * 26 * (dt || 0.016);
-        c.x += (distMouseX / distMouse) * empuje;
-        c.y += (distMouseY / distMouse) * empuje;
+      if (c.estado === 'sobresaltada' && tSegundos >= c.finDelSobresalto) {
+        // Se acabó el susto: vuelve a la calma con un destino nuevo, para
+        // no seguir de largo hacia donde iba antes de que lo asustaran.
+        c.estado = 'calma';
+        const nuevo = nuevoDestino(c.zona);
+        c.destinoX = nuevo.x; c.destinoY = nuevo.y;
+      }
+
+      if (c.estado === 'sobresaltada') {
+        // Rápido, errático, en el rumbo de escape que se eligió al
+        // asustarse —con un tembleque perpendicular que lo hace ver
+        // nervioso en vez de dispararse en línea recta—.
+        const tembleque = Math.sin(tSegundos * 13 + c.faseDelTembleque) * 0.5;
+        const rumbo = c.anguloDeEscape + tembleque;
+        if (dt > 0) {
+          c.x += Math.cos(rumbo) * c.velocidad * FACTOR_DE_VELOCIDAD_DEL_SOBRESALTO * dt;
+          c.y += Math.sin(rumbo) * c.velocidad * FACTOR_DE_VELOCIDAD_DEL_SOBRESALTO * dt;
+        }
+        // Nunca se sale de su propia zona de vuelo: solo se mueve rápido
+        // y errático ADENTRO de ella.
+        c.x = limitar(c.x, c.zona.x, c.zona.x + c.zona.ancho);
+        c.y = limitar(c.y, c.zona.y, c.zona.y + c.zona.alto);
+      } else {
+        // Vuelo tranquilo de siempre: rumbo hacia el destino actual; al
+        // llegar, se elige otro al azar dentro de la misma zona.
+        let dx = c.destinoX - c.x, dy = c.destinoY - c.y;
+        let distancia = Math.hypot(dx, dy);
+        if (distancia < c.radioDeLlegada) {
+          const nuevo = nuevoDestino(c.zona);
+          c.destinoX = nuevo.x; c.destinoY = nuevo.y;
+          dx = c.destinoX - c.x; dy = c.destinoY - c.y;
+          distancia = Math.hypot(dx, dy) || 1;
+        }
+        if (dt > 0 && distancia > 0.01) {
+          c.x += (dx / distancia) * c.velocidad * dt;
+          c.y += (dy / distancia) * c.velocidad * dt;
+        }
       }
 
       // El parpadeo: la luciérnaga destella con huecos oscuros entre
