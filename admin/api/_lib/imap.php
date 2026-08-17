@@ -359,8 +359,16 @@ class BuzonImap {
 
         $analizado = analizarParteMime($encabezados, $cuerpoCrudo, '');
 
-        $texto = $analizado['texto'] !== '' ? trim($analizado['texto'])
-               : ($analizado['html'] !== '' ? trim(html_entity_decode(strip_tags($analizado['html']))) : '');
+        /* Antes de esta fase, un correo HTML se aplanaba siempre a texto
+           (strip_tags) antes de llegar al teléfono: se podía LEER, pero
+           se perdía todo el formato — un boletín de un proveedor se
+           veía como un bloque de texto ilegible. Ahora se manda el HTML
+           tal cual (sin tocar), y es 12-vista-correo.js quien decide
+           cómo mostrarlo: en un <iframe sandbox> sin JavaScript, nunca
+           inyectado directo en la página del panel. Si el correo no
+           trae parte HTML, sigue habiendo texto plano de respaldo. */
+        $texto = trim($analizado['texto']);
+        $html  = trim($analizado['html']);
 
         // Marcar como leído, ahora que efectivamente se abrió.
         $this->ordenar("UID STORE $uid +FLAGS (\\Seen)");
@@ -373,6 +381,7 @@ class BuzonImap {
             'asunto'     => $asunto,
             'fecha'      => $fecha,
             'texto'      => $texto,
+            'html'       => $html,
             'adjuntos'   => $analizado['adjuntos'],
         ];
     }

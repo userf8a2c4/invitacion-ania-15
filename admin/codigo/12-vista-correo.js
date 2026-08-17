@@ -353,6 +353,91 @@ async function accionDeCorreo(accion, correo, lista) {
 /* ─── 4. LEER Y ESCRIBIR ───────────────────────────────────────────── */
 
 /**
+ * El cuerpo del correo, listo para insertarse en el HTML de la hoja:
+ * un <iframe> en sandbox si el mensaje trae parte HTML, o el texto
+ * plano de siempre si no.
+ *
+ * @param {Object} m - El mensaje devuelto por correo.php?accion=leer
+ * @returns {string}
+ */
+function cuerpoDeCorreo(m) {
+  if (m.html) {
+    // El srcdoc de verdad se pone después, en engancharCorreoHtml(): un
+    // <iframe srcdoc="..."> armado a mano acá tendría que escapar
+    // comillas dentro de HTML dentro de un atributo HTML — frágil y
+    // fácil de romper con un correo raro. Más simple y más seguro:
+    // crear el iframe vacío y asignarle .srcdoc como propiedad de JS.
+    return '' +
+      '<iframe id="correo-html" title="Contenido del correo" ' +
+              'sandbox="allow-same-origin" ' +
+              'style="width:100%;border:1px solid var(--borde);' +
+                     'border-radius:8px;background:#fff;display:block;' +
+                     'height:120px;margin-bottom:var(--esp-2)"></iframe>';
+  }
+
+  /* Sin parte HTML: el texto plano de siempre. white-space:pre-wrap
+     conserva los saltos de línea sin convertirlos a <br> (o sea, sin
+     meter HTML), y overflow-wrap:anywhere corta las URLs largas. */
+  return '<div class="tarjeta" style="white-space:pre-wrap;line-height:1.6;' +
+              'overflow-wrap:anywhere;margin-bottom:var(--esp-2)">' +
+           seguro(m.texto || '(sin contenido)') +
+         '</div>';
+}
+
+/**
+ * Le pone el contenido al <iframe sandbox> del correo y ajusta su alto
+ * al contenido real, una vez que termina de cargar.
+ *
+ * POR QUÉ ES SEGURO SIN "SANITIZAR" EL HTML A MANO
+ * El sandbox NO lleva allow-scripts: ni un <script>, ni un onclick="",
+ * ni nada del correo puede ejecutar código, sea lo que sea que traiga.
+ * allow-same-origin solo deja que ESTA página mida el alto real del
+ * contenido para no dejar un hueco en blanco ni cortar el correo — no
+ * le da al correo ningún permiso nuevo, porque adentro nada corre.
+ *
+ * POR QUÉ NO SE PUEDEN TOCAR LOS ENLACES
+ * Sin allow-popups, tocar un enlace del correo no hace nada. Es
+ * a propósito: dejar que un correo ajeno abra pestañas nuevas abre la
+ * puerta a que esa pestaña controle a esta (si al enlace le faltara
+ * rel="noopener", que es justamente lo que no se puede garantizar en
+ * HTML que no escribimos nosotros). Mejor un enlace inerte que uno que
+ * podría redirigir el panel a otro lado.
+ *
+ * @param {string} html
+ * @param {Element} cuerpo
+ * @returns {void}
+ */
+function engancharCorreoHtml(html, cuerpo) {
+  const marco = buscar('#correo-html', cuerpo);
+  if (!marco) return;
+
+  marco.addEventListener('load', () => {
+    try {
+      const alto = marco.contentDocument.documentElement.scrollHeight;
+      marco.style.height = Math.min(Math.max(alto + 16, 120), 2400) + 'px';
+    } catch (error) {
+      // Si por lo que sea no se pudo medir, se deja un alto fijo
+      // razonable con scroll propio en vez de quedar en blanco.
+      marco.style.height = '480px';
+      marco.style.overflowY = 'auto';
+    }
+  });
+
+  marco.srcdoc =
+    '<!DOCTYPE html><html><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<style>' +
+      'body{margin:0;padding:12px;font-family:-apple-system,"Segoe UI",' +
+        'Roboto,Arial,sans-serif;color:#111;background:#fff;' +
+        'word-wrap:break-word;}' +
+      'img{max-width:100%;height:auto;}' +
+      'table{max-width:100%;}' +
+    '</style></head><body>' +
+    html +
+    '</body></html>';
+}
+
+/**
  * Abre un mensaje y ofrece responderlo.
  *
  * @param {number} uid
@@ -381,13 +466,7 @@ async function abrirCorreo(uid) {
       '<span class="detalle__valor">' + seguro(m.fecha) + '</span>' +
     '</div>' +
 
-    /* white-space:pre-wrap conserva los saltos de línea del correo sin
-       convertirlos a <br>, o sea sin meter HTML. Y overflow-wrap:anywhere
-       corta las URLs largas, que si no desbordan la pantalla a lo ancho. */
-    '<div class="tarjeta" style="white-space:pre-wrap;line-height:1.6;' +
-         'overflow-wrap:anywhere">' +
-      seguro(m.texto || '(sin contenido)') +
-    '</div>' +
+    cuerpoDeCorreo(m) +
 
     pintarAdjuntos(m) +
 
@@ -397,6 +476,8 @@ async function abrirCorreo(uid) {
         ? '<button class="boton boton--principal" id="responder">Responder</button>'
         : '') +
     '</div>';
+
+  if (m.html) engancharCorreoHtml(m.html, cuerpo);
 
   const responder = buscar('#responder', cuerpo);
   if (responder) {
