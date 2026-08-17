@@ -542,9 +542,14 @@
   color: var(--texto-tenue);
 }
 
+/* "Cuesta" y "De tu bolsillo" son las dos cifras más importantes de
+   Presupuesto — se tratan como instrumento financiero de verdad
+   (brief), al mismo nivel que las cifras de Hoy, no como un dato
+   secundario de 21px. */
 .dinero-resumen__cifra {
-  font-size: 21px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   color: var(--texto);
   line-height: 1.2;
@@ -553,23 +558,6 @@
 /* La cifra "de tu bolsillo" va en oro porque es la que de verdad
    importa cuando se decide si algo se puede o no. */
 .dinero-resumen__cifra--propio { color: var(--oro); }
-
-
-/* ─── CUÁNTO FALTA (Fase 1 del rediseño, B1) ───────────────────────── */
-/* Mismo texto y mismos umbrales que usa Resumen (textoDeCuentaAtras(),
-   07-vista-resumen.js) — acá solo cambia dónde vive. */
-
-.hoy__cuenta-atras {
-  margin: 0 0 var(--esp-2);
-  font-size: 14px;
-  color: var(--texto-suave);
-}
-/* El día de la fiesta, un acento sutil en vez de un texto más (B3):
-   nada que grite, solo que se note que hoy es distinto. */
-.hoy__cuenta-atras--hoy {
-  color: var(--oro);
-  font-weight: 600;
-}
 
 
 /* ─── LA TARJETA DE ESTADO DE HOY (Fase 2 del rediseño) ────────────── */
@@ -599,9 +587,14 @@
   padding: 4px;
 }
 
+/* Neutro (var(--texto)), no dorado a propósito: son cifras
+   operativas del día (quién llegó, cuántas mesas), no elementos de
+   prestigio — el oro se reserva para eso, no para cada número grande
+   del panel. */
 .hoy-estado__numero {
   font-size: 34px;
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   color: var(--texto);
   line-height: 1.1;
@@ -655,9 +648,15 @@
   color: var(--texto);
 }
 
+/* Mismo criterio que .tarjeta-dato__numero (rediseño Lucila): números
+   de instrumento, no de título. 30px y no 34px porque acá van DOS por
+   renglón (grilla de 2 columnas) — a 34px un número de más de dos
+   cifras junto a su etiqueta empieza a apretarse. */
 .rejilla-ejecutiva__numero {
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--oro);
   font-variant-numeric: tabular-nums;
   line-height: 1.15;
 }
