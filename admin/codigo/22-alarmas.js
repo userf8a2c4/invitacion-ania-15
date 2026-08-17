@@ -76,9 +76,53 @@ async function cargarAlarmas(donde) {
   buscarTodos('[data-alarma]', donde).forEach(boton => {
     boton.addEventListener('click', () => {
       const a = alarmas.find(x => String(x.id) === boton.dataset.alarma);
-      formularioDeAlarma(a, () => cargarAlarmas(donde));
+      abrirDetalleDeAlarma(a, () => cargarAlarmas(donde));
     });
   });
+}
+
+/**
+ * Ficha de solo lectura de una alarma, antes de editar — mismo patrón
+ * que las de Presupuesto: tocar la fila nunca abre directo un
+ * formulario editable. Posponer/Apagar/Borrar siguen viviendo adentro
+ * de formularioDeAlarma(), no hace falta repetirlos acá.
+ *
+ * @param {Object} alarma
+ * @param {Function} despues - Para refrescar la lista al volver.
+ * @returns {void}
+ */
+function abrirDetalleDeAlarma(alarma, despues) {
+  const repeticiones = {
+    una_vez: 'Una sola vez', diaria: 'Todos los días',
+    semanal: 'Cada semana', mensual: 'Cada mes',
+  };
+  const avisos = [
+    Number(alarma.por_correo) === 1 ? 'correo' : '',
+    Number(alarma.por_push) === 1 ? 'notificación' : '',
+  ].filter(Boolean).join(' y ');
+
+  const detalle = [
+    ['Cuándo', comoFecha(String(alarma.cuando).slice(0, 10)) +
+      ' a las ' + seguro(String(alarma.cuando).slice(11, 16))],
+    ['Repetir', repeticiones[alarma.repetir] || 'Una sola vez'],
+    ['Estado', Number(alarma.activa) === 1
+      ? (alarma.sonada_en ? 'Ya sonó' : 'Encendida') : 'Apagada'],
+    ['Avisa por', avisos || 'Nada (ni correo ni notificación)'],
+    ['Detalle', alarma.detalle || '—'],
+  ].map(r =>
+    '<span class="detalle__rotulo">' + seguro(r[0]) + '</span>' +
+    '<span class="detalle__valor">' + seguro(r[1]) + '</span>'
+  ).join('');
+
+  const cuerpo = abrirHoja(alarma.titulo,
+    '<div class="detalle">' + detalle + '</div>' +
+    '<div class="acciones" style="margin-top:var(--esp-3)">' +
+      '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
+    '</div>'
+  );
+
+  buscar('#detalle-editar', cuerpo).addEventListener('click',
+    () => formularioDeAlarma(alarma, despues));
 }
 
 /**

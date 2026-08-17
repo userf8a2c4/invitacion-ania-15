@@ -588,10 +588,41 @@ function pintarCategorias(cuerpo) {
   buscarTodos('[data-categoria]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
       const cat = DINERO.categorias.find(c => String(c.id) === boton.dataset.categoria);
-      formularioCategoria(cat);
+      abrirDetalleDeCategoria(cat);
     });
   });
   buscar('#agregar', cuerpo).addEventListener('click', () => formularioCategoria());
+}
+
+/**
+ * Ficha de solo lectura de una categoría, antes de editar — mismo
+ * patrón que abrirDetalleDeProveedor()/abrirDetalleDePadrino(): tocar
+ * una fila de la lista nunca abre directo un formulario editable, para
+ * que no haya cambios por error de dedo. El botón "Editar" abre
+ * formularioCategoria(), que ya trae su propio "Borrar" adentro (ver
+ * pieDeFormulario), así que acá no hace falta repetirlo.
+ *
+ * @param {Object} categoria
+ * @returns {void}
+ */
+function abrirDetalleDeCategoria(categoria) {
+  const detalle = [
+    ['Techo', categoria.techo > 0 ? comoDinero(categoria.techo, false) : 'Sin techo definido'],
+    ['Planeado', comoDinero(categoria.planeado, false)],
+    ['Gastado', comoDinero(categoria.gastado, false)],
+  ].map(r =>
+    '<span class="detalle__rotulo">' + seguro(r[0]) + '</span>' +
+    '<span class="detalle__valor">' + seguro(r[1]) + '</span>'
+  ).join('');
+
+  const cuerpo = abrirHoja(categoria.nombre,
+    '<div class="detalle">' + detalle + '</div>' +
+    '<div class="acciones" style="margin-top:var(--esp-3)">' +
+      '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
+    '</div>'
+  );
+
+  buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioCategoria(categoria));
 }
 
 /**
@@ -649,12 +680,43 @@ function pintarGastos(cuerpo) {
 
     buscarTodos('[data-gasto]', cuerpo).forEach(boton => {
       boton.addEventListener('click', () => {
-        formularioGasto(DINERO.gastos.find(g => String(g.id) === boton.dataset.gasto));
+        abrirDetalleDeGasto(DINERO.gastos.find(g => String(g.id) === boton.dataset.gasto));
       });
     });
   }
 
   buscar('#agregar', cuerpo).addEventListener('click', () => formularioGasto());
+}
+
+/**
+ * Ficha de solo lectura de un gasto, antes de editar.
+ *
+ * @param {Object} gasto
+ * @returns {void}
+ */
+function abrirDetalleDeGasto(gasto) {
+  const detalle = [
+    ['Categoría', gasto.categoria_nombre || '—'],
+    ['Proveedor', gasto.proveedor_nombre || '—'],
+    ['Lo cubre', gasto.padrino_nombre
+      ? gasto.padrino_nombre + (gasto.padrino_estado === 'entregado' ? ' (ya entregó)' : ' (todavía no entrega)')
+      : 'Tu bolsillo'],
+    ['Presupuestado', comoDinero(gasto.presupuestado, false)],
+    ['Costo real', Number(gasto.monto_real) > 0 ? comoDinero(gasto.monto_real, false) : 'Todavía sin cargar'],
+    ['Notas', gasto.notas || '—'],
+  ].map(r =>
+    '<span class="detalle__rotulo">' + seguro(r[0]) + '</span>' +
+    '<span class="detalle__valor">' + seguro(r[1]) + '</span>'
+  ).join('');
+
+  const cuerpo = abrirHoja(gasto.concepto,
+    '<div class="detalle">' + detalle + '</div>' +
+    '<div class="acciones" style="margin-top:var(--esp-3)">' +
+      '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
+    '</div>'
+  );
+
+  buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioGasto(gasto));
 }
 
 /**
@@ -726,11 +788,47 @@ function pintarPagos(cuerpo) {
 
   buscarTodos('[data-pago]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
-      formularioPago(DINERO.pagos.find(p => String(p.id) === boton.dataset.pago));
+      abrirDetalleDePago(DINERO.pagos.find(p => String(p.id) === boton.dataset.pago));
     });
   });
 
   buscar('#agregar', cuerpo).addEventListener('click', () => formularioPago());
+}
+
+/**
+ * Ficha de solo lectura de un pago, antes de editar. La casilla de
+ * "marcar pagado" en la lista sigue siendo de un toque, a propósito —
+ * es una acción chica y reversible; esto es para no editar el monto o
+ * la fecha por error.
+ *
+ * @param {Object} pago
+ * @returns {void}
+ */
+function abrirDetalleDePago(pago) {
+  const pagado = pago.estado === 'pagado';
+
+  const detalle = [
+    ['Parte de', pago.gasto_concepto || 'Suelto (no pertenece a ningún gasto)'],
+    ['Monto', comoDinero(pago.monto, false)],
+    ['Estado', pagado ? 'Pagado' : 'Pendiente'],
+    [pagado ? 'Pagado el' : 'Vence el',
+      (pagado ? pago.fecha_pagado : pago.fecha_limite)
+        ? comoFecha(pagado ? pago.fecha_pagado : pago.fecha_limite) : '—'],
+    ['Método', pago.metodo || '—'],
+    ['Notas', pago.notas || '—'],
+  ].map(r =>
+    '<span class="detalle__rotulo">' + seguro(r[0]) + '</span>' +
+    '<span class="detalle__valor">' + seguro(r[1]) + '</span>'
+  ).join('');
+
+  const cuerpo = abrirHoja(pago.concepto || pago.gasto_concepto || 'Pago',
+    '<div class="detalle">' + detalle + '</div>' +
+    '<div class="acciones" style="margin-top:var(--esp-3)">' +
+      '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
+    '</div>'
+  );
+
+  buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioPago(pago));
 }
 
 /**
@@ -1047,11 +1145,45 @@ function pintarCotizaciones(cuerpo) {
 
   buscarTodos('[data-cotizacion]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
-      formularioCotizacion(
+      abrirDetalleDeCotizacion(
         DINERO.cotizaciones.find(c => String(c.id) === boton.dataset.cotizacion));
     });
   });
   buscar('#agregar', cuerpo).addEventListener('click', () => formularioCotizacion());
+}
+
+/**
+ * Ficha de solo lectura de una cotización, antes de editar.
+ *
+ * @param {Object} cotizacion
+ * @returns {void}
+ */
+function abrirDetalleDeCotizacion(cotizacion) {
+  const esPorPersona = cotizacion.tipo_precio === 'por_persona';
+  const precio = esPorPersona
+    ? comoDinero(cotizacion.precio_pp, false) + ' / persona'
+    : comoDinero(cotizacion.monto, false);
+
+  const detalle = [
+    ['Servicio', cotizacion.servicio],
+    ['Precio', precio],
+    ['Vale hasta', cotizacion.vigencia ? comoFecha(cotizacion.vigencia) : '—'],
+    ['Teléfono', cotizacion.telefono || '—'],
+    ['Elegida', Number(cotizacion.elegida) === 1 ? 'Sí' : 'No'],
+  ].map(r =>
+    '<span class="detalle__rotulo">' + seguro(r[0]) + '</span>' +
+    '<span class="detalle__valor">' + seguro(r[1]) + '</span>'
+  ).join('');
+
+  const cuerpo = abrirHoja(cotizacion.proveedor,
+    '<div class="detalle">' + detalle + '</div>' +
+    vinetasDeQueIncluye(cotizacion.detalle_items) +
+    '<div class="acciones" style="margin-top:var(--esp-3)">' +
+      '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
+    '</div>'
+  );
+
+  buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioCotizacion(cotizacion));
 }
 
 

@@ -35,6 +35,39 @@
 require_once __DIR__ . '/bd.php';
 require_once __DIR__ . '/responder.php';
 
+/**
+ * Las cinco preguntas de seguridad entre las que se puede elegir.
+ *
+ * Es una lista FIJA a propósito, no texto libre: una pregunta inventada
+ * por la propia persona tiende a ser débil ("¿cuál es mi color favorito?"
+ * con la respuesta ya puesta en la foto de perfil). Estas cinco son
+ * clásicas porque la respuesta no cambia con el tiempo y no es algo que
+ * cualquiera que te conozca un poco adivine a la primera.
+ *
+ * Se usa acá (sesion.php, para guardar/verificar) y se repite tal cual en
+ * codigo/04-sesion.js y codigo/20-arranque.js (para mostrarla en el
+ * formulario) — si se cambia una lista hay que cambiar la otra.
+ */
+const PREGUNTAS_DE_SEGURIDAD = [
+    '¿Cuál fue tu primer trabajo?',
+    '¿Cómo se llamaba tu primera mascota?',
+    '¿En qué ciudad naciste?',
+    '¿Cuál era tu comida favorita de niño?',
+    '¿Cuál era tu apodo de la infancia?',
+];
+
+/**
+ * Deja una respuesta de seguridad lista para comparar: sin espacios de
+ * más ni diferencias de mayúsculas, para que "Summer", "summer " y
+ * "SUMMER" cuenten como la misma respuesta.
+ *
+ * @param string $respuesta
+ * @return string
+ */
+function normalizarRespuestaSeguridad($respuesta) {
+    return mb_strtolower(trim(preg_replace('/\s+/', ' ', (string) $respuesta)));
+}
+
 /** Cuántos días vive un token antes de pedir contraseña otra vez. */
 const DIAS_DE_SESION = 90;
 
@@ -203,7 +236,8 @@ function usuarioActual() {
        eso se arman a mano según lo que columnasDe() encuentre. */
     $colsUsuarios = columnasDe('usuarios');
     $colsEspeciales = array_values(array_filter(
-        ['perfil', 'puede_escanear', 'puede_ver_dinero', 'puede_borrar', 'puede_crear_cuentas'],
+        ['perfil', 'puede_escanear', 'puede_ver_dinero', 'puede_borrar', 'puede_crear_cuentas',
+         'pregunta_seguridad'],
         function ($c) use ($colsUsuarios) { return in_array($c, $colsUsuarios, true); }
     ));
     $selectEspeciales = $colsEspeciales

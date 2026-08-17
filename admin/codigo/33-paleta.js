@@ -47,15 +47,23 @@ const PALETA_ORIGINAL = { principal: '#6B3FA0', fondo: '#08050C', alerta: '#FF4D
    look. Estas son cinco combinaciones ya probadas; abajo, para quien
    quiera, están los selectores sueltos.
 
-   "Dorado y café" era la paleta original del panel, antes de que el
-   morado pasara a ser el color de fábrica. Queda acá para quien la
-   prefiera — no se perdió, solo dejó de ser la que trae por defecto. */
+   REDISEÑO LUCILA (ago-2026): antes había presets de otros colores
+   (dorado y café, rosa, vino, verde) sueltos entre las opciones —
+   quedaban al mismo nivel que el morado, como si fueran alternativas
+   equivalentes. El morado (y el negro de fondo) es la identidad fija
+   de la app, no una opción más: por eso las cinco combinaciones de acá
+   son todas variantes DENTRO de la familia del morado —más oscuro, más
+   claro, más frío, más cálido— nunca un color distinto. Quien quiera
+   otro color todavía puede usar los selectores sueltos de abajo, pero
+   ya no se lo ofrece como un look armado de igual peso. El oro de
+   prestigio (--acento-victoriano, estilos/01-fundamentos.css) ni
+   siquiera está acá: eso no es parte de lo que se elige. */
 const PALETAS_LISTAS = [
-  { nombre: 'Morado (original)',        principal: '#6B3FA0', fondo: '#08050C', alerta: '#FF4D6A' },
-  { nombre: 'Dorado y café (clásico)',  principal: '#d4a843', fondo: '#140a04', alerta: '#cf5b52' },
-  { nombre: 'Rosa y crema',             principal: '#c98a9c', fondo: '#2b1418', alerta: '#cf5b52' },
-  { nombre: 'Vino y dorado',            principal: '#b3893f', fondo: '#2a0e14', alerta: '#d97b3c' },
-  { nombre: 'Verde y arena',            principal: '#8fa565', fondo: '#12160d', alerta: '#c4633c' },
+  { nombre: 'Morado (original)',    principal: '#6B3FA0', fondo: '#08050C', alerta: '#FF4D6A' },
+  { nombre: 'Medianoche',           principal: '#5B2E8C', fondo: '#050308', alerta: '#FF4D6A' },
+  { nombre: 'Violeta claro',        principal: '#8B5FBF', fondo: '#0C0812', alerta: '#FF4D6A' },
+  { nombre: 'Ciruela',              principal: '#7A3F6B', fondo: '#0A0610', alerta: '#FF4D6A' },
+  { nombre: 'Lavanda nocturna',     principal: '#9B7FFF', fondo: '#0D0A14', alerta: '#FF4D6A' },
 ];
 
 

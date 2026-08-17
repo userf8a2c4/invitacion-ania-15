@@ -368,17 +368,37 @@ function pintarCargando(donde, cuantos) {
   donde.innerHTML = '<div class="esqueleto"></div>'.repeat(n);
 }
 
+/** Las dos siluetas disponibles para pintarVacio() — nada más que
+    estas dos, a propósito: el brief pide guiños "con extrema
+    moderación", no un set de iconos por sección. Ambas son una sola
+    silueta rellena (currentColor), sin detalle interno: a la opacidad
+    bajísima con la que se muestran, cualquier detalle se pierde y solo
+    ensucia el trazo. */
+const GUINOS_DE_VACIO = {
+  gato: '<svg viewBox="0 0 100 100" class="vacio__guino" aria-hidden="true">' +
+          '<path d="M50 90c-16 0-29-11-29-27 0-8 3-15 3-15l-9-19c-1-2 1-4 3-3l16 9c5-2 10-3 16-3s11 1 16 3l16-9c2-1 4 1 3 3l-9 19s3 7 3 15c0 16-13 27-29 27z"/>' +
+        '</svg>',
+  murcielago: '<svg viewBox="0 0 100 60" class="vacio__guino" aria-hidden="true">' +
+          '<path d="M50 30c-6-10-20-22-38-22-4 0-6 3-3 6 8 8 14 14 16 18-6 0-16 4-20 10-2 3 0 5 3 4 8-3 15-4 20-3-3 4-8 12-8 18 0 3 3 4 5 2 6-6 12-14 15-19h20c3 5 9 13 15 19 2 2 5 1 5-2 0-6-5-14-8-18 5-1 12 0 20 3 3 1 5-1 3-4-4-6-14-10-20-10 2-4 8-10 16-18 3-3 1-6-3-6-18 0-32 12-38 22z"/>' +
+        '</svg>',
+};
+
 /**
  * Pinta el estado de lista vacía.
  *
  * @param {Element} donde
  * @param {string} titulo - 'Todavía no hay gastos'
  * @param {string} texto - Qué hacer para que deje de estar vacío.
+ * @param {string} [guino] - 'gato' | 'murcielago'. Opcional a propósito:
+ *   la mayoría de los vacíos del panel siguen sin ninguno — es un
+ *   guiño puntual, no algo que aparezca en todos lados (ver el brief:
+ *   "con extrema moderación").
  * @returns {void}
  */
-function pintarVacio(donde, titulo, texto) {
+function pintarVacio(donde, titulo, texto, guino) {
   donde.innerHTML =
     '<div class="vacio">' +
+      (guino && GUINOS_DE_VACIO[guino] ? GUINOS_DE_VACIO[guino] : '') +
       '<p class="vacio__titulo">' + seguro(titulo) + '</p>' +
       '<p class="vacio__texto">' + seguro(texto) + '</p>' +
     '</div>';
@@ -564,7 +584,7 @@ function pintarIndice(donde, grupos, alElegir) {
                entender antes de tocarlo. */
             '<svg viewBox="0 0 24 24" class="indice__flecha" aria-hidden="true">' +
               '<path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" ' +
-                    'stroke-width="2" stroke-linecap="round" ' +
+                    'stroke-width="1.5" stroke-linecap="round" ' +
                     'stroke-linejoin="round"/>' +
             '</svg>' +
           '</button>';
@@ -592,7 +612,7 @@ function barraDeVuelta(titulo, descripcion) {
       '<button class="volver__boton" id="indice-volver">' +
         '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
           '<path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" ' +
-                'stroke-width="2" stroke-linecap="round" ' +
+                'stroke-width="1.5" stroke-linecap="round" ' +
                 'stroke-linejoin="round"/>' +
         '</svg>' +
         '<span>' + seguro(titulo) + '</span>' +

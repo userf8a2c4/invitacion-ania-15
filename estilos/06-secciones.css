@@ -360,6 +360,16 @@
 }
 #pie-de-pagina .rosa { color: var(--color-sangre); }
 
+/* Firma discreta debajo de la fecha: mismo tono apagado, letra más chica
+   que el resto del pie para que no compita con el nombre de Ania. */
+.pie__firma {
+  display: block;
+  margin-top: .6rem;
+  font-size: .62rem;
+  letter-spacing: .15em;
+  opacity: .55;
+}
+
 /* LA ROSA SECRETA DEL PIE.
    Es el acceso a la hoja de confirmaciones (ver 15-registro-de-
    confirmaciones.js): parece un adorno del pie —el invitado no la

@@ -353,8 +353,8 @@ const SECCIONES = {
   foraneos: {
     rotulo: 'Foráneos',
     titulo: 'Invitados de fuera',
-    vacio: ['Todavía no hay foráneos',
-            'Quién viene de otra ciudad, dónde se queda y cómo llega.'],
+    vacio: ['Todavía no hay nadie de fuera',
+            'Quién viene de otra ciudad, dónde se queda y cómo llega — se va a ver acá.'],
     campos: [
       { id: 'nombre',     rotulo: 'Nombre' },
       { id: 'ciudad',     rotulo: 'De dónde viene' },
@@ -822,7 +822,10 @@ function pintarSeccionGenerica(cuerpo, clave) {
 
   if (!registros.length) {
     cuerpo.innerHTML = '';
-    pintarVacio(cuerpo, config.vacio[0], config.vacio[1]);
+    // El murciélago es el guiño de Foráneos, y de nadie más — el brief
+    // lo sugiere puntual para esa sección exacta.
+    pintarVacio(cuerpo, config.vacio[0], config.vacio[1],
+                clave === 'foraneos' ? 'murcielago' : undefined);
     cuerpo.insertAdjacentHTML('beforeend', botonNuevo);
     buscar('#ev-nuevo', cuerpo).addEventListener('click',
       () => formularioEvento(clave));

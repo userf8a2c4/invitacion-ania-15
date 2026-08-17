@@ -355,8 +355,8 @@ function pintarListaDeInvitados() {
 
   if (!visibles.length) {
     if (!INVITADOS.length) {
-      pintarVacio(lista, 'Todavía no hay confirmaciones',
-        'Van a aparecer aquí en cuanto alguien responda la invitación.');
+      pintarVacio(lista, 'Todavía no hay nadie confirmado',
+        'Van a aparecer aquí, uno a uno, en cuanto respondan la invitación.');
     } else {
       pintarVacio(lista, 'Nada coincide',
         'Prueba con otra búsqueda o cambia el filtro.');

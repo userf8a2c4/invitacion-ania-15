@@ -119,16 +119,16 @@ function botonesDeArchivo(opciones) {
       '<button type="button" class="boton" style="flex:1" data-subir="archivo">' +
         '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
           '<path d="M12 16V4M12 4l-4 4M12 4l4 4" fill="none" stroke="currentColor" ' +
-                'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+                'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>' +
           '<path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" fill="none" ' +
-                'stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
+                'stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
         '</svg>Subir' +
       '</button>' +
       '<button type="button" class="boton" style="flex:1" data-subir="camara">' +
         '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
           '<path d="M3 8a2 2 0 0 1 2-2h2l1.4-2h7.2L17 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" ' +
-                'fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>' +
-          '<circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="2"/>' +
+                'fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>' +
+          '<circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="1.5"/>' +
         '</svg>Tomar foto' +
       '</button>' +
 
@@ -137,7 +137,7 @@ function botonesDeArchivo(opciones) {
       '<button type="button" class="boton" style="flex:1" data-subir="dibujo">' +
         '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
           '<path d="M4 20l4-1 10-10a2.1 2.1 0 0 0-3-3L5 16z" fill="none" ' +
-                'stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>' +
+                'stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>' +
         '</svg>A mano' +
       '</button>' +
     '</div>';
@@ -336,7 +336,7 @@ async function pintarArchivosDe(donde, tipo, id) {
           '<button class="boton-icono" data-borrar-archivo="' + seguro(a.id) + '" ' +
                   'aria-label="Borrar archivo">' +
             '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
-              '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" ' +
+              '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.5" ' +
                     'stroke-linecap="round"/>' +
             '</svg>' +
           '</button>' +
