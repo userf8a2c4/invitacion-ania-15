@@ -93,6 +93,14 @@
     <div class="encabezado__lado">
       <h1 id="titulo-vista" class="encabezado__titulo">Resumen</h1>
       <p id="subtitulo-vista" class="encabezado__subtitulo"></p>
+      <!-- El único contador persistente del panel (brief Lucila): vive
+           acá, aparte de #subtitulo-vista, porque cada pantalla pisa el
+           subtítulo con lo suyo — este no se pisa nunca, se calcula una
+           vez al arrancar (ver actualizarContadorDeDias(), 05-navegacion.js)
+           y queda quieto sin importar a qué pestaña se navegue. Empieza
+           oculto: si CONFIGURACION.fiesta todavía no cargó, mejor nada
+           que un "NaN días". -->
+      <p id="contador-dias" class="encabezado__contador oculto"></p>
     </div>
     <!-- Los dos botones van juntos en una caja porque el encabezado usa
          space-between: sueltos, la lupa se iría al medio de la pantalla. -->

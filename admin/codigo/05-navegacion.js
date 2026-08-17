@@ -184,6 +184,27 @@ function ponerTitulo(titulo, subtitulo) {
   bajo.classList.toggle('oculto', !subtitulo);
 }
 
+/**
+ * Pone el contador de días en el encabezado — el único detalle en oro
+ * persistente que pide el brief de Lucila, aparte del subtítulo de
+ * cada pantalla (que cada una pisa con lo suyo). Se calcula una sola
+ * vez con diasParaElEvento() (38-metricas.js), que ya lee
+ * CONFIGURACION.fiesta sin pedirle nada al servidor — no hace falta
+ * esperar a que Resumen o Hoy carguen sus datos.
+ *
+ * @returns {void}
+ */
+function actualizarContadorDeDias() {
+  const nodo = buscar('#contador-dias');
+  if (!nodo) return;
+
+  const dias = diasParaElEvento();
+  if (dias === null || dias === undefined) { nodo.classList.add('oculto'); return; }
+
+  nodo.textContent = textoDeCuentaAtras(dias);
+  nodo.classList.remove('oculto');
+}
+
 
 /* ─── ENGANCHAR LOS BOTONES ────────────────────────────────────────── */
 
