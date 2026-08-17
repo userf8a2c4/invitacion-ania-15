@@ -172,6 +172,22 @@ case 'todo':
          FROM padrinos WHERE estado <> 'entregado' AND tipo_aporte = 'dinero'"
     );
 
+    /* `de_padrinos` (arriba, en $totales) suma TODO gasto con padrino
+       asignado, sin importar si ese padrino ya entregó o nomás lo
+       habló. Eso alcanza para el desglose de categorías, pero para
+       decir "cuánto sale de tu bolsillo DE VERDAD" hay que ser más
+       estrictos: un padrino que "lo habló" no es plata seguro (principio
+       del módulo). Acá se suma solo lo de padrinos con estado
+       'entregado' — lo único que ya está, de verdad, cubierto. */
+    $deEntregado = consultarUno(
+        "SELECT COALESCE(SUM(g.monto_real), 0) AS monto
+         FROM gastos g JOIN padrinos pa ON pa.id = g.padrino_id
+         WHERE pa.estado = 'entregado'" .
+        ($tienePresupuestos ? ' AND g.presupuesto_id = :activo' : ''),
+        $tienePresupuestos ? [':activo' => $activo] : []
+    );
+    $dePadrinosEntregado = (float) $deEntregado['monto'];
+
     $presupuestos = $tienePresupuestos
         ? consultarTodo('SELECT * FROM presupuestos ORDER BY creado_en')
         : [];
@@ -201,6 +217,10 @@ case 'todo':
             'costo'         => (float) $totales['costo'],
             'propio'        => (float) $totales['propio'],
             'de_padrinos'   => (float) $totales['de_padrinos'],
+            // Ver comentario arriba: solo padrinos con estado 'entregado'.
+            'de_padrinos_entregado' => $dePadrinosEntregado,
+            'bolsillo_si_nadie_mas_entrega' =>
+                round(((float) $totales['costo']) - $dePadrinosEntregado, 2),
             'por_pagar'     => (float) $porPagar['monto'],
             'por_pagar_cuantos' => (int) $porPagar['cuantos'],
             'pagado'        => (float) $pagado['monto'],

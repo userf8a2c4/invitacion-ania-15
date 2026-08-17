@@ -530,6 +530,16 @@ const CONFIGURACION = {
         'amarillo para que no se te olvide.',
     },
 
+    'dinero.pipeline-padrinos': {
+      titulo: 'Cuánto va en cada etapa',
+      texto:
+        'Lo mismo que "de tu bolsillo", pero desglosado por padrino: ' +
+        'cuánto se habló, cuánto ya se confirmó y cuánto YA entregó.\n\n' +
+        'Solo lo de "Ya entregó" cuenta como plata segura para calcular ' +
+        'tu bolsillo real. Lo demás es una promesa, y las promesas a ' +
+        'veces cambian.',
+    },
+
     'mesas.fijar': {
       titulo: 'Fijar una mesa',
       texto:
