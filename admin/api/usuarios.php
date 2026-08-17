@@ -15,12 +15,13 @@
    cuenta, esa puerta se cierra sola para siempre.
 
    QUÉ SE LE PUEDE PEDIR
-     POST ?accion=primero  crea la primera cuenta (solo si no hay ninguna)
-     GET  ?accion=listar   lista las cuentas
-     POST ?accion=crear    agrega una cuenta
-     POST ?accion=editar   cambia nombre, correo, rol o si está activa
-     POST ?accion=clave    le pone contraseña nueva a otra cuenta
-     POST ?accion=borrar   elimina una cuenta
+     POST ?accion=primero     crea la primera cuenta (solo si no hay ninguna)
+     POST ?accion=emergencia  pone contraseña nueva sabiendo la llave del .env
+     GET  ?accion=listar      lista las cuentas
+     POST ?accion=crear       agrega una cuenta
+     POST ?accion=editar      cambia nombre, correo, rol o si está activa
+     POST ?accion=clave       le pone contraseña nueva a otra cuenta
+     POST ?accion=borrar      elimina una cuenta
    ══════════════════════════════════════════════════════════════════════ */
 
 require_once __DIR__ . '/_lib/bd.php';
@@ -72,6 +73,56 @@ if ($accion === 'primero') {
         'mensaje' => 'Cuenta creada. Ya puedes entrar al panel.',
         'id'      => $id,
     ], 201);
+}
+
+/* ─── EMERGENCIA: OLVIDÉ MI CONTRASEÑA Y NO TENGO PREGUNTA CONFIGURADA ── */
+
+/* La misma idea que 'primero': corre SIN sesión porque es justo para
+ * cuando no se puede conseguir una. La diferencia es que 'primero' solo
+ * funciona si no hay NINGUNA cuenta; esta funciona siempre, para
+ * cualquier cuenta que ya exista — la única llave es la del .env del
+ * servidor (LLAVE_DIAGNOSTICO), la misma que abre instalar.php y
+ * diagnostico.php.
+ *
+ * QUIÉN LA PUEDE USAR
+ * Solo quien tiene acceso al .env del servidor (Carlos, por hPanel o por
+ * el repositorio). No es un mecanismo para que Lucila se autogestione un
+ * olvido del día a día — para eso está la pregunta de seguridad de
+ * sesion.php ('recuperar'). Esta es la salida de emergencia de una sola
+ * vez para cuando la pregunta todavía no se configuró y no hay forma de
+ * entrar para configurarla.
+ *
+ * ⚠️ BORRAR ESTA ACCIÓN (o todo usuarios.php si hace falta) no es
+ * necesario: sigue exigiendo la llave del .env, igual que instalar.php y
+ * diagnostico.php, que también quedan en el servidor a propósito. */
+if ($accion === 'emergencia') {
+    exigirMetodo('POST');
+    $datos = cuerpoJson();
+
+    if (!llaveDeArranqueCorrecta($datos['llave'] ?? '')) {
+        responderMal('Llave incorrecta.', 403);
+    }
+
+    $correo = mb_strtolower(campoTexto($datos, 'correo', 190));
+    $nueva  = (string) ($datos['nueva'] ?? '');
+
+    $usuario = consultarUno('SELECT id, correo FROM usuarios WHERE correo = :c', [':c' => $correo]);
+    if (!$usuario) {
+        // Acá SÍ se puede decir que el correo no existe: quien llama ya
+        // demostró tener la llave del servidor, no es alguien externo
+        // probando a ver qué correos tienen cuenta.
+        responderMal('No hay ninguna cuenta con ese correo.', 404);
+    }
+
+    $problema = problemaDeContrasena($nueva);
+    if ($problema) responderMal($problema, 400);
+
+    actualizar('usuarios', $usuario['id'], ['password_hash' => hashearContrasena($nueva)]);
+    // Por si esa cuenta tenía sesiones abiertas en otro teléfono con la
+    // contraseña vieja.
+    cerrarTodasLasSesiones($usuario['id']);
+
+    responderBien(['mensaje' => 'Contraseña cambiada. Ya puedes entrar con la nueva.']);
 }
 
 /* ─── DE ACÁ EN ADELANTE, SOLO ADMINISTRADORES ────────────────────────── */

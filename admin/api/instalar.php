@@ -177,11 +177,18 @@ $agregarColumna('llegadas', 'intentos', 'INT NOT NULL DEFAULT 0');
 $agregarColumna('categorias_gasto', 'presupuesto_id', 'INT NOT NULL DEFAULT 1');
 $agregarColumna('gastos', 'presupuesto_id', 'INT NOT NULL DEFAULT 1');
 
+/* La pregunta de seguridad de "olvidé mi contraseña" (ver sesion.php).
+ * Igual que la contraseña, la respuesta NUNCA se guarda en claro — solo
+ * su hash. La pregunta en sí sí queda en claro: hace falta mostrarla de
+ * vuelta cuando alguien la esté configurando desde Ajustes. */
+$agregarColumna('usuarios', 'pregunta_seguridad', 'VARCHAR(200) NULL DEFAULT NULL');
+$agregarColumna('usuarios', 'respuesta_seguridad_hash', 'VARCHAR(255) NULL DEFAULT NULL');
+
 
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 
 $tablasEsperadas = [
-    'usuarios', 'sesiones', 'intentos_login', 'bitacora', 'notas', 'archivos',
+    'usuarios', 'sesiones', 'recuperaciones_clave', 'intentos_login', 'bitacora', 'notas', 'archivos',
     'ajustes', 'alarmas', 'suscripciones_push', 'categorias_gasto', 'padrinos',
     'proveedores',
     'cotizaciones', 'cotizacion_items', 'gastos', 'pagos', 'tareas', 'agenda',

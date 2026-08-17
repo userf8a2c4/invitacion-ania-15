@@ -51,6 +51,14 @@
   border-color: var(--oro);
   color: var(--texto-sobre-principal);
   font-weight: 600;
+  /* El resplandor sutil que pide el brief para que la acción principal
+     "se sienta como una acción de poder" — no un botón más. Se apaga
+     un poco al presionar (ver más abajo) para que el hundido de
+     .boton:active siga leyéndose como la señal de toque principal. */
+  box-shadow: var(--brillo-oro);
+}
+.boton--principal:active {
+  box-shadow: 0 0 10px rgba(107, 63, 160, .25);
 }
 
 .boton--peligro {
@@ -244,9 +252,14 @@ select.campo__control {
   text-align: center;
 }
 
+/* Números "de instrumento de precisión" (brief): grandes, tracking
+   negativo apretado, sin llegar al peso 700 que se sentía más a título
+   que a métrica — 600 es el punto donde todavía se lee como un dato,
+   no como un encabezado. */
 .tarjeta-dato__numero {
-  font-size: 26px;
-  font-weight: 700;
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   color: var(--oro);
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
@@ -791,6 +804,21 @@ select.campo__control {
   opacity: .6;
 }
 .vacio__texto { font-size: 13px; }
+
+/* El guiño spooky de un estado vacío (pintarVacio(), 06-piezas.js) —
+   gato o murciélago, siempre en el oro apagado y a una opacidad tan
+   baja que se siente "en el aire", no dibujado. Cuando aparece, ocupa
+   el lugar de la línea dorada de arriba (::before se apaga: dos
+   adornos juntos serían ruido, no atmósfera). */
+.vacio__guino {
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: 0 auto var(--esp-2);
+  color: var(--acento-victoriano);
+  opacity: .12;
+}
+.vacio__guino ~ .vacio__titulo::before { display: none; }
 
 /* Bloque gris que late mientras se cargan los datos. Sostiene el lugar
    del contenido para que la pantalla no salte cuando llega. */

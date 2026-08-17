@@ -114,6 +114,7 @@ function avisarSiHayActualizacion() {
  */
 function arrancarLaApp() {
   mostrarPantalla('app');
+  actualizarContadorDeDias();
 
   /* Antes de nada: comprobar que lo guardado en el teléfono sea de esta
      cuenta. Si era de otra, se borra. Recién después se mira la cola,
@@ -235,16 +236,29 @@ async function abrirHojaDeBitacora() {
  *
  * @returns {void}
  */
-function abrirHojaDeCuenta() {
+async function abrirHojaDeCuenta() {
+  // Se pide 'quien' de nuevo en vez de confiar en el USUARIO ya cargado:
+  // así la pregunta de seguridad que se muestra es siempre la que hay de
+  // verdad en el servidor, no una copia que pudo quedar vieja desde que
+  // se entró (ver por qué en sesion.php: 'entrar' no la manda, 'quien' sí).
+  let usuarioAlDia = USUARIO;
+  try {
+    const respuesta = await traer('sesion.php?accion=quien');
+    usuarioAlDia = respuesta.usuario;
+  } catch (error) {
+    // Sin señal, se sigue con lo que ya había en memoria: mejor una
+    // pregunta quizás desactualizada que la hoja entera sin abrir.
+  }
+
   const cuerpo = abrirHoja('Mi cuenta',
     '<div class="detalle" style="margin-bottom:var(--esp-4)">' +
       '<span class="detalle__rotulo">Nombre</span>' +
-      '<span class="detalle__valor">' + seguro(USUARIO.nombre) + '</span>' +
+      '<span class="detalle__valor">' + seguro(usuarioAlDia.nombre) + '</span>' +
       '<span class="detalle__rotulo">Correo</span>' +
-      '<span class="detalle__valor">' + seguro(USUARIO.correo) + '</span>' +
+      '<span class="detalle__valor">' + seguro(usuarioAlDia.correo) + '</span>' +
       '<span class="detalle__rotulo">Rol</span>' +
       '<span class="detalle__valor">' +
-        (USUARIO.rol === 'admin' ? 'Administradora' : 'Entrada') +
+        (usuarioAlDia.rol === 'admin' ? 'Administradora' : 'Entrada') +
       '</span>' +
     '</div>' +
 
@@ -254,6 +268,27 @@ function abrirHojaDeCuenta() {
                  ayuda: 'Al menos 10 caracteres. Se cerrará la sesión en todos los dispositivos.' }) +
     '<button type="button" class="boton boton--principal boton--ancho" id="cambiar-clave">' +
       'Cambiar contraseña' +
+    '</button>' +
+
+    '<h3 style="margin-top:var(--esp-5);margin-bottom:var(--esp-2)">Pregunta de seguridad</h3>' +
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+      (usuarioAlDia.pregunta_seguridad
+        ? 'Configurada: "' + seguro(usuarioAlDia.pregunta_seguridad) + '". Se usa para pedir el ' +
+          'código de "olvidé mi contraseña" en el login — sin acertarla, el código no se manda.'
+        : 'Todavía no tienes una. Sin ella, si olvidas tu contraseña, alguien con rol ' +
+          'administradora tiene que ponerte una nueva a mano desde Ajustes → Cuentas.') +
+    '</p>' +
+    campoLista({
+      id: 'pregunta-elegida', rotulo: 'Pregunta',
+      opciones: PREGUNTAS_DE_SEGURIDAD.map(p => ({ valor: p, texto: p })),
+      valor: usuarioAlDia.pregunta_seguridad || '',
+    }) +
+    campoTexto({ id: 'pregunta-respuesta', rotulo: 'Tu respuesta',
+                 ayuda: 'No hace falta mayúsculas ni acentos exactos: se compara sin eso.' }) +
+    campoTexto({ id: 'pregunta-clave-actual', rotulo: 'Tu contraseña actual', tipo: 'password',
+                 ayuda: 'Para confirmar que eres tú quien la está cambiando.' }) +
+    '<button type="button" class="boton boton--principal boton--ancho" id="guardar-pregunta">' +
+      'Guardar pregunta de seguridad' +
     '</button>'
   );
 
@@ -268,6 +303,26 @@ function abrirHojaDeCuenta() {
       cerrarHoja(true);
       borrarToken();
       mostrarPantallaDeEntrada('Contraseña cambiada. Entra con la nueva.');
+    } catch (error) {
+      avisar(error.message, true);
+    }
+  });
+
+  buscar('#guardar-pregunta', cuerpo).addEventListener('click', async () => {
+    const pregunta  = valorDe('pregunta-elegida', cuerpo);
+    const respuesta = valorDe('pregunta-respuesta', cuerpo);
+    const actual    = valorDe('pregunta-clave-actual', cuerpo);
+
+    if (!pregunta || !respuesta || !actual) {
+      avisar('Completa la pregunta, la respuesta y tu contraseña actual.', true);
+      return;
+    }
+
+    try {
+      await mandar('sesion.php?accion=pregunta_seguridad',
+        { actual: actual, pregunta: pregunta, respuesta: respuesta });
+      cerrarHoja(true);
+      avisar('Pregunta de seguridad guardada.');
     } catch (error) {
       avisar(error.message, true);
     }
