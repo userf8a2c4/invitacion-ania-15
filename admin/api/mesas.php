@@ -399,6 +399,22 @@ case 'sentar_auto':
     break;
 
 
+/* Solo lee: propone dónde sentaría a alguien sentar_auto, SIN escribir
+   nada. La usa el agente de mesas (Paso 5) para mostrar una propuesta
+   con motivo antes de pedir confirmación — ver previsualizarAsientoPara()
+   en _lib/mesas.php, que es el mismo cálculo que sentar_auto usa de
+   verdad, para que la propuesta nunca diga una cosa y asigne otra. */
+case 'sugerir_asiento':
+    exigirMetodo('GET');
+    $confirmacion = campoEntero($_GET, 'confirmacion_id', 1);
+
+    $r = previsualizarAsientoPara($confirmacion);
+    if (!$r['ok']) responderMal($r['error'], 400);
+
+    responderBien($r);
+    break;
+
+
 case 'fijar':
     exigirMetodo('POST');
     $datos = cuerpoJson();

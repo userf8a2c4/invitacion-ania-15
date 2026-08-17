@@ -546,20 +546,22 @@ function volverAlAcomodoAnterior() {
 /* ─── 4. SENTAR A UNO SOLO ────────────────────────────────────────────── */
 
 /**
- * Busca lugar para UNA confirmación sin tocar a nadie más.
- *
- * Es lo que corre cuando llega una confirmación nueva: no tiene sentido
- * reacomodar la fiesta entera porque confirmó un invitado más.
+ * La MISMA búsqueda que hace sentarAUnoSolo(), pero sin escribir nada
+ * — para que el agente de mesas (Paso 5, ver 42-agente-mesas.js) pueda
+ * PROPONER antes de asignar de verdad. Confirmar la propuesta manda a
+ * sentarAUnoSolo(), que llama a esta misma función para el puntaje: la
+ * propuesta que se ve y lo que de verdad se asigna nunca pueden
+ * quedar desalineadas, porque es literalmente el mismo cálculo.
  *
  * @param int $confirmacionId
- * @return array ['ok' => bool, 'mesa_id' => int, 'mesa' => string]
+ * @return array {ok, error?, mesa_id?, mesa_nombre?, por_grupo?, ya_estaba?}
  */
-function sentarAUnoSolo($confirmacionId) {
+function previsualizarAsientoPara($confirmacionId) {
     if (!existeTabla('mesas') || !existeTabla('asignacion_mesas')) {
         return ['ok' => false, 'error' => 'Faltan las tablas de mesas.'];
     }
 
-    // Si ya está sentado, no se hace nada.
+    // Si ya está sentado, no hay nada que proponer.
     $yaEsta = consultarUno(
         'SELECT mesa_id FROM asignacion_mesas WHERE confirmacion_id = :c',
         [':c' => (int) $confirmacionId]
@@ -594,8 +596,10 @@ function sentarAUnoSolo($confirmacionId) {
     }
 
     /* Se prefiere una mesa donde ya haya gente de su mismo grupo: es
-       más importante sentarlo con los suyos que optimizar el espacio. */
-    $destino = 0;
+       más importante sentarlo con los suyos que optimizar el espacio.
+       $porGrupo queda anotado para poder explicar el motivo después. */
+    $destino  = 0;
+    $porGrupo = false;
     if (!empty($quien['grupo_id'])) {
         $conSuGrupo = [];
         foreach ($datos['invitados'] as $invitado) {
@@ -606,6 +610,7 @@ function sentarAUnoSolo($confirmacionId) {
 
         $soloEsas = array_intersect_key($estado, $conSuGrupo);
         $destino = mejorMesaPara($quien['lugares_necesarios'], [$quien], $soloEsas, $peleas);
+        if ($destino) $porGrupo = true;
     }
 
     if (!$destino) {
@@ -616,12 +621,44 @@ function sentarAUnoSolo($confirmacionId) {
         return ['ok' => false, 'error' => 'No hay ninguna mesa con lugar suficiente.'];
     }
 
+    return [
+        'ok'          => true,
+        'mesa_id'     => $destino,
+        'mesa_nombre' => $estado[$destino]['nombre'],
+        'por_grupo'   => $porGrupo,
+        'ya_estaba'   => false,
+    ];
+}
+
+/**
+ * Busca lugar para UNA confirmación sin tocar a nadie más, y la sienta
+ * de verdad.
+ *
+ * Es lo que corre cuando llega una confirmación nueva: no tiene sentido
+ * reacomodar la fiesta entera porque confirmó un invitado más.
+ *
+ * @param int $confirmacionId
+ * @return array ['ok' => bool, 'mesa_id' => int, 'mesa' => string]
+ */
+function sentarAUnoSolo($confirmacionId) {
+    $previa = previsualizarAsientoPara($confirmacionId);
+    if (!$previa['ok'] || !empty($previa['ya_estaba'])) return $previa;
+
+    // Se necesita lugares_necesarios para el INSERT, que
+    // previsualizarAsientoPara() no devuelve (no es parte de "adónde").
+    $datos = panoramaDeMesas();
+    $quien = null;
+    foreach ($datos['invitados'] as $invitado) {
+        if ((int) $invitado['id'] === (int) $confirmacionId) { $quien = $invitado; break; }
+    }
+    if (!$quien) return ['ok' => false, 'error' => 'Esa confirmación no existe o no asiste.'];
+
     insertar('asignacion_mesas', [
         'confirmacion_id' => (int) $confirmacionId,
-        'mesa_id'         => $destino,
+        'mesa_id'         => $previa['mesa_id'],
         'lugares'         => $quien['lugares_necesarios'],
         'fijada'          => 0,
     ]);
 
-    return ['ok' => true, 'mesa_id' => $destino, 'mesa' => $estado[$destino]['nombre']];
+    return ['ok' => true, 'mesa_id' => $previa['mesa_id'], 'mesa' => $previa['mesa_nombre']];
 }
