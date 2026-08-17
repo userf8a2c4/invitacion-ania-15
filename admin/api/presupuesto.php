@@ -116,6 +116,22 @@ case 'todo':
         'SELECT * FROM cotizaciones ORDER BY servicio, monto'
     );
 
+    /* `detalle_items` se guarda como JSON de texto (columna TEXT, no
+       nativa JSON, para no depender de una versión de MySQL en
+       particular). Se decodifica acá, no en el teléfono: así la app
+       recibe siempre un array —nunca un string a medio parsear— sin
+       importar si la instalación ya tiene la columna o no. */
+    $decodificarDetalle = function (array $filas) {
+        foreach ($filas as &$fila) {
+            $fila['detalle_items'] = !empty($fila['detalle_items'])
+                ? (json_decode($fila['detalle_items'], true) ?: [])
+                : [];
+        }
+        return $filas;
+    };
+    $proveedores  = $decodificarDetalle($proveedores);
+    $cotizaciones = $decodificarDetalle($cotizaciones);
+
     /* ─── Los totales ─────────────────────────────────────────────────
        Se calculan en SQL y no sumando en PHP porque MySQL lo hace sobre
        la tabla entera de una sola pasada. Filtrados por presupuesto
@@ -388,12 +404,17 @@ case 'guardar_proveedor':
                          ['', 'banquete', 'salon', 'fotografo', 'dj',
                           'iglesia', 'modista'], ''),
         'notas'       => campoTexto($datos, 'notas', 2000),
+        // Lista estructurada de "qué incluye" (Paso 2). Aparte de
+        // `notas`: eso sigue siendo el cuaderno libre de la persona.
+        'detalle_items' => campoListaDeDetalle($datos, 'detalle_items'),
     ];
     if ($valores['nombre'] === '') responderMal('El proveedor necesita un nombre.', 400);
 
-    /* La columna la agrega instalar.php. Si todavía no se corrió, se
+    /* Las columnas las agrega instalar.php. Si todavía no se corrió, se
        guarda el resto igual en vez de fallar entero. */
-    if (!in_array('paquete', columnasDe('proveedores'), true)) unset($valores['paquete']);
+    $columnasProveedor = columnasDe('proveedores');
+    if (!in_array('paquete', $columnasProveedor, true)) unset($valores['paquete']);
+    if (!in_array('detalle_items', $columnasProveedor, true)) unset($valores['detalle_items']);
 
     responderBien(guardarFila('proveedores', $datos, $valores, $yo, 'proveedor'));
     break;
@@ -422,13 +443,24 @@ case 'guardar_cotizacion':
         'tipo_precio' => campoOpcion($datos, 'tipo_precio',
                          ['por_persona', 'fijo'], 'fijo'),
         'precio_pp'   => campoMonto($datos, 'precio_pp'),
+        /* `que_incluye` es el texto libre viejo (Paso 1). Ya no se
+           edita a mano: 09-vista-dinero.js manda acá el mismo contenido
+           que `detalle_items`, pero como texto plano, para que un
+           lector viejo de la base (o un backup) no se quede con la
+           columna vacía de golpe. La fuente de verdad para la UI nueva
+           es `detalle_items`. */
         'que_incluye' => campoTexto($datos, 'que_incluye', 2000),
         'vigencia'    => campoFecha($datos, 'vigencia'),
         'elegida'     => !empty($datos['elegida']) ? 1 : 0,
         'notas'       => campoTexto($datos, 'notas', 2000),
+        'detalle_items' => campoListaDeDetalle($datos, 'detalle_items'),
     ];
     if ($valores['proveedor'] === '' || $valores['servicio'] === '') {
         responderMal('La cotización necesita servicio y proveedor.', 400);
+    }
+
+    if (!in_array('detalle_items', columnasDe('cotizaciones'), true)) {
+        unset($valores['detalle_items']);
     }
 
     $resultado = guardarFila('cotizaciones', $datos, $valores, $yo, 'cotización');
