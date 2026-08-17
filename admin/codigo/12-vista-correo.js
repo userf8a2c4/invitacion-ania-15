@@ -23,6 +23,11 @@
 /** Los mensajes de la última carga. */
 let CORREOS = [];
 
+/** Qué carpeta se está viendo. 'INBOX' hasta que exista el selector
+    de carpetas (Fase F) — todo lo demás ya sabe pasarla de un lado a
+    otro, así que agregar el selector después no toca esta parte. */
+let CARPETA_ACTUAL = 'INBOX';
+
 /** Cuánto mide la zona de botones que queda detrás de cada correo. */
 const ANCHO_ACCIONES = 216;   // 3 botones de 72px
 
@@ -52,13 +57,15 @@ async function dibujarCorreo() {
 
   let datos;
   try {
-    datos = await traer('correo.php?accion=bandeja');
+    datos = await traer('correo.php?accion=bandeja&carpeta=' +
+                         encodeURIComponent(CARPETA_ACTUAL));
   } catch (error) {
     pintarError(lista, error.message, () => dibujarCorreo());
     throw error;
   }
 
   CORREOS = datos.mensajes || [];
+  CARPETA_ACTUAL = datos.carpeta || CARPETA_ACTUAL;
   ponerTitulo('Correo', datos.buzon);
   ponerBurbuja('#burbuja-correo', datos.sin_leer);
 
@@ -230,7 +237,7 @@ function engancharBandeja(lista) {
         tapa.style.transform = '';
         return;
       }
-      abrirCorreo(CORREOS[Number(tapa.dataset.abrir)].numero);
+      abrirCorreo(CORREOS[Number(tapa.dataset.abrir)].uid);
     });
   });
 
@@ -289,12 +296,14 @@ async function accionDeCorreo(accion, correo, lista) {
     /* Para responder hace falta la dirección del remitente, y la lista
        solo trae el nombre visible. Se abre el mensaje para sacarla. */
     try {
-      const m = await traer('correo.php?accion=leer&n=' + correo.numero);
+      const m = await traer('correo.php?accion=leer&uid=' + correo.uid +
+                             '&carpeta=' + encodeURIComponent(CARPETA_ACTUAL));
       formularioCorreo({
         para: m.correo_de,
         asunto: /^re:/i.test(m.asunto) ? m.asunto : 'Re: ' + m.asunto,
         adjuntosDelOriginal: m.adjuntos || [],
-        numeroDelOriginal: m.numero,
+        uidDelOriginal: m.uid,
+        carpetaDelOriginal: m.carpeta,
       });
     } catch (error) {
       avisar(error.message, true);
@@ -305,7 +314,8 @@ async function accionDeCorreo(accion, correo, lista) {
   if (accion === 'marcar') {
     try {
       const r = await mandar('correo.php?accion=marcar', {
-        numero: correo.numero,
+        uid: correo.uid,
+        carpeta: CARPETA_ACTUAL,
         marcar: !correo.marcado,
       });
       correo.marcado = r.marcado;
@@ -325,11 +335,13 @@ async function accionDeCorreo(accion, correo, lista) {
     }
 
     try {
-      const r = await mandar('correo.php?accion=borrar', { numero: correo.numero });
+      const r = await mandar('correo.php?accion=borrar',
+        { uid: correo.uid, carpeta: CARPETA_ACTUAL });
       avisar(r.mensaje);
-      /* Se recarga la bandeja entera y no se saca la fila a mano: al
-         borrar, el servidor renumera los mensajes, así que los índices
-         que teníamos en memoria ya no valen. */
+      /* Se recarga la bandeja entera y no se saca la fila a mano: aunque
+         ahora se borra por UID (ver imap.php), el EXPUNGE de todos modos
+         puede correr el resto de la lista visible, así que lo más
+         simple y seguro sigue siendo volver a pedirla completa. */
       dibujarCorreo();
     } catch (error) {
       avisar(error.message, true);
@@ -343,18 +355,19 @@ async function accionDeCorreo(accion, correo, lista) {
 /**
  * Abre un mensaje y ofrece responderlo.
  *
- * @param {number} numero
+ * @param {number} uid
  * @returns {Promise<void>}
  */
-async function abrirCorreo(numero) {
+async function abrirCorreo(uid) {
   const cuerpo = abrirHoja('Cargando…', '<div class="esqueleto"></div>'.repeat(3));
 
   let m;
   try {
-    m = await traer('correo.php?accion=leer&n=' + numero);
+    m = await traer('correo.php?accion=leer&uid=' + uid +
+                     '&carpeta=' + encodeURIComponent(CARPETA_ACTUAL));
   } catch (error) {
     cuerpo.innerHTML = '';
-    pintarError(cuerpo, error.message, () => abrirCorreo(numero));
+    pintarError(cuerpo, error.message, () => abrirCorreo(uid));
     return;
   }
 
@@ -392,14 +405,16 @@ async function abrirCorreo(numero) {
         para: m.correo_de,
         asunto: /^re:/i.test(m.asunto) ? m.asunto : 'Re: ' + m.asunto,
         adjuntosDelOriginal: m.adjuntos || [],
-        numeroDelOriginal: m.numero,
+        uidDelOriginal: m.uid,
+        carpetaDelOriginal: m.carpeta,
       });
     });
   }
 
   buscar('#no-leido', cuerpo).addEventListener('click', async () => {
     try {
-      const r = await mandar('correo.php?accion=no_leido', { numero: numero });
+      const r = await mandar('correo.php?accion=no_leido',
+        { uid: uid, carpeta: CARPETA_ACTUAL });
       cerrarHoja(true);
       avisar(r.mensaje);
       dibujarCorreo();
@@ -412,12 +427,12 @@ async function abrirCorreo(numero) {
 
   buscarTodos('[data-ver-adjunto]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () =>
-      abrirAdjunto(m.numero, adjuntos[Number(boton.dataset.verAdjunto)], false));
+      abrirAdjunto(m.uid, m.carpeta, adjuntos[Number(boton.dataset.verAdjunto)], false));
   });
 
   buscarTodos('[data-bajar-adjunto]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () =>
-      abrirAdjunto(m.numero, adjuntos[Number(boton.dataset.bajarAdjunto)], true));
+      abrirAdjunto(m.uid, m.carpeta, adjuntos[Number(boton.dataset.bajarAdjunto)], true));
   });
 }
 
@@ -425,20 +440,22 @@ async function abrirCorreo(numero) {
  * Baja un adjunto con el token de sesión y lo muestra en el visor
  * compartido (imagen o PDF), o fuerza la descarga.
  *
- * @param {number} numero - El número de mensaje en el buzón.
+ * @param {number} uid - El UID del mensaje en el buzón.
+ * @param {string} carpeta
  * @param {Object} adjunto - { nombre, ruta, tipo, tamano }
  * @param {boolean} forzarDescarga
  * @returns {Promise<void>}
  */
-async function abrirAdjunto(numero, adjunto, forzarDescarga) {
+async function abrirAdjunto(uid, carpeta, adjunto, forzarDescarga) {
   const token = tokenGuardado();
   if (!token) { manejarSesionVencida(); return; }
 
   avisar(forzarDescarga ? 'Bajando…' : 'Abriendo…');
 
   try {
-    const url = CONFIGURACION.servidor.base + 'correo.php?accion=adjunto&numero=' +
-                numero + '&ruta=' + encodeURIComponent(adjunto.ruta) +
+    const url = CONFIGURACION.servidor.base + 'correo.php?accion=adjunto&uid=' +
+                uid + '&carpeta=' + encodeURIComponent(carpeta) +
+                '&ruta=' + encodeURIComponent(adjunto.ruta) +
                 (forzarDescarga ? '&descargar=1' : '');
 
     const respuesta = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
@@ -520,7 +537,8 @@ function pintarAdjuntos(m) {
 /**
  * Formulario para escribir o responder.
  *
- * @param {Object} [previo] - { para, asunto, adjuntosDelOriginal, numeroDelOriginal }
+ * @param {Object} [previo] - { para, asunto, adjuntosDelOriginal,
+ *   uidDelOriginal, carpetaDelOriginal }
  * @returns {void}
  */
 function formularioCorreo(previo) {
@@ -564,7 +582,7 @@ function formularioCorreo(previo) {
       .filter(caja => caja.checked)
       .map(caja => {
         const a = adjuntosDisponibles[Number(caja.value)];
-        return { numero: d.numeroDelOriginal, ruta: a.ruta };
+        return { uid: d.uidDelOriginal, carpeta: d.carpetaDelOriginal, ruta: a.ruta };
       });
 
     const boton = buscar('#enviar', cuerpo);
