@@ -50,6 +50,14 @@ registrarAgente('dinero', 'Dinero', async () => {
           await mandar('presupuesto.php?accion=marcar_pagado', { id: pago.id });
           ensuciarVistas('resumen', 'dinero');
         },
+        // marcar_pagado ALTERNA pagado/pendiente (presupuesto.php) — así
+        // que deshacer es, literalmente, llamarlo de nuevo. No es un
+        // atajo inventado: es el mismo botón que ya existe en la
+        // pestaña Pagos, aplicado al revés.
+        deshacer: async () => {
+          await mandar('presupuesto.php?accion=marcar_pagado', { id: pago.id });
+          ensuciarVistas('resumen', 'dinero');
+        },
       };
     })
     .filter(Boolean);

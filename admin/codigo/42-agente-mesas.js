@@ -65,6 +65,13 @@ registrarAgente('mesas', 'Mesas', async () => {
         await mandar('mesas.php?accion=sentar_auto', { confirmacion_id: invitado.id });
         ensuciarVistas('resumen', 'evento', 'invitados');
       },
+      // mesas.php?accion=sentar con mesa_id=0 saca a alguien del
+      // acomodo (ver el caso 'sentar' en mesas.php) — el mismo camino
+      // que ya existe, no un unsentar inventado para esta sugerencia.
+      deshacer: async () => {
+        await mandar('mesas.php?accion=sentar', { confirmacion_id: invitado.id, mesa_id: 0 });
+        ensuciarVistas('resumen', 'evento', 'invitados');
+      },
     });
   }
 
