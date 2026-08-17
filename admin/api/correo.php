@@ -7,6 +7,7 @@
    buzón institucional de Hostinger.
 
    QUÉ SE LE PUEDE PEDIR
+     GET  ?accion=estado        solo prueba la conexión, sin bajar nada
      GET  ?accion=bandeja       la lista de los últimos mensajes
      GET  ?accion=leer&n=42     un mensaje completo, con su lista de adjuntos
      GET  ?accion=adjunto&numero=42&ruta=2   baja (o muestra) un adjunto
@@ -32,6 +33,32 @@ $accion = (string) ($_GET['accion'] ?? 'bandeja');
 
 switch ($accion) {
 
+/* ─── SALUD DE LA CONEXIÓN ────────────────────────────────────────────── */
+
+/*
+   Prueba SOLO que el login IMAP funcione — no pide ni un mensaje. Sirve
+   para separar "está mal configurado el .env" de "el buzón está
+   vacío", sin pagar el costo de bajar 40 encabezados nada más para
+   averiguarlo. conectar() ya distingue sin señal (fsockopen falla) de
+   credenciales rechazadas (LOGIN falla) — acá solo se expone eso tal
+   cual, con el mismo mensaje humano que ya arma imap.php.
+*/
+case 'estado':
+    exigirMetodo('GET');
+
+    $buzon = new BuzonImap();
+    $conectado = $buzon->conectar();
+    if ($conectado) $buzon->cerrar();
+
+    if (!$conectado) responderMal($buzon->error, 502);
+
+    responderBien([
+        'ok'    => true,
+        'buzon' => env('IMAP_USER', env('SMTP_USER', '')),
+    ]);
+    break;
+
+
 /* ─── LA BANDEJA ──────────────────────────────────────────────────────── */
 
 case 'bandeja':
@@ -43,6 +70,18 @@ case 'bandeja':
     }
 
     $mensajes = $buzon->listar(40);
+
+    /* listar() puede fallar DESPUÉS del login —por ejemplo si el SELECT
+       INBOX no salió bien— y en ese caso devuelve un arreglo vacío
+       igual que una bandeja legítimamente vacía. Sin este chequeo esos
+       dos casos se verían idénticos en pantalla: "La bandeja está
+       vacía" cuando en realidad algo se rompió. */
+    if ($buzon->error) {
+        $error = $buzon->error;
+        $buzon->cerrar();
+        responderMal($error, 502);
+    }
+
     $buzon->cerrar();
 
     responderBien([
