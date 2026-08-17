@@ -161,16 +161,6 @@
   <link rel="preload" as="font" type="font/woff2" crossorigin
         href="recursos/tipografias/im-fell-english-400-normal-latin.woff2">
 
-  <!-- ═══ FONDO CRÍTICO, INLINE ══════════════════════════════════════════
-       Una sola línea, a propósito: es el color de #capa-fondo (ver
-       01-fundamentos.css) puesto acá para que exista ANTES de que llegue
-       la hoja de estilos completa. Sin esto, el instante entre "el HTML ya
-       se puede pintar" y "el CSS ya llegó" se vería blanco —nada elegante
-       para una invitación oscura—. Es intencionalmente lo único que va
-       inline: el resto de la apariencia puede esperar unos milisegundos
-       más sin que se note. -->
-  <style>html{background:#0a0605}</style>
-
   <!-- ═══ ESTILOS ═════════════════════════════════════════════════════
        Los 14 archivos de estilos/ (00-tipografias a 13-preguntas) van
        empaquetados en uno solo: menos peticiones al servidor, más rápido
@@ -181,26 +171,18 @@
        si dos archivos dicen cosas distintas sobre lo mismo, gana el que
        iba último; 00-tipografias sigue yendo primero).
 
-       ⚠️ SE CARGA SIN BLOQUEAR EL PRIMER PINTADO, Y ES A PROPÓSITO.
-       Un <link rel="stylesheet"> normal es render-blocking: el navegador
-       no pinta NADA hasta que termina de bajarlo. Medido con datos reales
-       (PageSpeed Insights, móvil con red 4G lenta simulada): esto solo
-       costaba 170ms de transferencia, pero el navegador estimaba 1,3
-       segundos de ahorro en el primer pintado por evitarle esa espera —
-       porque mientras espera el CSS, tampoco puede seguir procesando el
-       resto del documento (que es grande: todo el marco decorativo en
-       SVG), así que el bloqueo se encadena.
-
-       El truco (rel="preload" + swap a stylesheet en el evento load) le
-       pide el archivo con la MISMA prioridad de red que un <link>
-       normal —no se descarga más tarde ni compite peor—, pero sin
-       obligar al navegador a esperarlo para pintar. El <noscript> de
-       abajo es la red de seguridad: si alguien tiene JavaScript
-       apagado, se aplica como una hoja de estilos común y corriente. */
-       -->
-  <link rel="preload" href="estilos/_empaquetado.css?v=61" as="style"
-        onload="this.onload=null;this.rel='stylesheet'">
-  <noscript><link rel="stylesheet" href="estilos/_empaquetado.css?v=61"></noscript>
+       ⚠️ VUELVE A SER UN <link rel="stylesheet"> NORMAL, BLOQUEANTE.
+       Se probó cargarlo con rel="preload" + swap, sin bloquear el primer
+       pintado (la razón: PageSpeed estimaba hasta 1,3s de ahorro). El
+       número mejoraba, pero el precio real no se veía en el número: por
+       el instante entre "el HTML ya se puede pintar" y "el CSS ya
+       llegó", #sobre-de-apertura —que necesita su position:fixed y su
+       z-index del CSS para tapar la pantalla— no tapaba nada todavía, y
+       se alcanzaba a ver el relicario sin estilos por debajo. En una
+       invitación, ese instante importa más que medio segundo de puntaje.
+       Bloqueante es más lento en el papel y más correcto en la pantalla:
+       gana lo segundo. -->
+  <link rel="stylesheet" href="estilos/_empaquetado.css?v=63">
 
   
   
@@ -2108,23 +2090,23 @@
      empaquetado (ver la sección de ESTILOS): el CSS no se compila ni se
      ejecuta, así que ahí juntar no genera ninguna tarea larga.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/01-configuracion.js?v=61"></script>
-<script defer src="codigo/02-utilidades.js?v=61"></script>
-<script defer src="codigo/03-sobre-de-apertura.js?v=61"></script>
-<script defer src="codigo/04-invitado-personalizado.js?v=61"></script>
-<script defer src="codigo/05-cursor-personalizado.js?v=61"></script>
+<script defer src="codigo/01-configuracion.js?v=63"></script>
+<script defer src="codigo/02-utilidades.js?v=63"></script>
+<script defer src="codigo/03-sobre-de-apertura.js?v=63"></script>
+<script defer src="codigo/04-invitado-personalizado.js?v=63"></script>
+<script defer src="codigo/05-cursor-personalizado.js?v=63"></script>
 <!-- EL LIENZO DE PÉTALOS. Va ANTES que 06-petalos-con-fisica.js porque ese
      archivo le pregunta al arrancar si debe crear elementos o solo números.
      Con  ?petalos=dom  vuelve el sistema de divs. -->
-<script defer src="codigo/24-lienzo-de-petalos.js?v=61"></script>
-<script defer src="codigo/06-petalos-con-fisica.js?v=61"></script>
-<script defer src="codigo/07-marco-y-enredaderas.js?v=61"></script>
-<script defer src="codigo/08-efectos-de-scroll.js?v=61"></script>
-<script defer src="codigo/09-cuenta-regresiva.js?v=61"></script>
-<script defer src="codigo/10-reproductor-de-musica.js?v=61"></script>
-<script defer src="codigo/11-formulario-confirmacion.js?v=61"></script>
-<script defer src="codigo/12-pase-de-acceso.js?v=61"></script>
-<script defer src="codigo/13-agregar-al-calendario.js?v=61"></script>
+<script defer src="codigo/24-lienzo-de-petalos.js?v=63"></script>
+<script defer src="codigo/06-petalos-con-fisica.js?v=63"></script>
+<script defer src="codigo/07-marco-y-enredaderas.js?v=63"></script>
+<script defer src="codigo/08-efectos-de-scroll.js?v=63"></script>
+<script defer src="codigo/09-cuenta-regresiva.js?v=63"></script>
+<script defer src="codigo/10-reproductor-de-musica.js?v=63"></script>
+<script defer src="codigo/11-formulario-confirmacion.js?v=63"></script>
+<script defer src="codigo/12-pase-de-acceso.js?v=63"></script>
+<script defer src="codigo/13-agregar-al-calendario.js?v=63"></script>
 <!-- EL LIENZO DE LUZ. Dibuja los tres sistemas de luz —velas, haces y polvo—
      en un solo <canvas>, en vez de en ~140 elementos con `mix-blend-mode`.
 
@@ -2134,15 +2116,15 @@
 
      Con  ?luz=dom  este módulo se queda dormido y vuelve el sistema
      anterior completo, sin tocar código. -->
-<script defer src="codigo/23-lienzo-de-luz.js?v=61"></script>
+<script defer src="codigo/23-lienzo-de-luz.js?v=63"></script>
 <!-- FAUNA NOCTURNA: luciérnagas y termitas, dibujadas por el lienzo de
      arriba. Va después de 23 (que crea window.LienzoDeLuz) — el orden
      respecto de 19-velas.js no importa, porque este módulo espera el
      evento 'invitacion-visible' antes de buscar los candelabros, que
      19-velas.js recién crea ahí. -->
-<script defer src="codigo/27-fauna-nocturna.js?v=61"></script>
-<script defer src="codigo/14-haces-de-luz.js?v=61"></script>
-<script defer src="codigo/15-registro-de-confirmaciones.js?v=61"></script>
+<script defer src="codigo/27-fauna-nocturna.js?v=63"></script>
+<script defer src="codigo/14-haces-de-luz.js?v=63"></script>
+<script defer src="codigo/15-registro-de-confirmaciones.js?v=63"></script>
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda).
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
      —incluso sobre el sobre de entrada— para que quien tenga un equipo
@@ -2157,27 +2139,27 @@
   <span class="boton-animaciones__texto">Animación</span>
 </button>
 
-<script defer src="codigo/16-volver-arriba.js?v=61"></script>
-<script defer src="codigo/17-joyas-colgantes.js?v=61"></script>
-<script defer src="codigo/18-motas-de-polvo.js?v=61"></script>
-<script defer src="codigo/19-velas.js?v=61"></script>
-<script defer src="codigo/20-boton-de-animaciones.js?v=61"></script>
-<script defer src="codigo/21-monitor-de-rendimiento.js?v=61"></script>
+<script defer src="codigo/16-volver-arriba.js?v=63"></script>
+<script defer src="codigo/17-joyas-colgantes.js?v=63"></script>
+<script defer src="codigo/18-motas-de-polvo.js?v=63"></script>
+<script defer src="codigo/19-velas.js?v=63"></script>
+<script defer src="codigo/20-boton-de-animaciones.js?v=63"></script>
+<script defer src="codigo/21-monitor-de-rendimiento.js?v=63"></script>
 <!-- Tiñe la luz que entra por los ventanales según la hora del día. Va
      después de los haces y las motas, porque escribe sobre sus capas. -->
-<script defer src="codigo/22-luz-de-la-hora.js?v=61"></script>
+<script defer src="codigo/22-luz-de-la-hora.js?v=63"></script>
 
 <!-- PREGUNTAS FRECUENTES (el botón "?" de la fila de controles).
      El 00 tiene solo los datos —fecha, lugar, vestimenta, regalos— y el
      25 arma el panel leyéndolos. Ese orden importa: si el 25 corriera
      primero, no encontraría la lista de preguntas y no dibujaría nada. -->
-<script defer src="codigo/00-conocimiento-chatbot.js?v=61"></script>
-<script defer src="codigo/25-preguntas-frecuentes.js?v=61"></script>
+<script defer src="codigo/00-conocimiento-chatbot.js?v=63"></script>
+<script defer src="codigo/25-preguntas-frecuentes.js?v=63"></script>
 
 <!-- EL MAPA A PEDIDO. El iframe de Google Maps recién se crea cuando se
      toca "Ver el mapa" (ver el comentario junto a .mapa-marco--a-pedido
      más arriba). -->
-<script defer src="codigo/26-mapa-a-pedido.js?v=61"></script>
+<script defer src="codigo/26-mapa-a-pedido.js?v=63"></script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
      internet y se pueda instalar. Va al final y falla en silencio si el
