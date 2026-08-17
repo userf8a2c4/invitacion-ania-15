@@ -876,6 +876,20 @@ async function guardarDinero(accion, carga, mensaje) {
  * @param {Object} [existente]
  * @returns {void}
  */
+/**
+ * A qué arreglo de DINERO pertenece cada tipo de registro que edita
+ * engancharFormularioDinero(). Solo entran acá los que se pueden mutar
+ * en memoria de forma segura al editar (fila plana, sin recalcular
+ * nada agregado): cotización y categoría se quedan fuera porque su
+ * forma en DINERO es agrupada, no una lista plana por id.
+ */
+const COLECCIONES_DINERO = {
+  proveedor: 'proveedores',
+  padrino:   'padrinos',
+  gasto:     'gastos',
+  pago:      'pagos',
+};
+
 function engancharFormularioDinero(cuerpo, armarCarga, nombreAccion, existente) {
 
   /* TODAS las secciones del presupuesto llevan adjuntos: el contrato del
@@ -921,11 +935,42 @@ function engancharFormularioDinero(cuerpo, armarCarga, nombreAccion, existente) 
     },
   });
 
-  buscar('#pie-guardar', cuerpo).addEventListener('click', () => {
+  buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
     const carga = armarCarga();
     if (!carga) return;
     if (existente) carga.id = existente.id;
-    guardarDinero('guardar_' + nombreAccion, carga, 'Guardado.');
+
+    /* Editar un registro que ya existe puede aplicarse de una: ya hay
+       una fila en memoria para mutar y repintar al instante (A1, ver
+       36-optimista.js) — mismo patrón que abrirFormularioDeInvitado()
+       en 08-vista-invitados.js. Dar de alta uno nuevo no tiene id
+       todavía, así que sigue esperando la respuesta del servidor. */
+    const coleccion = existente && COLECCIONES_DINERO[nombreAccion];
+    if (!coleccion) {
+      guardarDinero('guardar_' + nombreAccion, carga, 'Guardado.');
+      return;
+    }
+
+    cerrarHoja(true);
+    try {
+      const resultado = await aplicarOptimista(
+        'presupuesto.php?accion=guardar_' + nombreAccion, carga,
+        {
+          mutar: () => {
+            const lista = DINERO[coleccion];
+            const i = lista.findIndex(f => Number(f.id) === Number(existente.id));
+            if (i !== -1) Object.assign(lista[i], carga);
+          },
+          repintar: pintarSeccionDeDinero,
+        }
+      );
+      avisar(resultado.offline
+        ? 'Sin conexión: se guardó y se va a mandar solo.'
+        : 'Guardado.');
+      ensuciarVistas('resumen');
+    } catch (error) {
+      avisar(error.message, true);
+    }
   });
 
   const borrar = buscar('#pie-borrar', cuerpo);
