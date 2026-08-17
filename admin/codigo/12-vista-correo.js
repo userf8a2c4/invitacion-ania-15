@@ -744,7 +744,16 @@ function formularioCorreo(previo) {
         adjuntos: adjuntosElegidos,
       });
       cerrarHoja(true);
-      avisar(r.mensaje || 'Correo enviado.');
+      /* guardado_en_enviados es "mejor esfuerzo" (ver correo.php): el
+         correo se mandó igual, esto solo avisa si además quedó una
+         copia visible en Enviados o no, para que no sea un misterio si
+         después no aparece ahí. */
+      avisar(
+        (r.mensaje || 'Correo enviado.') +
+        (r.guardado_en_enviados === false
+          ? ' (no se pudo guardar una copia en Enviados, pero sí se mandó)'
+          : '')
+      );
     } catch (error) {
       avisar(error.message, true);
       boton.disabled = false;

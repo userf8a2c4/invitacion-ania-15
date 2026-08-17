@@ -536,6 +536,72 @@ class BuzonImap {
         if (!$this->entrarA($carpeta)) return false;
         return $this->salioBien($this->ordenar("UID STORE $uid -FLAGS (\\Seen)"));
     }
+
+
+    /* ─── 3c. GUARDAR UNA COPIA DE LO ENVIADO ───────────────────────────── */
+
+    /**
+     * Intenta guardar una copia de un correo recién mandado (por SMTP,
+     * ver _lib/correo.php) en la carpeta de Enviados, con el comando
+     * IMAP APPEND.
+     *
+     * ES "MEJOR ESFUERZO" A PROPÓSITO
+     * El correo YA SE MANDÓ cuando esto se llama — SMTP y APPEND son dos
+     * pasos separados. Si ninguna carpeta de Enviados acepta el APPEND
+     * (o el servidor no tiene una), se devuelve false sin avisar como
+     * error: lo único que se pierde es la comodidad de verlo después en
+     * el panel, no el envío en sí.
+     *
+     * CÓMO ES DIFERENTE DE ordenar()
+     * APPEND es el único comando de este cliente que manda un literal
+     * SIN que el servidor lo haya pedido con "+ " antes — hay que
+     * esperar esa línea de continuación y recién ahí mandar el cuerpo
+     * del mensaje. ordenar() no sabe hacer esa pausa, así que este
+     * método habla el socket directo, igual que hace conectar().
+     *
+     * @param string $mensajeCrudo El mensaje RFC822 completo (encabezados
+     *                              + cuerpo) tal como se mandó por SMTP.
+     * @return bool
+     */
+    public function guardarEnviado($mensajeCrudo) {
+        if ($mensajeCrudo === '' || !$this->sock) return false;
+
+        // IMAP cuenta el literal en bytes, no en caracteres — importante
+        // con acentos y emojis, que en UTF-8 ocupan más de un byte.
+        $bytes = strlen($mensajeCrudo);
+
+        foreach (['Sent', 'INBOX.Sent', 'Sent Items', 'Enviados',
+                  'INBOX.Enviados', 'Sent Messages'] as $carpeta) {
+
+            $etiqueta = 'a' . (++$this->contador);
+            fwrite(
+                $this->sock,
+                $etiqueta . ' APPEND ' . $this->escaparCarpeta($carpeta) .
+                ' (\\Seen) {' . $bytes . "}\r\n"
+            );
+
+            // El servidor contesta "+ ..." pidiendo el literal. Si en vez
+            // de eso contesta con la etiqueta de una (NO), esa carpeta no
+            // existe o no acepta APPEND: se prueba la siguiente sin
+            // mandar ningún byte de más que el servidor no pidió.
+            $listo = fgets($this->sock, 1024);
+            if ($listo === false || strpos(ltrim($listo), '+') !== 0) continue;
+
+            fwrite($this->sock, $mensajeCrudo . "\r\n");
+
+            $lineas = [];
+            while (!feof($this->sock)) {
+                $linea = fgets($this->sock, 8192);
+                if ($linea === false) break;
+                $lineas[] = rtrim($linea, "\r\n");
+                if (strpos($linea, $etiqueta . ' ') === 0) break;
+            }
+
+            if ($this->salioBien($lineas)) return true;
+        }
+
+        return false;
+    }
 }
 
 

@@ -45,11 +45,18 @@ require_once __DIR__ . '/entorno.php';
  *                           Cada una: ['cid' => 'qr', 'tipo' => 'image/png',
  *                           'datos' => contenido binario]. En el HTML se
  *                           referencian con <img src="cid:qr">.
+ * @param string|null &$mensajeCrudo Opcional: si se pasa una variable,
+ *                           queda con el mensaje RFC822 completo tal
+ *                           como se mandó (encabezados + cuerpo). Sirve
+ *                           para guardar una copia en la carpeta de
+ *                           Enviados por IMAP después (ver
+ *                           BuzonImap::guardarEnviado() en imap.php) sin
+ *                           tener que reconstruir el mensaje dos veces.
  * @return true|string true si salió, o el texto del error si falló.
  */
 function smtpEnviar($para, $asunto, $html, $from, $fromNombre,
                     $host, $port, $user, $pass, $responderA = '',
-                    $imagenes = [], $adjuntos = []) {
+                    $imagenes = [], $adjuntos = [], &$mensajeCrudo = null) {
     $log = [];
 
     // Con 465 el cifrado va desde el saludo. Con cualquier otro puerto se
@@ -226,6 +233,10 @@ function smtpEnviar($para, $asunto, $html, $from, $fromNombre,
         $msg .= "--$frontera--";
     }
 
+    // Se deja disponible tal cual se va a mandar, antes del DATA: sirve
+    // para archivarlo en Enviados después, salga bien o mal el envío.
+    $mensajeCrudo = $msg;
+
     // El punto solo en una línea es lo que le dice al servidor "terminé".
     fwrite($sock, $msg . "\r\n.\r\n");
     $r = $leer();
@@ -247,9 +258,11 @@ function smtpEnviar($para, $asunto, $html, $from, $fromNombre,
  * @param string $asunto
  * @param string $html
  * @param string $responderA
+ * @param array  $adjuntos
+ * @param string|null &$mensajeCrudo Ver smtpEnviar().
  * @return true|string
  */
-function enviarCorreo($para, $asunto, $html, $responderA = '', $adjuntos = []) {
+function enviarCorreo($para, $asunto, $html, $responderA = '', $adjuntos = [], &$mensajeCrudo = null) {
     return smtpEnviar(
         $para,
         $asunto,
@@ -262,6 +275,7 @@ function enviarCorreo($para, $asunto, $html, $responderA = '', $adjuntos = []) {
         env('SMTP_PASSWORD', ''),
         $responderA,
         [],
-        $adjuntos
+        $adjuntos,
+        $mensajeCrudo
     );
 }
