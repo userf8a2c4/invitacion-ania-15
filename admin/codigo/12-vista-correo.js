@@ -738,6 +738,30 @@ function pesoLegible(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
+/** Tope de peso para los archivos que se adjuntan desde el teléfono al
+    escribir o responder — no para los que se reenvían del original,
+    esos ya tienen su propio tope de cantidad. 8 MB alcanza para fotos
+    y PDFs comunes sin arriesgarse al límite de subida del servidor
+    (post_max_size), que en hosting compartido suele rondar los 8-32 MB
+    para el pedido ENTERO, no solo el archivo. */
+const PESO_MAXIMO_ADJUNTOS_NUEVOS = 8 * 1024 * 1024;
+
+/**
+ * Lee un File del teléfono y lo deja en base64 puro (sin el prefijo
+ * "data:tipo;base64,"), que es lo que espera correo.php del otro lado.
+ *
+ * @param {File} archivo
+ * @returns {Promise<string>}
+ */
+function comoBase64(archivo) {
+  return new Promise((resolver, rechazar) => {
+    const lector = new FileReader();
+    lector.onload = () => resolver(String(lector.result).split(',')[1] || '');
+    lector.onerror = () => rechazar(new Error('No se pudo leer ' + archivo.name));
+    lector.readAsDataURL(archivo);
+  });
+}
+
 /**
  * Pinta la lista de adjuntos de un mensaje, con enlaces para verlo o
  * bajarlo. Las imágenes y PDF se abren dentro del panel; el resto baja
@@ -792,6 +816,11 @@ function formularioCorreo(previo) {
   const d = previo || {};
   const adjuntosDisponibles = d.adjuntosDelOriginal || [];
 
+  // Los archivos que se van eligiendo del teléfono, aparte de los que
+  // se reenvían del original. Vive acá adentro (no global): cada vez
+  // que se abre el formulario arranca vacío.
+  let archivosNuevos = [];
+
   const cuerpo = abrirHoja(previo ? 'Responder' : 'Escribir',
     campoTexto({ id: 'cor-para', rotulo: 'Para', tipo: 'email', valor: d.para }) +
     campoTexto({ id: 'cor-asunto', rotulo: 'Asunto', valor: d.asunto }) +
@@ -811,12 +840,65 @@ function formularioCorreo(previo) {
         ).join('')
       : '') +
 
+    '<div class="campo" style="margin-top:var(--esp-2)">' +
+      '<span class="campo__rotulo">Adjuntar archivos</span>' +
+      '<input type="file" id="cor-archivo-nuevo" class="campo__control" multiple>' +
+      '<div id="cor-lista-nuevos"></div>' +
+    '</div>' +
+
     '<button type="button" class="boton boton--principal boton--ancho" id="enviar">' +
       'Enviar' +
     '</button>'
   );
 
   buscar('#cor-texto', cuerpo).focus();
+
+  const listaNuevos = buscar('#cor-lista-nuevos', cuerpo);
+
+  /** Vuelve a pintar la lista de archivos elegidos, con su peso y un
+      botón para quitar cada uno. */
+  const pintarNuevos = () => {
+    listaNuevos.innerHTML = archivosNuevos.map((archivo, i) =>
+      '<div style="display:flex;align-items:center;justify-content:space-between;' +
+           'padding:var(--esp-1) 0">' +
+        '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+          seguro(archivo.name) +
+          '<span style="color:var(--texto-tenue);font-size:.85em"> · ' +
+            pesoLegible(archivo.size) + '</span>' +
+        '</span>' +
+        '<button type="button" class="boton-icono" data-quitar-nuevo="' + i + '" ' +
+                'aria-label="Quitar">' +
+          '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
+            '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" ' +
+                  'stroke-width="2" stroke-linecap="round"/></svg>' +
+        '</button>' +
+      '</div>'
+    ).join('');
+
+    buscarTodos('[data-quitar-nuevo]', listaNuevos).forEach(boton => {
+      boton.addEventListener('click', () => {
+        archivosNuevos.splice(Number(boton.dataset.quitarNuevo), 1);
+        pintarNuevos();
+      });
+    });
+  };
+
+  buscar('#cor-archivo-nuevo', cuerpo).addEventListener('change', evento => {
+    const elegidos = Array.from(evento.target.files || []);
+    evento.target.value = ''; // para poder elegir el mismo archivo dos veces
+
+    const pesoActual = archivosNuevos.reduce((suma, a) => suma + a.size, 0);
+    const pesoNuevo   = elegidos.reduce((suma, a) => suma + a.size, 0);
+
+    if (pesoActual + pesoNuevo > PESO_MAXIMO_ADJUNTOS_NUEVOS) {
+      avisar('Entre todos los archivos no pueden pesar más de ' +
+             pesoLegible(PESO_MAXIMO_ADJUNTOS_NUEVOS) + '.', true);
+      return;
+    }
+
+    archivosNuevos = archivosNuevos.concat(elegidos);
+    pintarNuevos();
+  });
 
   buscar('#enviar', cuerpo).addEventListener('click', async () => {
     const para  = valorDe('cor-para', cuerpo);
@@ -834,6 +916,22 @@ function formularioCorreo(previo) {
 
     const boton = buscar('#enviar', cuerpo);
     boton.disabled = true;
+    boton.textContent = archivosNuevos.length ? 'Preparando archivos…' : 'Enviando…';
+
+    let archivosParaMandar;
+    try {
+      archivosParaMandar = await Promise.all(archivosNuevos.map(async archivo => ({
+        nombre: archivo.name,
+        tipo:   archivo.type || 'application/octet-stream',
+        datos:  await comoBase64(archivo),
+      })));
+    } catch (error) {
+      avisar(error.message, true);
+      boton.disabled = false;
+      boton.textContent = 'Enviar';
+      return;
+    }
+
     boton.textContent = 'Enviando…';
 
     try {
@@ -842,6 +940,7 @@ function formularioCorreo(previo) {
         asunto: valorDe('cor-asunto', cuerpo),
         texto: texto,
         adjuntos: adjuntosElegidos,
+        archivos_nuevos: archivosParaMandar,
       });
       cerrarHoja(true);
       /* guardado_en_enviados es "mejor esfuerzo" (ver correo.php): el
