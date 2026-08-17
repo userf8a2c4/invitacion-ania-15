@@ -241,7 +241,7 @@ const CONFIGURACION = {
       'nuestra historia más bella y nuestra mayor aventura.<br><br>' +
       'Esta noche es para ti. ¡Que comience la magia!',
 
-    firmaDeLosPapas: '— Con todo nuestro amor, Mamá y Papá',
+    firmaDeLosPapas: 'Con todo nuestro amor, Mamá y Papá',
 
     /** Saludo por defecto del sobre, cuando el enlace no trae nombre. */
     saludoGenerico: 'Estás invitado',
