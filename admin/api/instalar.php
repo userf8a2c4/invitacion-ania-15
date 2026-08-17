@@ -181,7 +181,7 @@ $agregarColumna('gastos', 'presupuesto_id', 'INT NOT NULL DEFAULT 1');
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 
 $tablasEsperadas = [
-    'usuarios', 'sesiones', 'intentos_login', 'bitacora', 'notas', 'archivos',
+    'usuarios', 'sesiones', 'recuperaciones_clave', 'intentos_login', 'bitacora', 'notas', 'archivos',
     'ajustes', 'alarmas', 'suscripciones_push', 'categorias_gasto', 'padrinos',
     'proveedores',
     'cotizaciones', 'cotizacion_items', 'gastos', 'pagos', 'tareas', 'agenda',
