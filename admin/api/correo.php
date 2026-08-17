@@ -177,6 +177,12 @@ case 'escribir':
     $para   = campoTexto($datos, 'para', 190);
     $asunto = campoTexto($datos, 'asunto', 200);
     $texto  = campoTexto($datos, 'texto', 20000);
+    // Con copia y con copia oculta: listas separadas por coma, tal cual
+    // se escriben en un campo de correo normal. direccionesValidas()
+    // (_lib/correo.php) descarta lo que no sea un correo real antes de
+    // que llegue a armar ningún comando SMTP.
+    $cc     = campoTexto($datos, 'cc', 500);
+    $cco    = campoTexto($datos, 'cco', 500);
 
     if (!filter_var($para, FILTER_VALIDATE_EMAIL)) {
         responderMal('La dirección de destino no es válida.', 422);
@@ -243,7 +249,8 @@ case 'escribir':
 
     $mensajeCrudo = null;
     $resultado = enviarCorreo(
-        $para, $asunto, plantillaDeRespuesta($texto), '', $adjuntosParaEnviar, $mensajeCrudo
+        $para, $asunto, plantillaDeRespuesta($texto), '', $adjuntosParaEnviar, $mensajeCrudo,
+        $cc, $cco
     );
 
     if ($resultado !== true) {

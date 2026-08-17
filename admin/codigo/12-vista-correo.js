@@ -823,6 +823,19 @@ function formularioCorreo(previo) {
 
   const cuerpo = abrirHoja(previo ? 'Responder' : 'Escribir',
     campoTexto({ id: 'cor-para', rotulo: 'Para', tipo: 'email', valor: d.para }) +
+
+    // CC/CCO empiezan escondidos: la mayoría de los correos no los usa,
+    // y mostrarlos siempre haría más largo el formulario simple de
+    // todos los días. "Agregar CC/CCO" los destapa sin recargar nada.
+    '<button type="button" class="boton boton--chico" id="cor-mostrar-copia" ' +
+            'style="margin:var(--esp-1) 0">Agregar CC/CCO</button>' +
+    '<div id="cor-copia" class="oculto">' +
+      campoTexto({ id: 'cor-cc', rotulo: 'CC',
+                   pista: 'Separados por coma, si son varios' }) +
+      campoTexto({ id: 'cor-cco', rotulo: 'CCO',
+                   pista: 'Con copia oculta: nadie más los ve' }) +
+    '</div>' +
+
     campoTexto({ id: 'cor-asunto', rotulo: 'Asunto', valor: d.asunto }) +
     campoLargo({ id: 'cor-texto', rotulo: 'Mensaje' }) +
 
@@ -852,6 +865,12 @@ function formularioCorreo(previo) {
   );
 
   buscar('#cor-texto', cuerpo).focus();
+
+  buscar('#cor-mostrar-copia', cuerpo).addEventListener('click', () => {
+    buscar('#cor-copia', cuerpo).classList.remove('oculto');
+    buscar('#cor-mostrar-copia', cuerpo).remove();
+    buscar('#cor-cc', cuerpo).focus();
+  });
 
   const listaNuevos = buscar('#cor-lista-nuevos', cuerpo);
 
@@ -937,6 +956,8 @@ function formularioCorreo(previo) {
     try {
       const r = await mandar('correo.php?accion=' + (previo ? 'responder' : 'escribir'), {
         para: para,
+        cc: valorDe('cor-cc', cuerpo),
+        cco: valorDe('cor-cco', cuerpo),
         asunto: valorDe('cor-asunto', cuerpo),
         texto: texto,
         adjuntos: adjuntosElegidos,
