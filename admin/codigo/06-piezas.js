@@ -829,6 +829,86 @@ function _filaDeDetalle(item) {
 }
 
 /**
+ * Ítems típicos por tipo de servicio, para no empezar de cero. Son un
+ * punto de partida MX-XV, no una verdad absoluta: agregan, no
+ * reemplazan lo que ya se haya escrito, así que sumar una plantilla de
+ * más no borra nada.
+ */
+const PLANTILLAS_DETALLE_PROVEEDOR = {
+  salon: {
+    nombre: 'Salón',
+    palabras: ['salon', 'salón', 'jardin', 'jardín', 'quinta', 'terraza'],
+    items: [
+      'Montaje y desmontaje', 'Mobiliario y mantelería',
+      'Iluminación básica del salón', 'Seguridad y valet parking',
+      'Horas de renta incluidas', 'Estacionamiento',
+    ],
+  },
+  dj: {
+    nombre: 'DJ',
+    palabras: ['dj', 'musica', 'música', 'sonido'],
+    items: [
+      'Horas de música incluidas', 'Equipo de sonido e iluminación',
+      'Micrófono para brindis', 'Ambientación de la ceremonia',
+      'Lista de canciones y prohibidas por escrito',
+    ],
+  },
+  foto: {
+    nombre: 'Foto',
+    palabras: ['foto', 'fotograf', 'fotógrafo'],
+    items: [
+      'Horas de cobertura', 'Número de fotógrafos',
+      'Fotos editadas entregadas', 'Álbum impreso',
+      'Sesión previa (save the date)',
+    ],
+  },
+  video: {
+    nombre: 'Video',
+    palabras: ['video', 'vídeo', 'filmacion', 'filmación'],
+    items: [
+      'Horas de cobertura', 'Video resumen (highlights)',
+      'Video completo de la ceremonia', 'Dron',
+      'Entrega en USB o nube',
+    ],
+  },
+  decoracion: {
+    nombre: 'Decoración',
+    palabras: ['decora', 'flores', 'floral', 'ambientacion', 'ambientación'],
+    items: [
+      'Centros de mesa', 'Arco o backdrop de ceremonia',
+      'Flores para el vals', 'Montaje y desmontaje',
+      'Mesa de dulces / postres',
+    ],
+  },
+  pastel: {
+    nombre: 'Pastel',
+    palabras: ['pastel', 'reposteria', 'repostería', 'postre'],
+    items: [
+      'Número de personas que rinde', 'Sabor y relleno',
+      'Piso de exhibición (falso)', 'Entrega y montaje el día del evento',
+      'Cuchillo y servicio de corte',
+    ],
+  },
+};
+
+/**
+ * Qué plantillas sugerirle a un proveedor según lo que escribió en
+ * "Servicio". Puede devolver más de una si el texto es ambiguo (ej.
+ * "Foto y video"), y ninguna si no reconoce nada — no inventa.
+ *
+ * @param {string} servicio
+ * @returns {Array<{nombre:string, items:string[]}>}
+ */
+function plantillasSugeridasPara(servicio) {
+  const normalizado = paraBuscar(servicio || '');
+  if (!normalizado) return [];
+
+  return Object.values(PLANTILLAS_DETALLE_PROVEEDOR).filter(p =>
+    p.palabras.some(palabra => normalizado.includes(paraBuscar(palabra)))
+  );
+}
+
+/**
  * Devuelve el HTML de la lista editable de "qué incluye": un renglón
  * por ítem, más agregar uno y pegar varias líneas de un tirón.
  *
@@ -842,10 +922,13 @@ function _filaDeDetalle(item) {
  * @param {string} opciones.rotulo
  * @param {Array} [opciones.items] - Ya en formato {id,texto,hecho}.
  * @param {string} [opciones.ayuda]
+ * @param {Array<{nombre:string,items:string[]}>} [opciones.plantillas]
+ *   - Botones de "Usar plantilla de X" (ver plantillasSugeridasPara()).
  * @returns {string}
  */
 function campoListaDeDetalle(opciones) {
   const items = opciones.items && opciones.items.length ? opciones.items : [];
+  const plantillas = opciones.plantillas || [];
 
   return '' +
     '<div class="campo">' +
@@ -856,11 +939,15 @@ function campoListaDeDetalle(opciones) {
       '<div id="' + seguro(opciones.id) + '">' +
         items.map(_filaDeDetalle).join('') +
       '</div>' +
-      '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-1)">' +
+      '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-1);flex-wrap:wrap">' +
         '<button type="button" class="boton boton--chico" data-detalle-agregar>' +
           'Agregar línea</button>' +
         '<button type="button" class="boton boton--chico" data-detalle-pegar>' +
           'Pegar varias…</button>' +
+        plantillas.map((p, i) =>
+          '<button type="button" class="boton boton--chico" data-detalle-plantilla="' + i + '">' +
+            'Usar plantilla de ' + seguro(p.nombre) + '</button>'
+        ).join('') +
       '</div>' +
     '</div>';
 }
@@ -872,9 +959,11 @@ function campoListaDeDetalle(opciones) {
  *
  * @param {string} id - El mismo que se le dio a campoListaDeDetalle().
  * @param {Element} [cuerpo]
+ * @param {Array<{nombre:string,items:string[]}>} [plantillas] - Mismo
+ *   arreglo, en el mismo orden, que se le pasó a campoListaDeDetalle().
  * @returns {void}
  */
-function engancharListaDeDetalle(id, cuerpo) {
+function engancharListaDeDetalle(id, cuerpo, plantillas) {
   const contenedor = buscar('#' + id, cuerpo);
   if (!contenedor) return;
 
@@ -891,6 +980,22 @@ function engancharListaDeDetalle(id, cuerpo) {
   };
 
   buscarTodos('[data-detalle-fila]', contenedor).forEach(engancharQuitar);
+
+  buscarTodos('[data-detalle-plantilla]', raiz).forEach(boton => {
+    boton.addEventListener('click', () => {
+      const plantilla = (plantillas || [])[Number(boton.dataset.detallePlantilla)];
+      if (!plantilla) return;
+
+      // No repite lo que ya está escrito, para poder tocar el botón
+      // más de una vez (ej. "Foto y video") sin duplicar renglones.
+      const yaEscritos = new Set(
+        buscarTodos('[data-detalle-texto]', contenedor).map(i => paraBuscar(i.value))
+      );
+      plantilla.items
+        .filter(texto => !yaEscritos.has(paraBuscar(texto)))
+        .forEach(texto => agregarFila(nuevoItemDeDetalle(texto)));
+    });
+  });
 
   const botonAgregar = buscar('[data-detalle-agregar]', raiz);
   if (botonAgregar) {
