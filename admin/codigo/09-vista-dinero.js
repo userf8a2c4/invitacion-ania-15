@@ -95,6 +95,7 @@ async function dibujarDinero() {
   });
 
   buscar('#exportar-dinero', vista).addEventListener('click', abrirHojaDeDescarga);
+  buscar('#resumen-ejecutivo', vista).addEventListener('click', exportarResumenEjecutivoDinero);
 
   buscarTodos('[data-proximo-pago]', vista).forEach(boton => {
     boton.addEventListener('click', () => {
@@ -377,8 +378,13 @@ function bloqueTotales(t) {
       '</div>' +
       costoPorInvitado +
       avisos +
-      '<button class="boton boton--chico boton--ancho" id="exportar-dinero" ' +
-              'style="margin-top:var(--esp-2)">Descargar</button>' +
+      '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-2)">' +
+        '<button class="boton boton--chico" style="flex:1" id="exportar-dinero">' +
+          'Descargar</button>' +
+        '<button class="boton boton--chico" style="flex:1" id="resumen-ejecutivo">' +
+          'Resumen ejecutivo' +
+        '</button>' +
+      '</div>' +
     '</div>';
 }
 
