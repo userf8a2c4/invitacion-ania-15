@@ -209,6 +209,38 @@ case 'escribir':
         }
     }
 
+    /* Archivos NUEVOS elegidos del teléfono (no reenviados de un correo
+       existente). Viajan en base64 porque este endpoint habla JSON, no
+       multipart/form-data — 12-vista-correo.js los lee con FileReader
+       antes de mandarlos. Máximo 5 y 8 MB en total entre todos: es un
+       correo, no un subidor de archivos pesados, y post_max_size del
+       servidor podría rechazar el pedido entero mucho antes si se
+       dejara más. */
+    $archivosNuevos = is_array($datos['archivos_nuevos'] ?? null)
+        ? array_slice($datos['archivos_nuevos'], 0, 5) : [];
+
+    $pesoAdjuntos = 0;
+    foreach ($archivosNuevos as $archivo) {
+        $b64 = (string) ($archivo['datos'] ?? '');
+        if ($b64 === '') continue;
+
+        $binario = base64_decode($b64, true);
+        if ($binario === false) continue;
+
+        $pesoAdjuntos += strlen($binario);
+        if ($pesoAdjuntos > 8 * 1024 * 1024) {
+            responderMal('Los archivos adjuntos pesan demasiado (máximo 8 MB en total).', 413);
+        }
+
+        $adjuntosParaEnviar[] = [
+            // Sin comillas ni saltos de línea: rompen la cabecera MIME
+            // del adjunto (ver smtpEnviar() en _lib/correo.php).
+            'nombre' => str_replace(['"', "\r", "\n"], '', (string) ($archivo['nombre'] ?? 'archivo')),
+            'tipo'   => campoTexto($archivo, 'tipo', 100, 'application/octet-stream'),
+            'datos'  => $binario,
+        ];
+    }
+
     $mensajeCrudo = null;
     $resultado = enviarCorreo(
         $para, $asunto, plantillaDeRespuesta($texto), '', $adjuntosParaEnviar, $mensajeCrudo
