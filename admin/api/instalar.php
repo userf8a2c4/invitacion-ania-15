@@ -128,6 +128,12 @@ $agregarColumna('cotizaciones', 'precio_pp', 'DECIMAL(12,2) NOT NULL DEFAULT 0')
    suyo por WhatsApp de un toque. Ver compartir.php. */
 $agregarColumna('proveedores', 'paquete', "VARCHAR(20) NOT NULL DEFAULT ''");
 
+/* "Qué incluye" como lista de ítems ({id,texto,hecho} en JSON), en vez
+   de un cuadro de texto corrido. Ver campoListaDeDetalle() en
+   06-piezas.js y campoListaDeDetalle() en _lib/responder.php. */
+$agregarColumna('proveedores',  'detalle_items', 'TEXT NULL');
+$agregarColumna('cotizaciones', 'detalle_items', 'TEXT NULL');
+
 /* Dónde está cada mesa en el salón, para poder dibujar el plano. En 0
    quedan las que todavía no se ubicaron: se muestran aparte. */
 $agregarColumna('mesas', 'fila',    'INT NOT NULL DEFAULT 0');
