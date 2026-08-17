@@ -101,6 +101,21 @@
            donde uno esté. Va acá, a la vista desde cualquier pantalla:
            con esta cantidad de datos, "¿dónde lo cargué?" es la pregunta
            que más tiempo hace perder. -->
+      <!-- Aparece SOLO cuando el Service Worker activó una versión nueva
+           de verdad (VERSION cambió en sw.js) mientras esta pestaña ya
+           estaba abierta con una vieja — nunca por archivos a medio
+           subir: el navegador solo detecta una versión nueva cuando ese
+           número cambió en el servidor. Ver 20-arranque.js. Empieza
+           oculto y sigue oculto toda la vida de la pestaña salvo que
+           esto pase de verdad. -->
+      <button id="boton-actualizar" class="boton-icono oculto" aria-label="Hay una versión nueva — tocar para actualizar">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
+          <path d="M12 4v10m0 0l-4-4m4 4l4-4" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M5 18v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
       <button id="boton-buscar" class="boton-icono" aria-label="Buscar en todo">
         <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
           <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/>
