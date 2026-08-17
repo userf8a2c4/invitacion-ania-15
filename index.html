@@ -161,26 +161,6 @@
   <link rel="preload" as="font" type="font/woff2" crossorigin
         href="recursos/tipografias/im-fell-english-400-normal-latin.woff2">
 
-  <!-- ═══ CRÍTICO, INLINE: QUE EL SOBRE TAPE LA PANTALLA DESDE EL PRIMER
-       PÍXEL, AUNQUE EL CSS COMPLETO TODAVÍA NO LLEGÓ ═══════════════════
-       Estas pocas reglas son un duplicado A PROPÓSITO de lo que ya dice
-       estilos/03-sobre-de-apertura.css. Sin esto, en el instante entre
-       "el HTML ya se puede pintar" y "el CSS ya llegó", #sobre-de-apertura
-       no tenía su position:fixed ni su z-index —no tapaba nada todavía—,
-       y se alcanzaba a ver el relicario sin estilos por debajo. Con esto
-       inline, el sobre tapa la pantalla ENTERA, opaco, desde el primer
-       cuadro, sin esperar nada.
-
-       Cuando el CSS completo (de abajo) llega, sus reglas —mismo
-       selector, más abajo en el documento— pisan estas por cascada
-       normal (el degradado bonito y el centrado entran solos, sin
-       salto). Total: cero riesgo de ver algo por detrás del sobre, Y el
-       resto del CSS sigue sin bloquear el pintado. -->
-  <style>
-    html { background: #0a0605; }
-    #sobre-de-apertura { position: fixed; inset: 0; z-index: 2000; background: #0a0605; }
-  </style>
-
   <!-- ═══ ESTILOS ═════════════════════════════════════════════════════
        Los 14 archivos de estilos/ (00-tipografias a 13-preguntas) van
        empaquetados en uno solo: menos peticiones al servidor, más rápido
@@ -191,27 +171,25 @@
        si dos archivos dicen cosas distintas sobre lo mismo, gana el que
        iba último; 00-tipografias sigue yendo primero).
 
-       ⚠️ SE CARGA SIN BLOQUEAR EL PRIMER PINTADO, Y AHORA SÍ ES SEGURO.
-       Antes esto se probó y se revirtió porque, sin el bloque crítico de
-       arriba, el sobre no tapaba nada mientras esperaba el CSS. Con ese
-       bloque puesto, el problema real quedó resuelto en la raíz —no en
-       si el CSS bloquea o no, sino en que el sobre tape la pantalla
-       desde el primer píxel—, así que se puede volver a cargar sin
-       bloquear con seguridad: PageSpeed estimaba hasta 1,3s de ahorro en
-       el primer pintado por evitarle a la página esperar 170ms de
-       transferencia de un archivo que, mientras se espera, también
-       frena el procesamiento del resto del documento (grande: todo el
-       marco decorativo en SVG).
+       ⚠️ ES UN <link rel="stylesheet"> NORMAL, BLOQUEANTE, A PROPÓSITO
+       Y DEFINITIVO. Se probó dos veces cargarlo sin bloquear
+       (rel="preload" + swap por JavaScript, primero solo y después con
+       un <style> crítico inline como red de seguridad). Las dos veces
+       aparecieron partes del sitio sin su CSS real en el teléfono —el
+       fondo craquelado, los ramilletes de esquina, la fluidez del
+       scroll—, aunque esos archivos no se habían tocado.
 
-       El truco (rel="preload" + swap a stylesheet en el evento load) le
-       pide el archivo con la MISMA prioridad de red que un <link>
-       normal —no se descarga más tarde ni compite peor—, pero sin
-       obligar al navegador a esperarlo para pintar. El <noscript> de
-       abajo es la red de seguridad: si alguien tiene JavaScript
-       apagado, se aplica como una hoja de estilos común y corriente. -->
-  <link rel="preload" href="estilos/_empaquetado.css?v=64" as="style"
-        onload="this.onload=null;this.rel='stylesheet'">
-  <noscript><link rel="stylesheet" href="estilos/_empaquetado.css?v=64"></noscript>
+       La causa: el evento `onload` de un `rel="preload"` de hoja de
+       estilos tiene un bug conocido en Safari/iOS —no siempre dispara—.
+       Cuando no dispara, la hoja se queda pedida pero nunca aplicada,
+       PARA SIEMPRE. Es indistinguible, para quien mira la pantalla, de
+       "se rompió el sitio". El ahorro que prometía (~1,3s estimados por
+       PageSpeed) no vale ese riesgo en una invitación que tiene que
+       funcionar perfecto una sola vez.
+
+       No se vuelve a intentar esta técnica sin antes verla funcionar de
+       verdad en un dispositivo real, no solo en el número de PageSpeed. -->
+  <link rel="stylesheet" href="estilos/_empaquetado.css?v=65">
 
 
   
@@ -2119,23 +2097,23 @@
      empaquetado (ver la sección de ESTILOS): el CSS no se compila ni se
      ejecuta, así que ahí juntar no genera ninguna tarea larga.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/01-configuracion.js?v=64"></script>
-<script defer src="codigo/02-utilidades.js?v=64"></script>
-<script defer src="codigo/03-sobre-de-apertura.js?v=64"></script>
-<script defer src="codigo/04-invitado-personalizado.js?v=64"></script>
-<script defer src="codigo/05-cursor-personalizado.js?v=64"></script>
+<script defer src="codigo/01-configuracion.js?v=65"></script>
+<script defer src="codigo/02-utilidades.js?v=65"></script>
+<script defer src="codigo/03-sobre-de-apertura.js?v=65"></script>
+<script defer src="codigo/04-invitado-personalizado.js?v=65"></script>
+<script defer src="codigo/05-cursor-personalizado.js?v=65"></script>
 <!-- EL LIENZO DE PÉTALOS. Va ANTES que 06-petalos-con-fisica.js porque ese
      archivo le pregunta al arrancar si debe crear elementos o solo números.
      Con  ?petalos=dom  vuelve el sistema de divs. -->
-<script defer src="codigo/24-lienzo-de-petalos.js?v=64"></script>
-<script defer src="codigo/06-petalos-con-fisica.js?v=64"></script>
-<script defer src="codigo/07-marco-y-enredaderas.js?v=64"></script>
-<script defer src="codigo/08-efectos-de-scroll.js?v=64"></script>
-<script defer src="codigo/09-cuenta-regresiva.js?v=64"></script>
-<script defer src="codigo/10-reproductor-de-musica.js?v=64"></script>
-<script defer src="codigo/11-formulario-confirmacion.js?v=64"></script>
-<script defer src="codigo/12-pase-de-acceso.js?v=64"></script>
-<script defer src="codigo/13-agregar-al-calendario.js?v=64"></script>
+<script defer src="codigo/24-lienzo-de-petalos.js?v=65"></script>
+<script defer src="codigo/06-petalos-con-fisica.js?v=65"></script>
+<script defer src="codigo/07-marco-y-enredaderas.js?v=65"></script>
+<script defer src="codigo/08-efectos-de-scroll.js?v=65"></script>
+<script defer src="codigo/09-cuenta-regresiva.js?v=65"></script>
+<script defer src="codigo/10-reproductor-de-musica.js?v=65"></script>
+<script defer src="codigo/11-formulario-confirmacion.js?v=65"></script>
+<script defer src="codigo/12-pase-de-acceso.js?v=65"></script>
+<script defer src="codigo/13-agregar-al-calendario.js?v=65"></script>
 <!-- EL LIENZO DE LUZ. Dibuja los tres sistemas de luz —velas, haces y polvo—
      en un solo <canvas>, en vez de en ~140 elementos con `mix-blend-mode`.
 
@@ -2145,15 +2123,15 @@
 
      Con  ?luz=dom  este módulo se queda dormido y vuelve el sistema
      anterior completo, sin tocar código. -->
-<script defer src="codigo/23-lienzo-de-luz.js?v=64"></script>
+<script defer src="codigo/23-lienzo-de-luz.js?v=65"></script>
 <!-- FAUNA NOCTURNA: luciérnagas y termitas, dibujadas por el lienzo de
      arriba. Va después de 23 (que crea window.LienzoDeLuz) — el orden
      respecto de 19-velas.js no importa, porque este módulo espera el
      evento 'invitacion-visible' antes de buscar los candelabros, que
      19-velas.js recién crea ahí. -->
-<script defer src="codigo/27-fauna-nocturna.js?v=64"></script>
-<script defer src="codigo/14-haces-de-luz.js?v=64"></script>
-<script defer src="codigo/15-registro-de-confirmaciones.js?v=64"></script>
+<script defer src="codigo/27-fauna-nocturna.js?v=65"></script>
+<script defer src="codigo/14-haces-de-luz.js?v=65"></script>
+<script defer src="codigo/15-registro-de-confirmaciones.js?v=65"></script>
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda).
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
      —incluso sobre el sobre de entrada— para que quien tenga un equipo
@@ -2168,27 +2146,27 @@
   <span class="boton-animaciones__texto">Animación</span>
 </button>
 
-<script defer src="codigo/16-volver-arriba.js?v=64"></script>
-<script defer src="codigo/17-joyas-colgantes.js?v=64"></script>
-<script defer src="codigo/18-motas-de-polvo.js?v=64"></script>
-<script defer src="codigo/19-velas.js?v=64"></script>
-<script defer src="codigo/20-boton-de-animaciones.js?v=64"></script>
-<script defer src="codigo/21-monitor-de-rendimiento.js?v=64"></script>
+<script defer src="codigo/16-volver-arriba.js?v=65"></script>
+<script defer src="codigo/17-joyas-colgantes.js?v=65"></script>
+<script defer src="codigo/18-motas-de-polvo.js?v=65"></script>
+<script defer src="codigo/19-velas.js?v=65"></script>
+<script defer src="codigo/20-boton-de-animaciones.js?v=65"></script>
+<script defer src="codigo/21-monitor-de-rendimiento.js?v=65"></script>
 <!-- Tiñe la luz que entra por los ventanales según la hora del día. Va
      después de los haces y las motas, porque escribe sobre sus capas. -->
-<script defer src="codigo/22-luz-de-la-hora.js?v=64"></script>
+<script defer src="codigo/22-luz-de-la-hora.js?v=65"></script>
 
 <!-- PREGUNTAS FRECUENTES (el botón "?" de la fila de controles).
      El 00 tiene solo los datos —fecha, lugar, vestimenta, regalos— y el
      25 arma el panel leyéndolos. Ese orden importa: si el 25 corriera
      primero, no encontraría la lista de preguntas y no dibujaría nada. -->
-<script defer src="codigo/00-conocimiento-chatbot.js?v=64"></script>
-<script defer src="codigo/25-preguntas-frecuentes.js?v=64"></script>
+<script defer src="codigo/00-conocimiento-chatbot.js?v=65"></script>
+<script defer src="codigo/25-preguntas-frecuentes.js?v=65"></script>
 
 <!-- EL MAPA A PEDIDO. El iframe de Google Maps recién se crea cuando se
      toca "Ver el mapa" (ver el comentario junto a .mapa-marco--a-pedido
      más arriba). -->
-<script defer src="codigo/26-mapa-a-pedido.js?v=64"></script>
+<script defer src="codigo/26-mapa-a-pedido.js?v=65"></script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
      internet y se pueda instalar. Va al final y falla en silencio si el
