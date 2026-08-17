@@ -209,14 +209,33 @@ case 'escribir':
         }
     }
 
-    $resultado = enviarCorreo($para, $asunto, plantillaDeRespuesta($texto), '', $adjuntosParaEnviar);
+    $mensajeCrudo = null;
+    $resultado = enviarCorreo(
+        $para, $asunto, plantillaDeRespuesta($texto), '', $adjuntosParaEnviar, $mensajeCrudo
+    );
 
     if ($resultado !== true) {
         responderMal('No se pudo enviar: ' . $resultado, 502);
     }
 
+    /* Mejor esfuerzo: guardar una copia en Enviados por IMAP. El correo
+       YA SE MANDÓ arriba —esto es aparte, y si falla no hay nada que
+       avisar como error, porque no falló el envío—. Ver
+       BuzonImap::guardarEnviado() para el porqué. */
+    $guardadoEnEnviados = false;
+    if ($mensajeCrudo) {
+        $buzonEnv = new BuzonImap();
+        if ($buzonEnv->conectar()) {
+            $guardadoEnEnviados = $buzonEnv->guardarEnviado($mensajeCrudo);
+            $buzonEnv->cerrar();
+        }
+    }
+
     anotarEnBitacora($yo, 'envió un correo', 'correo', 0, $para . ' — ' . $asunto);
-    responderBien(['mensaje' => 'Correo enviado a ' . $para]);
+    responderBien([
+        'mensaje' => 'Correo enviado a ' . $para,
+        'guardado_en_enviados' => $guardadoEnEnviados,
+    ]);
     break;
 
 
