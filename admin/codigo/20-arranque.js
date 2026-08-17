@@ -114,6 +114,7 @@ function avisarSiHayActualizacion() {
  */
 function arrancarLaApp() {
   mostrarPantalla('app');
+  actualizarContadorDeDias();
 
   /* Antes de nada: comprobar que lo guardado en el teléfono sea de esta
      cuenta. Si era de otra, se borra. Recién después se mira la cola,

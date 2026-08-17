@@ -38,7 +38,12 @@ async function dibujarResumen() {
     throw error;
   }
 
-  ponerTitulo('Resumen', textoDeCuentaAtras(datos.dias_para_la_fiesta));
+  /* La cuenta atrás ya no va acá: desde el rediseño Lucila vive en el
+     encabezado como el contador persistente en oro (ver
+     actualizarContadorDeDias(), 05-navegacion.js), visible en TODAS
+     las pantallas, no solo en Resumen. Repetirla acá abajo sería la
+     misma cifra dos veces en la misma pantalla. */
+  ponerTitulo('Resumen');
 
   const pendientes = listaDeAtencion(datos);
 

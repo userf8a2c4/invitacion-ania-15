@@ -145,7 +145,10 @@ function pintarListaDeContactos() {
       CONTACTOS.length ? 'Nada coincide' : 'Todavía no hay contactos',
       CONTACTOS.length
         ? 'Prueba con otra búsqueda.'
-        : 'Van apareciendo solos a medida que cargues invitados, proveedores y padrinos.');
+        : 'Se van a ir sumando solos a medida que cargues invitados, proveedores y padrinos.',
+      // El gato solo en el vacío de verdad — una búsqueda sin resultados
+      // no es "todavía no hay nada", así que no le toca el guiño.
+      CONTACTOS.length ? undefined : 'gato');
     return;
   }
 
