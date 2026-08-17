@@ -1184,7 +1184,7 @@
   position: relative;
   overflow: hidden;
   border-radius: var(--redondeo-chico);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   /* touch-action limita el gesto al eje vertical para el navegador, así
      el arrastre horizontal nos lo queda manejando el JavaScript y no se
      pelea con el desplazamiento de la página. */
@@ -1223,8 +1223,12 @@
   display: flex;
   align-items: center;
   gap: var(--esp-2);
-  min-height: 62px;
-  padding: var(--esp-2) var(--esp-3);
+  /* Fase D del Paso 4: filas más densas para que quepan más correos por
+     pantalla sin scrollear tanto — 52px sigue siendo un objetivo de
+     toque cómodo (bien arriba del mínimo de 44px que recomienda
+     Apple/Google), solo que ya no sobra tanto aire. */
+  min-height: 52px;
+  padding: var(--esp-1) var(--esp-3);
   background: var(--fondo-tarjeta);
   border: 1px solid var(--borde);
   border-radius: var(--redondeo-chico);
