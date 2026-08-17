@@ -564,7 +564,7 @@ function pintarIndice(donde, grupos, alElegir) {
                entender antes de tocarlo. */
             '<svg viewBox="0 0 24 24" class="indice__flecha" aria-hidden="true">' +
               '<path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" ' +
-                    'stroke-width="2" stroke-linecap="round" ' +
+                    'stroke-width="1.5" stroke-linecap="round" ' +
                     'stroke-linejoin="round"/>' +
             '</svg>' +
           '</button>';
@@ -592,7 +592,7 @@ function barraDeVuelta(titulo, descripcion) {
       '<button class="volver__boton" id="indice-volver">' +
         '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
           '<path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" ' +
-                'stroke-width="2" stroke-linecap="round" ' +
+                'stroke-width="1.5" stroke-linecap="round" ' +
                 'stroke-linejoin="round"/>' +
         '</svg>' +
         '<span>' + seguro(titulo) + '</span>' +
