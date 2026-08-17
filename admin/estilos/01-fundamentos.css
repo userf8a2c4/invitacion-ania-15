@@ -71,18 +71,29 @@
   --alerta:  #FF4D6A;
   --info:    #5B8DEF;
 
-  /* Medidas. Todo el espaciado sale de estas seis para que nada quede
-     a ojo y el conjunto se vea parejo. */
+  /* Medidas. Todo el espaciado sale de esta escala para que nada quede
+     a ojo y el conjunto se vea parejo. --esp-6 es nueva (rediseño
+     Lucila): el brief pide 28-36px de aire entre bloques grandes de una
+     pantalla — --esp-5 (32px) ya cubre eso, --esp-6 es el paso extra
+     para cuando hace falta separar aún más (ej. debajo del encabezado
+     antes del primer bloque, donde el brief pide "aire generoso"). */
   --gota:  4px;
   --esp-1: 8px;
   --esp-2: 12px;
   --esp-3: 16px;
   --esp-4: 24px;
   --esp-5: 32px;
+  --esp-6: 40px;
 
   --redondeo:       12px;
   --redondeo-chico: 8px;
   --redondeo-hoja:  20px;
+
+  /* El resplandor morado sutil que pide el brief para los elementos de
+     "máximo prestigio" (botón primario activo, contador de días) — NO
+     para cada tarjeta, si no dejaría de sentirse especial. Un solo
+     valor acá para que todos los usos compartan la misma intensidad. */
+  --brillo-oro: 0 0 20px rgba(107, 63, 160, .35);
 
   /* Alturas de las barras fijas. Se usan para calcular cuánto espacio
      dejarle al contenido y que nada quede tapado. */
@@ -136,34 +147,26 @@ html {
 }
 
 body {
-  /* El papel tapiz gótico-victoriano de verdad (Fase 7.5): imagen real,
-     no un SVG dibujado a mano — esta la generó Carlos con IA y la
-     pidió a propósito porque el patrón vectorial no llegaba al nivel
-     de detalle/lujo que quería (gatos negros con ojos de gema, filigrana
-     dorada con relieve, murciélagos, damasco morado con sombreado real).
+  /* Rediseño "centro de mando" (brief Lucila, ago-2026): el papel tapiz
+     gótico-victoriano a fuerza completa que había antes competía con
+     los datos — el brief pide "el dato siempre gana al ornamento" y el
+     patrón limitado a 3-6% de opacidad, y SOLO en encabezado o estados
+     vacíos, nunca como fondo del área de trabajo. Ese tratamiento puntual
+     vive ahora en 02-componentes.css/03-vistas.css (encabezado, vacíos);
+     acá en el fondo de trabajo solo queda un morado casi invisible.
 
-     REPITE, no "cover": con cover+fixed la imagen se veía una sola vez
-     y en pantallas largas se cortaba, dejando el resto en el color
-     liso de abajo. Repetida, la propia grilla de medallones que ya
-     trae la imagen sigue armando el mosaico sin importar cuánto se
-     desplace la pantalla — puede notarse alguna costura leve donde
-     empalma una copia con la siguiente, pero es preferible a que se
-     corte.
-
-     El velo negro al 50% (el linear-gradient de arriba, primera capa)
-     oscurece la imagen sin tocar el color de fondo real ni el
-     contenido: por eso va como una capa MÁS del fondo y no como
-     filter en el body —filter afectaría también a todo lo de adentro,
-     no solo al papel tapiz. */
+     El degradé radial es la única textura del fondo de trabajo: morado
+     apenas insinuado arriba, que se apaga hacia el negro de --fondo
+     antes de llegar a la mitad de la pantalla. "at 50% -8%" lo centra
+     un poco por encima del borde superior, así el punto más intenso
+     queda oculto detrás del encabezado y lo que se alcanza a ver ya es
+     el borde suave del resplandor, nunca el centro. */
   background-image:
-    linear-gradient(rgba(0, 0, 0, .5), rgba(0, 0, 0, .5)),
-    url('../recursos/fondo-gotico-victoriano.webp');
-  background-repeat: no-repeat, repeat;
-  /* E2: sin esto el mosaico arranca desde la esquina 0,0 y en una
-     pantalla angosta corta los gatos de los bordes de cualquier forma.
-     "center top" centra el enrejado horizontalmente (el patrón es
-     simétrico izquierda-derecha) y lo arranca prolijo desde arriba. */
-  background-position: 0 0, center top;
+    radial-gradient(ellipse 1000px 580px at 50% -8%,
+                     rgba(107, 63, 160, .16), transparent 62%);
+  background-repeat: no-repeat;
+  background-position: center top;
+  background-attachment: fixed;
   background-color: var(--fondo);
   color: var(--texto);
 

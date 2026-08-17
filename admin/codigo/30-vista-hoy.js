@@ -174,7 +174,7 @@ function bloqueTresAcciones() {
             'id="hoy-escanear">' +
       '<svg viewBox="0 0 24 24" aria-hidden="true" class="icono">' +
         '<path d="M4 4h4M4 4v4M20 4h-4M20 4v4M4 20h4M4 20v-4M20 20h-4M20 20v-4" ' +
-             'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
+             'fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
         '<rect x="9" y="9" width="6" height="6" fill="currentColor"/>' +
       '</svg>' +
       'Escanear pase' +
