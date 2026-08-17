@@ -337,6 +337,12 @@
 <script src="codigo/31-vista-planificar.js"></script>
 <script src="codigo/38-metricas.js"></script>
 <script src="codigo/39-vista-metricas.js"></script>
+<!-- Los agentes del asistente (Paso 5): el registro primero (40), cada
+     agente después — cada uno se anota solo al cargar (registrarAgente()
+     en 40-agentes.js), así que el orden entre ellos no importa, pero
+     40 tiene que ir antes que todos. Se van agregando acá a medida que
+     se escriben (41 dinero, 42 mesas, 43 fechas, 44 hoy). -->
+<script src="codigo/40-agentes.js"></script>
 <!-- 20-arranque.js va SIEMPRE último: es el que enciende la app y usa
      funciones de todos los anteriores. Por eso el 21 y el 22 se cargan
      antes que él aunque su número sea mayor. -->
