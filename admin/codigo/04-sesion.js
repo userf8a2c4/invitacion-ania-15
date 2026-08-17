@@ -19,6 +19,19 @@
 /** Quién está usando el panel. Lo leen las otras vistas. */
 let USUARIO = null;
 
+/**
+ * Las mismas cinco preguntas de seguridad de _lib/sesion.php
+ * (PREGUNTAS_DE_SEGURIDAD) — si se cambia una lista, hay que cambiar la
+ * otra. Se usan acá (login) y en 20-arranque.js (Ajustes → Mi cuenta).
+ */
+const PREGUNTAS_DE_SEGURIDAD = [
+  '¿Cuál fue tu primer trabajo?',
+  '¿Cómo se llamaba tu primera mascota?',
+  '¿En qué ciudad naciste?',
+  '¿Cuál era tu comida favorita de niño?',
+  '¿Cuál era tu apodo de la infancia?',
+];
+
 
 /* ─── CAMBIAR DE PANTALLA ──────────────────────────────────────────── */
 
@@ -262,11 +275,15 @@ async function salir() {
 function abrirRecuperarContrasena(correoPrecargado) {
   const cuerpo = abrirHoja('¿Olvidaste tu contraseña?',
     '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
-      'Escribe el correo de tu cuenta y te mandamos un código para poner ' +
-      'una contraseña nueva.' +
+      'Escribe el correo de tu cuenta y responde la pregunta de seguridad ' +
+      'que configuraste en Ajustes → Mi cuenta. Si coincide, te mandamos ' +
+      'un código para poner una contraseña nueva.' +
     '</p>' +
     campoTexto({ id: 'recuperar-correo', rotulo: 'Correo', tipo: 'email',
                  valor: correoPrecargado || '' }) +
+    campoLista({ id: 'recuperar-pregunta', rotulo: 'Pregunta de seguridad',
+                 opciones: PREGUNTAS_DE_SEGURIDAD.map(p => ({ valor: p, texto: p })) }) +
+    campoTexto({ id: 'recuperar-respuesta', rotulo: 'Tu respuesta' }) +
     '<p id="recuperar-error" class="aviso-error oculto" role="alert"></p>' +
     '<div class="acciones">' +
       '<button type="button" class="boton boton--principal" id="recuperar-pedir">' +
@@ -276,12 +293,14 @@ function abrirRecuperarContrasena(correoPrecargado) {
   );
 
   buscar('#recuperar-pedir', cuerpo).addEventListener('click', async () => {
-    const boton  = buscar('#recuperar-pedir', cuerpo);
-    const error  = buscar('#recuperar-error', cuerpo);
-    const correo = buscar('#recuperar-correo', cuerpo).value.trim();
+    const boton     = buscar('#recuperar-pedir', cuerpo);
+    const error     = buscar('#recuperar-error', cuerpo);
+    const correo    = buscar('#recuperar-correo', cuerpo).value.trim();
+    const pregunta  = buscar('#recuperar-pregunta', cuerpo).value;
+    const respuesta = buscar('#recuperar-respuesta', cuerpo).value.trim();
 
-    if (!correo) {
-      error.textContent = 'Escribe tu correo.';
+    if (!correo || !pregunta || !respuesta) {
+      error.textContent = 'Completa el correo, la pregunta y la respuesta.';
       error.classList.remove('oculto');
       return;
     }
@@ -291,13 +310,13 @@ function abrirRecuperarContrasena(correoPrecargado) {
     error.classList.add('oculto');
 
     try {
-      const respuesta = await pedir('sesion.php?accion=recuperar', {
+      const respuestaServidor = await pedir('sesion.php?accion=recuperar', {
         metodo: 'POST',
         sinSesion: true,
         noEncolar: true,
-        cuerpo: { correo: correo },
+        cuerpo: { correo: correo, pregunta: pregunta, respuesta: respuesta },
       });
-      abrirConfirmarCodigo(correo, respuesta.mensaje);
+      abrirConfirmarCodigo(correo, respuestaServidor.mensaje);
     } catch (fallo) {
       error.textContent = fallo.message;
       error.classList.remove('oculto');
