@@ -243,11 +243,62 @@ function buscarCoincidencias(texto) {
    búsqueda en sí ya normaliza los dos lados por su cuenta.
 */
 const PATRONES_DE_ENTIDAD = [
-  { tipo: 'pago',    regex: /^marca(?:r)?\s+pagad[oa]\s+(?:el\s+|la\s+)?(.+)/i },
+  /* Fase B (Paso 5): más formas de decir "ya se pagó" — antes solo
+     entendía "marca(r) pagado/a". El grupo de después del verbo se
+     prueba de más específico ("el pago de") a más genérico ("a"), para
+     que "liquida el pago de flores" no se coma "el pago de" como si
+     fuera parte del nombre. */
+  { tipo: 'pago',    regex: /^(?:marca(?:r)?\s+pagad[oa]|ya\s+pagu[eé]|ya\s+se\s+pag[oó]|cobra(?:r)?|liquida(?:r)?|salda(?:r)?)\s+(?:el\s+pago\s+de\s+|la\s+cuenta\s+de\s+|el\s+|la\s+|al\s+|a\s+)?(.+)/i },
   { tipo: 'buscar',  regex: /^(?:busca(?:r)?\s+a|quien\s+es)\s+(.+)/i },
-  { tipo: 'sentar',  regex: /^(?:sienta(?:r|n)?|acomoda(?:r)?)\s+a\s+(.+)/i },
+  /* Fase B: "sienta a Juan en la mesa 5" — el segundo grupo (la mesa)
+     es opcional; si no está, sigue funcionando como antes (abre el
+     selector de mesas de siempre). */
+  { tipo: 'sentar',  regex: /^(?:sienta(?:r|n)?|acomoda(?:r)?)\s+a\s+(.+?)(?:\s+en\s+(?:la\s+)?mesa\s+(.+))?$/i },
   { tipo: 'tarea',   regex: /^(?:crea(?:r)?|agrega(?:r)?)\s+una?\s+tarea\s+(?:de\s+)?(.+)/i },
 ];
+
+/**
+ * Fase B (Paso 5): separa una fecha del final de una tarea SIN la
+ * palabra "para" — "llamar al DJ mañana", "confirmar flores el
+ * viernes". Prueba las últimas 1, 2, 3… palabras como fecha, de MENOS
+ * palabras a MÁS: "el viernes" ya matchea con la palabra "viernes"
+ * sola (interpretarFechaParaElAsistente busca por substring), así que
+ * si se probara de más a menos primero, "confirmar flores el viernes"
+ * se comería "flores el" como si fueran parte de la fecha. Probando
+ * de a poco, "en 3 dias" igual se arma completo: "dias" sola no
+ * significa nada, así que sigue probando hasta llegar a la frase
+ * entera.
+ *
+ * Es ambiguo a propósito, de forma conservadora: si el final de una
+ * tarea real fuera "...el pago de mañana" (mañana como parte del
+ * título, no como fecha), esto igual la separaría. Es un costado
+ * aceptado del Paso 5 — la tarea se crea igual, solo con el título
+ * recortado, y se corrige a mano abriendo la tarea después.
+ *
+ * @param {string} resto
+ * @returns {{titulo:string, fecha:string}|null} null si nada del final
+ *   se entendió como fecha.
+ */
+function separarFechaSueltaDeTarea(resto) {
+  const palabras = resto.trim().split(/\s+/).filter(Boolean);
+  const maximo = Math.min(4, palabras.length - 1);
+
+  for (let n = 1; n <= maximo; n++) {
+    const candidata = palabras.slice(-n).join(' ');
+    const fecha = interpretarFechaParaElAsistente(candidata);
+    if (!fecha) continue;
+
+    // Puede quedar un conector suelto al final ("...flores el" →
+    // "...flores"): se saca, que ese sí es siempre parte de la fecha
+    // que se acaba de separar, nunca del título.
+    const titulo = palabras.slice(0, -n).join(' ')
+      .replace(/\s+(?:el|la|del|de|para)$/i, '');
+
+    return { titulo: titulo, fecha: fecha };
+  }
+
+  return null;
+}
 
 /**
  * Prueba los patrones de entidad. Si alguno matchea, resuelve la
@@ -306,24 +357,95 @@ async function intentarConEntidad(texto, resultado) {
     }
 
     if (patron.tipo === 'sentar') {
-      const opciones = await buscarParaSentarParaElAsistente(resto);
-      // La computadora propone mesa, la persona decide — mismo camino
-      // que ya existe, no hace falta una confirmación aparte acá.
-      mostrarOpcionesDeEntidad(resultado, opciones, o => o.nombre, inv => {
-        cerrarHoja(true);
-        elegirMesaPara(inv.id, () => {
-          ensuciarVistas('resumen', 'evento', 'invitados');
-          if (VISTA_ACTUAL === 'invitados') dibujarGente();
+      // m[1] es siempre el nombre; m[2] (Fase B) es la mesa SI se dijo
+      // "en la mesa N" — si no, sigue undefined y se comporta como antes.
+      const nombreBuscado = m[1].trim();
+      const mesaBuscada = m[2] ? m[2].trim() : '';
+      const opciones = await buscarParaSentarParaElAsistente(nombreBuscado);
+
+      if (!mesaBuscada) {
+        // Sin mesa explícita: la computadora propone, la persona decide
+        // — mismo camino que ya existe, no hace falta confirmación
+        // aparte acá porque elegirMesaPara() ya la pide por su cuenta.
+        mostrarOpcionesDeEntidad(resultado, opciones, o => o.nombre, inv => {
+          cerrarHoja(true);
+          elegirMesaPara(inv.id, () => {
+            ensuciarVistas('resumen', 'evento', 'invitados');
+            if (VISTA_ACTUAL === 'invitados') dibujarGente();
+          });
+        });
+        return true;
+      }
+
+      // Con mesa explícita ("en la mesa 5"): esto SÍ escribe directo,
+      // sin pasar por el selector de siempre — por eso acá adentro hace
+      // falta su propia confirmación antes de mandar mesas.php?accion=
+      // sentar (el mismo endpoint que ya usa 08-vista-invitados.js).
+      mostrarOpcionesDeEntidad(resultado, opciones, o => o.nombre, async inv => {
+        const mesas = await datosDeMesasParaElAsistente();
+        const mesaEncontrada = (mesas && mesas.mesas || []).find(m2 =>
+          paraBuscar(m2.nombre).includes(paraBuscar(mesaBuscada)));
+
+        if (!mesaEncontrada) {
+          resultado.innerHTML =
+            '<p class="aviso-error">No encontré una mesa que coincida con "' +
+              seguro(mesaBuscada) + '".</p>' +
+            '<div class="acciones">' +
+              '<button class="boton boton--principal" id="entidad-abrir-selector">' +
+                'Elegir mesa a mano</button>' +
+            '</div>';
+          buscar('#entidad-abrir-selector', resultado).addEventListener('click', () => {
+            cerrarHoja(true);
+            elegirMesaPara(inv.id, () => {
+              ensuciarVistas('resumen', 'evento', 'invitados');
+              if (VISTA_ACTUAL === 'invitados') dibujarGente();
+            });
+          });
+          return;
+        }
+
+        resultado.innerHTML =
+          '<p style="margin-bottom:var(--esp-2)">¿Sentar a <strong>' + seguro(inv.nombre) +
+            '</strong> en <strong>' + seguro(mesaEncontrada.nombre) + '</strong>?</p>' +
+          '<div class="acciones">' +
+            '<button class="boton" id="entidad-cancelar">Cancelar</button>' +
+            '<button class="boton boton--principal" id="entidad-confirmar">Sentar</button>' +
+          '</div>';
+
+        buscar('#entidad-cancelar', resultado).addEventListener('click', () => { resultado.innerHTML = ''; });
+        buscar('#entidad-confirmar', resultado).addEventListener('click', async () => {
+          try {
+            await mandar('mesas.php?accion=sentar',
+              { confirmacion_id: inv.id, mesa_id: mesaEncontrada.id });
+            cerrarHoja(true);
+            avisar('Sentado en ' + mesaEncontrada.nombre + '.');
+            ensuciarVistas('resumen', 'evento', 'invitados');
+            if (VISTA_ACTUAL === 'invitados') dibujarGente();
+          } catch (error) {
+            avisar(error.message, true);
+          }
         });
       });
       return true;
     }
 
     if (patron.tipo === 'tarea') {
-      // No busca: separa "para <fecha>" del título, si está.
+      // Primero "para <fecha>", que es lo explícito de siempre. Si no
+      // está (Fase B), se prueba si el final de la frase YA ES una
+      // fecha por su cuenta ("...llamar al DJ mañana"), sin la palabra
+      // "para" — separarFechaSueltaDeTarea() prueba de más palabras a
+      // menos para no cortar "en 3 dias" por la mitad.
       const conFecha = resto.match(/^(.*?)\s+para\s+(.+)$/i);
-      const titulo = (conFecha ? conFecha[1] : resto).trim();
-      const fecha = conFecha ? interpretarFechaParaElAsistente(conFecha[2]) : null;
+      let titulo, fecha;
+
+      if (conFecha) {
+        titulo = conFecha[1].trim();
+        fecha  = interpretarFechaParaElAsistente(conFecha[2]);
+      } else {
+        const suelta = separarFechaSueltaDeTarea(resto);
+        titulo = suelta ? suelta.titulo : resto.trim();
+        fecha  = suelta ? suelta.fecha : null;
+      }
 
       if (!titulo) {
         resultado.innerHTML = '<p class="aviso-error">Decime qué tarea, además de la fecha.</p>';
