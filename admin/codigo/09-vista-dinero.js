@@ -716,6 +716,8 @@ function abrirDetalleDeGasto(gasto) {
     '</div>'
   );
 
+  insertarAdjuntosDeSoloLectura(cuerpo, 'gasto', gasto.id, 'Facturas y comprobantes');
+
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioGasto(gasto));
 }
 
@@ -827,6 +829,8 @@ function abrirDetalleDePago(pago) {
       '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
     '</div>'
   );
+
+  insertarAdjuntosDeSoloLectura(cuerpo, 'pago', pago.id, 'Comprobante del pago');
 
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioPago(pago));
 }
@@ -965,6 +969,8 @@ function abrirDetalleDePadrino(padrino) {
       '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
     '</div>'
   );
+
+  insertarAdjuntosDeSoloLectura(cuerpo, 'padrino', padrino.id, 'Comprobante de lo entregado');
 
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioPadrino(padrino));
 
@@ -1145,7 +1151,7 @@ function pintarCotizaciones(cuerpo) {
 
   buscarTodos('[data-cotizacion]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
-      abrirDetalleDeCotizacion(
+      abrirVistaPreviaDeCotizacion(
         DINERO.cotizaciones.find(c => String(c.id) === boton.dataset.cotizacion));
     });
   });
@@ -1155,10 +1161,20 @@ function pintarCotizaciones(cuerpo) {
 /**
  * Ficha de solo lectura de una cotización, antes de editar.
  *
+ * NOTA DE NOMBRE: no se llama abrirDetalleDeCotizacion() a propósito.
+ * 21-cotizador.js (el comparador de cotizaciones, más viejo que esta
+ * función) ya tiene una función con exactamente ese nombre — toma un id
+ * numérico y abre el desglose de costos por invitados, no esta ficha.
+ * Como no hay módulos, los dos <script> comparten un mismo espacio de
+ * nombres global: la que carga después (21-cotizador.js, ver
+ * index.html) pisaba a esta silenciosamente, y la lista de Cotizaciones
+ * terminaba llamando accion=ver de cotizador.php con el objeto entero
+ * como "id" — de ahí el "Esa cotización no existe" que reportó Lucila.
+ *
  * @param {Object} cotizacion
  * @returns {void}
  */
-function abrirDetalleDeCotizacion(cotizacion) {
+function abrirVistaPreviaDeCotizacion(cotizacion) {
   const esPorPersona = cotizacion.tipo_precio === 'por_persona';
   const precio = esPorPersona
     ? comoDinero(cotizacion.precio_pp, false) + ' / persona'
@@ -1182,6 +1198,8 @@ function abrirDetalleDeCotizacion(cotizacion) {
       '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
     '</div>'
   );
+
+  insertarAdjuntosDeSoloLectura(cuerpo, 'cotizacion', cotizacion.id, 'La cotización en PDF o foto');
 
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioCotizacion(cotizacion));
 }
@@ -1690,6 +1708,7 @@ function abrirDetalleDeProveedor(proveedor) {
   );
 
   engancharBotonesDeContacto(cuerpo, proveedor);
+  insertarAdjuntosDeSoloLectura(cuerpo, 'proveedor', proveedor.id, 'Contrato y documentos');
 
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioProveedor(proveedor));
 
