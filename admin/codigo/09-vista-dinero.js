@@ -1337,6 +1337,7 @@ function abrirDetalleDeProveedor(proveedor) {
 
   const cuerpo = abrirHoja(proveedor.nombre,
     '<div class="detalle">' + detalle + '</div>' +
+    vinetasDeQueIncluye(proveedor.detalle_items) +
     botonesDeContacto(proveedor) +
     '<div class="acciones" style="margin-top:var(--esp-3)">' +
       '<button class="boton boton--peligro" id="detalle-borrar">Borrar</button>' +
@@ -1398,27 +1399,34 @@ function formularioProveedor(proveedor) {
                    { valor: 'modista',   texto: 'Pruebas de vestido' },
                  ] }) +
 
+    /* Aparte de las notas libres: acá va la lista de "qué trae" el
+       proveedor, en renglones — no un párrafo. Ver 06-piezas.js. */
+    campoListaDeDetalle({ id: 'pro-detalle', rotulo: 'Qué incluye',
+                           items: d.detalle_items }) +
+
     campoLargo({ id: 'pro-notas', rotulo: 'Notas', valor: d.notas }) +
     (proveedor ? botonesDeContacto(proveedor) : '') +
     pieDeFormulario('Guardar', !!proveedor)
   );
 
   if (proveedor) engancharBotonesDeContacto(cuerpo, proveedor);
+  engancharListaDeDetalle('pro-detalle', cuerpo);
 
   engancharFormularioDinero(cuerpo, () => {
     const nombre = valorDe('pro-nombre', cuerpo);
     if (!nombre) { avisar('Falta el nombre.', true); return null; }
     return {
-      nombre:      nombre,
-      servicio:    valorDe('pro-servicio', cuerpo),
-      monto_total: aPesos(valorDe('pro-total', cuerpo)),
-      anticipo:    aPesos(valorDe('pro-anticipo', cuerpo)),
-      estado:      valorDe('pro-estado', cuerpo),
-      contacto:    valorDe('pro-contacto', cuerpo),
-      telefono:    valorDe('pro-telefono', cuerpo),
-      correo:      valorDe('pro-correo', cuerpo),
-      paquete:     valorDe('pro-paquete', cuerpo),
-      notas:       valorDe('pro-notas', cuerpo),
+      nombre:        nombre,
+      servicio:      valorDe('pro-servicio', cuerpo),
+      monto_total:   aPesos(valorDe('pro-total', cuerpo)),
+      anticipo:      aPesos(valorDe('pro-anticipo', cuerpo)),
+      estado:        valorDe('pro-estado', cuerpo),
+      contacto:      valorDe('pro-contacto', cuerpo),
+      telefono:      valorDe('pro-telefono', cuerpo),
+      correo:        valorDe('pro-correo', cuerpo),
+      paquete:       valorDe('pro-paquete', cuerpo),
+      notas:         valorDe('pro-notas', cuerpo),
+      detalle_items: valorDeListaDeDetalle('pro-detalle', cuerpo),
     };
   }, 'proveedor', proveedor);
 }

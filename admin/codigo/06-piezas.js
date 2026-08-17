@@ -918,6 +918,28 @@ function engancharListaDeDetalle(id, cuerpo) {
 }
 
 /**
+ * El HTML de solo lectura de "qué incluye", para las fichas de
+ * detalle (no editables) de proveedor y cotización. Los ítems marcados
+ * "hecho" salen tachados en vez de desaparecer — sigue siendo parte de
+ * lo acordado, solo que ya se cumplió.
+ *
+ * @param {Array} [items]
+ * @returns {string} HTML, o '' si no hay ítems (nada que mostrar).
+ */
+function vinetasDeQueIncluye(items) {
+  if (!items || !items.length) return '';
+
+  return '' +
+    '<div class="tarjeta__titulo" style="margin-top:var(--esp-2)">Incluye</div>' +
+    '<ul style="margin:0 0 var(--esp-2);padding-left:1.2em">' +
+      items.map(item =>
+        '<li' + (item.hecho ? ' style="text-decoration:line-through;color:var(--texto-tenue)"' : '') +
+        '>' + seguro(item.texto) + '</li>'
+      ).join('') +
+    '</ul>';
+}
+
+/**
  * Lee los ítems actuales de una lista de detalle ya abierta. Los
  * renglones que se dejaron vacíos no se guardan.
  *
