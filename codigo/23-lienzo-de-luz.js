@@ -341,7 +341,23 @@
       );
     }
 
-    const desplazamiento = scrollActualY();
+    /* ⚡ ACÁ SÍ VA window.scrollY DIRECTO, NO scrollActualY().
+       scrollActualY() devuelve una copia que solo se actualiza cuando
+       dispara el evento 'scroll' del navegador — y en Safari/iOS, durante
+       un scroll rápido o con inercia, ese evento llega con MUCHA menos
+       frecuencia que el repintado visual real. La llama de una vela es
+       un elemento normal: el navegador la mueve por el compositor en el
+       mismo instante que se mueve la pantalla, sin esperar a JavaScript.
+       Si acá se sigue usando la copia cacheada, el resplandor se dibuja
+       en la posición VIEJA mientras la llama ya está en la nueva —eso es
+       el "la luz se queda atrás de la vela" que se reportó—.
+
+       Esto NO es el mismo caso que motivó el caché (cientos de lecturas
+       por cuadro, una por cada joya colgante): acá es UNA lectura, una
+       vez por cuadro dibujado, como mucho 60 veces por segundo. El costo
+       es insignificante comparado con el beneficio de que la luz nunca
+       se separe de la llama. */
+    const desplazamiento = window.scrollY;
     const fuentes = window.LienzoDeLuz.fuentes;
 
     /* ── CUÁNTO MANDAN LAS VELAS A ESTA HORA ──
@@ -475,7 +491,7 @@
        queda quieto. Estampar el canvas es barato (ver el resto de este
        archivo): la ventana en la que esto corre a más fps es la del
        gesto de scroll, que dura instantes. */
-    const desplazamientoActual = scrollActualY();
+    const desplazamientoActual = window.scrollY;
     const seMovioElScroll = desplazamientoActual !== ultimoDesplazamientoDibujado;
 
     if (!seMovioElScroll && ahora - ultimoRepintado < CADA_CUANTO_REPINTAR) {
@@ -515,7 +531,7 @@
     if (!hayAlgoQueMirar()) return;
     dibujarUnCuadro(true);
     ultimoRepintado = performance.now();
-    ultimoDesplazamientoDibujado = scrollActualY();
+    ultimoDesplazamientoDibujado = window.scrollY;
   }, { passive: true });
 
 })();
