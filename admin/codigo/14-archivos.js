@@ -389,7 +389,22 @@ async function abrirArchivo(id, archivo) {
       { headers: { Authorization: 'Bearer ' + token } }
     );
 
-    if (!respuesta.ok) { avisar('No se pudo abrir el archivo.', true); return; }
+    if (!respuesta.ok) {
+      // El motivo real (403 sin permiso, 404 borrado, 500 del servidor…)
+      // importa para poder arreglarlo. "No se pudo abrir" a secas no
+      // decía si era un problema de permisos, un archivo que ya no está,
+      // o el servidor caído — y eso hacía imposible diagnosticar a
+      // distancia. El cuerpo trae { ok:false, error:"..." } (ver
+      // responder.php); si no se puede leer, al menos queda el código.
+      let motivo = 'código ' + respuesta.status;
+      try {
+        const cuerpo = await respuesta.json();
+        if (cuerpo && cuerpo.error) motivo = cuerpo.error;
+      } catch (error) { /* la respuesta no era JSON: se deja el código */ }
+
+      avisar('No se pudo abrir el archivo (' + motivo + ').', true);
+      return;
+    }
 
     const bolsa = await respuesta.blob();
     const url   = URL.createObjectURL(bolsa);
@@ -405,7 +420,10 @@ async function abrirArchivo(id, archivo) {
     }
 
   } catch (error) {
-    avisar('No se pudo abrir el archivo.', true);
+    // Acá caen los fallos de RED (sin señal, tiempo agotado) o cualquier
+    // excepción al armar el visor — nunca un error HTTP, que ya se
+    // atendió arriba con su propio motivo.
+    avisar('No se pudo abrir el archivo (' + (error.message || 'sin conexión') + ').', true);
   }
 }
 
@@ -492,6 +510,49 @@ function montarAdjuntos(opciones) {
       });
     });
   });
+}
+
+/**
+ * Mete la lista de adjuntos (con ver y descargar) dentro de una ficha de
+ * SOLO LECTURA — a diferencia de montarAdjuntos(), no agrega los botones
+ * de Subir/Tomar foto/A mano: eso es cosa del formulario de edición. Acá
+ * solo hace falta poder VER lo que ya hay, no cargar más.
+ *
+ * Se salta entero si no hay ningún archivo, para no mostrar un título
+ * "Adjuntos" seguido de "Todavía no hay archivos" en cada ficha que
+ * nunca tuvo uno — la mayoría de gastos y pagos no llevan comprobante
+ * escaneado, y ese texto de sobra sería ruido en todas ellas.
+ *
+ * @param {Element} cuerpo - La hoja abierta (de abrirHoja()).
+ * @param {string} tipo - 'proveedor', 'gasto', 'pago', 'cotizacion', 'padrino'…
+ * @param {number} id
+ * @param {string} [titulo='Adjuntos']
+ * @returns {Promise<void>}
+ */
+async function insertarAdjuntosDeSoloLectura(cuerpo, tipo, id, titulo) {
+  if (!id) return;
+
+  let archivos;
+  try {
+    archivos = await traer('archivos.php?accion=listar&tipo=' +
+                           encodeURIComponent(tipo) + '&id=' + id);
+  } catch (error) {
+    return;   // Sin señal o sin permiso: la ficha sigue viéndose igual, sin este bloque.
+  }
+  if (!archivos.length) return;
+
+  const bloque = crear('div');
+  bloque.innerHTML =
+    '<div class="tarjeta__titulo" style="margin-top:var(--esp-4)">' +
+      seguro(titulo || 'Adjuntos') +
+    '</div>' +
+    '<div id="adjuntos-de-esto"></div>';
+
+  const pie = buscar('.acciones', cuerpo);
+  if (pie) cuerpo.insertBefore(bloque, pie);
+  else cuerpo.appendChild(bloque);
+
+  pintarArchivosDe(buscar('#adjuntos-de-esto', bloque), tipo, id);
 }
 
 /**
