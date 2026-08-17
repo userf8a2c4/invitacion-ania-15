@@ -1417,7 +1417,8 @@ function formularioProveedor(proveedor) {
     /* Aparte de las notas libres: acá va la lista de "qué trae" el
        proveedor, en renglones — no un párrafo. Ver 06-piezas.js. */
     campoListaDeDetalle({ id: 'pro-detalle', rotulo: 'Qué incluye',
-                           items: d.detalle_items }) +
+                           items: d.detalle_items,
+                           plantillas: plantillasSugeridasPara(d.servicio) }) +
 
     campoLargo({ id: 'pro-notas', rotulo: 'Notas', valor: d.notas }) +
     (proveedor ? botonesDeContacto(proveedor) : '') +
@@ -1425,7 +1426,7 @@ function formularioProveedor(proveedor) {
   );
 
   if (proveedor) engancharBotonesDeContacto(cuerpo, proveedor);
-  engancharListaDeDetalle('pro-detalle', cuerpo);
+  engancharListaDeDetalle('pro-detalle', cuerpo, plantillasSugeridasPara(d.servicio));
 
   engancharFormularioDinero(cuerpo, () => {
     const nombre = valorDe('pro-nombre', cuerpo);
