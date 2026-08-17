@@ -463,6 +463,61 @@ function botonAgregar(texto) {
 /* ─── 3. CADA SECCIÓN ──────────────────────────────────────────────── */
 
 /**
+ * El único gráfico de esta pantalla: de lo que se pensó gastar a lo
+ * que ya se pagó de verdad, en tres barras. Responde una decisión
+ * concreta —¿cuánto de lo planeado sigue siendo solo un número, y
+ * cuánto ya es plata que salió?— sin depender de ninguna librería:
+ * es SVG a mano, con los mismos colores que ya usa el resto del panel.
+ *
+ * @param {Object} t - DINERO.totales
+ * @returns {string} HTML, o '' si todavía no hay nada planeado.
+ */
+function graficoDeFlujoDePresupuesto(t) {
+  const planeado = Number(t.planeado) || 0;
+  if (planeado <= 0) return '';
+
+  const costo  = Number(t.costo)  || 0;
+  const pagado = Number(t.pagado) || 0;
+  const referencia = Math.max(planeado, costo, 1);
+
+  const filas = [
+    ['Planeado',   planeado, 'var(--texto-tenue)'],
+    ['Costo real', costo,    'var(--oro)'],
+    ['Pagado',     pagado,   'var(--bien)'],
+  ];
+
+  const ALTO_FILA   = 34;
+  const ANCHO_BARRA = 220;
+  const svgAlto = filas.length * ALTO_FILA;
+
+  const filasSvg = filas.map(([nombre, valor, color], i) => {
+    const y = i * ALTO_FILA;
+    // Mínimo 3 unidades para que un valor > 0 no desaparezca del todo.
+    const ocupado = valor > 0 ? Math.max((valor / referencia) * ANCHO_BARRA, 3) : 0;
+
+    return '' +
+      '<text x="0" y="' + (y + 11) + '" font-size="11" fill="var(--texto-suave)">' +
+        seguro(nombre) + '</text>' +
+      '<rect x="0" y="' + (y + 16) + '" width="' + ANCHO_BARRA + '" height="12" rx="4" ' +
+            'fill="var(--borde)"></rect>' +
+      '<rect x="0" y="' + (y + 16) + '" width="' + ocupado + '" height="12" rx="4" ' +
+            'fill="' + color + '"></rect>' +
+      '<text x="' + (ANCHO_BARRA + 8) + '" y="' + (y + 25) + '" font-size="11" ' +
+            'fill="var(--texto-suave)">' + seguro(comoDinero(valor, false)) + '</text>';
+  }).join('');
+
+  return '' +
+    '<div class="tarjeta" style="margin-bottom:var(--esp-2)">' +
+      '<div class="tarjeta__titulo">De lo planeado a lo pagado</div>' +
+      '<svg viewBox="0 0 ' + (ANCHO_BARRA + 90) + ' ' + svgAlto + '" ' +
+           'style="width:100%;height:auto;display:block;margin-top:var(--esp-1)" ' +
+           'role="img" aria-label="Comparación entre lo planeado, el costo real y lo pagado">' +
+        filasSvg +
+      '</svg>' +
+    '</div>';
+}
+
+/**
  * Categorías con su barra de gasto contra el techo.
  *
  * @param {Element} cuerpo
@@ -518,7 +573,11 @@ function pintarCategorias(cuerpo) {
       '</button>';
   }).join('');
 
-  cuerpo.innerHTML = filas + botonAgregar('Nueva categoría');
+  // El gráfico es del presupuesto entero, no de las categorías que haya
+  // dejado el buscador: no tiene sentido esconderlo al filtrar.
+  const grafico = BUSQUEDA_DINERO.trim() ? '' : graficoDeFlujoDePresupuesto(DINERO.totales);
+
+  cuerpo.innerHTML = grafico + filas + botonAgregar('Nueva categoría');
 
   buscarTodos('[data-categoria]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
