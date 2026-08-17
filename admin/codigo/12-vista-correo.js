@@ -23,13 +23,16 @@
 /** Los mensajes de la última carga. */
 let CORREOS = [];
 
-/** Qué carpeta se está viendo. 'INBOX' hasta que exista el selector
-    de carpetas (Fase F) — todo lo demás ya sabe pasarla de un lado a
-    otro, así que agregar el selector después no toca esta parte. */
+/** Qué carpeta se está viendo. */
 let CARPETA_ACTUAL = 'INBOX';
 
 /** Qué filtro está puesto: 'todos' | 'no_leidos' | 'destacados'. */
 let FILTRO_CORREO = 'todos';
+
+/** Entrada/Enviados/Papelera/Spam, identificadas entre las carpetas que
+    devolvió el servidor la última vez. Cada valor es una carpeta real
+    ({nombre, atributos}) o undefined si no se encontró ninguna. */
+let CARPETAS_ESPECIALES = {};
 
 /** Cuánto mide la zona de botones que queda detrás de cada correo. */
 const ANCHO_ACCIONES = 216;   // 3 botones de 72px
@@ -52,6 +55,8 @@ async function dibujarCorreo() {
       '<button class="boton" id="correo-actualizar" aria-label="Actualizar la bandeja">' +
         '↻</button>' +
     '</div>' +
+
+    '<div class="filtros" id="carpetas-correo" style="margin-bottom:var(--esp-2)"></div>' +
 
     '<div class="filtros" id="filtros-correo" style="margin-bottom:var(--esp-2)">' +
       botonFiltroCorreo('todos', 'Todos') +
@@ -79,10 +84,16 @@ async function dibujarCorreo() {
     'Conectando con el buzón…</p>' +
     '<div class="esqueleto"></div>'.repeat(4);
 
-  let datos;
+  /* Las carpetas se piden en paralelo con la bandeja, no antes: son dos
+     conexiones IMAP separadas, y hacerlas una tras otra sumaría los dos
+     tiempos de espera en vez de quedarse con el más largo. Si carpetas
+     falla, no es grave — simplemente no aparecen los chips esta vez. */
+  let datos, datosCarpetas;
   try {
-    datos = await traer('correo.php?accion=bandeja&carpeta=' +
-                         encodeURIComponent(CARPETA_ACTUAL));
+    [datos, datosCarpetas] = await Promise.all([
+      traer('correo.php?accion=bandeja&carpeta=' + encodeURIComponent(CARPETA_ACTUAL)),
+      traer('correo.php?accion=carpetas').catch(() => null),
+    ]);
   } catch (error) {
     pintarError(lista, error.message, () => dibujarCorreo());
     throw error;
@@ -90,16 +101,97 @@ async function dibujarCorreo() {
 
   CORREOS = datos.mensajes || [];
   CARPETA_ACTUAL = datos.carpeta || CARPETA_ACTUAL;
+  CARPETAS_ESPECIALES = identificarCarpetasEspeciales(
+    (datosCarpetas && datosCarpetas.carpetas) || []
+  );
+  pintarChipsDeCarpeta(buscar('#carpetas-correo', vista));
+
   ponerTitulo('Correo', datos.buzon);
   ponerBurbuja('#burbuja-correo', datos.sin_leer);
 
   if (!CORREOS.length) {
-    pintarVacio(lista, 'La bandeja está vacía',
+    pintarVacio(lista,
+      CARPETA_ACTUAL === 'INBOX' ? 'La bandeja está vacía' : 'Esta carpeta está vacía',
       'Aquí van a aparecer los correos que lleguen a ' + (datos.buzon || 'tu buzón') + '.');
     return;
   }
 
   pintarBandeja(lista);
+}
+
+/**
+ * De la lista cruda que devuelve correo.php?accion=carpetas, encuentra
+ * cuál es Entrada, Enviados, Papelera y Spam.
+ *
+ * PRIMERO POR ATRIBUTO, DESPUÉS POR NOMBRE
+ * RFC 6154 (SPECIAL-USE) deja que el servidor marque cada carpeta con
+ * \Sent, \Trash, \Junk — pero es opcional, y Hostinger no siempre lo
+ * declara. Cuando no está, se adivina por el nombre en inglés o
+ * español, que es lo que de verdad usan casi todos los proveedores.
+ *
+ * @param {Array} carpetas - [{nombre, atributos}]
+ * @returns {{entrada, enviados, papelera, spam}} Cada una la carpeta
+ *   encontrada, o undefined si ninguna calzó.
+ */
+function identificarCarpetasEspeciales(carpetas) {
+  const porAtributoONombre = (atributo, nombreRegex) =>
+    carpetas.find(c => c.atributos && c.atributos.includes(atributo)) ||
+    carpetas.find(c => nombreRegex.test(c.nombre));
+
+  return {
+    entrada:  carpetas.find(c => c.nombre.toUpperCase() === 'INBOX'),
+    enviados: porAtributoONombre('\\Sent', /sent|enviad/i),
+    papelera: porAtributoONombre('\\Trash', /trash|papeler|deleted/i),
+    spam:     porAtributoONombre('\\Junk', /spam|junk/i),
+  };
+}
+
+/**
+ * Si la carpeta que se está mirando ahora es la que se identificó como
+ * Papelera — de eso depende si "Borrar" mueve a la papelera o borra
+ * para siempre (ver accionDeCorreo()).
+ *
+ * @returns {boolean}
+ */
+function viendoLaPapelera() {
+  return !!(CARPETAS_ESPECIALES.papelera &&
+            CARPETAS_ESPECIALES.papelera.nombre === CARPETA_ACTUAL);
+}
+
+/**
+ * Pinta los chips de carpeta (Entrada/Enviados/Papelera/Spam), pero
+ * solo con las que de verdad existen en este buzón — no se inventa
+ * ninguna. Con una sola carpeta encontrada no hay nada que elegir, así
+ * que no se muestra la fila.
+ *
+ * @param {Element} contenedor
+ * @returns {void}
+ */
+function pintarChipsDeCarpeta(contenedor) {
+  if (!contenedor) return;
+
+  const opciones = [
+    ['Entrada', CARPETAS_ESPECIALES.entrada],
+    ['Enviados', CARPETAS_ESPECIALES.enviados],
+    ['Papelera', CARPETAS_ESPECIALES.papelera],
+    ['Spam', CARPETAS_ESPECIALES.spam],
+  ].filter(([, carpeta]) => carpeta);
+
+  if (opciones.length < 2) { contenedor.innerHTML = ''; return; }
+
+  contenedor.innerHTML = opciones.map(([texto, carpeta]) =>
+    '<button class="filtro' + (carpeta.nombre === CARPETA_ACTUAL ? ' activo' : '') +
+    '" data-carpeta="' + seguro(carpeta.nombre) + '">' + seguro(texto) + '</button>'
+  ).join('');
+
+  buscarTodos('[data-carpeta]', contenedor).forEach(boton => {
+    boton.addEventListener('click', () => {
+      if (boton.dataset.carpeta === CARPETA_ACTUAL) return;
+      CARPETA_ACTUAL = boton.dataset.carpeta;
+      FILTRO_CORREO = 'todos';
+      dibujarCorreo();
+    });
+  });
 }
 
 /**
@@ -192,7 +284,7 @@ function pintarBandeja(lista) {
               '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
                 '<path d="M6 7h12v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1zM9 4h6l1 2H8z" ' +
                       'fill="currentColor"/></svg>' +
-              'Borrar' +
+              (viendoLaPapelera() ? 'Eliminar' : 'Borrar') +
             '</button>' +
           '</div>' +
 
@@ -394,15 +486,23 @@ async function accionDeCorreo(accion, correo, lista) {
   }
 
   if (accion === 'borrar') {
-    if (!confirmarAccion('¿Mover este correo a la papelera?\n\n' +
-                         acortar(correo.asunto, 60))) {
+    // En la Papelera ya no hay a dónde más mandarlo: "Borrar" ahí es
+    // para siempre, así que la confirmación tiene que decirlo clarito.
+    const definitivo = viendoLaPapelera();
+
+    if (!confirmarAccion(
+      (definitivo
+        ? '¿Borrar este correo para siempre? No se puede deshacer.\n\n'
+        : '¿Mover este correo a la papelera?\n\n') +
+      acortar(correo.asunto, 60)
+    )) {
       cerrarLasDemas(lista, null);
       return;
     }
 
     try {
       const r = await mandar('correo.php?accion=borrar',
-        { uid: correo.uid, carpeta: CARPETA_ACTUAL });
+        { uid: correo.uid, carpeta: CARPETA_ACTUAL, definitivo: definitivo });
       avisar(r.mensaje);
       /* Se recarga la bandeja entera y no se saca la fila a mano: aunque
          ahora se borra por UID (ver imap.php), el EXPUNGE de todos modos
