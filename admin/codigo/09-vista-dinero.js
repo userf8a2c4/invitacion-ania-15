@@ -740,6 +740,21 @@ function pintarProveedores(cuerpo) {
  * @param {Element} cuerpo
  * @returns {void}
  */
+/**
+ * Un resumen de una línea de "qué incluye" una cotización, para la
+ * fila de la lista. Prefiere los ítems estructurados; si todavía no se
+ * migró (formato viejo, texto corrido), cae al texto tal cual.
+ *
+ * @param {Object} cot
+ * @returns {string}
+ */
+function resumenDeQueIncluye(cot) {
+  if (cot.detalle_items && cot.detalle_items.length) {
+    return cot.detalle_items.map(it => it.texto).join(' · ');
+  }
+  return cot.que_incluye || '';
+}
+
 function pintarCotizaciones(cuerpo) {
   const cotizaciones = filtrarPorBusqueda(DINERO.cotizaciones,
     ['servicio', 'proveedor', 'que_incluye', 'notas']);
@@ -811,7 +826,7 @@ function pintarCotizaciones(cuerpo) {
           '<span class="lista__cuerpo">' +
             '<span class="lista__titulo">' + seguro(cot.proveedor) + '</span>' +
             '<span class="lista__pie">' +
-              seguro(acortar(cot.que_incluye || '', 60)) + '</span>' +
+              seguro(acortar(resumenDeQueIncluye(cot), 60)) + '</span>' +
             (marcas.length ? '<span class="menus-mini">' + marcas.join('') + '</span>' : '') +
           '</span>' +
           '<span class="lista__lado cifra">' + cifra + '</span>' +
@@ -1528,11 +1543,22 @@ function formularioCotizacion(cotizacion) {
                  valor: d.vigencia || '' }) +
 
     campoTexto({ id: 'cot-telefono', rotulo: 'Teléfono', tipo: 'tel', valor: d.telefono }) +
-    campoLargo({ id: 'cot-incluye', rotulo: 'Qué incluye', valor: d.que_incluye }) +
+
+    /* Migra sola la primera vez que se abre: si ya tiene detalle_items
+       (formato nuevo) se usa tal cual; si no, se parte el que_incluye
+       viejo en renglones. Nada se borra hasta que se guarde. */
+    campoListaDeDetalle({
+      id: 'cot-incluye', rotulo: 'Qué incluye',
+      items: (d.detalle_items && d.detalle_items.length)
+        ? d.detalle_items : itemsDesdeTexto(d.que_incluye),
+    }) +
+
     campoCasilla({ id: 'cot-elegida', rotulo: 'Es la que elegimos',
                    marcado: Number(d.elegida) === 1 }) +
     pieDeFormulario('Guardar', !!cotizacion)
   );
+
+  engancharListaDeDetalle('cot-incluye', cuerpo);
 
   engancharFormularioDinero(cuerpo, () => {
     const servicio  = valorDe('cot-servicio', cuerpo);
@@ -1541,16 +1567,24 @@ function formularioCotizacion(cotizacion) {
       avisar('Falta el servicio o quién cotiza.', true);
       return null;
     }
+
+    const items = valorDeListaDeDetalle('cot-incluye', cuerpo);
+
     return {
-      servicio:    servicio,
-      proveedor:   proveedor,
-      tipo_precio: valorDe('cot-tipo', cuerpo),
-      monto:       aPesos(valorDe('cot-monto', cuerpo)),
-      precio_pp:   aPesos(valorDe('cot-pp', cuerpo)),
-      vigencia:    valorDe('cot-vigencia', cuerpo),
-      telefono:    valorDe('cot-telefono', cuerpo),
-      que_incluye: valorDe('cot-incluye', cuerpo),
-      elegida:     !!valorDe('cot-elegida', cuerpo),
+      servicio:      servicio,
+      proveedor:     proveedor,
+      tipo_precio:   valorDe('cot-tipo', cuerpo),
+      monto:         aPesos(valorDe('cot-monto', cuerpo)),
+      precio_pp:     aPesos(valorDe('cot-pp', cuerpo)),
+      vigencia:      valorDe('cot-vigencia', cuerpo),
+      telefono:      valorDe('cot-telefono', cuerpo),
+      detalle_items: items,
+      /* Espejo en texto plano: lo sigue leyendo el comparador viejo
+         (21-cotizador.js, "Notas del paquete"). La fuente de verdad
+         para editar es detalle_items; esto es solo para no dejarlo
+         vacío mientras ese lector no se actualice también. */
+      que_incluye:   items.map(it => it.texto).join('; '),
+      elegida:       !!valorDe('cot-elegida', cuerpo),
     };
   }, 'cotizacion', cotizacion);
 }
