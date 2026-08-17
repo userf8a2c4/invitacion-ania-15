@@ -64,12 +64,14 @@ case 'estado':
 case 'bandeja':
     exigirMetodo('GET');
 
+    $carpeta = campoTexto($_GET, 'carpeta', 120, 'INBOX');
+
     $buzon = new BuzonImap();
     if (!$buzon->conectar()) {
         responderMal($buzon->error, 502);
     }
 
-    $mensajes = $buzon->listar(40);
+    $mensajes = $buzon->listar($carpeta, 40);
 
     /* listar() puede fallar DESPUÉS del login —por ejemplo si el SELECT
        INBOX no salió bien— y en ese caso devuelve un arreglo vacío
@@ -86,6 +88,7 @@ case 'bandeja':
 
     responderBien([
         'mensajes'  => $mensajes,
+        'carpeta'   => $carpeta,
         'sin_leer'  => count(array_filter($mensajes, function ($m) {
                            return empty($m['leido']);
                        })),
@@ -94,18 +97,34 @@ case 'bandeja':
     break;
 
 
+/* ─── CARPETAS ────────────────────────────────────────────────────────── */
+
+case 'carpetas':
+    exigirMetodo('GET');
+
+    $buzon = new BuzonImap();
+    if (!$buzon->conectar()) responderMal($buzon->error, 502);
+
+    $carpetas = $buzon->carpetas();
+    $buzon->cerrar();
+
+    responderBien(['carpetas' => $carpetas]);
+    break;
+
+
 /* ─── LEER UNO ────────────────────────────────────────────────────────── */
 
 case 'leer':
     exigirMetodo('GET');
 
-    $numero = (int) ($_GET['n'] ?? 0);
-    if ($numero < 1) responderMal('Falta decir qué mensaje.', 400);
+    $uid     = (int) ($_GET['uid'] ?? 0);
+    $carpeta = campoTexto($_GET, 'carpeta', 120, 'INBOX');
+    if ($uid < 1) responderMal('Falta decir qué mensaje.', 400);
 
     $buzon = new BuzonImap();
     if (!$buzon->conectar()) responderMal($buzon->error, 502);
 
-    $mensaje = $buzon->leer($numero);
+    $mensaje = $buzon->leer($carpeta, $uid);
     $buzon->cerrar();
 
     if (!$mensaje) responderMal('No se pudo leer ese mensaje.', 404);
@@ -118,17 +137,18 @@ case 'leer':
 case 'adjunto':
     exigirMetodo('GET');
 
-    $numero = (int) ($_GET['numero'] ?? 0);
+    $uid     = (int) ($_GET['uid'] ?? 0);
+    $carpeta = campoTexto($_GET, 'carpeta', 120, 'INBOX');
     // Solo dígitos y puntos: es una ruta MIME (ej. "2" o "1.2"), nunca
     // texto libre, así que no hay nada que sanitizar más que esto.
     $ruta = preg_replace('/[^0-9.]/', '', (string) ($_GET['ruta'] ?? ''));
 
-    if ($numero < 1 || $ruta === '') responderMal('Falta decir qué adjunto.', 400);
+    if ($uid < 1 || $ruta === '') responderMal('Falta decir qué adjunto.', 400);
 
     $buzon = new BuzonImap();
     if (!$buzon->conectar()) responderMal($buzon->error, 502);
 
-    $adjunto = $buzon->leerAdjunto($numero, $ruta);
+    $adjunto = $buzon->leerAdjunto($carpeta, $uid, $ruta);
     $buzon->cerrar();
 
     if (!$adjunto) responderMal('No se pudo bajar ese adjunto.', 404);
@@ -165,10 +185,11 @@ case 'escribir':
     if ($asunto === '') $asunto = '(sin asunto)';
 
     /* Reenviar adjuntos del mensaje original, si se pidió alguno. Vienen
-       como referencias {numero, ruta} — el archivo se vuelve a bajar del
-       buzón acá mismo, nunca se confía en datos binarios mandados por el
-       navegador para esto. Como máximo 5: es para reenviar el contrato o
-       la foto que llegó, no para armar un mailer de archivos pesados. */
+       como referencias {uid, carpeta, ruta} — el archivo se vuelve a
+       bajar del buzón acá mismo, nunca se confía en datos binarios
+       mandados por el navegador para esto. Como máximo 5: es para
+       reenviar el contrato o la foto que llegó, no para armar un mailer
+       de archivos pesados. */
     $referencias = is_array($datos['adjuntos'] ?? null) ? array_slice($datos['adjuntos'], 0, 5) : [];
     $adjuntosParaEnviar = [];
 
@@ -176,11 +197,12 @@ case 'escribir':
         $buzonAdj = new BuzonImap();
         if ($buzonAdj->conectar()) {
             foreach ($referencias as $ref) {
-                $n = (int) ($ref['numero'] ?? 0);
+                $u = (int) ($ref['uid'] ?? 0);
+                $c = campoTexto($ref, 'carpeta', 120, 'INBOX');
                 $r = preg_replace('/[^0-9.]/', '', (string) ($ref['ruta'] ?? ''));
-                if ($n < 1 || $r === '') continue;
+                if ($u < 1 || $r === '') continue;
 
-                $bajado = $buzonAdj->leerAdjunto($n, $r);
+                $bajado = $buzonAdj->leerAdjunto($c, $u, $r);
                 if ($bajado) $adjuntosParaEnviar[] = $bajado;
             }
             $buzonAdj->cerrar();
@@ -205,15 +227,16 @@ case 'borrar':
 case 'no_leido':
     exigirMetodo('POST');
 
-    $datos  = cuerpoJson();
-    $numero = campoEntero($datos, 'numero', 1);
+    $datos   = cuerpoJson();
+    $uid     = campoEntero($datos, 'uid', 1);
+    $carpeta = campoTexto($datos, 'carpeta', 120, 'INBOX');
 
     $buzon = new BuzonImap();
     if (!$buzon->conectar()) responderMal($buzon->error, 502);
 
     if ($accion === 'marcar') {
         $marcar = !empty($datos['marcar']);
-        $salio  = $buzon->marcar($numero, $marcar);
+        $salio  = $buzon->marcar($carpeta, $uid, $marcar);
         $buzon->cerrar();
 
         if (!$salio) responderMal('No se pudo cambiar la marca.', 502);
@@ -224,7 +247,7 @@ case 'no_leido':
     }
 
     if ($accion === 'no_leido') {
-        $salio = $buzon->marcarNoLeido($numero);
+        $salio = $buzon->marcarNoLeido($carpeta, $uid);
         $buzon->cerrar();
 
         if (!$salio) responderMal('No se pudo marcar como no leído.', 502);
@@ -232,7 +255,7 @@ case 'no_leido':
     }
 
     // Borrar.
-    $salio = $buzon->borrar($numero);
+    $salio = $buzon->borrar($carpeta, $uid);
     $buzon->cerrar();
 
     if (!$salio) {
@@ -243,7 +266,7 @@ case 'no_leido':
         );
     }
 
-    anotarEnBitacora($yo, 'borró un correo', 'correo', $numero);
+    anotarEnBitacora($yo, 'borró un correo', 'correo', $uid);
     responderBien(['mensaje' => 'Correo movido a la papelera.']);
     break;
 
@@ -264,7 +287,7 @@ case 'regalos':
     $buzon = new BuzonImap();
     if (!$buzon->conectar()) responderMal($buzon->error, 502);
 
-    $todos = $buzon->listar(60);
+    $todos = $buzon->listar('INBOX', 60);
     $buzon->cerrar();
 
     // Cuáles ya se dieron de alta, para no ofrecerlos dos veces.
@@ -286,16 +309,29 @@ case 'regalos':
 
         if (!$esDeAmazon || !$hablaDeRegalo) continue;
 
-        // La huella de un mensaje: su número y su fecha. Alcanza para no
-        // repetirlo, porque los números no se reutilizan en el buzón.
-        $huella = 'imap:' . $mensaje['numero'];
+        /* La huella de un mensaje: su UID. Antes de esta fase se usaba
+           el número de secuencia, que el propio servidor reasigna cada
+           vez que algo se borra y se hace EXPUNGE — un correo podía
+           volver a proponerse como "nuevo" simplemente porque otro
+           mensaje se borró antes en la lista. El UID no cambia nunca
+           mientras el mensaje siga en la carpeta, así que ahora sí es
+           una huella de verdad.
+
+           Efecto de este cambio: las huellas "imap:<numero>" que ya
+           estén guardadas en la tabla `regalos` de una instalación
+           vieja no van a coincidir con las nuevas "imap:<uid>", así
+           que esos regalos concretos podrían proponerse una vez más.
+           No es grave —solo hay que ignorarlos o cargarlos de nuevo
+           una vez—, y a partir de acá queda arreglado para siempre. */
+        $huella = 'imap:' . $mensaje['uid'];
         if (isset($yaCargados[$huella])) continue;
 
         $candidatos[] = [
-            'huella' => $huella,
-            'numero' => $mensaje['numero'],
-            'asunto' => $mensaje['asunto'],
-            'fecha'  => $mensaje['fecha'],
+            'huella'  => $huella,
+            'uid'     => $mensaje['uid'],
+            'carpeta' => 'INBOX',
+            'asunto'  => $mensaje['asunto'],
+            'fecha'   => $mensaje['fecha'],
         ];
     }
 

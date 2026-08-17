@@ -146,18 +146,85 @@ class BuzonImap {
     }
 
 
-    /* ─── 2. LISTAR MENSAJES ──────────────────────────────────────────── */
+    /* ─── 2. CARPETAS Y LISTAR MENSAJES ─────────────────────────────────── */
 
     /**
-     * Devuelve los mensajes más recientes de la bandeja de entrada.
+     * Pone el nombre de una carpeta entre comillas, a prueba de que
+     * traiga una comilla o una barra adentro.
      *
-     * @param int $cuantos Cuántos traer, del más nuevo hacia atrás.
-     * @return array[] Cada uno con numero, asunto, de, fecha, leido.
+     * ⚠️ No convierte a UTF-7 modificado (lo que pide RFC 3501 para
+     * nombres de carpeta con acentos o ñ). INBOX, Sent, Trash, Junk y
+     * sus variantes en inglés —que es lo que trae Hostinger de
+     * fábrica— son ASCII puro, así que alcanza. Una carpeta que alguien
+     * haya renombrado con acentos podría no abrir bien.
+     *
+     * @param string $nombre
+     * @return string
      */
-    public function listar($cuantos = 40) {
-        $respuesta = $this->ordenar('SELECT INBOX');
+    private function escaparCarpeta($nombre) {
+        return '"' . addcslashes($nombre, '"\\') . '"';
+    }
+
+    /**
+     * Entra a una carpeta. Deja el error puesto si no se pudo.
+     *
+     * @param string $carpeta
+     * @return bool
+     */
+    private function entrarA($carpeta) {
+        $r = $this->ordenar('SELECT ' . $this->escaparCarpeta($carpeta));
+        if (!$this->salioBien($r)) {
+            $this->error = 'No se pudo abrir esa carpeta.';
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Devuelve las carpetas del buzón (Entrada, Enviados, Papelera…),
+     * tal como las conoce el servidor.
+     *
+     * @return array[] Cada una: ['nombre' => string, 'atributos' => string[]]
+     *   Los atributos son los que el servidor declare, ej. \Sent,
+     *   \Trash, \Junk, \Drafts, \Noselect — no todos los servidores los
+     *   marcan (RFC 6154 es opcional), así que puede venir vacío y hay
+     *   que adivinar por el nombre (ver 12-vista-correo.js).
+     */
+    public function carpetas() {
+        $lineas = $this->ordenar('LIST "" "*"');
+        $carpetas = [];
+
+        foreach ($lineas as $linea) {
+            // * LIST (\HasNoChildren \Sent) "/" "Sent"
+            if (!preg_match('/^\* LIST \(([^)]*)\)\s+"?([^"]*)"?\s+(.+)$/i', $linea, $m)) {
+                continue;
+            }
+
+            $atributos = array_values(array_filter(explode(' ', trim($m[1]))));
+            $nombre    = trim($m[3], "\"\r\n ");
+
+            // \Noselect: existe como agrupador ("Trabajo/") pero no
+            // guarda mensajes propios — no tiene sentido ofrecerla.
+            if (in_array('\\Noselect', $atributos, true)) continue;
+            if ($nombre === '') continue;
+
+            $carpetas[] = ['nombre' => $nombre, 'atributos' => $atributos];
+        }
+
+        return $carpetas;
+    }
+
+    /**
+     * Devuelve los mensajes más recientes de una carpeta.
+     *
+     * @param string $carpeta
+     * @param int    $cuantos Cuántos traer, del más nuevo hacia atrás.
+     * @return array[] Cada uno con uid, asunto, de, fecha, leido, marcado.
+     */
+    public function listar($carpeta = 'INBOX', $cuantos = 40) {
+        $respuesta = $this->ordenar('SELECT ' . $this->escaparCarpeta($carpeta));
         if (!$this->salioBien($respuesta)) {
-            $this->error = 'No se pudo abrir la bandeja de entrada.';
+            $this->error = 'No se pudo abrir esa carpeta.';
             return [];
         }
 
@@ -171,19 +238,25 @@ class BuzonImap {
         }
         if ($total === 0) return [];
 
-        // Se piden los últimos N: los mensajes se numeran del 1 al total,
-        // y los más nuevos son los de número más alto.
+        /* Se piden los últimos N POR NÚMERO DE SECUENCIA —eso solo dice
+           "los N mensajes más nuevos de esta carpeta ahora mismo", que
+           es justo lo que queremos—, pero se pide UID FETCH en vez de
+           FETCH: la respuesta trae el UID de cada uno adentro (ver
+           interpretarLista()), y ES ESE UID el identificador que se
+           devuelve y se usa después para leer/marcar/borrar. El número
+           de secuencia nunca sale de acá adentro. */
         $desde = max(1, $total - $cuantos + 1);
 
         $lineas = $this->ordenar(
-            "FETCH $desde:$total (FLAGS BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])"
+            "UID FETCH $desde:$total (UID FLAGS BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])"
         );
 
         return $this->interpretarLista($lineas);
     }
 
     /**
-     * Convierte la respuesta cruda del FETCH en una lista de mensajes.
+     * Convierte la respuesta cruda del UID FETCH en una lista de
+     * mensajes.
      *
      * @param string[] $lineas
      * @return array[]
@@ -194,12 +267,15 @@ class BuzonImap {
 
         foreach ($lineas as $linea) {
 
-            // "* 42 FETCH (FLAGS (\Seen) BODY[HEADER.FIELDS ...]"
-            if (preg_match('/^\* (\d+) FETCH/i', $linea, $m)) {
-                if ($actual) $mensajes[] = $actual;
+            // "* 42 FETCH (UID 981 FLAGS (\Seen) BODY[HEADER.FIELDS ...]"
+            if (preg_match('/^\* \d+ FETCH/i', $linea)) {
+                if ($actual && $actual['uid'] > 0) $mensajes[] = $actual;
+
+                $uid = 0;
+                if (preg_match('/UID (\d+)/', $linea, $mu)) $uid = (int) $mu[1];
 
                 $actual = [
-                    'numero' => (int) $m[1],
+                    'uid'    => $uid,
                     'de'     => '',
                     'asunto' => '(sin asunto)',
                     'fecha'  => '',
@@ -223,7 +299,7 @@ class BuzonImap {
             }
         }
 
-        if ($actual) $mensajes[] = $actual;
+        if ($actual && $actual['uid'] > 0) $mensajes[] = $actual;
 
         // Del más nuevo al más viejo, que es como se espera ver un buzón.
         return array_reverse($mensajes);
@@ -235,14 +311,25 @@ class BuzonImap {
     /**
      * Baja un mensaje entero y devuelve su texto.
      *
-     * @param int $numero
+     * @param string $carpeta
+     * @param int    $uid
      * @return array|null
      */
-    public function leer($numero) {
-        $this->ordenar('SELECT INBOX');
+    public function leer($carpeta, $uid) {
+        if (!$this->entrarA($carpeta)) return null;
 
-        $lineas = $this->ordenar("FETCH $numero (BODY[])");
+        $lineas = $this->ordenar("UID FETCH $uid (BODY[])");
         if (empty($lineas)) return null;
+
+        /* Si ese UID no existe en esta carpeta (se borró, o es de otra
+           carpeta), el servidor contesta OK igual pero SIN ninguna línea
+           "* n FETCH" — hay que distinguir eso de un mensaje que sí
+           existe pero vino vacío. */
+        $huboFetch = false;
+        foreach ($lineas as $linea) {
+            if (preg_match('/^\* \d+ FETCH/i', $linea)) { $huboFetch = true; break; }
+        }
+        if (!$huboFetch) return null;
 
         // La primera línea es el "* N FETCH (...)" y la última la etiqueta:
         // el mensaje de verdad está en el medio.
@@ -276,10 +363,11 @@ class BuzonImap {
                : ($analizado['html'] !== '' ? trim(html_entity_decode(strip_tags($analizado['html']))) : '');
 
         // Marcar como leído, ahora que efectivamente se abrió.
-        $this->ordenar("STORE $numero +FLAGS (\\Seen)");
+        $this->ordenar("UID STORE $uid +FLAGS (\\Seen)");
 
         return [
-            'numero'     => (int) $numero,
+            'uid'        => (int) $uid,
+            'carpeta'    => $carpeta,
             'de'         => $de,
             'correo_de'  => extraerCorreo($responderA !== '' ? $responderA : $de),
             'asunto'     => $asunto,
@@ -292,21 +380,22 @@ class BuzonImap {
     /**
      * Baja un adjunto concreto de un mensaje, ya decodificado.
      *
-     * @param int    $numero El mensaje.
-     * @param string $ruta   La ruta MIME que devolvió leer(), ej. "2" o "1.2".
-     * @return array|null    ['nombre', 'tipo', 'datos'], o null si falló.
+     * @param string $carpeta
+     * @param int    $uid   El mensaje.
+     * @param string $ruta  La ruta MIME que devolvió leer(), ej. "2" o "1.2".
+     * @return array|null   ['nombre', 'tipo', 'datos'], o null si falló.
      */
-    public function leerAdjunto($numero, $ruta) {
-        $this->ordenar('SELECT INBOX');
+    public function leerAdjunto($carpeta, $uid, $ruta) {
+        if (!$this->entrarA($carpeta)) return null;
 
         // Los encabezados de esa parte sola, para saber cómo decodificarla.
         $cab = $this->cuerpoDeFetch(
-            $this->ordenar("FETCH $numero (BODY.PEEK[$ruta.MIME])")
+            $this->ordenar("UID FETCH $uid (BODY.PEEK[$ruta.MIME])")
         );
 
         // El contenido crudo de esa parte sola, sin bajar el mensaje entero.
         $crudo = $this->cuerpoDeFetch(
-            $this->ordenar("FETCH $numero (BODY.PEEK[$ruta])")
+            $this->ordenar("UID FETCH $uid (BODY.PEEK[$ruta])")
         );
 
         if ($crudo === null) return null;
@@ -353,15 +442,16 @@ class BuzonImap {
     /**
      * Pone o quita la estrella de "importante".
      *
-     * @param int  $numero
-     * @param bool $marcar true pone la estrella, false la quita.
+     * @param string $carpeta
+     * @param int    $uid
+     * @param bool   $marcar true pone la estrella, false la quita.
      * @return bool
      */
-    public function marcar($numero, $marcar) {
-        $this->ordenar('SELECT INBOX');
+    public function marcar($carpeta, $uid, $marcar) {
+        if (!$this->entrarA($carpeta)) return false;
 
         $signo = $marcar ? '+' : '-';
-        $r = $this->ordenar("STORE $numero {$signo}FLAGS (\\Flagged)");
+        $r = $this->ordenar("UID STORE $uid {$signo}FLAGS (\\Flagged)");
 
         return $this->salioBien($r);
     }
@@ -378,18 +468,28 @@ class BuzonImap {
      * y recién después se lo saca de la bandeja. Si algún día alguien
      * borra un correo importante por error, sigue estando.
      *
-     * @param int $numero
+     * POR QUÉ TODO ESTO VA POR UID Y NO POR NÚMERO
+     * COPY + STORE + EXPUNGE por número de secuencia era exactamente lo
+     * peligroso que describe el Paso 4: EXPUNGE renumera todo lo que
+     * viene después del mensaje borrado, así que si dos borrados se
+     * dispararan casi juntos (dos pestañas, doble toque) el segundo
+     * podía terminar borrando OTRO mensaje sin querer. Con UID eso no
+     * puede pasar: el identificador no cambia nunca, borre lo que borre
+     * antes.
+     *
+     * @param string $carpeta
+     * @param int    $uid
      * @return bool
      */
-    public function borrar($numero) {
-        $this->ordenar('SELECT INBOX');
+    public function borrar($carpeta, $uid) {
+        if (!$this->entrarA($carpeta)) return false;
 
         /* El nombre de la papelera cambia según el servidor y el idioma.
            Se prueban los más comunes y se usa el primero que acepte. */
         $copiado = false;
         foreach (['Trash', 'INBOX.Trash', 'Papelera', 'INBOX.Papelera',
                   'Deleted Items', 'Deleted Messages'] as $papelera) {
-            if ($this->salioBien($this->ordenar("COPY $numero \"$papelera\""))) {
+            if ($this->salioBien($this->ordenar('UID COPY ' . $uid . ' ' . $this->escaparCarpeta($papelera)))) {
                 $copiado = true;
                 break;
             }
@@ -403,7 +503,14 @@ class BuzonImap {
             return false;
         }
 
-        $this->ordenar("STORE $numero +FLAGS (\\Deleted)");
+        $this->ordenar("UID STORE $uid +FLAGS (\\Deleted)");
+
+        /* EXPUNGE (sin UID) elimina TODO lo marcado \Deleted en la
+           carpeta actual, no solo este mensaje — pero acá adentro nunca
+           se deja un \Deleted puesto en nadie más, así que en la
+           práctica solo se va este. Se evita UID EXPUNGE (el comando
+           "de verdad" selectivo) porque necesita la extensión UIDPLUS,
+           que no todos los servidores declaran, y falla feo si no está. */
         $r = $this->ordenar('EXPUNGE');
 
         return $this->salioBien($r);
@@ -412,12 +519,13 @@ class BuzonImap {
     /**
      * Marca un mensaje como no leído.
      *
-     * @param int $numero
+     * @param string $carpeta
+     * @param int    $uid
      * @return bool
      */
-    public function marcarNoLeido($numero) {
-        $this->ordenar('SELECT INBOX');
-        return $this->salioBien($this->ordenar("STORE $numero -FLAGS (\\Seen)"));
+    public function marcarNoLeido($carpeta, $uid) {
+        if (!$this->entrarA($carpeta)) return false;
+        return $this->salioBien($this->ordenar("UID STORE $uid -FLAGS (\\Seen)"));
     }
 }
 
