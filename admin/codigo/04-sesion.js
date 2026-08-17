@@ -169,9 +169,18 @@ function prepararEntrada() {
   const boton  = buscar('#entrada-boton');
   const error  = buscar('#entrada-error');
 
-  buscar('#entrada-olvide').addEventListener('click', () => {
-    abrirRecuperarContrasena(buscar('#entrada-correo').value.trim());
-  });
+  /* El botón puede NO estar: si el Service Worker todavía sirve la copia
+     guardada de un index.html anterior a esta función, ese elemento no
+     existe en la página. Sin esta comprobación, el .addEventListener
+     sobre null reventaba encender() entero y el panel se quedaba para
+     siempre en la pantalla de carga, sin manera de entrar. Un botón
+     opcional nunca puede impedir que la app arranque. */
+  const olvide = buscar('#entrada-olvide');
+  if (olvide) {
+    olvide.addEventListener('click', () => {
+      abrirRecuperarContrasena(buscar('#entrada-correo').value.trim());
+    });
+  }
 
   forma.addEventListener('submit', async evento => {
     evento.preventDefault();
