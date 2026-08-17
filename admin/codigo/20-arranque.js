@@ -56,6 +56,51 @@ function registrarServiceWorker() {
         // Sin Service Worker la app funciona igual, solo que no abre sin
         // internet. No vale la pena molestar a nadie con este error.
       });
+
+    avisarSiHayActualizacion();
+  });
+}
+
+/**
+ * Muestra el botón de "hay una versión nueva" cuando —y solo cuando— el
+ * Service Worker de verdad cambió de versión mientras esta pestaña
+ * seguía abierta.
+ *
+ * CÓMO SE DISTINGUE UNA ACTUALIZACIÓN REAL DE LA PRIMERA VISITA
+ * sw.js llama a self.skipWaiting() + clients.claim() (ver ahí el
+ * porqué), así que la primera vez que alguien entra al panel TAMBIÉN
+ * dispara el evento 'controllerchange' — pasa de "sin Service Worker
+ * controlando la página" a "con uno". Eso no es una actualización, es
+ * arrancar de cero, y no hay que ofrecer "actualizar" para eso.
+ *
+ * La diferencia está en si YA HABÍA un controlador ANTES de este
+ * cambio: si lo había, es que esta pestaña venía funcionando con una
+ * versión y el navegador activó una distinta por detrás — ahí sí hay
+ * algo nuevo para mostrar.
+ *
+ * POR QUÉ ESTO NUNCA AVISA DE ALGO "A MEDIAS"
+ * No hay ningún archivo intermedio que dispare esto. El navegador solo
+ * detecta una versión nueva cuando pide sw.js y el número de VERSION
+ * ahí adentro cambió — y ese número se sube a mano, como último paso,
+ * cuando quien despliega decide que el cambio ya está listo. Mientras
+ * VERSION no cambie, no pasa nada acá, sin importar cuántos archivos
+ * se hayan subido por separado mientras tanto.
+ *
+ * @returns {void}
+ */
+function avisarSiHayActualizacion() {
+  if (!('serviceWorker' in navigator)) return;
+
+  const yaHabiaControlador = !!navigator.serviceWorker.controller;
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!yaHabiaControlador) return;
+
+    const boton = buscar('#boton-actualizar');
+    if (!boton) return;
+
+    boton.classList.remove('oculto');
+    boton.addEventListener('click', () => location.reload());
   });
 }
 
@@ -77,6 +122,11 @@ function arrancarLaApp() {
     actualizarBannerConexion();
     sincronizarCola();
   });
+
+  // F1: refresca sola la vista que se esté mirando cada 60-120s con
+  // señal. Se llama una sola vez; la función misma se cuida de no
+  // duplicar el temporizador si arrancarLaApp() corriera de nuevo.
+  if (typeof arrancarRefrescoPeriodico === 'function') arrancarRefrescoPeriodico();
 
   // Si se entró desde un atajo del icono ("Invitados", "Dinero"…), se
   // abre esa vista en lugar del Resumen.

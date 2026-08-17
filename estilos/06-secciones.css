@@ -73,9 +73,29 @@
   font-family: var(--tipo-texto);
   font-size: .9rem;
   letter-spacing: .15em;
+  /* En una sola línea siempre: una firma partida a la mitad se ve
+     descuidada. Ya no lleva el guion inicial (era el único motivo para
+     alinearla a la derecha; sin él, centrada se lee mejor como cierre
+     del mensaje). */
+  white-space: nowrap;
   color: var(--color-oro-texto);
-  text-align: right;
+  text-align: center;
   font-style: normal;
+}
+
+/* Bajo los 600px el tamaño de arriba (.9rem + .15em de espaciado) no
+   entra en una sola línea sin desbordar la caja. Valores fijos, medidos
+   a mano contra el ancho real de la caja en ese rango (no un clamp():
+   uno se probó antes y el resultado no achicaba lo suficiente en un
+   iPhone real — mezclar vw con em en el mismo clamp() no dio el
+   resultado esperado). Con .68rem y .04em de espaciado, el texto más
+   largo mide ~213px; la caja, incluso en el celular más angosto, tiene
+   al menos ~270px libres. */
+@media (max-width: 600px) {
+  .caja-mensaje cite {
+    font-size: .68rem;
+    letter-spacing: .04em;
+  }
 }
 
 /* Los cuatro adornos de las esquinas del recuadro */

@@ -78,7 +78,7 @@ const ETIQUETAS_EDITABLES = {
     ['gente.mesas',     'Mesas'],
     ['gente.regalos',   'Regalos'],
     ['gente.foraneos',  'Foráneos'],
-    ['gente.contactos', 'Agenda de contactos'],
+    ['gente.contactos', 'Contactos'],
   ],
 };
 

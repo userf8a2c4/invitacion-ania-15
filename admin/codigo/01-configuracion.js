@@ -282,7 +282,7 @@ const CONFIGURACION = {
     ['mesas',     'Mesas',              'Quién se sienta dónde'],
     ['regalos',   'Regalos',            'Qué llegó y a quién falta agradecerle'],
     ['foraneos',  'Foráneos',           'Los que vienen de afuera: hospedaje y llegada'],
-    ['contactos', 'Agenda de contactos','Todos los teléfonos del evento en un solo lugar'],
+    ['contactos', 'Contactos','Todos los teléfonos del evento en un solo lugar'],
   ],
 
 
@@ -528,6 +528,16 @@ const CONFIGURACION = {
         'Ojo con el estado: PROMETIDO no es ENTREGADO. Mientras no haya ' +
         'entregado, ese dinero todavía no existe, y el panel lo marca en ' +
         'amarillo para que no se te olvide.',
+    },
+
+    'dinero.pipeline-padrinos': {
+      titulo: 'Cuánto va en cada etapa',
+      texto:
+        'Lo mismo que "de tu bolsillo", pero desglosado por padrino: ' +
+        'cuánto se habló, cuánto ya se confirmó y cuánto YA entregó.\n\n' +
+        'Solo lo de "Ya entregó" cuenta como plata segura para calcular ' +
+        'tu bolsillo real. Lo demás es una promesa, y las promesas a ' +
+        'veces cambian.',
     },
 
     'mesas.fijar': {

@@ -1,41 +1,51 @@
 ﻿<!DOCTYPE html>
-<!--
-  ══════════════════════════════════════════════════════════════════════
-  INVITACIÓN DE XV AÑOS · ANIA
-  ══════════════════════════════════════════════════════════════════════
-
-  QUÉ ES ESTE ARCHIVO
-  Es el esqueleto de la web: define QUÉ cosas hay y en qué orden.
-  No define cómo se ven (eso está en la carpeta estilos/) ni qué hacen
-  (eso está en la carpeta codigo/).
-
-  ÍNDICE DE LA PÁGINA
-     1. Cabecera: tipografías, estilos y datos para compartir
-     2. Capas de fondo: fondo, pétalos y cursor
-     3. Sobre de apertura
-     4. Marco victoriano
-     5. Portada (el nombre dentro del óvalo dorado)
-     6. Mensaje de los papás
-     7. Cuenta regresiva
-     8. Mesa de regalos
-     9. Ubicación y mapa
-    10. Confirmación de asistencia
-    11. Pie de página
-    12. Ventana del pase de acceso
-    13. Reproductor de música
-    14. Archivos de código
-
-  CÓMO CAMBIAR LOS TEXTOS
-  Los textos marcados con  data-dato="..."  NO se editan acá: se editan
-  en  codigo/01-configuracion.js  y la web los completa sola. Así la
-  fecha (por ejemplo) se escribe UNA sola vez y nunca queda distinta en
-  dos lugares.
-  ══════════════════════════════════════════════════════════════════════
--->
 <html lang="es-MX">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!--
+    ══════════════════════════════════════════════════════════════════════
+    INVITACIÓN DE XV AÑOS · ANIA
+    ══════════════════════════════════════════════════════════════════════
+
+    QUÉ ES ESTE ARCHIVO
+    Es el esqueleto de la web: define QUÉ cosas hay y en qué orden.
+    No define cómo se ven (eso está en la carpeta estilos/) ni qué hacen
+    (eso está en la carpeta codigo/).
+
+    ÍNDICE DE LA PÁGINA
+       1. Cabecera: tipografías, estilos y datos para compartir
+       2. Capas de fondo: fondo, pétalos y cursor
+       3. Sobre de apertura
+       4. Marco victoriano
+       5. Portada (el nombre dentro del óvalo dorado)
+       6. Mensaje de los papás
+       7. Cuenta regresiva
+       8. Mesa de regalos
+       9. Ubicación y mapa
+      10. Confirmación de asistencia
+      11. Pie de página
+      12. Ventana del pase de acceso
+      13. Reproductor de música
+      14. Archivos de código
+
+    CÓMO CAMBIAR LOS TEXTOS
+    Los textos marcados con  data-dato="..."  NO se editan acá: se editan
+    en  codigo/01-configuracion.js  y la web los completa sola. Así la
+    fecha (por ejemplo) se escribe UNA sola vez y nunca queda distinta en
+    dos lugares.
+
+    ⚠️ EL CHARSET Y EL VIEWPORT VAN ARRIBA DE ESTE COMENTARIO, NO ABAJO.
+    El navegador exige que <meta charset> esté dentro de los primeros 1024
+    bytes del archivo para confiar en él sin tener que adivinar la
+    codificación primero. Este bloque de comentario por sí solo pesa más
+    que eso — así que si el charset fuera lo primero DESPUÉS del comentario
+    (como estaba antes), quedaba mucho más allá del límite (se midió: byte
+    1691) y Lighthouse lo marca como "falta o llega tarde". La documentación
+    es igual de útil acá abajo; el charset no puede moverse de arriba.
+    ══════════════════════════════════════════════════════════════════════
+  -->
 
   <!-- ANIMACIONES ON/OFF + CALIDAD GRÁFICA (sin parpadeo).
        Este script minúsculo corre ANTES de dibujar la página y decide (a)
@@ -160,10 +170,28 @@
        Ese script respeta el orden con el que se cargaban antes (importa:
        si dos archivos dicen cosas distintas sobre lo mismo, gana el que
        iba último; 00-tipografias sigue yendo primero).
-  ═══════════════════════════════════════════════════════════════════ -->
-  <link rel="stylesheet" href="estilos/_empaquetado.css?v=53">
 
-  
+       ⚠️ ES UN <link rel="stylesheet"> NORMAL, BLOQUEANTE, A PROPÓSITO
+       Y DEFINITIVO. Se probó dos veces cargarlo sin bloquear
+       (rel="preload" + swap por JavaScript, primero solo y después con
+       un <style> crítico inline como red de seguridad). Las dos veces
+       aparecieron partes del sitio sin su CSS real en el teléfono —el
+       fondo craquelado, los ramilletes de esquina, la fluidez del
+       scroll—, aunque esos archivos no se habían tocado.
+
+       La causa: el evento `onload` de un `rel="preload"` de hoja de
+       estilos tiene un bug conocido en Safari/iOS —no siempre dispara—.
+       Cuando no dispara, la hoja se queda pedida pero nunca aplicada,
+       PARA SIEMPRE. Es indistinguible, para quien mira la pantalla, de
+       "se rompió el sitio". El ahorro que prometía (~1,3s estimados por
+       PageSpeed) no vale ese riesgo en una invitación que tiene que
+       funcionar perfecto una sola vez.
+
+       No se vuelve a intentar esta técnica sin antes verla funcionar de
+       verdad en un dispositivo real, no solo en el número de PageSpeed. -->
+  <link rel="stylesheet" href="estilos/_empaquetado.css?v=67">
+
+
   
   
   
@@ -637,6 +665,16 @@
       <stop offset="100%" stop-color="#8a6a2c"/>
     </linearGradient>
 
+    <!-- ENLACE EXTERNO · flecha saliendo de una esquina, mismo trazo que
+         el resto de los íconos (fill:none, stroke dorado por .icono-dorado).
+         Reemplaza el carácter "↗" suelto, que el navegador dibujaba con su
+         fuente de emoji de sistema —un cuadradito azul ajeno a toda la
+         paleta— en vez de con el trazo dorado del resto de la web. -->
+    <g id="icono-enlace-externo">
+      <path d="M8 16 L16 8"/>
+      <path d="M10 8 H16 V14"/>
+    </g>
+
     <!-- FECHA · almanaque con una estrella marcando el día -->
     <g id="icono-fecha">
       <rect x="3.2" y="5.4" width="17.6" height="15.4" rx="1.6"/>
@@ -791,30 +829,14 @@
 
   <!-- Lo que se ve mientras carga todo -->
   <div class="sobre__precarga">
-    <svg class="sobre__monograma" viewBox="0 0 100 100" aria-hidden="true">
-      <!-- Una "A" caligráfica de UN SOLO TRAZO, dibujada como una firma.
-
-           Es cursiva y no geométrica a propósito: la de antes eran tres
-           rectas y un círculo, y se leía como un ícono de aplicación, no
-           como el monograma de una invitación.
-
-           Y es un trazo único, sin levantar la pluma: entra con una
-           pequeña floritura abajo a la izquierda, sube al ápice, baja
-           por la derecha y vuelve sobre sí para trazar el travesaño, que
-           termina en un gancho. Por eso al cargar se dibuja de corrido,
-           como si una mano la firmara de una sola pasada.
-
-           pathLength="620" hace que la animación mida el trazo en 620
-           unidades imaginarias, coincidiendo con el stroke-dasharray del
-           CSS. Si se cambia el dibujo, este número puede quedar igual:
-           es una escala, no el largo real. -->
-      <path pathLength="620" d="M10 80
-        C 14 74, 20 74, 26 78
-        C 32 60, 42 32, 52 12
-        C 62 34, 73 62, 88 88
-        C 79 75, 66 64, 42 64
-        C 34 64, 29 68, 26 74" />
-    </svg>
+    <!-- La "A" que dibujó Lucila para su hija, no una inventada por
+         nosotros (recursos/logo-dibujado-por-lucila.png), recoloreada al
+         dorado de la web con una máscara CSS (la foto es amarillo puro,
+         no el dorado antiguo del resto de la invitación — ver el porqué
+         en .sobre__monograma, estilos/03-sobre-de-apertura.css). Por eso
+         es un <div>, no un <img>: el color lo pone el background, la
+         forma se la da la máscara. -->
+    <div class="sobre__monograma" role="img" aria-label="Firma de Ania"></div>
     <p class="sobre__cargando">Preparando la velada…</p>
   </div>
 
@@ -845,6 +867,24 @@
           <stop offset="70%"  stop-color="#8a6a2c"/>
           <stop offset="100%" stop-color="#e0c26a"/>
         </linearGradient>
+
+        <!-- La foto de la firma de Lucila es amarillo puro (#ffea3c), no
+             el dorado antiguo del resto del sobre. Acá se usa solo su
+             silueta (canal alfa) como máscara, y sob-oro (el mismo
+             degradado de arriba) le pone el color de verdad — así queda
+             igual de dorada que el resto del sello y del marco.
+
+             El <image> de adentro va agrandado y corrido: la tinta de la
+             foto (687×927) está pegada al borde izquierdo, con bastante
+             aire a la derecha; dibujarla completa centrada se veía
+             corrida. Estos números recortan a la caja real de tinta
+             (x 0-629, y 40-880 del archivo original) y la escalan para
+             que llene justo la caja de la máscara de abajo. -->
+        <mask id="mascara-firma" maskUnits="userSpaceOnUse"
+              x="203" y="128" width="34" height="46" mask-type="alpha">
+          <image href="recursos/logo-dibujado-por-lucila.png"
+                 x="203" y="125.84" width="37.13" height="50.11"/>
+        </mask>
 
         <!-- Cera: tres degradados superpuestos para dar volumen real -->
         <radialGradient id="sob-cera-base" cx="34%" cy="28%" r="78%">
@@ -948,7 +988,7 @@
              Se dibuja como cera derramada de verdad: borde irregular,
              volumen con luz arriba a la izquierda y sombra abajo a la
              derecha, y la letra HUNDIDA en la cera. -->
-        <g class="sobre__sello">
+        <g class="sobre__sello" id="figura-del-sello">
 
           <!-- salpicaduras que quedaron al caer la cera -->
           <g fill="#7d1626" fill-opacity=".85" filter="url(#sob-grumo)">
@@ -991,15 +1031,34 @@
                   stroke-opacity=".5" stroke-linecap="round"/>
           </g>
 
-          <!-- La "A" hundida: primero la cara iluminada (abajo-derecha),
-               después la sombra (arriba-izquierda). Ese desfase de un
-               píxel y medio es lo que la hace parecer excavada. -->
-          <g font-family="'Cinzel Decorative', serif" font-size="34"
-             text-anchor="middle" font-weight="700">
-            <text x="221.5" y="167.5" fill="#e8808f" fill-opacity=".5">A</text>
-            <text x="220"   y="166"   fill="#4a0a15" fill-opacity=".92">A</text>
-          </g>
+          <!-- La "A" que dibujó Lucila para su hija, recoloreada al dorado
+               de siempre (sob-oro) con la máscara de arriba, hundida en
+               la cera: un drop-shadow oscuro hacia abajo-derecha insinúa
+               el grabado, en vez del doble-texto desfasado que se usaba
+               con el trazo inventado. -->
+          <rect x="203" y="128" width="34" height="46" fill="url(#sob-oro)"
+                mask="url(#mascara-firma)"
+                style="filter: drop-shadow(1.5px 2px 1.5px rgba(58,10,21,.85))"/>
         </g>
+
+        <!-- EL BRILLO DEL LATIDO, EN SU PROPIA CAPA.
+             Antes el "latido" del sello animaba scale() Y filter() juntos
+             en el mismo elemento. transform sí es compositable; filter no
+             —Lighthouse lo marca como animación "no compuesta", porque
+             cada cuadro fuerza al navegador a recalcular estilos en el
+             hilo principal en vez de dejárselo a la GPU—, y encima corre
+             SIN PARAR mientras el sobre está en pantalla.
+
+             La solución: una copia idéntica (el mismo dibujo, vía <use>,
+             nada duplicado a mano) que no recibe toques
+             (pointer-events: none, no le roba el toque al sello real) y
+             solo existe para el brillo — con el filtro FIJO y animando
+             nada más que su opacidad. El sello real (arriba) se queda
+             solo con el scale(); esta copia aporta el resplandor rojo
+             pulsando por encima. Combinados se ven exactamente igual que
+             antes: laten y brillan juntos, pero las dos animaciones son
+             ahora 100% compositables. -->
+        <use href="#figura-del-sello" class="sobre__sello-brillo" aria-hidden="true"/>
       </g>
     </svg>
 
@@ -1578,7 +1637,7 @@
       </p>
       <a class="boton-dorado" target="_blank" rel="noopener"
          data-enlace="regalos.enlaceDeLaLista" href="#">
-        Ver lista de regalos ↗
+        Ver lista de regalos <svg class="icono-dorado" viewBox="0 0 24 24" aria-hidden="true"><use href="#icono-enlace-externo"/></svg>
       </a>
       <p class="tarjeta-regalo__nota" data-dato="regalos.aclaracion"></p>
     </div>
@@ -1658,7 +1717,7 @@
     <div class="acciones-lugar revelar">
       <a class="boton-dorado" target="_blank" rel="noopener"
          data-enlace="lugar.enlaceParaAbrirEnMaps" href="#">
-        Abrir en Google Maps ↗
+        Abrir en Google Maps <svg class="icono-dorado" viewBox="0 0 24 24" aria-hidden="true"><use href="#icono-enlace-externo"/></svg>
       </a>
       <button class="boton-dorado" id="boton-agendar" type="button">
         Agendar la fecha <svg class="icono-dorado" viewBox="0 0 24 24" aria-hidden="true"><use href="#icono-fecha"/></svg>
@@ -2038,23 +2097,23 @@
      empaquetado (ver la sección de ESTILOS): el CSS no se compila ni se
      ejecuta, así que ahí juntar no genera ninguna tarea larga.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/01-configuracion.js?v=53"></script>
-<script defer src="codigo/02-utilidades.js?v=53"></script>
-<script defer src="codigo/03-sobre-de-apertura.js?v=53"></script>
-<script defer src="codigo/04-invitado-personalizado.js?v=53"></script>
-<script defer src="codigo/05-cursor-personalizado.js?v=53"></script>
+<script defer src="codigo/01-configuracion.js?v=67"></script>
+<script defer src="codigo/02-utilidades.js?v=67"></script>
+<script defer src="codigo/03-sobre-de-apertura.js?v=67"></script>
+<script defer src="codigo/04-invitado-personalizado.js?v=67"></script>
+<script defer src="codigo/05-cursor-personalizado.js?v=67"></script>
 <!-- EL LIENZO DE PÉTALOS. Va ANTES que 06-petalos-con-fisica.js porque ese
      archivo le pregunta al arrancar si debe crear elementos o solo números.
      Con  ?petalos=dom  vuelve el sistema de divs. -->
-<script defer src="codigo/24-lienzo-de-petalos.js?v=53"></script>
-<script defer src="codigo/06-petalos-con-fisica.js?v=53"></script>
-<script defer src="codigo/07-marco-y-enredaderas.js?v=53"></script>
-<script defer src="codigo/08-efectos-de-scroll.js?v=53"></script>
-<script defer src="codigo/09-cuenta-regresiva.js?v=53"></script>
-<script defer src="codigo/10-reproductor-de-musica.js?v=53"></script>
-<script defer src="codigo/11-formulario-confirmacion.js?v=53"></script>
-<script defer src="codigo/12-pase-de-acceso.js?v=53"></script>
-<script defer src="codigo/13-agregar-al-calendario.js?v=53"></script>
+<script defer src="codigo/24-lienzo-de-petalos.js?v=67"></script>
+<script defer src="codigo/06-petalos-con-fisica.js?v=67"></script>
+<script defer src="codigo/07-marco-y-enredaderas.js?v=67"></script>
+<script defer src="codigo/08-efectos-de-scroll.js?v=67"></script>
+<script defer src="codigo/09-cuenta-regresiva.js?v=67"></script>
+<script defer src="codigo/10-reproductor-de-musica.js?v=67"></script>
+<script defer src="codigo/11-formulario-confirmacion.js?v=67"></script>
+<script defer src="codigo/12-pase-de-acceso.js?v=67"></script>
+<script defer src="codigo/13-agregar-al-calendario.js?v=67"></script>
 <!-- EL LIENZO DE LUZ. Dibuja los tres sistemas de luz —velas, haces y polvo—
      en un solo <canvas>, en vez de en ~140 elementos con `mix-blend-mode`.
 
@@ -2064,15 +2123,15 @@
 
      Con  ?luz=dom  este módulo se queda dormido y vuelve el sistema
      anterior completo, sin tocar código. -->
-<script defer src="codigo/23-lienzo-de-luz.js?v=53"></script>
+<script defer src="codigo/23-lienzo-de-luz.js?v=67"></script>
 <!-- FAUNA NOCTURNA: luciérnagas y termitas, dibujadas por el lienzo de
      arriba. Va después de 23 (que crea window.LienzoDeLuz) — el orden
      respecto de 19-velas.js no importa, porque este módulo espera el
      evento 'invitacion-visible' antes de buscar los candelabros, que
      19-velas.js recién crea ahí. -->
-<script defer src="codigo/27-fauna-nocturna.js?v=53"></script>
-<script defer src="codigo/14-haces-de-luz.js?v=53"></script>
-<script defer src="codigo/15-registro-de-confirmaciones.js?v=53"></script>
+<script defer src="codigo/27-fauna-nocturna.js?v=67"></script>
+<script defer src="codigo/14-haces-de-luz.js?v=67"></script>
+<script defer src="codigo/15-registro-de-confirmaciones.js?v=67"></script>
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda).
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
      —incluso sobre el sobre de entrada— para que quien tenga un equipo
@@ -2087,27 +2146,27 @@
   <span class="boton-animaciones__texto">Animación</span>
 </button>
 
-<script defer src="codigo/16-volver-arriba.js?v=53"></script>
-<script defer src="codigo/17-joyas-colgantes.js?v=53"></script>
-<script defer src="codigo/18-motas-de-polvo.js?v=53"></script>
-<script defer src="codigo/19-velas.js?v=53"></script>
-<script defer src="codigo/20-boton-de-animaciones.js?v=53"></script>
-<script defer src="codigo/21-monitor-de-rendimiento.js?v=53"></script>
+<script defer src="codigo/16-volver-arriba.js?v=67"></script>
+<script defer src="codigo/17-joyas-colgantes.js?v=67"></script>
+<script defer src="codigo/18-motas-de-polvo.js?v=67"></script>
+<script defer src="codigo/19-velas.js?v=67"></script>
+<script defer src="codigo/20-boton-de-animaciones.js?v=67"></script>
+<script defer src="codigo/21-monitor-de-rendimiento.js?v=67"></script>
 <!-- Tiñe la luz que entra por los ventanales según la hora del día. Va
      después de los haces y las motas, porque escribe sobre sus capas. -->
-<script defer src="codigo/22-luz-de-la-hora.js?v=53"></script>
+<script defer src="codigo/22-luz-de-la-hora.js?v=67"></script>
 
 <!-- PREGUNTAS FRECUENTES (el botón "?" de la fila de controles).
      El 00 tiene solo los datos —fecha, lugar, vestimenta, regalos— y el
      25 arma el panel leyéndolos. Ese orden importa: si el 25 corriera
      primero, no encontraría la lista de preguntas y no dibujaría nada. -->
-<script defer src="codigo/00-conocimiento-chatbot.js?v=53"></script>
-<script defer src="codigo/25-preguntas-frecuentes.js?v=53"></script>
+<script defer src="codigo/00-conocimiento-chatbot.js?v=67"></script>
+<script defer src="codigo/25-preguntas-frecuentes.js?v=67"></script>
 
 <!-- EL MAPA A PEDIDO. El iframe de Google Maps recién se crea cuando se
      toca "Ver el mapa" (ver el comentario junto a .mapa-marco--a-pedido
      más arriba). -->
-<script defer src="codigo/26-mapa-a-pedido.js?v=53"></script>
+<script defer src="codigo/26-mapa-a-pedido.js?v=67"></script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
      internet y se pueda instalar. Va al final y falla en silencio si el

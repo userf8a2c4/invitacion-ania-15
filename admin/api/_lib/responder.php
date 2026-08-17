@@ -241,3 +241,43 @@ function campoOpcion($origen, $clave, $permitidos, $respaldo) {
     $valor = trim((string) ($origen[$clave] ?? ''));
     return in_array($valor, $permitidos, true) ? $valor : $respaldo;
 }
+
+/**
+ * Saca una lista de ítems de "qué incluye" ({id, texto, hecho}) y la
+ * deja lista para guardar como JSON en una columna TEXT.
+ *
+ * Se limpia acá y no solo en el teléfono porque el teléfono es de quien
+ * escribe, no de quien lee: sin este límite, cualquiera que hable
+ * directo con la API podría guardar un array gigante o con ítems de
+ * texto larguísimo.
+ *
+ * @param array  $origen
+ * @param string $clave
+ * @return string|null JSON de la lista, o null si quedó vacía (para no
+ *                      guardar "[]" de más y poder distinguir "sin
+ *                      ítems" de "todavía no se migró" al leer).
+ */
+function campoListaDeDetalle($origen, $clave) {
+    $crudo = $origen[$clave] ?? [];
+    if (!is_array($crudo)) return null;
+
+    $limpio = [];
+    foreach ($crudo as $item) {
+        if (!is_array($item)) continue;
+
+        $texto = trim(mb_substr((string) ($item['texto'] ?? ''), 0, 200, 'UTF-8'));
+        if ($texto === '') continue;
+
+        $limpio[] = [
+            'id'    => (string) mb_substr((string) ($item['id'] ?? ''), 0, 40, 'UTF-8'),
+            'texto' => $texto,
+            'hecho' => !empty($item['hecho']),
+        ];
+
+        // 60 ítems alcanza de sobra para cualquier "qué incluye" real;
+        // más que eso ya no es una lista, es otra cosa.
+        if (count($limpio) >= 60) break;
+    }
+
+    return $limpio ? json_encode($limpio, JSON_UNESCAPED_UNICODE) : null;
+}

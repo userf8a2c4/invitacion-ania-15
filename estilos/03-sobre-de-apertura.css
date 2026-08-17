@@ -59,30 +59,73 @@ body.sobre-visible { overflow: hidden; }
 }
 
 
-/* ─── 2. MONOGRAMA QUE SE DIBUJA SOLO ──────────────────────────────────
-   Truco clásico: a un trazo SVG se le pone una línea punteada tan larga
-   como el trazo entero (stroke-dasharray) y se la corre hacia afuera
-   (stroke-dashoffset). Al animar el desplazamiento hasta 0, parece que
-   una mano invisible va dibujando la letra.
-   ---------------------------------------------------------------------- */
-.sobre__monograma { width: 130px; height: 130px; }
+/* ─── 2. LA FIRMA DE LUCILA ─────────────────────────────────────────────
+   Antes era un trazo SVG inventado por nosotros, que se "autodibujaba"
+   con stroke-dashoffset. Ahora es la firma real que dibujó Lucila para su
+   hija (recursos/logo-dibujado-por-lucila.png) — simbólicamente vale mil
+   veces más que cualquier trazo que hubiéramos podido inventar.
 
-.sobre__monograma path {
-  fill: none;
-  stroke: var(--color-oro);
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 620;
-  stroke-dashoffset: 620;
-  animation: dibujar-trazo 2.6s var(--curva-elegante) infinite;
+   LA MÁSCARA (por qué es un <div> con background, y no un <img>)
+   La foto es amarillo puro (#ffea3c), no el dorado antiguo del resto de
+   la web. mask-image usa la SILUETA de la imagen (su transparencia) nada
+   más, como una plantilla recortada; el color de verdad lo pone el
+   background de acá abajo, con el mismo dorado que el resto de la
+   invitación. Por eso tiene que ser un elemento con background propio
+   —un <img> ya trae su color adentro y no hay forma de pisarlo—.
+
+   EL RECORTE
+   La foto (687×927) tiene la tinta pegada al borde izquierdo y bastante
+   aire a la derecha: centrar el archivo ENTERO (mask-size: contain) dejaba
+   la letra visualmente corrida. El segundo mask-size/mask-position de
+   abajo recorta justo a la caja real de tinta (medida a mano, decodificando
+   los píxeles del PNG: x 0-629, y 40-880 de 687×927), agrandada y corrida
+   para que esa caja llene el recuadro.
+
+   EL TRAZO
+   Ya no hay un <path> vectorial para animar con stroke-dashoffset como
+   antes —esto es una foto—, así que el gesto de "una mano firmando" se
+   arma con clip-path. Una cortina rectangular de lado a lado (lo que
+   había primero) se leía IMPRESA, no escrita: nadie firma en una línea
+   perfectamente recta de punta a punta de la hoja.
+
+   En su lugar es un círculo que CRECE desde donde arrancaría el trazo
+   —la voluta de abajo a la izquierda, el mismo punto donde depositarías
+   la pluma para empezar a firmar—, como tinta expandiéndose desde donde
+   tocó el papel. Se ve orgánico, no mecánico, y sigue siendo una sola
+   propiedad de recorte (clip-path: circle()), sin depender de combinar
+   dos máscaras (eso se probó primero y era demasiado frágil entre
+   navegadores para algo que se ve en cada visita). */
+.sobre__monograma {
+  width: 115px;
+  height: 154px;
+  /* ⚡ SIN ESTO SE VEÍA CORRIDO A LA IZQUIERDA. .sobre__precarga no tiene
+     ancho propio: se achica al contenido más ancho, que es el texto
+     "PREPARANDO LA VELADA…" (más ancho que estos 115px). Sin margen
+     automático, un bloque más angosto que su contenedor queda pegado al
+     borde izquierdo por default —el texto de abajo, al ser lo más ancho,
+     SÍ se ve centrado por definir el ancho de la caja, pero el glifo no—. */
+  margin-inline: auto;
+
+  background: linear-gradient(135deg,
+    var(--color-oro-brillante) 0%, var(--color-oro) 55%, var(--color-oro-sombra) 100%);
+
+  -webkit-mask-image: url(../recursos/logo-dibujado-por-lucila.png);
+  mask-image: url(../recursos/logo-dibujado-por-lucila.png);
+  -webkit-mask-size: 126px 170px;
+  mask-size: 126px 170px;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: 0px -7px;
+  mask-position: 0px -7px;
+
+  animation: revelar-firma 2.6s var(--curva-elegante) infinite;
 }
 
-@keyframes dibujar-trazo {
-  0%   { stroke-dashoffset: 620; opacity: .25; }
-  45%  { stroke-dashoffset: 0;   opacity: 1;   }
-  75%  { stroke-dashoffset: 0;   opacity: 1;   }
-  100% { stroke-dashoffset: -620; opacity: .25; }
+@keyframes revelar-firma {
+  0%   { clip-path: circle(0%   at 18% 82%); opacity: .3; }
+  45%  { clip-path: circle(150% at 18% 82%); opacity: 1;  }
+  75%  { clip-path: circle(150% at 18% 82%); opacity: 1;  }
+  100% { clip-path: circle(0%   at 18% 82%); opacity: .3; }
 }
 
 .sobre__cargando {
@@ -134,15 +177,38 @@ body.sobre-visible { overflow: hidden; }
   transition: transform 1s var(--curva-elegante);
 }
 
-/* El sello de lacre late suavemente para invitar a tocarlo. */
+/* El sello de lacre late suavemente para invitar a tocarlo.
+   ⚡ SOLO scale() ACÁ. El brillo (que antes se lograba animando `filter`
+   en este mismo elemento) vive aparte en .sobre__sello-brillo, más abajo
+   — ver el comentario junto al <use> en index.html para el porqué
+   completo: filter animado no es compositable, y esto latía SIN PARAR
+   mientras el sobre estaba en pantalla. */
 .sobre__sello {
   transform-box: view-box;
   transform-origin: 220px 152px;
-  animation: latir-sello 2.8s ease-in-out infinite;
+  animation: latir-sello-escala 2.8s ease-in-out infinite;
 }
-@keyframes latir-sello {
-  0%, 100% { transform: scale(1);    filter: drop-shadow(0 0 0 rgba(192,24,26,0)); }
-  50%      { transform: scale(1.05); filter: drop-shadow(0 0 16px rgba(192,24,26,.5)); }
+@keyframes latir-sello-escala {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.05); }
+}
+
+/* La copia de brillo (el <use href="#figura-del-sello"> de index.html):
+   mismo latido, mismo filtro que antes, pero FIJO — solo se anima la
+   opacidad, que sí es compositable. A opacidad 0 el filtro ya es
+   invisible, así que el resultado combinado con el sello real de arriba
+   se ve idéntico al de antes: laten y brillan juntos. */
+.sobre__sello-brillo {
+  transform-box: view-box;
+  transform-origin: 220px 152px;
+  pointer-events: none;
+  filter: drop-shadow(0 0 16px rgba(192, 24, 26, .5));
+  animation: latir-sello-escala 2.8s ease-in-out infinite,
+             latir-sello-brillo 2.8s ease-in-out infinite;
+}
+@keyframes latir-sello-brillo {
+  0%, 100% { opacity: 0; }
+  50%      { opacity: 1; }
 }
 
 

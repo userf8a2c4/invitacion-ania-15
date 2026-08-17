@@ -346,8 +346,21 @@ function hayAlgoQueMirar() {
    ser una consulta al navegador a ser una simple variable.
    ---------------------------------------------------------------- */
 
-let _scrollGuardadoX = window.scrollX;
-let _scrollGuardadoY = window.scrollY;
+/* ⚡ ACÁ NO SE LE PREGUNTA AL NAVEGADOR, NI SIQUIERA UNA VEZ.
+   Esto arrancaba leyendo window.scrollX/Y de entrada, "por las dudas".
+   Pero ese primer vistazo se hace ANTES de que el navegador termine de
+   acomodar la página —está recién parseando el HTML—, así que la
+   consulta lo obliga a resolver todo el layout de golpe: un reprocesamiento
+   forzado medido en 127ms, en la carga inicial, el peor momento posible
+   para perder tiempo.
+
+   Se arranca asumiendo 0 (correcto en la enorme mayoría de las cargas: una
+   página nueva siempre abre arriba de todo) y los oyentes de scroll/resize
+   de acá abajo corrigen el valor apenas hay algo real que corregir — sin
+   forzar nunca un cálculo que el navegador todavía no había hecho por su
+   cuenta. */
+let _scrollGuardadoX = 0;
+let _scrollGuardadoY = 0;
 
 window.addEventListener('scroll', () => {
   _scrollGuardadoX = window.scrollX;
@@ -591,23 +604,46 @@ function cederElHilo(seguir) {
 function trabajarPorTandas(cuantos, hacerUno, alTerminar, presupuestoMs = 8) {
   let indice = 0;
 
-  /* ⚠️ CON LA PESTAÑA OCULTA SE HACE TODO DE UNA, SIN TROCEAR.
-     Parece al revés de lo que uno esperaría, pero es lo correcto, y viene de
-     un caso real: alguien abre la invitación con "abrir en pestaña nueva" y
-     la deja de fondo mientras termina otra cosa.
+  /* ⚠️ CON LA PESTAÑA OCULTA SE TROCEA IGUAL, PERO CON OTRO RELOJ.
+     Antes esto hacía TODO de corrido, sin ningún límite, razonando que si
+     nadie mira la pestaña no hay ningún cuadro que proteger. El caso real
+     que lo motivó: alguien abre la invitación con "abrir en pestaña nueva"
+     y la deja de fondo — ahí requestAnimationFrame casi no corre (el
+     navegador lo castiga fuerte en pestañas ocultas: un temporizador por
+     segundo, y a los pocos minutos uno por minuto), así que con troceado
+     normal las enredaderas tardaban minutos en aparecer.
 
-     El troceado existe para que la página siga respondiendo MIENTRAS SE LA
-     MIRA. Si nadie la mira, no hay ningún cuadro que proteger — y en cambio
-     el navegador castiga fuerte a las pestañas de fondo: les permite un
-     temporizador por segundo, y después de unos minutos uno por MINUTO. Con
-     22 plantas de a una tanda por turno, las enredaderas tardaban minutos en
-     aparecer, y el invitado volvía a una invitación a medio dibujar.
+     El problema: Lighthouse (y por lo tanto PageSpeed / la auditoría de
+     velocidad) audita la página con document.hidden en true — es un
+     comportamiento conocido de Chrome headless, la pestaña nunca está
+     "activa" de verdad. Con el "todo de corrido" de antes, la auditoría
+     veía TODA la construcción —24 plantas, 8 candelabros— como una sola
+     tarea sincrónica de más de un segundo: exactamente lo que Total
+     Blocking Time castiga, y la razón medida de que el sitio no pasara
+     de 65-80 en el puntaje de velocidad.
 
-     Haciéndolo de corrido, cuando vuelve ya está todo listo. La "tarea
-     larga" que eso genera no le molesta a nadie: no hay nada que dibujar. */
+     La solución: seguir troceando, pero con setTimeout (que sí corre en
+     pestañas de fondo, a diferencia de requestAnimationFrame) y con un
+     presupuesto generoso pero acotado —40ms, apenas debajo del umbral de
+     50ms que define una "tarea larga"—. Una pestaña de fondo real sigue
+     terminando en una fracción de segundo (lejos de los "minutos" de
+     antes), y la auditoría deja de ver ninguna tarea que la penalice. */
   if (document.hidden) {
-    for (; indice < cuantos; indice++) hacerUno(indice);
-    if (typeof alTerminar === 'function') alTerminar();
+    const presupuestoOculto = 40;   // bajo el umbral de "tarea larga" (50ms)
+
+    function unaTandaOculta() {
+      const arranque = performance.now();
+      do {
+        hacerUno(indice++);
+      } while (indice < cuantos && performance.now() - arranque < presupuestoOculto);
+
+      if (indice < cuantos) {
+        setTimeout(unaTandaOculta, 0);
+        return;
+      }
+      if (typeof alTerminar === 'function') alTerminar();
+    }
+    unaTandaOculta();
     return;
   }
 

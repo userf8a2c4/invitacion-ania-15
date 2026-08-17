@@ -57,6 +57,7 @@
       anguloDelSol: 34,
       largoDelHaz:  1.3,
       fuerzaDeVelas: 0.95,
+      deNoche: 0.15,
     },
     {
       hora: 13,  // MEDIODIA: el NEUTRO. Luz plana, sin caracter.
@@ -71,6 +72,7 @@
       anguloDelSol: 10,
       largoDelHaz:  0.85,
       fuerzaDeVelas: 0.7,
+      deNoche: 0,
     },
     {
       hora: 18,  // HORA DORADA: el momento mas caracteristico
@@ -85,6 +87,7 @@
       anguloDelSol: -26,
       largoDelHaz:  1.28,
       fuerzaDeVelas: 0.92,
+      deNoche: 0.35,
     },
     {
       hora: 20,  // crepusculo malva: evita el gris al cruzar de calido a frio
@@ -99,6 +102,7 @@
       anguloDelSol: -32,
       largoDelHaz:  1.32,
       fuerzaDeVelas: 0.98,
+      deNoche: 0.85,
     },
     {
       hora: 23,  // NOCHE: oscura de verdad. La luna apenas insinua.
@@ -113,6 +117,7 @@
       anguloDelSol: -20,
       largoDelHaz:  1.12,
       fuerzaDeVelas: 1.05,
+      deNoche: 1,
     },
   ];
 
@@ -131,6 +136,7 @@
     anguloDelSol: -10,
     largoDelHaz:  1.05,
     fuerzaDeVelas: 1.08,
+    deNoche: 1,
   };
 
   /* Y el espejo del crepusculo, para el cruce frio -> calido del amanecer. */
@@ -147,6 +153,7 @@
     anguloDelSol: 38,
     largoDelHaz:  1.34,
     fuerzaDeVelas: 1.00,
+    deNoche: 0.6,
   };
 
 /**
@@ -310,6 +317,12 @@
                            discretas (×0,70); de madrugada SON la única luz
                            de la sala y crecen (×1,30). Ese cambio de quién
                            manda es lo que vuelve envolvente la escena.
+         · deNoche       → 0 al mediodía, 1 de noche cerrada. Lo usa
+                           codigo/27-fauna-nocturna.js para que las
+                           luciérnagas y termitas solo se vean cuando de
+                           verdad es de noche, con un fundido suave al
+                           atardecer/amanecer en vez de un apagón brusco a
+                           una hora fija.
 
        Se escriben una vez cada diez minutos: cuestan cero por cuadro. */
     const mezclarNumero = (clave) => desde[clave] + (hasta[clave] - desde[clave]) * t;
@@ -318,6 +331,7 @@
       anguloDelSol:  mezclarNumero('anguloDelSol'),
       largoDelHaz:   mezclarNumero('largoDelHaz'),
       fuerzaDeVelas: mezclarNumero('fuerzaDeVelas'),
+      deNoche:       mezclarNumero('deNoche'),
     };
 
     document.dispatchEvent(new CustomEvent('hora-cambio'));

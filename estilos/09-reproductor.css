@@ -304,7 +304,14 @@ html.animaciones-off #musica-flotante.sonando #boton-musica { animation: none; }
 
 /* Aviso que invita a dar play si el navegador bloqueó la música.
    Se desvanece solo a los 8 segundos. Apunta al círculo, que es lo que
-   hay que tocar. */
+   hay que tocar.
+   ⚡ EL BRILLO PULSANTE VA EN ::before, NO ANIMANDO box-shadow ACÁ.
+   Lighthouse marca `box-shadow` animado como "no compuesto" —igual que
+   filter, obliga a recalcular estilos en el hilo principal en cada
+   cuadro, sin parar mientras el aviso está en pantalla—. El elemento
+   real se queda con un box-shadow FIJO (el valor de reposo); el brillo
+   que crece y decrece es una capa aparte, del mismo tamaño exacto
+   (inset: 0), animando solo su opacidad. */
 .reproductor__aviso {
   position: absolute;
   bottom: calc(100% + .75rem);
@@ -318,8 +325,15 @@ html.animaciones-off #musica-flotante.sonando #boton-musica { animation: none; }
   font-size: .78rem;
   letter-spacing: .1em;
   pointer-events: none;
-  animation: pulso-aviso 2s ease-in-out infinite,
-             desvanecer-aviso 1s 8s forwards;
+  box-shadow: 0 4px 20px rgba(201, 168, 76, .15);
+  animation: desvanecer-aviso 1s 8s forwards;
+}
+.reproductor__aviso::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow: 0 4px 28px rgba(201, 168, 76, .45);
+  animation: pulso-aviso 2s ease-in-out infinite;
 }
 .reproductor__aviso::after {
   content: '';
@@ -331,11 +345,16 @@ html.animaciones-off #musica-flotante.sonando #boton-musica { animation: none; }
   border-top: 7px solid var(--color-oro);
 }
 @keyframes pulso-aviso {
-  0%, 100% { box-shadow: 0 4px 20px rgba(201, 168, 76, .15); }
-  50%      { box-shadow: 0 4px 28px rgba(201, 168, 76, .45); }
+  0%, 100% { opacity: 0; }
+  50%      { opacity: 1; }
 }
+/* ⚡ SIN `visibility: hidden` ACÁ. Esa línea también hacía que Lighthouse
+   marcara la animación como no compositable —visibility no es una
+   propiedad que la GPU pueda animar—, y no hacía falta: el elemento ya
+   tiene pointer-events: none de base, así que sacarla no cambia nada
+   funcionalmente. opacity: 0 sola ya lo esconde. */
 @keyframes desvanecer-aviso {
-  to { opacity: 0; visibility: hidden; }
+  to { opacity: 0; }
 }
 
 /* Si la música ya está sonando, el aviso sobra */

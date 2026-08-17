@@ -159,6 +159,11 @@ body {
     linear-gradient(rgba(0, 0, 0, .5), rgba(0, 0, 0, .5)),
     url('../recursos/fondo-gotico-victoriano.webp');
   background-repeat: no-repeat, repeat;
+  /* E2: sin esto el mosaico arranca desde la esquina 0,0 y en una
+     pantalla angosta corta los gatos de los bordes de cualquier forma.
+     "center top" centra el enrejado horizontalmente (el patrón es
+     simétrico izquierda-derecha) y lo arranca prolijo desde arriba. */
+  background-position: 0 0, center top;
   background-color: var(--fondo);
   color: var(--texto);
 

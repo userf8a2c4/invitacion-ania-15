@@ -116,6 +116,22 @@ case 'todo':
         'SELECT * FROM cotizaciones ORDER BY servicio, monto'
     );
 
+    /* `detalle_items` se guarda como JSON de texto (columna TEXT, no
+       nativa JSON, para no depender de una versión de MySQL en
+       particular). Se decodifica acá, no en el teléfono: así la app
+       recibe siempre un array —nunca un string a medio parsear— sin
+       importar si la instalación ya tiene la columna o no. */
+    $decodificarDetalle = function (array $filas) {
+        foreach ($filas as &$fila) {
+            $fila['detalle_items'] = !empty($fila['detalle_items'])
+                ? (json_decode($fila['detalle_items'], true) ?: [])
+                : [];
+        }
+        return $filas;
+    };
+    $proveedores  = $decodificarDetalle($proveedores);
+    $cotizaciones = $decodificarDetalle($cotizaciones);
+
     /* ─── Los totales ─────────────────────────────────────────────────
        Se calculan en SQL y no sumando en PHP porque MySQL lo hace sobre
        la tabla entera de una sola pasada. Filtrados por presupuesto
@@ -156,9 +172,42 @@ case 'todo':
          FROM padrinos WHERE estado <> 'entregado' AND tipo_aporte = 'dinero'"
     );
 
+    /* `de_padrinos` (arriba, en $totales) suma TODO gasto con padrino
+       asignado, sin importar si ese padrino ya entregó o nomás lo
+       habló. Eso alcanza para el desglose de categorías, pero para
+       decir "cuánto sale de tu bolsillo DE VERDAD" hay que ser más
+       estrictos: un padrino que "lo habló" no es plata seguro (principio
+       del módulo). Acá se suma solo lo de padrinos con estado
+       'entregado' — lo único que ya está, de verdad, cubierto. */
+    $deEntregado = consultarUno(
+        "SELECT COALESCE(SUM(g.monto_real), 0) AS monto
+         FROM gastos g JOIN padrinos pa ON pa.id = g.padrino_id
+         WHERE pa.estado = 'entregado'" .
+        ($tienePresupuestos ? ' AND g.presupuesto_id = :activo' : ''),
+        $tienePresupuestos ? [':activo' => $activo] : []
+    );
+    $dePadrinosEntregado = (float) $deEntregado['monto'];
+
     $presupuestos = $tienePresupuestos
         ? consultarTodo('SELECT * FROM presupuestos ORDER BY creado_en')
         : [];
+
+    /* Cuánto sale la fiesta POR CADA INVITADO QUE DE VERDAD VA. No se
+       usa el total de confirmaciones (grupos), sino la gente real
+       (adultos + niños) — un costo/invitado que contara "familia
+       López" como una sola persona diría un número falso. Si todavía
+       no hay nadie confirmado, se deja explícitamente vacío (null) en
+       vez de dividir por cero o mostrar un $0 que parecería un error. */
+    $confirmados = existeTabla('confirmaciones')
+        ? consultarUno(
+            "SELECT COALESCE(SUM(adultos), 0) + COALESCE(SUM(ninos), 0) AS personas
+             FROM confirmaciones WHERE asiste = 1"
+          )
+        : ['personas' => 0];
+    $personasConfirmadas = (int) $confirmados['personas'];
+    $costoPorInvitado = $personasConfirmadas > 0
+        ? round(((float) $totales['costo']) / $personasConfirmadas, 2)
+        : null;
 
     responderBien([
         'presupuestos'       => $presupuestos,
@@ -168,11 +217,17 @@ case 'todo':
             'costo'         => (float) $totales['costo'],
             'propio'        => (float) $totales['propio'],
             'de_padrinos'   => (float) $totales['de_padrinos'],
+            // Ver comentario arriba: solo padrinos con estado 'entregado'.
+            'de_padrinos_entregado' => $dePadrinosEntregado,
+            'bolsillo_si_nadie_mas_entrega' =>
+                round(((float) $totales['costo']) - $dePadrinosEntregado, 2),
             'por_pagar'     => (float) $porPagar['monto'],
             'por_pagar_cuantos' => (int) $porPagar['cuantos'],
             'pagado'        => (float) $pagado['monto'],
             'padrinos_pendientes'         => (float) $padrinosPendientes['monto'],
             'padrinos_pendientes_cuantos' => (int) $padrinosPendientes['cuantos'],
+            'confirmados'         => $personasConfirmadas,
+            'costo_por_invitado'  => $costoPorInvitado,
         ],
         'categorias'   => $categorias,
         'gastos'       => $gastos,
@@ -388,12 +443,17 @@ case 'guardar_proveedor':
                          ['', 'banquete', 'salon', 'fotografo', 'dj',
                           'iglesia', 'modista'], ''),
         'notas'       => campoTexto($datos, 'notas', 2000),
+        // Lista estructurada de "qué incluye" (Paso 2). Aparte de
+        // `notas`: eso sigue siendo el cuaderno libre de la persona.
+        'detalle_items' => campoListaDeDetalle($datos, 'detalle_items'),
     ];
     if ($valores['nombre'] === '') responderMal('El proveedor necesita un nombre.', 400);
 
-    /* La columna la agrega instalar.php. Si todavía no se corrió, se
+    /* Las columnas las agrega instalar.php. Si todavía no se corrió, se
        guarda el resto igual en vez de fallar entero. */
-    if (!in_array('paquete', columnasDe('proveedores'), true)) unset($valores['paquete']);
+    $columnasProveedor = columnasDe('proveedores');
+    if (!in_array('paquete', $columnasProveedor, true)) unset($valores['paquete']);
+    if (!in_array('detalle_items', $columnasProveedor, true)) unset($valores['detalle_items']);
 
     responderBien(guardarFila('proveedores', $datos, $valores, $yo, 'proveedor'));
     break;
@@ -422,13 +482,24 @@ case 'guardar_cotizacion':
         'tipo_precio' => campoOpcion($datos, 'tipo_precio',
                          ['por_persona', 'fijo'], 'fijo'),
         'precio_pp'   => campoMonto($datos, 'precio_pp'),
+        /* `que_incluye` es el texto libre viejo (Paso 1). Ya no se
+           edita a mano: 09-vista-dinero.js manda acá el mismo contenido
+           que `detalle_items`, pero como texto plano, para que un
+           lector viejo de la base (o un backup) no se quede con la
+           columna vacía de golpe. La fuente de verdad para la UI nueva
+           es `detalle_items`. */
         'que_incluye' => campoTexto($datos, 'que_incluye', 2000),
         'vigencia'    => campoFecha($datos, 'vigencia'),
         'elegida'     => !empty($datos['elegida']) ? 1 : 0,
         'notas'       => campoTexto($datos, 'notas', 2000),
+        'detalle_items' => campoListaDeDetalle($datos, 'detalle_items'),
     ];
     if ($valores['proveedor'] === '' || $valores['servicio'] === '') {
         responderMal('La cotización necesita servicio y proveedor.', 400);
+    }
+
+    if (!in_array('detalle_items', columnasDe('cotizaciones'), true)) {
+        unset($valores['detalle_items']);
     }
 
     $resultado = guardarFila('cotizaciones', $datos, $valores, $yo, 'cotización');
