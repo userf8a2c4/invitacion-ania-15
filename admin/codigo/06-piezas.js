@@ -17,6 +17,7 @@
      3. Cargando y vacío
      4. Armar formularios
      5. Confirmar antes de borrar
+     6. Lista de detalle (ítems de "qué incluye")
    ══════════════════════════════════════════════════════════════════════ */
 
 
@@ -741,4 +742,198 @@ function valorDe(id, dentroDe) {
  */
 function confirmarAccion(pregunta) {
   return window.confirm(pregunta);
+}
+
+
+/* ─── 6. LISTA DE DETALLE (ÍTEMS DE "QUÉ INCLUYE") ─────────────────── */
+
+/**
+ * Contador para dar id único a los ítems que se agregan en el momento
+ * (todavía no tienen uno del servidor). No hace falta que sobreviva
+ * entre recargas: solo sirve para no repetir key mientras la hoja está
+ * abierta.
+ */
+let _SIGUIENTE_ID_DE_DETALLE = 1;
+
+/**
+ * Un ítem nuevo, con id propio para poder quitarlo del renglón correcto
+ * aunque dos ítems tengan el mismo texto.
+ *
+ * @param {string} [texto]
+ * @param {boolean} [hecho]
+ * @returns {{id:string, texto:string, hecho:boolean}}
+ */
+function nuevoItemDeDetalle(texto, hecho) {
+  return { id: 'nuevo-' + (_SIGUIENTE_ID_DE_DETALLE++), texto: texto || '', hecho: !!hecho };
+}
+
+/**
+ * Convierte lo que haya en la columna vieja de texto libre ("qué
+ * incluye" corrido) a la lista de ítems nueva. No borra nada: si no hay
+ * texto, devuelve una lista vacía en vez de inventar un ítem.
+ *
+ * Si lo que llega ya es un JSON de una lista (porque se está reabriendo
+ * algo que ya se guardó con el formato nuevo), se respeta tal cual.
+ *
+ * @param {string|Array} texto
+ * @returns {Array<{id:string, texto:string, hecho:boolean}>}
+ */
+function itemsDesdeTexto(texto) {
+  if (Array.isArray(texto)) {
+    return texto
+      .map(it => (it && typeof it === 'object')
+        ? nuevoItemDeDetalle(String(it.texto || ''), !!it.hecho)
+        : nuevoItemDeDetalle(String(it || '')))
+      .filter(it => it.texto.trim());
+  }
+
+  const crudo = String(texto || '').trim();
+  if (!crudo) return [];
+
+  // Si ya es JSON de una lista (reabrir algo guardado con el formato
+  // nuevo), se usa esa lista directo en vez de partirla por renglón.
+  if (crudo.startsWith('[')) {
+    try {
+      const lista = JSON.parse(crudo);
+      if (Array.isArray(lista)) return itemsDesdeTexto(lista);
+    } catch (error) {
+      // No era JSON de verdad: sigue como texto plano de abajo.
+    }
+  }
+
+  // Texto corrido de siempre: una línea o un ";" por ítem.
+  return crudo
+    .split(/\r?\n|;/)
+    .map(linea => linea.trim())
+    .filter(Boolean)
+    .map(linea => nuevoItemDeDetalle(linea));
+}
+
+/**
+ * El HTML de un renglón de ítem.
+ *
+ * @param {{id:string, texto:string, hecho:boolean}} item
+ * @returns {string}
+ */
+function _filaDeDetalle(item) {
+  return '' +
+    '<div class="lista__fila" data-detalle-fila="' + seguro(item.id) + '" ' +
+         'style="gap:var(--esp-1)">' +
+      '<input type="checkbox" data-detalle-hecho' +
+             (item.hecho ? ' checked' : '') + ' aria-label="Ya está">' +
+      '<input type="text" class="campo__control" data-detalle-texto ' +
+             'value="' + seguro(item.texto) + '" placeholder="Ej. Montaje incluido">' +
+      '<button type="button" class="boton boton--chico" data-detalle-quitar ' +
+              'aria-label="Quitar">✕</button>' +
+    '</div>';
+}
+
+/**
+ * Devuelve el HTML de la lista editable de "qué incluye": un renglón
+ * por ítem, más agregar uno y pegar varias líneas de un tirón.
+ *
+ * Sigue el mismo molde que los demás campoX() de este archivo: arma el
+ * HTML acá, y quien abre la hoja llama a engancharListaDeDetalle()
+ * después de insertarlo en el DOM (igual que engancharListaAmpliable()
+ * en 09-vista-dinero.js).
+ *
+ * @param {Object} opciones
+ * @param {string} opciones.id
+ * @param {string} opciones.rotulo
+ * @param {Array} [opciones.items] - Ya en formato {id,texto,hecho}.
+ * @param {string} [opciones.ayuda]
+ * @returns {string}
+ */
+function campoListaDeDetalle(opciones) {
+  const items = opciones.items && opciones.items.length ? opciones.items : [];
+
+  return '' +
+    '<div class="campo">' +
+      '<span class="campo__rotulo">' + seguro(opciones.rotulo) + '</span>' +
+      (opciones.ayuda
+        ? '<span class="vacio__texto">' + seguro(opciones.ayuda) + '</span>'
+        : '') +
+      '<div id="' + seguro(opciones.id) + '">' +
+        items.map(_filaDeDetalle).join('') +
+      '</div>' +
+      '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-1)">' +
+        '<button type="button" class="boton boton--chico" data-detalle-agregar>' +
+          'Agregar línea</button>' +
+        '<button type="button" class="boton boton--chico" data-detalle-pegar>' +
+          'Pegar varias…</button>' +
+      '</div>' +
+    '</div>';
+}
+
+/**
+ * Engancha los botones de una lista de detalle ya insertada en el DOM.
+ * Se llama una vez, después de abrirHoja(), igual que
+ * engancharListaAmpliable().
+ *
+ * @param {string} id - El mismo que se le dio a campoListaDeDetalle().
+ * @param {Element} [cuerpo]
+ * @returns {void}
+ */
+function engancharListaDeDetalle(id, cuerpo) {
+  const contenedor = buscar('#' + id, cuerpo);
+  if (!contenedor) return;
+
+  const raiz = contenedor.parentElement; // el <div class="campo"> entero
+
+  const agregarFila = (item) => {
+    contenedor.insertAdjacentHTML('beforeend', _filaDeDetalle(item));
+    engancharQuitar(buscar('[data-detalle-fila="' + item.id + '"]', contenedor));
+  };
+
+  const engancharQuitar = (fila) => {
+    if (!fila) return;
+    buscar('[data-detalle-quitar]', fila).addEventListener('click', () => fila.remove());
+  };
+
+  buscarTodos('[data-detalle-fila]', contenedor).forEach(engancharQuitar);
+
+  const botonAgregar = buscar('[data-detalle-agregar]', raiz);
+  if (botonAgregar) {
+    botonAgregar.addEventListener('click', () => {
+      agregarFila(nuevoItemDeDetalle());
+      const nuevoTexto = contenedor.lastElementChild &&
+        buscar('[data-detalle-texto]', contenedor.lastElementChild);
+      if (nuevoTexto) nuevoTexto.focus();
+    });
+  }
+
+  /* "Pegar varias…" abre un prompt() de una sola vez en vez de armar un
+     textarea aparte: es lo más rápido para pegar una lista que ya se
+     tenía copiada de una cotización en PDF o un WhatsApp, sin agregar
+     otro control permanente a un formulario que ya tiene bastantes. */
+  const botonPegar = buscar('[data-detalle-pegar]', raiz);
+  if (botonPegar) {
+    botonPegar.addEventListener('click', () => {
+      const texto = window.prompt(
+        'Pega aquí varias líneas (una por ítem, o separadas por ";"):', '');
+      if (!texto) return;
+      itemsDesdeTexto(texto).forEach(agregarFila);
+    });
+  }
+}
+
+/**
+ * Lee los ítems actuales de una lista de detalle ya abierta. Los
+ * renglones que se dejaron vacíos no se guardan.
+ *
+ * @param {string} id
+ * @param {Element} [dentroDe]
+ * @returns {Array<{id:string, texto:string, hecho:boolean}>}
+ */
+function valorDeListaDeDetalle(id, dentroDe) {
+  const contenedor = buscar('#' + id, dentroDe);
+  if (!contenedor) return [];
+
+  return buscarTodos('[data-detalle-fila]', contenedor)
+    .map(fila => ({
+      id:    fila.dataset.detalleFila,
+      texto: buscar('[data-detalle-texto]', fila).value.trim(),
+      hecho: buscar('[data-detalle-hecho]', fila).checked,
+    }))
+    .filter(item => item.texto);
 }
