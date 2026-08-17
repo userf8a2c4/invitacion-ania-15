@@ -48,6 +48,7 @@ async function dibujarDinero() {
   vista.innerHTML =
     bloqueSelectorDePresupuesto(DINERO.presupuestos, DINERO.presupuesto_activo) +
     bloqueTotales(DINERO.totales) +
+    bloqueProximosPagos(DINERO.pagos) +
 
     '<div class="buscador">' +
       '<svg class="buscador__lupa" viewBox="0 0 24 24" aria-hidden="true">' +
@@ -94,6 +95,16 @@ async function dibujarDinero() {
   });
 
   buscar('#exportar-dinero', vista).addEventListener('click', abrirHojaDeDescarga);
+
+  buscarTodos('[data-proximo-pago]', vista).forEach(boton => {
+    boton.addEventListener('click', () => {
+      SECCION_DINERO = 'pagos';
+      buscarTodos('[data-seccion]', vista).forEach(o =>
+        o.classList.toggle('activo', o.dataset.seccion === 'pagos'));
+      pintarSeccionDeDinero();
+      formularioPago(DINERO.pagos.find(p => String(p.id) === boton.dataset.proximoPago));
+    });
+  });
 
   const cambiarPresupuesto = buscar('#presupuesto-cambiar', vista);
   if (cambiarPresupuesto) {
@@ -322,6 +333,21 @@ function bloqueTotales(t) {
               ' sin entregar todavía.</p>';
   }
 
+  /* "De tu bolsillo" (arriba) da por hecho que todo padrino asignado a
+     un gasto SÍ va a entregar. Cuando hay gastos cubiertos por un
+     padrino que todavía no entregó (solo lo habló o lo confirmó), ese
+     dinero no es seguro todavía — se avisa cuál sería el bolsillo real
+     si nadie más entrega, para no gastar de más confiando en una
+     promesa. */
+  const prometidoSinEntregar = (t.de_padrinos || 0) - (t.de_padrinos_entregado || 0);
+  if (prometidoSinEntregar > 0.01) {
+    avisos += '<p class="vacio__texto" style="color:var(--ojo)">' +
+              seguro(comoDinero(prometidoSinEntregar, false)) + ' de padrinos ' +
+              'todavía no entregado — si nadie más entrega, tu bolsillo real ' +
+              'sería <strong>' + seguro(comoDinero(t.bolsillo_si_nadie_mas_entrega, false)) +
+              '</strong>.</p>';
+  }
+
   /* costo_por_invitado viene null cuando todavía no hay nadie
      confirmado (presupuesto.php lo calcula así a propósito): se dice
      explícito por qué no hay número, en vez de mostrar "$0/persona"
@@ -353,6 +379,48 @@ function bloqueTotales(t) {
       avisos +
       '<button class="boton boton--chico boton--ancho" id="exportar-dinero" ' +
               'style="margin-top:var(--esp-2)">Descargar</button>' +
+    '</div>';
+}
+
+
+/**
+ * Los pagos pendientes que vencen más pronto, para no tener que abrir
+ * la pestaña de Pagos y hacer memoria de cuál era el próximo.
+ *
+ * Se arma en el teléfono con lo que ya trae `case 'todo'` — no hace
+ * falta un endpoint aparte, `pagos.fecha_limite` ya existe de antes.
+ *
+ * @param {Array} pagos
+ * @returns {string} HTML, o '' si no hay ningún pago pendiente con fecha.
+ */
+function bloqueProximosPagos(pagos) {
+  const proximos = (pagos || [])
+    .filter(p => p.estado !== 'pagado' && p.fecha_limite)
+    .sort((a, b) => (a.fecha_limite < b.fecha_limite ? -1 : 1))
+    .slice(0, 5);
+
+  if (!proximos.length) return '';
+
+  return '' +
+    '<div class="tarjeta" style="margin-top:var(--esp-2)">' +
+      '<div class="tarjeta__titulo">Próximos pagos</div>' +
+      proximos.map(pago => {
+        const atrasado = diasHasta(pago.fecha_limite) < 0;
+        return '' +
+          '<button class="lista__fila" data-proximo-pago="' + seguro(pago.id) + '">' +
+            '<span class="lista__cuerpo">' +
+              '<span class="lista__titulo">' +
+                seguro(pago.concepto || pago.gasto_concepto || 'Pago') + '</span>' +
+              '<span class="lista__pie">' +
+                (atrasado
+                  ? '<span class="etiqueta etiqueta--alerta">Atrasado</span> desde ' +
+                    seguro(comoFecha(pago.fecha_limite))
+                  : 'Vence ' + seguro(comoCuando(pago.fecha_limite))) +
+              '</span>' +
+            '</span>' +
+            '<span class="lista__lado cifra">' + seguro(comoDinero(pago.monto, false)) + '</span>' +
+          '</button>';
+      }).join('') +
     '</div>';
 }
 
@@ -595,6 +663,45 @@ function pintarPagos(cuerpo) {
  * @param {Element} cuerpo
  * @returns {void}
  */
+/**
+ * Cuánto suma cada etapa del compromiso de los padrinos ("lo habló",
+ * "ya lo confirmó", "ya entregó"), para ver el embudo de un vistazo.
+ *
+ * Solo cuenta los que aportan en dinero: "en especie" no tiene un
+ * monto comparable de verdad —el que se carga es solo aproximado—, y
+ * sumarlo junto con dinero real daría un total que no significa nada.
+ *
+ * @param {Array} padrinos
+ * @returns {string} HTML, o '' si no hay ninguno que aporte en dinero.
+ */
+function resumenDePipelineDePadrinos(padrinos) {
+  const enDinero = (padrinos || []).filter(p => p.tipo_aporte !== 'especie');
+  if (!enDinero.length) return '';
+
+  const porEstado = { hablado: 0, confirmado: 0, entregado: 0 };
+  enDinero.forEach(p => {
+    const clave = porEstado.hasOwnProperty(p.estado) ? p.estado : 'hablado';
+    porEstado[clave] += Number(p.monto) || 0;
+  });
+
+  const etiquetas = [
+    ['hablado', 'Hablado'], ['confirmado', 'Confirmado'], ['entregado', 'Ya entregó'],
+  ];
+
+  return '' +
+    '<div class="tarjeta" style="margin-bottom:var(--esp-2)">' +
+      '<div class="tarjeta__titulo">Cuánto va en cada etapa' +
+        ayuda('dinero.pipeline-padrinos') + '</div>' +
+      etiquetas.map(([clave, texto]) =>
+        '<div class="detalle__rotulo" style="display:flex;justify-content:space-between;' +
+             'padding:var(--esp-1) 0">' +
+          '<span>' + seguro(texto) + '</span>' +
+          '<span class="cifra">' + seguro(comoDinero(porEstado[clave], false)) + '</span>' +
+        '</div>'
+      ).join('') +
+    '</div>';
+}
+
 function pintarPadrinos(cuerpo) {
   const padrinos = filtrarPorBusqueda(DINERO.padrinos,
     ['nombre', 'apadrina', 'telefono', 'correo', 'notas']);
@@ -619,7 +726,9 @@ function pintarPadrinos(cuerpo) {
     entregado:  ['bien',   'Entregado'],
   };
 
-  cuerpo.innerHTML = padrinos.map(padrino => {
+  cuerpo.innerHTML = resumenDePipelineDePadrinos(DINERO.padrinos) +
+
+  padrinos.map(padrino => {
     const estado = estados[padrino.estado] || estados.hablado;
 
     const monto = padrino.tipo_aporte === 'especie'
