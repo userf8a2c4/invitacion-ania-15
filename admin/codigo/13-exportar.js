@@ -166,18 +166,27 @@ function armarPdf(titulo, bloques) {
     return;
   }
 
-  const tablas = bloques.map(bloque =>
-    '<h2>' + seguro(bloque.titulo) + '</h2>' +
-    (bloque.filas.length
-      ? '<table>' +
-          '<thead><tr>' + bloque.encabezados.map(h =>
-            '<th>' + seguro(h) + '</th>').join('') + '</tr></thead>' +
-          '<tbody>' + bloque.filas.map(fila =>
-            '<tr>' + fila.map(c => '<td>' + seguro(c) + '</td>').join('') + '</tr>'
-          ).join('') + '</tbody>' +
-        '</table>'
-      : '<p>(vacío)</p>')
-  ).join('');
+  /* Un bloque de una sola columna (ej. "Lectura del asesor") se lee mejor
+     como párrafos corridos que como una tabla con un único encabezado
+     repetido en cada fila — por eso `parrafos` se detecta acá y se salta
+     la tabla entera para ese bloque. */
+  const tablas = bloques.map(bloque => {
+    const esDeParrafos = bloque.encabezados.length === 1 &&
+      bloque.filas.every(f => f.length === 1);
+
+    return '<h2>' + seguro(bloque.titulo) + '</h2>' +
+      (!bloque.filas.length
+        ? '<p>(vacío)</p>'
+        : esDeParrafos
+          ? bloque.filas.map(f => '<p class="lectura">' + seguro(f[0]) + '</p>').join('')
+          : '<table>' +
+              '<thead><tr>' + bloque.encabezados.map(h =>
+                '<th>' + seguro(h) + '</th>').join('') + '</tr></thead>' +
+              '<tbody>' + bloque.filas.map(fila =>
+                '<tr>' + fila.map(c => '<td>' + seguro(c) + '</td>').join('') + '</tr>'
+              ).join('') + '</tbody>' +
+            '</table>');
+  }).join('');
 
   ventana.document.write(
     '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">' +
@@ -191,6 +200,9 @@ function armarPdf(titulo, bloques) {
       'td{border:1px solid #eee;padding:6px;}' +
       // Que una tabla no se parta a la mitad entre dos hojas.
       'table{page-break-inside:auto;} tr{page-break-inside:avoid;}' +
+      // La lectura del asesor: párrafo corrido, no fila de tabla.
+      '.lectura{line-height:1.5;margin:0 0 10px;padding-left:12px;' +
+        'border-left:3px solid #d4a843;}' +
       '@media print{ body{padding:0;} }' +
     '</style></head><body>' +
     '<h1>' + seguro(titulo) + '</h1>' +
@@ -324,8 +336,9 @@ function exportarPresupuesto(formato) {
 
 /**
  * El PDF de una reunión familiar: no la base de datos entera en tablas
- * (eso ya lo hace exportarPresupuesto → PDF), sino las pocas cifras
- * que importan para decidir algo, en una o dos hojas.
+ * (eso ya lo hace exportarPresupuesto → PDF), sino las pocas cifras que
+ * importan para decidir algo, con la lectura y el criterio de un asesor
+ * financiero — qué significa cada número, no solo cuál es.
  *
  * Reusa armarPdf() con bloques armados a mano en vez de volcar tablas
  * completas — mismo motor de impresión, contenido curado.
@@ -338,19 +351,48 @@ function exportarResumenEjecutivoDinero() {
   const t = DINERO.totales;
   const monto = v => comoDinero(v, false);
 
-  const lo_esencial = [
-    ['Cuesta la fiesta',              monto(t.costo)],
-    ['De tu bolsillo',                monto(t.propio)],
-    ['Cubren los padrinos (en total)', monto(t.de_padrinos)],
-    ['  · de eso, ya entregado',      monto(t.de_padrinos_entregado)],
+  const panorama = [
+    ['Costo total del evento',        monto(t.costo)],
+    ['Presupuestado originalmente',   monto(t.planeado)],
+    ['Desvío contra lo planeado',
+      (t.costo > t.planeado ? '+' : '') + monto(t.costo - t.planeado)],
     ['Pagado hasta hoy',              monto(t.pagado)],
     ['Por pagar',                     monto(t.por_pagar) +
-      (t.por_pagar_cuantos ? ' (' + t.por_pagar_cuantos + ')' : '')],
+      (t.por_pagar_cuantos ? ' (' + t.por_pagar_cuantos +
+        (t.por_pagar_cuantos === 1 ? ' pago pendiente)' : ' pagos pendientes)') : '')],
     ['Costo por invitado confirmado',
       t.costo_por_invitado === null || t.costo_por_invitado === undefined
         ? 'Todavía no hay confirmados'
         : monto(t.costo_por_invitado) + ' (' + (t.confirmados || 0) + ' personas)'],
   ];
+
+  /* EL COMPROMISO DE LOS PADRINOS, COMPLETO.
+   *
+   * `de_padrinos` (lo que devuelve presupuesto.php) solo cuenta el dinero
+   * de un padrino que YA está asignado a un gasto concreto — así que un
+   * padrino recién cargado, con su monto prometido pero sin un gasto
+   * todavía enlazado, no suma ahí y el reporte mostraba $0 aunque hubiera
+   * padrinos reales con plata comprometida. Acá se sacan las tres capas
+   * por separado, calculadas del propio arreglo de padrinos (ya viene
+   * cargado, no hace falta pedirlo de nuevo): cuánto se PROMETIÓ en
+   * total, cuánto ya ENTREGARON, y cuánto de eso ya quedó APLICADO a un
+   * gasto puntual. Las tres cuentan una parte distinta de la misma
+   * historia y ver solo una desorienta. */
+  const padrinosDinero = (DINERO.padrinos || []).filter(p => p.tipo_aporte === 'dinero');
+  const prometidoTotal = padrinosDinero.reduce((s, p) => s + (Number(p.monto) || 0), 0);
+  const entregadoTotal = padrinosDinero
+    .filter(p => p.estado === 'entregado')
+    .reduce((s, p) => s + (Number(p.monto) || 0), 0);
+
+  const padrinos = prometidoTotal > 0 || (t.de_padrinos > 0) ? [
+    ['Comprometido en total (' + padrinosDinero.length +
+      (padrinosDinero.length === 1 ? ' padrino)' : ' padrinos)'), monto(prometidoTotal)],
+    ['Ya entregado',                     monto(entregadoTotal)],
+    ['Todavía prometido, sin entregar',  monto(prometidoTotal - entregadoTotal) +
+      (t.padrinos_pendientes_cuantos ? ' (' + t.padrinos_pendientes_cuantos + ')' : '')],
+    ['  · de eso, ya aplicado a un gasto concreto', monto(t.de_padrinos)],
+    ['De tu bolsillo si nadie más entrega', monto(t.bolsillo_si_nadie_mas_entrega)],
+  ] : [];
 
   // Categorías al 85% de su techo o pasadas — lo único que amerita
   // frenar y decidir algo, no la lista completa de categorías sanas.
@@ -374,15 +416,55 @@ function exportarResumenEjecutivoDinero() {
       monto(p.monto),
     ]);
 
+  /* LA LECTURA, NO SOLO LOS NÚMEROS.
+   *
+   * Un asesor de verdad no entrega una planilla y se va: dice qué
+   * significa. Estas dos o tres líneas se arman solas a partir de los
+   * mismos datos de arriba — nunca inventan nada que la base no
+   * respalde, solo lo traducen a una frase directa. */
+  const lectura = [];
+
+  if (t.costo > t.planeado && t.planeado > 0) {
+    lectura.push('El costo real ya superó lo presupuestado por ' +
+      monto(t.costo - t.planeado) + '. Vale revisar qué categoría se movió antes de seguir comprometiendo gasto.');
+  } else if (t.planeado > 0) {
+    lectura.push('El costo real sigue dentro de lo presupuestado, con ' +
+      monto(t.planeado - t.costo) + ' de margen.');
+  }
+
+  if (prometidoTotal - entregadoTotal > 0) {
+    lectura.push('Hay ' + monto(prometidoTotal - entregadoTotal) +
+      ' prometidos por padrinos que todavía no entraron: hasta que eso se entregue, ese monto sale del bolsillo propio si hay que pagarlo antes.');
+  }
+
+  if (t.por_pagar > 0) {
+    lectura.push('Quedan ' + monto(t.por_pagar) + ' comprometidos en pagos pendientes' +
+      (alertasTecho.length ? ', con ' + alertasTecho.length +
+        (alertasTecho.length === 1 ? ' categoría' : ' categorías') + ' ya cerca o pasada de su techo' : '') + '.');
+  } else {
+    lectura.push('No hay pagos pendientes cargados en este momento.');
+  }
+
   const bloques = [
-    { titulo: 'Lo esencial', encabezados: ['Concepto', 'Monto'], filas: lo_esencial },
+    { titulo: 'Panorama general', encabezados: ['Concepto', 'Monto'], filas: panorama },
+  ];
+
+  if (padrinos.length) {
+    bloques.push({ titulo: 'Compromiso de los padrinos',
+      encabezados: ['Concepto', 'Monto'], filas: padrinos });
+  }
+
+  bloques.push(
     { titulo: 'Categorías cerca o pasadas de su techo',
       encabezados: ['Categoría', 'Situación', 'Gastado / Techo'],
       filas: alertasTecho },
     { titulo: 'Próximos pagos',
       encabezados: ['Concepto', 'Vence', 'Estado', 'Monto'],
       filas: proximosPagos },
-  ];
+    { titulo: 'Lectura del asesor',
+      encabezados: ['Diagnóstico'],
+      filas: lectura.map(l => [l]) },
+  );
 
   armarPdf('Resumen ejecutivo · Presupuesto XV de Ania', bloques);
 }
