@@ -402,3 +402,18 @@ a { color: var(--oro); }
   font-size: 13px;
   margin-bottom: var(--esp-5);
 }
+
+.tarjeta-entrada__olvide {
+  display: block;
+  width: 100%;
+  text-align: center;
+  background: none;
+  border: none;
+  color: var(--texto-tenue);
+  font-size: 13px;
+  margin-top: var(--esp-3);
+  padding: var(--esp-1);
+  cursor: pointer;
+}
+.tarjeta-entrada__olvide:hover,
+.tarjeta-entrada__olvide:focus-visible { color: var(--oro); }

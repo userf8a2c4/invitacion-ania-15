@@ -7,21 +7,28 @@
    la crea. Todo lo demás del panel exige un token válido.
 
    QUÉ SE LE PUEDE PEDIR
-     POST  ?accion=entrar     correo + contraseña  →  devuelve el token
-     POST  ?accion=salir      cierra esta sesión
-     POST  ?accion=salir_todo cierra la sesión en todos los dispositivos
-     GET   ?accion=quien      dice quién está usando el panel ahora
-     POST  ?accion=cambiar    cambia la contraseña propia
+     POST  ?accion=entrar      correo + contraseña  →  devuelve el token
+     POST  ?accion=salir       cierra esta sesión
+     POST  ?accion=salir_todo  cierra la sesión en todos los dispositivos
+     GET   ?accion=quien       dice quién está usando el panel ahora
+     POST  ?accion=cambiar     cambia la contraseña propia
+     POST  ?accion=recuperar   pide un código para restablecerla por correo
+     POST  ?accion=restablecer confirma el código y pone la contraseña nueva
 
    POR QUÉ EL ERROR DE LOGIN NO DICE QUÉ FALLÓ
    Si dijera "ese correo no existe", cualquiera podría averiguar qué
    correos tienen cuenta probando uno por uno. El mensaje es el mismo
-   para correo inexistente y contraseña equivocada.
+   para correo inexistente y contraseña equivocada. La misma idea se
+   repite en 'recuperar' más abajo, y por el mismo motivo.
    ══════════════════════════════════════════════════════════════════════ */
 
 require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
+require_once __DIR__ . '/_lib/correo.php';
+
+/** Cuántos minutos vive un código de recuperación antes de vencer. */
+const MINUTOS_DE_CODIGO_RECUPERACION = 30;
 
 $accion = (string) ($_GET['accion'] ?? '');
 
@@ -156,6 +163,148 @@ switch ($accion) {
         anotarEnBitacora($usuario, 'cambió su contraseña', 'usuarios', $usuario['id']);
 
         responderBien(['mensaje' => 'Contraseña cambiada. Vuelve a entrar.']);
+        break;
+
+    /* ─── OLVIDÉ MI CONTRASEÑA: PEDIR EL CÓDIGO ─────────────────────────── */
+
+    /* Manda un código de 6 dígitos al correo de la cuenta, si existe.
+     *
+     * SIEMPRE responde con el mismo mensaje, exista o no ese correo — el
+     * mismo motivo que el login (ver arriba): si el mensaje cambiara
+     * según el caso, cualquiera podría usar este formulario para
+     * averiguar qué correos tienen cuenta en el panel. */
+    case 'recuperar':
+        exigirMetodo('POST');
+
+        if (estaFrenadoDelTodo()) {
+            responderMal(
+                'Demasiados intentos seguidos. Espera ' . MINUTOS_DE_FRENO . ' minutos.',
+                429
+            );
+        }
+
+        $datos  = cuerpoJson();
+        $correo = mb_strtolower(campoTexto($datos, 'correo', 190));
+
+        // Cuenta como intento de la misma bolsa que el login: pedir el
+        // código muchas veces seguidas es exactamente el mismo tipo de
+        // abuso que probar contraseñas, y ya hay un freno hecho para eso.
+        anotarIntentoFallido($correo);
+
+        if ($correo !== '') {
+            $usuario = consultarUno(
+                'SELECT id, nombre, correo FROM usuarios WHERE correo = :c AND activo = 1',
+                [':c' => $correo]
+            );
+
+            if ($usuario) {
+                // Solo el código más nuevo sirve: los anteriores sin usar
+                // quedan invalidados, así no queda dando vueltas un código
+                // viejo por si alguien pidió varios de una vez.
+                ejecutar(
+                    'UPDATE recuperaciones_clave SET usado = 1 WHERE usuario_id = :u AND usado = 0',
+                    [':u' => $usuario['id']]
+                );
+
+                $codigo = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+                insertar('recuperaciones_clave', [
+                    'usuario_id'  => $usuario['id'],
+                    'codigo_hash' => hash('sha256', $codigo),
+                    'expira_en'   => date('Y-m-d H:i:s',
+                        strtotime('+' . MINUTOS_DE_CODIGO_RECUPERACION . ' minutes')),
+                ]);
+
+                $html =
+                    '<p>Hola ' . htmlspecialchars($usuario['nombre'], ENT_QUOTES, 'UTF-8') . ',</p>' .
+                    '<p>Este es tu código para poner una contraseña nueva en el panel de Ania XV:</p>' .
+                    '<p style="font-size:32px;font-weight:700;letter-spacing:6px;margin:16px 0">' .
+                        htmlspecialchars($codigo, ENT_QUOTES, 'UTF-8') .
+                    '</p>' .
+                    '<p>Vale por ' . MINUTOS_DE_CODIGO_RECUPERACION . ' minutos. Si no lo pediste ' .
+                    'vos, ignora este correo: con solo el código no alcanza para entrar, así que ' .
+                    'tu cuenta sigue segura.</p>';
+
+                try {
+                    enviarCorreo($usuario['correo'], 'Código para restablecer tu contraseña', $html);
+                } catch (Exception $e) {
+                    // No se le informa al navegador que el envío falló: eso
+                    // también filtraría si el correo existe o no. Queda en
+                    // el registro del servidor para revisarlo después.
+                    error_log('[Ania XV · recuperar clave] No se pudo enviar: ' . $e->getMessage());
+                }
+            }
+        }
+
+        responderBien([
+            'mensaje' => 'Si ese correo tiene una cuenta, te mandamos un código. Revisa la bandeja de entrada (y spam).',
+        ]);
+        break;
+
+    /* ─── OLVIDÉ MI CONTRASEÑA: CONFIRMAR EL CÓDIGO ─────────────────────── */
+
+    case 'restablecer':
+        exigirMetodo('POST');
+
+        if (estaFrenadoDelTodo()) {
+            responderMal(
+                'Demasiados intentos seguidos. Espera ' . MINUTOS_DE_FRENO . ' minutos.',
+                429
+            );
+        }
+
+        $datos  = cuerpoJson();
+        $correo = mb_strtolower(campoTexto($datos, 'correo', 190));
+        $codigo = preg_replace('/\D/', '', (string) ($datos['codigo'] ?? ''));
+        $nueva  = (string) ($datos['nueva'] ?? '');
+
+        if ($correo === '' || $codigo === '' || $nueva === '') {
+            responderMal('Faltan datos.', 400);
+        }
+
+        $problema = problemaDeContrasena($nueva);
+        if ($problema) responderMal($problema, 400);
+
+        $usuario = consultarUno(
+            'SELECT id FROM usuarios WHERE correo = :c AND activo = 1',
+            [':c' => $correo]
+        );
+
+        // Mismo mensaje genérico para "ese correo no existe", "el código
+        // está mal" y "el código venció": nada de esto se distingue desde
+        // afuera, igual que el login no distingue correo de contraseña.
+        $sirve = false;
+
+        if ($usuario) {
+            $fila = consultarUno(
+                'SELECT id, codigo_hash FROM recuperaciones_clave
+                 WHERE usuario_id = :u AND usado = 0 AND expira_en > NOW()
+                 ORDER BY id DESC LIMIT 1',
+                [':u' => $usuario['id']]
+            );
+
+            if ($fila && hash_equals($fila['codigo_hash'], hash('sha256', $codigo))) {
+                $sirve = true;
+
+                actualizar('recuperaciones_clave', $fila['id'], ['usado' => 1]);
+                actualizar('usuarios', $usuario['id'], [
+                    'password_hash' => hashearContrasena($nueva),
+                ]);
+                cerrarTodasLasSesiones($usuario['id']);
+                anotarEnBitacora(
+                    ['id' => $usuario['id'], 'nombre' => 'Recuperación por correo'],
+                    'restableció su contraseña por correo', 'usuarios', $usuario['id']
+                );
+            }
+        }
+
+        if (!$sirve) {
+            anotarIntentoFallido($correo);
+            responderMal('Código incorrecto o vencido.', 401);
+        }
+
+        limpiarIntentos();
+        responderBien(['mensaje' => 'Contraseña cambiada. Ya puedes entrar con la nueva.']);
         break;
 
     default:

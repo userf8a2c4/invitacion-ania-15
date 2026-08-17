@@ -156,6 +156,10 @@ function prepararEntrada() {
   const boton  = buscar('#entrada-boton');
   const error  = buscar('#entrada-error');
 
+  buscar('#entrada-olvide').addEventListener('click', () => {
+    abrirRecuperarContrasena(buscar('#entrada-correo').value.trim());
+  });
+
   forma.addEventListener('submit', async evento => {
     evento.preventDefault();
 
@@ -241,4 +245,135 @@ async function salir() {
 
   borrarToken();
   mostrarPantallaDeEntrada();
+}
+
+
+/* ─── OLVIDÉ MI CONTRASEÑA ─────────────────────────────────────────── */
+
+/**
+ * Abre la hoja de "olvidé mi contraseña": primero pide el correo, y una
+ * vez mandado el código pasa al segundo paso (código + contraseña nueva).
+ * Es la misma hoja (#hoja) que usa el resto del panel — funciona incluso
+ * antes de entrar porque #hoja vive fuera de #pantalla-entrada y #app.
+ *
+ * @param {string} [correoPrecargado] - Lo que ya estaba escrito en el login.
+ * @returns {void}
+ */
+function abrirRecuperarContrasena(correoPrecargado) {
+  const cuerpo = abrirHoja('¿Olvidaste tu contraseña?',
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
+      'Escribe el correo de tu cuenta y te mandamos un código para poner ' +
+      'una contraseña nueva.' +
+    '</p>' +
+    campoTexto({ id: 'recuperar-correo', rotulo: 'Correo', tipo: 'email',
+                 valor: correoPrecargado || '' }) +
+    '<p id="recuperar-error" class="aviso-error oculto" role="alert"></p>' +
+    '<div class="acciones">' +
+      '<button type="button" class="boton boton--principal" id="recuperar-pedir">' +
+        'Mandar código' +
+      '</button>' +
+    '</div>'
+  );
+
+  buscar('#recuperar-pedir', cuerpo).addEventListener('click', async () => {
+    const boton  = buscar('#recuperar-pedir', cuerpo);
+    const error  = buscar('#recuperar-error', cuerpo);
+    const correo = buscar('#recuperar-correo', cuerpo).value.trim();
+
+    if (!correo) {
+      error.textContent = 'Escribe tu correo.';
+      error.classList.remove('oculto');
+      return;
+    }
+
+    boton.disabled = true;
+    boton.textContent = 'Mandando…';
+    error.classList.add('oculto');
+
+    try {
+      const respuesta = await pedir('sesion.php?accion=recuperar', {
+        metodo: 'POST',
+        sinSesion: true,
+        noEncolar: true,
+        cuerpo: { correo: correo },
+      });
+      abrirConfirmarCodigo(correo, respuesta.mensaje);
+    } catch (fallo) {
+      error.textContent = fallo.message;
+      error.classList.remove('oculto');
+    } finally {
+      boton.disabled = false;
+      boton.textContent = 'Mandar código';
+    }
+  });
+}
+
+/**
+ * Segundo paso: el código que llegó por correo, más la contraseña nueva.
+ *
+ * @param {string} correo - El mismo que se usó para pedir el código.
+ * @param {string} mensaje - El aviso genérico del servidor, para mostrarlo tal cual.
+ * @returns {void}
+ */
+function abrirConfirmarCodigo(correo, mensaje) {
+  const cuerpo = abrirHoja('Escribe el código',
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' + seguro(mensaje) + '</p>' +
+    campoTexto({ id: 'recuperar-codigo', rotulo: 'Código de 6 dígitos', tipo: 'text' }) +
+    campoTexto({ id: 'recuperar-nueva', rotulo: 'Contraseña nueva', tipo: 'password',
+                 ayuda: 'Al menos 10 caracteres.' }) +
+    campoTexto({ id: 'recuperar-repetir', rotulo: 'Repite la contraseña nueva', tipo: 'password' }) +
+    '<p id="recuperar-error-2" class="aviso-error oculto" role="alert"></p>' +
+    '<div class="acciones">' +
+      '<button type="button" class="boton boton--principal" id="recuperar-confirmar">' +
+        'Cambiar contraseña' +
+      '</button>' +
+    '</div>'
+  );
+
+  buscar('#recuperar-codigo', cuerpo).setAttribute('inputmode', 'numeric');
+  buscar('#recuperar-codigo', cuerpo).setAttribute('autocomplete', 'one-time-code');
+  buscar('#recuperar-nueva', cuerpo).setAttribute('autocomplete', 'new-password');
+
+  buscar('#recuperar-confirmar', cuerpo).addEventListener('click', async () => {
+    const boton   = buscar('#recuperar-confirmar', cuerpo);
+    const error   = buscar('#recuperar-error-2', cuerpo);
+    const codigo  = buscar('#recuperar-codigo', cuerpo).value.trim();
+    const nueva   = buscar('#recuperar-nueva', cuerpo).value;
+    const repetir = buscar('#recuperar-repetir', cuerpo).value;
+
+    if (!codigo || !nueva) {
+      error.textContent = 'Completa el código y la contraseña nueva.';
+      error.classList.remove('oculto');
+      return;
+    }
+    if (nueva !== repetir) {
+      error.textContent = 'Las dos contraseñas no son iguales.';
+      error.classList.remove('oculto');
+      return;
+    }
+
+    boton.disabled = true;
+    boton.textContent = 'Cambiando…';
+    error.classList.add('oculto');
+
+    try {
+      await pedir('sesion.php?accion=restablecer', {
+        metodo: 'POST',
+        sinSesion: true,
+        noEncolar: true,
+        cuerpo: { correo: correo, codigo: codigo, nueva: nueva },
+      });
+
+      cerrarHoja(true);
+      avisar('Contraseña cambiada. Ya puedes entrar con la nueva.');
+      buscar('#entrada-correo').value = correo;
+      buscar('#entrada-contrasena').focus();
+    } catch (fallo) {
+      error.textContent = fallo.message;
+      error.classList.remove('oculto');
+    } finally {
+      boton.disabled = false;
+      boton.textContent = 'Cambiar contraseña';
+    }
+  });
 }

@@ -60,6 +60,23 @@ CREATE TABLE IF NOT EXISTS sesiones (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+-- Códigos para restablecer la contraseña por correo ("olvidé mi
+-- contraseña"). Igual que `sesiones`, guarda la HUELLA del código, nunca
+-- el código en claro: si alguien llegara a leer la tabla, no podría
+-- usarlo para entrar.
+CREATE TABLE IF NOT EXISTS recuperaciones_clave (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id  INT NOT NULL,
+  codigo_hash CHAR(64) NOT NULL,
+  expira_en   DATETIME NOT NULL,
+  usado       TINYINT(1) NOT NULL DEFAULT 0,
+  creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_usuario (usuario_id),
+  CONSTRAINT recuperacion_de_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 -- Intentos fallidos de login, para frenar a quien prueba contraseñas.
 CREATE TABLE IF NOT EXISTS intentos_login (
   id      INT AUTO_INCREMENT PRIMARY KEY,
