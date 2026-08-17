@@ -66,17 +66,16 @@ async function dibujarHoy() {
   const dia = datosDeHoy.dia || {};
   const alertas = alertasDelDia(datosDeHoy);
 
-  // diasParaLaFiesta() (02-utilidades.js) sale de CONFIGURACION.fiesta,
-  // no del servidor: funciona igual con o sin señal.
-  const dias = diasParaLaFiesta();
   // La hora de la última copia necesita leer IndexedDB (async); todo lo
   // demás de acá es síncrono, así que se resuelve antes de armar el HTML.
   const textoConexion = await textoDeConexionConHora();
 
+  /* La cuenta atrás en texto grande ("faltan N días") que iba acá se
+     sacó: desde el rediseño Lucila vive en el encabezado, persistente
+     en todas las pantallas (ver actualizarContadorDeDias(),
+     05-navegacion.js) — repetirla acá sería la misma cifra dos veces
+     en la misma pantalla. */
   vista.innerHTML =
-    '<p class="hoy__cuenta-atras' + (dias === 0 ? ' hoy__cuenta-atras--hoy' : '') + '">' +
-      seguro(textoDeCuentaAtras(dias)) +
-    '</p>' +
     bloqueEstadoDelDia(dia, textoConexion) +
     bloqueTresAcciones() +
     bloqueAlertasDelDia(alertas) +
