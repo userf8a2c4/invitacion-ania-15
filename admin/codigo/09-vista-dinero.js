@@ -473,8 +473,9 @@ function pintarCategorias(cuerpo) {
   if (!categorias.length && sinResultadosDeBusqueda(cuerpo)) return;
 
   const filas = categorias.map(categoria => {
-    const techo   = Number(categoria.techo) || 0;
-    const gastado = Number(categoria.gastado) || 0;
+    const techo    = Number(categoria.techo) || 0;
+    const gastado  = Number(categoria.gastado) || 0;
+    const planeado = Number(categoria.planeado) || 0;
 
     // Sin techo no hay con qué comparar: se muestra solo lo gastado.
     const pct = techo > 0 ? porcentaje(gastado, techo) : 0;
@@ -504,6 +505,16 @@ function pintarCategorias(cuerpo) {
             '</div>'
           : '<div class="vacio__texto" style="margin-top:4px">Sin techo definido' +
             ayuda('dinero.techo') + '</div>') +
+        /* Estimado vs. real: `planeado` es lo que se pensó gastar al
+           cargar cada gasto, `gastado` es lo que costó DE VERDAD. Verlos
+           juntos avisa cuando una categoría todavía es puro cálculo —
+           no hay que confundir "lo pensado" con "lo que ya pasó". */
+        (planeado > 0
+          ? '<div class="vacio__texto" style="margin-top:4px">Estimado ' +
+            seguro(comoDinero(planeado, false)) +
+            (gastado === 0 ? ' — todavía sin costo real cargado' : '') +
+            '</div>'
+          : '') +
       '</button>';
   }).join('');
 
