@@ -11,15 +11,27 @@
      POST  ?accion=salir       cierra esta sesión
      POST  ?accion=salir_todo  cierra la sesión en todos los dispositivos
      GET   ?accion=quien       dice quién está usando el panel ahora
-     POST  ?accion=cambiar     cambia la contraseña propia
-     POST  ?accion=recuperar   pide un código para restablecerla por correo
-     POST  ?accion=restablecer confirma el código y pone la contraseña nueva
+     POST  ?accion=cambiar            cambia la contraseña propia
+     POST  ?accion=pregunta_seguridad pone/cambia la pregunta de seguridad propia
+     POST  ?accion=recuperar          pide un código para restablecer la contraseña
+     POST  ?accion=restablecer        confirma el código y pone la contraseña nueva
 
    POR QUÉ EL ERROR DE LOGIN NO DICE QUÉ FALLÓ
    Si dijera "ese correo no existe", cualquiera podría averiguar qué
    correos tienen cuenta probando uno por uno. El mensaje es el mismo
    para correo inexistente y contraseña equivocada. La misma idea se
    repite en 'recuperar' más abajo, y por el mismo motivo.
+
+   POR QUÉ 'recuperar' PIDE ADEMÁS LA PREGUNTA DE SEGURIDAD
+   Antes alcanzaba con escribir el correo para que llegara un código: si
+   alguien tenía el teléfono de Lucila un minuto y ese minuto coincidía
+   con revisar el correo, podía pedir el código él mismo. Ahora hace
+   falta ADEMÁS acertar la pregunta y la respuesta que esa cuenta
+   configuró en Ajustes → Mi cuenta — sin eso, ni siquiera se manda el
+   código. Una cuenta que todavía no configuró su pregunta (ver
+   'pregunta_seguridad' abajo) no puede recuperarse por este camino
+   todavía: alguien con rol admin le puede poner una contraseña nueva a
+   mano desde Ajustes → Cuentas (usuarios.php?accion=clave).
    ══════════════════════════════════════════════════════════════════════ */
 
 require_once __DIR__ . '/_lib/bd.php';
@@ -165,6 +177,46 @@ switch ($accion) {
         responderBien(['mensaje' => 'Contraseña cambiada. Vuelve a entrar.']);
         break;
 
+    /* ─── PREGUNTA DE SEGURIDAD PROPIA ──────────────────────────────────── */
+
+    /* La configura cada cuenta para sí misma, desde Ajustes → Mi cuenta.
+     * Igual que 'cambiar', pide la contraseña actual: es la manera de que
+     * alguien con el teléfono desbloqueado un minuto no pueda dejar
+     * puesta una pregunta que después le sirva a ÉL para recuperar la
+     * cuenta ajena. */
+    case 'pregunta_seguridad':
+        exigirMetodo('POST');
+        $usuario = exigirSesion();
+        $datos   = cuerpoJson();
+
+        $actual    = (string) ($datos['actual'] ?? '');
+        $pregunta  = (string) ($datos['pregunta'] ?? '');
+        $respuesta = normalizarRespuestaSeguridad($datos['respuesta'] ?? '');
+
+        $fila = consultarUno(
+            'SELECT password_hash FROM usuarios WHERE id = :id',
+            [':id' => $usuario['id']]
+        );
+        if (!$fila || !contrasenaCorrecta($actual, $fila['password_hash'])) {
+            responderMal('La contraseña actual no es correcta.', 401);
+        }
+
+        if (!in_array($pregunta, PREGUNTAS_DE_SEGURIDAD, true)) {
+            responderMal('Elige una de las preguntas de la lista.', 400);
+        }
+        if (mb_strlen($respuesta) < 2) {
+            responderMal('La respuesta es demasiado corta.', 400);
+        }
+
+        actualizar('usuarios', $usuario['id'], [
+            'pregunta_seguridad'       => $pregunta,
+            'respuesta_seguridad_hash' => hashearContrasena($respuesta),
+        ]);
+
+        anotarEnBitacora($usuario, 'configuró su pregunta de seguridad', 'usuarios', $usuario['id']);
+        responderBien(['mensaje' => 'Pregunta de seguridad guardada.']);
+        break;
+
     /* ─── OLVIDÉ MI CONTRASEÑA: PEDIR EL CÓDIGO ─────────────────────────── */
 
     /* Manda un código de 6 dígitos al correo de la cuenta, si existe.
@@ -183,21 +235,34 @@ switch ($accion) {
             );
         }
 
-        $datos  = cuerpoJson();
-        $correo = mb_strtolower(campoTexto($datos, 'correo', 190));
+        $datos     = cuerpoJson();
+        $correo    = mb_strtolower(campoTexto($datos, 'correo', 190));
+        $pregunta  = (string) ($datos['pregunta'] ?? '');
+        $respuesta = normalizarRespuestaSeguridad($datos['respuesta'] ?? '');
 
         // Cuenta como intento de la misma bolsa que el login: pedir el
         // código muchas veces seguidas es exactamente el mismo tipo de
         // abuso que probar contraseñas, y ya hay un freno hecho para eso.
         anotarIntentoFallido($correo);
 
-        if ($correo !== '') {
+        if ($correo !== '' && $pregunta !== '' && $respuesta !== '') {
             $usuario = consultarUno(
-                'SELECT id, nombre, correo FROM usuarios WHERE correo = :c AND activo = 1',
+                'SELECT id, nombre, correo, pregunta_seguridad, respuesta_seguridad_hash
+                 FROM usuarios WHERE correo = :c AND activo = 1',
                 [':c' => $correo]
             );
 
-            if ($usuario) {
+            // Hace falta la cuenta Y la pregunta configurada Y que la
+            // respuesta coincida — cualquiera de las tres cosas que falte
+            // corta acá, antes de mandar nada. Ver la nota del encabezado
+            // sobre por qué se pide esto además del correo.
+            $vale = $usuario
+                && ($usuario['pregunta_seguridad'] ?? '') !== ''
+                && ($usuario['respuesta_seguridad_hash'] ?? '') !== ''
+                && $pregunta === $usuario['pregunta_seguridad']
+                && password_verify($respuesta, $usuario['respuesta_seguridad_hash']);
+
+            if ($vale) {
                 // Solo el código más nuevo sirve: los anteriores sin usar
                 // quedan invalidados, así no queda dando vueltas un código
                 // viejo por si alguien pidió varios de una vez.
