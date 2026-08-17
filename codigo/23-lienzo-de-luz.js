@@ -526,10 +526,30 @@
      Con equipos muy cargados igual puede quedar algo de desfase —es el
      límite de sincronizar un canvas con el scroll por JavaScript, no algo
      que un ajuste más vaya a borrar del todo—, pero esto lo deja en el
-     mínimo posible dentro de esta arquitectura. */
+     mínimo posible dentro de esta arquitectura.
+
+     ⚠️ ACÁ NO VA hayAlgoQueMirar(), Y ES A PROPÓSITO —ESTE FUE EL BUG
+     REPORTADO: "con 'Sin animación' la luz se queda en el mismo punto,
+     no se queda con la vela".
+     hayAlgoQueMirar() es falso con las animaciones apagadas (incluye el
+     botón, no solo el sobre cerrado o la pestaña de fondo —ver
+     02-utilidades.js—), así que este listener se cortaba ENTERO: con
+     "Sin animación" puesto, scrollear ya no repintaba nada, y el
+     resplandor quedaba congelado en el lugar exacto donde estaba cuando
+     se apagaron las animaciones, mientras la llama (DOM) seguía
+     moviéndose con la página.
+
+     Pero reposicionar el resplandor al scrollear NO ES una animación:
+     es hacer que algo estático siga estando en su lugar. Por eso acá se
+     pregunta por separado si la invitación está a la vista y la pestaña
+     activa (sin importar si las animaciones están prendidas), y con eso
+     alcanza para redibujar. El PARÁMETRO que sí depende de las
+     animaciones es conMovimiento: con animaciones apagadas se redibuja
+     iigual, pero sin mover haces, motas ni fauna —solo el resplandor de
+     las velas, quieto pero en el lugar correcto—. */
   window.addEventListener('scroll', () => {
-    if (!hayAlgoQueMirar()) return;
-    dibujarUnCuadro(true);
+    if (!_laInvitacionSeVe || document.hidden) return;
+    dibujarUnCuadro(hayAlgoQueMirar());
     ultimoRepintado = performance.now();
     ultimoDesplazamientoDibujado = window.scrollY;
   }, { passive: true });

@@ -282,7 +282,7 @@ const CONFIGURACION = {
     ['mesas',     'Mesas',              'Quién se sienta dónde'],
     ['regalos',   'Regalos',            'Qué llegó y a quién falta agradecerle'],
     ['foraneos',  'Foráneos',           'Los que vienen de afuera: hospedaje y llegada'],
-    ['contactos', 'Agenda de contactos','Todos los teléfonos del evento en un solo lugar'],
+    ['contactos', 'Contactos','Todos los teléfonos del evento en un solo lugar'],
   ],
 
 

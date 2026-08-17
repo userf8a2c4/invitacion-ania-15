@@ -79,6 +79,7 @@
 }
 
 .boton-icono {
+  position: relative; /* ancla la .burbuja (campana, cola) a su esquina */
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -88,8 +89,14 @@
   background: transparent;
   color: var(--texto-suave);
   border-radius: 50%;
+  transition: transform var(--transicion), background var(--transicion);
 }
-.boton-icono:active { background: color-mix(in srgb, var(--oro) 12%, transparent); }
+/* E1: un "hundido" chico al tocar — la única señal táctil que tenían
+   estos botones antes era el color de fondo. */
+.boton-icono:active {
+  background: color-mix(in srgb, var(--oro) 12%, transparent);
+  transform: scale(0.92);
+}
 
 /* El icono de sincronizar (05-navegacion.js, sincronizarAhora()) gira
    mientras manda lo que había quedado en la cola. */

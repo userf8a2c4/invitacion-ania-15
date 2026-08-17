@@ -147,6 +147,13 @@ function irA(cual, recargar) {
     // Ya estaba dibujada: se le avisa por si tiene que reacomodarse.
     vista.alVolver();
   }
+
+  // C1/C2: no hay un sistema de suscriptores para "cambió de vista", así
+  // que se llama directo desde el único lugar real donde eso pasa. Hoy
+  // es quien trae los datos de la campana (hoy.php.pendientes), así que
+  // conviene refrescar el número cada vez que se navega, no solo al
+  // entrar a Hoy.
+  if (typeof actualizarBurbujaCampana === 'function') actualizarBurbujaCampana();
 }
 
 /**
@@ -200,6 +207,12 @@ function prepararNavegacion() {
   const botonSync = buscar('#boton-sincronizar');
   if (botonSync) {
     botonSync.addEventListener('click', () => sincronizarAhora(botonSync));
+  }
+
+  /* ─── La campana ──────────────────────────────────────────────────── */
+  const botonCampana = buscar('#boton-campana');
+  if (botonCampana && typeof abrirBandejaDeAvisos === 'function') {
+    botonCampana.addEventListener('click', () => abrirBandejaDeAvisos());
   }
 
   /* ─── La tecla Escape cierra lo que esté abierto ────────────────── */

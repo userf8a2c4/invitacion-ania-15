@@ -497,11 +497,13 @@ function filaDeInvitado(fila) {
         '<span class="lista__titulo">' + seguro(fila.nombre || 'Sin nombre') + '</span>' +
         '<span class="lista__pie">' + seguro(pie.join(' · ')) + '</span>' +
       '</span>' +
-      (tieneAlergia
-        ? '<span class="etiqueta etiqueta--alerta lista__lado">Alergia</span>'
-        : (fila.codigo && asiste && !SELECCION_ACTIVA
-            ? '<span class="lista__lado codigo-pase">' + seguro(fila.codigo) + '</span>'
-            : '')) +
+      (esFilaPendiente(fila.id)
+        ? '<span class="etiqueta etiqueta--tenue lista__lado">Pendiente</span>'
+        : (tieneAlergia
+            ? '<span class="etiqueta etiqueta--alerta lista__lado">Alergia</span>'
+            : (fila.codigo && asiste && !SELECCION_ACTIVA
+                ? '<span class="lista__lado codigo-pase">' + seguro(fila.codigo) + '</span>'
+                : ''))) +
     '</button>';
 }
 
@@ -826,12 +828,40 @@ function abrirFormularioDeInvitado(fila) {
 
     if (!esNuevo) carga.id = datos.id;
 
+    /* Editar un invitado que ya existe puede aplicarse de una: ya hay
+       una fila en INVITADOS para mutar y repintar al instante (A1, ver
+       36-optimista.js). Agregar uno nuevo no tiene id todavía, así que
+       ese camino sigue esperando la respuesta del servidor como antes. */
+    if (esNuevo) {
+      try {
+        await mandar('confirmaciones.php?accion=crear', carga);
+        cerrarHoja(true);
+        avisar('Invitado agregado.');
+        ensuciarVistas('resumen');
+        dibujarGente();
+      } catch (error) {
+        avisar(error.message, true);
+      }
+      return;
+    }
+
+    cerrarHoja(true);
     try {
-      await mandar('confirmaciones.php?accion=' + (esNuevo ? 'crear' : 'editar'), carga);
-      cerrarHoja(true);
-      avisar(esNuevo ? 'Invitado agregado.' : 'Cambios guardados.');
+      const resultado = await aplicarOptimista(
+        'confirmaciones.php?accion=editar', carga,
+        {
+          idFila: datos.id,
+          mutar: () => {
+            const i = INVITADOS.findIndex(f => Number(f.id) === Number(datos.id));
+            if (i !== -1) Object.assign(INVITADOS[i], carga);
+          },
+          repintar: pintarListaDeInvitados,
+        }
+      );
+      avisar(resultado.offline
+        ? 'Sin conexión: se guardó y se va a mandar solo.'
+        : 'Cambios guardados.');
       ensuciarVistas('resumen');
-      dibujarGente();
     } catch (error) {
       avisar(error.message, true);
     }
