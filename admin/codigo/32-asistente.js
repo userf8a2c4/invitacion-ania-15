@@ -524,8 +524,10 @@ async function cargarSugerenciasDelAsistente(contenedor) {
   }
 
   contenedor.innerHTML = cajaDeSugerencias(sugerencias);
-  engancharSugerencias(contenedor, sugerencias,
-    () => cargarSugerenciasDelAsistente(contenedor));
+  // Las tarjetas cambian de estado adentro de sí mismas (confirmar,
+  // hecho, deshacer) — no hace falta volver a pedir la lista entera
+  // después de cada acción, ver engancharSugerencias() en 40-agentes.js.
+  engancharSugerencias(contenedor, sugerencias);
 }
 
 /**
