@@ -32,7 +32,7 @@
 
 
 const BD_OFFLINE_NOMBRE   = 'ania-admin-offline';
-const BD_OFFLINE_VERSION  = 1;
+const BD_OFFLINE_VERSION  = 2;
 
 /** La conexión a IndexedDB, una sola vez por sesión. */
 let _bdOffline = null;
@@ -99,6 +99,11 @@ function abrirBdOffline() {
       }
       if (!bd.objectStoreNames.contains('cola')) {
         bd.createObjectStore('cola', { keyPath: 'id', autoIncrement: true });
+      }
+      // v2: cambios que el servidor rechazó de verdad (no por falta de
+      // señal). Ver "apartarComoRechazado()" más abajo.
+      if (!bd.objectStoreNames.contains('rechazados')) {
+        bd.createObjectStore('rechazados', { keyPath: 'id', autoIncrement: true });
       }
     };
 
@@ -405,6 +410,57 @@ function borrarDeCola(id) {
 }
 
 /**
+ * Aparta un cambio que el servidor rechazó de verdad (no por falta de
+ * señal): un dato inválido, un permiso, un 500 real. Se saca de la cola
+ * para que NO bloquee a los que vienen atrás, y se guarda con el motivo
+ * real que dio el servidor, para poder revisarlo después. Nada se pierde
+ * en silencio.
+ *
+ * @param {{ruta:string, cuerpo:Object, creado_en:number, usuario_id:number}} item
+ * @param {ErrorDelServidor} error
+ * @returns {Promise<void>}
+ */
+function apartarComoRechazado(item, error) {
+  return conAlmacen('rechazados', 'readwrite', store =>
+    store.add({
+      ruta: item.ruta,
+      cuerpo: item.cuerpo,
+      creado_en: item.creado_en,
+      usuario_id: item.usuario_id,
+      rechazado_en: Date.now(),
+      codigo_http: (error && error.codigo) || 0,
+      mensaje_servidor: (error && error.message) || '',
+    })
+  );
+}
+
+/**
+ * Los cambios apartados de esta cuenta, para mostrarlos en la campana
+ * de avisos.
+ *
+ * @returns {Promise<Array>}
+ */
+async function listarRechazados() {
+  try {
+    const todos = await conAlmacen('rechazados', 'readonly', store => store.getAll());
+    const yo = quienSoy();
+    return todos.filter(i => Number(i.usuario_id || 0) === yo);
+  } catch (error) {
+    return [];
+  }
+}
+
+/**
+ * El usuario ya vio un rechazo y lo descarta.
+ *
+ * @param {number} id
+ * @returns {Promise<void>}
+ */
+function borrarRechazado(id) {
+  return conAlmacen('rechazados', 'readwrite', store => store.delete(id));
+}
+
+/**
  * Cuántos cambios están esperando.
  *
  * @returns {Promise<number>}
@@ -427,10 +483,13 @@ async function contarCola() {
 /**
  * Manda, uno por uno y en orden, todo lo que quedó pendiente.
  *
- * Si uno falla (por ejemplo porque el servidor lo rechaza, no por falta
- * de señal), se corta ahí: los que ya se mandaron no se vuelven a
- * mandar, y los que faltan esperan a la próxima vez. Así nunca se manda
- * un cambio dos veces ni se pierde el orden en que se hicieron.
+ * Si uno falla por falta de señal, se corta ahí: los que ya se mandaron
+ * no se vuelven a mandar, y los que faltan (incluido ese) esperan a la
+ * próxima vez. Pero si uno falla porque el SERVIDOR LO RECHAZA de
+ * verdad —un dato inválido, un permiso, un 500 real—, seguir cortando
+ * ahí sería dejar la cola trabada para siempre por un solo cambio malo:
+ * en vez de eso, ese cambio se aparta (ver apartarComoRechazado()) y se
+ * sigue con los demás, que no tienen ninguna culpa.
  *
  * @returns {Promise<void>}
  */
@@ -459,6 +518,7 @@ async function sincronizarCola() {
   actualizarBannerConexion();
 
   let mandados = 0;
+  let apartados = 0;
   for (const item of pendientes) {
     try {
       // _sync avisa a pedir() que esto YA viene de la cola: si vuelve a
@@ -467,17 +527,46 @@ async function sincronizarCola() {
       await borrarDeCola(item.id);
       mandados++;
     } catch (error) {
-      break;
+      // codigo 0 = no llegó al servidor (sin señal, se acabó el tiempo):
+      // se corta acá y este item y los siguientes esperan a la próxima.
+      // codigo 401 = la sesión ya no vale: seguir mandando con ella no
+      // tiene sentido, y pedir() ya mandó al login por su cuenta.
+      if (!error || error.codigo === 0 || error.codigo === 401) break;
+
+      // Cualquier otro código es el servidor rechazando ESTE cambio en
+      // particular: se aparta con su motivo real y se sigue con el resto.
+      await apartarComoRechazado(item, error);
+      await borrarDeCola(item.id);
+      apartados++;
     }
   }
 
   _sincronizando = false;
   actualizarBannerConexion();
+  actualizarBurbujaCola();
 
-  if (mandados) {
-    avisar(mandados === 1
-      ? 'Se mandó 1 cambio que había quedado pendiente.'
-      : 'Se mandaron ' + mandados + ' cambios que habían quedado pendientes.');
+  if (mandados || apartados) {
+    let texto;
+    if (mandados && apartados) {
+      texto = 'Se mandaron ' + mandados + ' cambios' +
+        (mandados === 1 ? '' : '') + '. ' +
+        (apartados === 1
+          ? '1 cambio no se pudo mandar y quedó apartado en Avisos.'
+          : apartados + ' cambios no se pudieron mandar y quedaron apartados en Avisos.');
+    } else if (mandados) {
+      texto = mandados === 1
+        ? 'Se mandó 1 cambio que había quedado pendiente.'
+        : 'Se mandaron ' + mandados + ' cambios que habían quedado pendientes.';
+    } else {
+      texto = apartados === 1
+        ? 'El servidor rechazó 1 cambio. Quedó apartado en Avisos para revisarlo.'
+        : 'El servidor rechazó ' + apartados + ' cambios. Quedaron apartados en Avisos para revisarlos.';
+    }
+    avisar(texto, !mandados && !!apartados);
+
+    // La marca "Pendiente" de A1 (36-optimista.js) ya cumplió su función:
+    // lo que sigue es una recarga completa, que trae la verdad del server.
+    if (typeof limpiarPendientesOptimistas === 'function') limpiarPendientesOptimistas();
 
     // Lo que se ve en pantalla puede haber quedado desactualizado
     // mientras se estaba offline: se vuelve a pedir todo.
@@ -513,6 +602,40 @@ async function sincronizarAhora(boton) {
 }
 
 
+/**
+ * El texto canónico de "cómo está la conexión ahora mismo", con la hora
+ * real de la última copia si hay una. Lo usan el banner de arriba
+ * (actualizarBannerConexion()) y la pantalla Hoy (30-vista-hoy.js), para
+ * que digan siempre la misma frase.
+ *
+ * @returns {Promise<string>}
+ */
+async function textoDeConexionConHora() {
+  if (!(SIN_LLEGADA || !navigator.onLine)) return 'En línea';
+
+  const guardadoEn = await ultimaLecturaGuardadaEn();
+  if (!guardadoEn) return 'Sin señal — sin copia guardada todavía.';
+
+  const hora = new Date(guardadoEn).toLocaleTimeString(
+    CONFIGURACION.dinero.region, { hour: '2-digit', minute: '2-digit' });
+  return 'Sin señal — última copia guardada ' + hora + '.';
+}
+
+/**
+ * Pinta la burbuja de #boton-sincronizar con cuántos cambios quedan por
+ * mandar. NUNCA comparte contador con #burbuja-campana (C2): esta cuenta
+ * cambios sin mandar, la campana cuenta avisos. -1 (no se pudo leer la
+ * cola) se muestra igual que 0, oculta: mostrar un número inventado
+ * sería peor que no mostrar nada.
+ *
+ * @returns {Promise<void>}
+ */
+async function actualizarBurbujaCola() {
+  const n = await contarCola();
+  ponerBurbuja('#burbuja-cola', n < 0 ? 0 : n);
+}
+
+
 /* ─── 5. EL AVISO DE ARRIBA ────────────────────────────────────────── */
 
 /**
@@ -521,6 +644,8 @@ async function sincronizarAhora(boton) {
  * @returns {Promise<void>}
  */
 async function actualizarBannerConexion() {
+  actualizarBurbujaCola();
+
   const banner = buscar('#banner-conexion');
   if (!banner) return;
 
@@ -630,6 +755,42 @@ async function precalentarCopias() {
   } finally {
     _precalentando = false;
   }
+}
+
+
+/* ─── 7. REFRESCO PERIÓDICO (Fase 1 del rediseño, F1) ──────────────── */
+
+/* Con señal, lo que se está mirando puede quedar viejo sin que nadie
+   toque nada: otra persona confirma, marca un pago, escanea un pase.
+   Los listeners de abajo (online / visibilitychange) ya cubren "volver
+   a la app", pero no "quedarse quieto mirando Hoy durante diez
+   minutos". Esto cubre ese hueco sin pisar nada de lo que ya hace la
+   cola: se salta solo si no hay señal, si la pestaña está oculta, o si
+   ya hay una sincronización en curso. */
+
+/** Entre 60 y 120s pide el mega-prompt; 90 es el punto medio. */
+const INTERVALO_REFRESCO_MS = 90000;
+
+let _temporizadorRefresco = null;
+
+/**
+ * Arranca el refresco periódico de la vista actual. Se llama una sola
+ * vez, desde arrancarLaApp() (20-arranque.js).
+ *
+ * @returns {void}
+ */
+function arrancarRefrescoPeriodico() {
+  if (_temporizadorRefresco) return;
+
+  _temporizadorRefresco = setInterval(() => {
+    if (SIN_LLEGADA) return;
+    if (document.hidden) return;
+    if (_sincronizando) return; // no competir con la cola al reconectar
+    if (!VISTAS[VISTA_ACTUAL]) return;
+
+    ensuciarVistas(VISTA_ACTUAL);
+    irA(VISTA_ACTUAL, true);
+  }, INTERVALO_REFRESCO_MS);
 }
 
 

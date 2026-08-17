@@ -341,7 +341,23 @@
       );
     }
 
-    const desplazamiento = scrollActualY();
+    /* ⚡ ACÁ SÍ VA window.scrollY DIRECTO, NO scrollActualY().
+       scrollActualY() devuelve una copia que solo se actualiza cuando
+       dispara el evento 'scroll' del navegador — y en Safari/iOS, durante
+       un scroll rápido o con inercia, ese evento llega con MUCHA menos
+       frecuencia que el repintado visual real. La llama de una vela es
+       un elemento normal: el navegador la mueve por el compositor en el
+       mismo instante que se mueve la pantalla, sin esperar a JavaScript.
+       Si acá se sigue usando la copia cacheada, el resplandor se dibuja
+       en la posición VIEJA mientras la llama ya está en la nueva —eso es
+       el "la luz se queda atrás de la vela" que se reportó—.
+
+       Esto NO es el mismo caso que motivó el caché (cientos de lecturas
+       por cuadro, una por cada joya colgante): acá es UNA lectura, una
+       vez por cuadro dibujado, como mucho 60 veces por segundo. El costo
+       es insignificante comparado con el beneficio de que la luz nunca
+       se separe de la llama. */
+    const desplazamiento = window.scrollY;
     const fuentes = window.LienzoDeLuz.fuentes;
 
     /* ── CUÁNTO MANDAN LAS VELAS A ESTA HORA ──
@@ -475,7 +491,7 @@
        queda quieto. Estampar el canvas es barato (ver el resto de este
        archivo): la ventana en la que esto corre a más fps es la del
        gesto de scroll, que dura instantes. */
-    const desplazamientoActual = scrollActualY();
+    const desplazamientoActual = window.scrollY;
     const seMovioElScroll = desplazamientoActual !== ultimoDesplazamientoDibujado;
 
     if (!seMovioElScroll && ahora - ultimoRepintado < CADA_CUANTO_REPINTAR) {
@@ -490,5 +506,52 @@
   }
 
   requestAnimationFrame(pintarLaLuz);
+
+  /* ⚡ TODAVÍA QUEDABA UNA VUELTA DE COLA, Y ESTO LA SACA.
+     El fix de arriba (seMovioElScroll) hace que el canvas se repinte en
+     cuanto pintarLaLuz nota que el scroll cambió — pero pintarLaLuz corre
+     dentro de un requestAnimationFrame, que es UN turno más del hilo
+     principal detrás de todo lo demás que también usa rAF (el vaivén de
+     las plantas, las joyas colgantes, el monitor de rendimiento…). El
+     scroll nativo lo mueve el COMPOSITOR, un hilo aparte que no espera
+     ese turno. En un cuadro cargado, ese turno de más ya se nota.
+
+     Este listener dibuja DIRECTO desde el propio evento 'scroll', en el
+     mismo turno en que el navegador ya avisó que la posición cambió, sin
+     esperar la vuelta completa de pintarLaLuz. Es seguro hacerlo acá:
+     dibujar en un canvas no fuerza layout ni reflow, así que no cuesta lo
+     que costaría, por ejemplo, leer un getBoundingClientRect() en el
+     mismo lugar.
+
+     Con equipos muy cargados igual puede quedar algo de desfase —es el
+     límite de sincronizar un canvas con el scroll por JavaScript, no algo
+     que un ajuste más vaya a borrar del todo—, pero esto lo deja en el
+     mínimo posible dentro de esta arquitectura.
+
+     ⚠️ ACÁ NO VA hayAlgoQueMirar(), Y ES A PROPÓSITO —ESTE FUE EL BUG
+     REPORTADO: "con 'Sin animación' la luz se queda en el mismo punto,
+     no se queda con la vela".
+     hayAlgoQueMirar() es falso con las animaciones apagadas (incluye el
+     botón, no solo el sobre cerrado o la pestaña de fondo —ver
+     02-utilidades.js—), así que este listener se cortaba ENTERO: con
+     "Sin animación" puesto, scrollear ya no repintaba nada, y el
+     resplandor quedaba congelado en el lugar exacto donde estaba cuando
+     se apagaron las animaciones, mientras la llama (DOM) seguía
+     moviéndose con la página.
+
+     Pero reposicionar el resplandor al scrollear NO ES una animación:
+     es hacer que algo estático siga estando en su lugar. Por eso acá se
+     pregunta por separado si la invitación está a la vista y la pestaña
+     activa (sin importar si las animaciones están prendidas), y con eso
+     alcanza para redibujar. El PARÁMETRO que sí depende de las
+     animaciones es conMovimiento: con animaciones apagadas se redibuja
+     iigual, pero sin mover haces, motas ni fauna —solo el resplandor de
+     las velas, quieto pero en el lugar correcto—. */
+  window.addEventListener('scroll', () => {
+    if (!_laInvitacionSeVe || document.hidden) return;
+    dibujarUnCuadro(hayAlgoQueMirar());
+    ultimoRepintado = performance.now();
+    ultimoDesplazamientoDibujado = window.scrollY;
+  }, { passive: true });
 
 })();

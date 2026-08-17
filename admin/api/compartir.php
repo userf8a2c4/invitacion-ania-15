@@ -504,11 +504,35 @@ $proveedorId = (int) ($_GET['proveedor'] ?? 0);
 $proveedor   = null;
 
 if ($proveedorId > 0 && existeTabla('proveedores')) {
+    // La columna detalle_items la agrega instalar.php (Paso 2): en una
+    // instalación que todavía no corrió esa migración, pedirla en el
+    // SELECT tiraría "columna desconocida" en vez de mandar el mensaje.
+    $conDetalle = in_array('detalle_items', columnasDe('proveedores'), true);
+
     $proveedor = consultarUno(
-        'SELECT id, nombre, telefono, correo FROM proveedores WHERE id = :id',
+        'SELECT id, nombre, telefono, correo' .
+        ($conDetalle ? ', detalle_items' : '') .
+        ' FROM proveedores WHERE id = :id',
         [':id' => $proveedorId]
     );
     if (!$proveedor) responderMal('Ese proveedor no existe.', 404);
+}
+
+/* Si el proveedor tiene su "qué incluye" cargado (Paso 2), se le
+   antepone al mensaje que ya armó la rama de $cual de arriba — así lo
+   que se le manda no es solo "menús y alergias", sino también un
+   recordatorio de lo que quedó acordado con él. Va primero para que se
+   lea antes de que la lista larga de abajo lo tape. */
+if ($proveedor && !empty($proveedor['detalle_items'])) {
+    $items = json_decode($proveedor['detalle_items'], true) ?: [];
+    if ($items) {
+        $bloque = "*Lo que incluye:*\n";
+        foreach ($items as $item) {
+            if (empty($item['texto'])) continue;
+            $bloque .= '· ' . $item['texto'] . "\n";
+        }
+        $texto = $bloque . "\n" . $texto;
+    }
 }
 
 /* Un número mal cargado abre un chat vacío, o el de otra persona en otro

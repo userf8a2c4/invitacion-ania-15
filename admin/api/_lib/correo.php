@@ -26,6 +26,23 @@
 require_once __DIR__ . '/entorno.php';
 
 /**
+ * De una lista de direcciones separadas por coma (como se escriben en
+ * un campo CC o CCO), devuelve solo las que son de verdad una
+ * dirección de correo válida — el resto se descarta en silencio, no
+ * revienta el envío por una coma de más o un espacio mal puesto.
+ *
+ * @param string $lista
+ * @return string[]
+ */
+function direccionesValidas($lista) {
+    $direcciones = array_map('trim', explode(',', (string) $lista));
+
+    return array_values(array_filter($direcciones, function ($d) {
+        return $d !== '' && filter_var($d, FILTER_VALIDATE_EMAIL);
+    }));
+}
+
+/**
  * Manda un correo HTML por SMTP.
  *
  * @param string $para       Destinatario.
@@ -45,11 +62,27 @@ require_once __DIR__ . '/entorno.php';
  *                           Cada una: ['cid' => 'qr', 'tipo' => 'image/png',
  *                           'datos' => contenido binario]. En el HTML se
  *                           referencian con <img src="cid:qr">.
+ * @param string|null &$mensajeCrudo Opcional: si se pasa una variable,
+ *                           queda con el mensaje RFC822 completo tal
+ *                           como se mandó (encabezados + cuerpo). Sirve
+ *                           para guardar una copia en la carpeta de
+ *                           Enviados por IMAP después (ver
+ *                           BuzonImap::guardarEnviado() en imap.php) sin
+ *                           tener que reconstruir el mensaje dos veces.
+ * @param string $cc  Opcional: con copia, separados por coma. VAN en el
+ *                    encabezado del mensaje — todos los destinatarios
+ *                    (Para y CCO incluidos) los ven.
+ * @param string $cco Opcional: con copia oculta, separados por coma.
+ *                    NUNCA van en ningún encabezado del mensaje —
+ *                    viajan solo como destinatarios del sobre SMTP
+ *                    (RCPT TO), que es justamente lo que hace que sean
+ *                    "ocultos": ni Para ni CC se enteran de que existen.
  * @return true|string true si salió, o el texto del error si falló.
  */
 function smtpEnviar($para, $asunto, $html, $from, $fromNombre,
                     $host, $port, $user, $pass, $responderA = '',
-                    $imagenes = [], $adjuntos = []) {
+                    $imagenes = [], $adjuntos = [], &$mensajeCrudo = null,
+                    $cc = '', $cco = '') {
     $log = [];
 
     // Con 465 el cifrado va desde el saludo. Con cualquier otro puerto se
@@ -121,8 +154,25 @@ function smtpEnviar($para, $asunto, $html, $from, $fromNombre,
     $r = $cmd("MAIL FROM:<$from>");
     if (strpos($r, '250') === false) { fclose($sock); return "MAIL FROM rechazado: $r"; }
 
-    $r = $cmd("RCPT TO:<$para>");
-    if (strpos($r, '250') === false) { fclose($sock); return "RCPT TO rechazado: $r"; }
+    /* El sobre SMTP (a quién se le manda de verdad) es una cosa, y los
+       encabezados del mensaje (a quién dice el correo que se le mandó)
+       son otra — son independientes. Para y CC van a las dos partes;
+       CCO SOLO va acá, al sobre, nunca a un encabezado: por eso es
+       "oculta", nadie que reciba el correo puede ver quién más lo
+       recibió con copia oculta. */
+    $direccionesDelSobre = array_merge(
+        [$para],
+        direccionesValidas($cc),
+        direccionesValidas($cco)
+    );
+
+    foreach ($direccionesDelSobre as $destinatario) {
+        $r = $cmd("RCPT TO:<$destinatario>");
+        if (strpos($r, '250') === false) {
+            fclose($sock);
+            return "RCPT TO rechazado para $destinatario: $r";
+        }
+    }
 
     $r = $cmd("DATA");
     if (strpos($r, '354') === false) { fclose($sock); return "DATA rechazado: $r"; }
@@ -133,8 +183,15 @@ function smtpEnviar($para, $asunto, $html, $from, $fromNombre,
     $asuntoEnc = '=?UTF-8?B?' . base64_encode($asunto) . '?=';
     $cuerpoB64 = chunk_split(base64_encode($html));
 
+    $ccParaEncabezado = direccionesValidas($cc);
+
     $msg  = "From: $fromEnc <$from>\r\n";
     $msg .= "To: <$para>\r\n";
+    // CC sí va en un encabezado — a diferencia de CCO, no es secreto
+    // quién más recibió el correo con copia normal.
+    if ($ccParaEncabezado) {
+        $msg .= 'Cc: <' . implode(">, <", $ccParaEncabezado) . ">\r\n";
+    }
     if ($responderA !== '') {
         $msg .= "Reply-To: <$responderA>\r\n";
     }
@@ -226,6 +283,10 @@ function smtpEnviar($para, $asunto, $html, $from, $fromNombre,
         $msg .= "--$frontera--";
     }
 
+    // Se deja disponible tal cual se va a mandar, antes del DATA: sirve
+    // para archivarlo en Enviados después, salga bien o mal el envío.
+    $mensajeCrudo = $msg;
+
     // El punto solo en una línea es lo que le dice al servidor "terminé".
     fwrite($sock, $msg . "\r\n.\r\n");
     $r = $leer();
@@ -247,9 +308,14 @@ function smtpEnviar($para, $asunto, $html, $from, $fromNombre,
  * @param string $asunto
  * @param string $html
  * @param string $responderA
+ * @param array  $adjuntos
+ * @param string|null &$mensajeCrudo Ver smtpEnviar().
+ * @param string $cc  Ver smtpEnviar().
+ * @param string $cco Ver smtpEnviar().
  * @return true|string
  */
-function enviarCorreo($para, $asunto, $html, $responderA = '', $adjuntos = []) {
+function enviarCorreo($para, $asunto, $html, $responderA = '', $adjuntos = [],
+                      &$mensajeCrudo = null, $cc = '', $cco = '') {
     return smtpEnviar(
         $para,
         $asunto,
@@ -262,6 +328,9 @@ function enviarCorreo($para, $asunto, $html, $responderA = '', $adjuntos = []) {
         env('SMTP_PASSWORD', ''),
         $responderA,
         [],
-        $adjuntos
+        $adjuntos,
+        $mensajeCrudo,
+        $cc,
+        $cco
     );
 }

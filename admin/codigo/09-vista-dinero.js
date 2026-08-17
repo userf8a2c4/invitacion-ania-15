@@ -48,6 +48,7 @@ async function dibujarDinero() {
   vista.innerHTML =
     bloqueSelectorDePresupuesto(DINERO.presupuestos, DINERO.presupuesto_activo) +
     bloqueTotales(DINERO.totales) +
+    bloqueProximosPagos(DINERO.pagos) +
 
     '<div class="buscador">' +
       '<svg class="buscador__lupa" viewBox="0 0 24 24" aria-hidden="true">' +
@@ -94,6 +95,17 @@ async function dibujarDinero() {
   });
 
   buscar('#exportar-dinero', vista).addEventListener('click', abrirHojaDeDescarga);
+  buscar('#resumen-ejecutivo', vista).addEventListener('click', exportarResumenEjecutivoDinero);
+
+  buscarTodos('[data-proximo-pago]', vista).forEach(boton => {
+    boton.addEventListener('click', () => {
+      SECCION_DINERO = 'pagos';
+      buscarTodos('[data-seccion]', vista).forEach(o =>
+        o.classList.toggle('activo', o.dataset.seccion === 'pagos'));
+      pintarSeccionDeDinero();
+      formularioPago(DINERO.pagos.find(p => String(p.id) === boton.dataset.proximoPago));
+    });
+  });
 
   const cambiarPresupuesto = buscar('#presupuesto-cambiar', vista);
   if (cambiarPresupuesto) {
@@ -322,6 +334,32 @@ function bloqueTotales(t) {
               ' sin entregar todavía.</p>';
   }
 
+  /* "De tu bolsillo" (arriba) da por hecho que todo padrino asignado a
+     un gasto SÍ va a entregar. Cuando hay gastos cubiertos por un
+     padrino que todavía no entregó (solo lo habló o lo confirmó), ese
+     dinero no es seguro todavía — se avisa cuál sería el bolsillo real
+     si nadie más entrega, para no gastar de más confiando en una
+     promesa. */
+  const prometidoSinEntregar = (t.de_padrinos || 0) - (t.de_padrinos_entregado || 0);
+  if (prometidoSinEntregar > 0.01) {
+    avisos += '<p class="vacio__texto" style="color:var(--ojo)">' +
+              seguro(comoDinero(prometidoSinEntregar, false)) + ' de padrinos ' +
+              'todavía no entregado — si nadie más entrega, tu bolsillo real ' +
+              'sería <strong>' + seguro(comoDinero(t.bolsillo_si_nadie_mas_entrega, false)) +
+              '</strong>.</p>';
+  }
+
+  /* costo_por_invitado viene null cuando todavía no hay nadie
+     confirmado (presupuesto.php lo calcula así a propósito): se dice
+     explícito por qué no hay número, en vez de mostrar "$0/persona"
+     como si costara gratis. */
+  const costoPorInvitado = t.costo_por_invitado === null || t.costo_por_invitado === undefined
+    ? '<p class="vacio__texto">Costo por invitado: se calcula en cuanto ' +
+      'haya al menos una confirmación que asiste.</p>'
+    : '<p class="vacio__texto">' +
+      seguro(comoDinero(t.costo_por_invitado, false)) + ' por invitado' +
+      ' (' + seguro(pluralizar(t.confirmados, 'confirmado', 'confirmados')) + ').</p>';
+
   return '' +
     selector +
     '<div class="tarjeta">' +
@@ -338,9 +376,57 @@ function bloqueTotales(t) {
             seguro(comoDinero(t.propio, false)) + '</div>' +
         '</div>' +
       '</div>' +
+      costoPorInvitado +
       avisos +
-      '<button class="boton boton--chico boton--ancho" id="exportar-dinero" ' +
-              'style="margin-top:var(--esp-2)">Descargar</button>' +
+      '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-2)">' +
+        '<button class="boton boton--chico" style="flex:1" id="exportar-dinero">' +
+          'Descargar</button>' +
+        '<button class="boton boton--chico" style="flex:1" id="resumen-ejecutivo">' +
+          'Resumen ejecutivo' +
+        '</button>' +
+      '</div>' +
+    '</div>';
+}
+
+
+/**
+ * Los pagos pendientes que vencen más pronto, para no tener que abrir
+ * la pestaña de Pagos y hacer memoria de cuál era el próximo.
+ *
+ * Se arma en el teléfono con lo que ya trae `case 'todo'` — no hace
+ * falta un endpoint aparte, `pagos.fecha_limite` ya existe de antes.
+ *
+ * @param {Array} pagos
+ * @returns {string} HTML, o '' si no hay ningún pago pendiente con fecha.
+ */
+function bloqueProximosPagos(pagos) {
+  const proximos = (pagos || [])
+    .filter(p => p.estado !== 'pagado' && p.fecha_limite)
+    .sort((a, b) => (a.fecha_limite < b.fecha_limite ? -1 : 1))
+    .slice(0, 5);
+
+  if (!proximos.length) return '';
+
+  return '' +
+    '<div class="tarjeta" style="margin-top:var(--esp-2)">' +
+      '<div class="tarjeta__titulo">Próximos pagos</div>' +
+      proximos.map(pago => {
+        const atrasado = diasHasta(pago.fecha_limite) < 0;
+        return '' +
+          '<button class="lista__fila" data-proximo-pago="' + seguro(pago.id) + '">' +
+            '<span class="lista__cuerpo">' +
+              '<span class="lista__titulo">' +
+                seguro(pago.concepto || pago.gasto_concepto || 'Pago') + '</span>' +
+              '<span class="lista__pie">' +
+                (atrasado
+                  ? '<span class="etiqueta etiqueta--alerta">Atrasado</span> desde ' +
+                    seguro(comoFecha(pago.fecha_limite))
+                  : 'Vence ' + seguro(comoCuando(pago.fecha_limite))) +
+              '</span>' +
+            '</span>' +
+            '<span class="lista__lado cifra">' + seguro(comoDinero(pago.monto, false)) + '</span>' +
+          '</button>';
+      }).join('') +
     '</div>';
 }
 
@@ -383,6 +469,61 @@ function botonAgregar(texto) {
 /* ─── 3. CADA SECCIÓN ──────────────────────────────────────────────── */
 
 /**
+ * El único gráfico de esta pantalla: de lo que se pensó gastar a lo
+ * que ya se pagó de verdad, en tres barras. Responde una decisión
+ * concreta —¿cuánto de lo planeado sigue siendo solo un número, y
+ * cuánto ya es plata que salió?— sin depender de ninguna librería:
+ * es SVG a mano, con los mismos colores que ya usa el resto del panel.
+ *
+ * @param {Object} t - DINERO.totales
+ * @returns {string} HTML, o '' si todavía no hay nada planeado.
+ */
+function graficoDeFlujoDePresupuesto(t) {
+  const planeado = Number(t.planeado) || 0;
+  if (planeado <= 0) return '';
+
+  const costo  = Number(t.costo)  || 0;
+  const pagado = Number(t.pagado) || 0;
+  const referencia = Math.max(planeado, costo, 1);
+
+  const filas = [
+    ['Planeado',   planeado, 'var(--texto-tenue)'],
+    ['Costo real', costo,    'var(--oro)'],
+    ['Pagado',     pagado,   'var(--bien)'],
+  ];
+
+  const ALTO_FILA   = 34;
+  const ANCHO_BARRA = 220;
+  const svgAlto = filas.length * ALTO_FILA;
+
+  const filasSvg = filas.map(([nombre, valor, color], i) => {
+    const y = i * ALTO_FILA;
+    // Mínimo 3 unidades para que un valor > 0 no desaparezca del todo.
+    const ocupado = valor > 0 ? Math.max((valor / referencia) * ANCHO_BARRA, 3) : 0;
+
+    return '' +
+      '<text x="0" y="' + (y + 11) + '" font-size="11" fill="var(--texto-suave)">' +
+        seguro(nombre) + '</text>' +
+      '<rect x="0" y="' + (y + 16) + '" width="' + ANCHO_BARRA + '" height="12" rx="4" ' +
+            'fill="var(--borde)"></rect>' +
+      '<rect x="0" y="' + (y + 16) + '" width="' + ocupado + '" height="12" rx="4" ' +
+            'fill="' + color + '"></rect>' +
+      '<text x="' + (ANCHO_BARRA + 8) + '" y="' + (y + 25) + '" font-size="11" ' +
+            'fill="var(--texto-suave)">' + seguro(comoDinero(valor, false)) + '</text>';
+  }).join('');
+
+  return '' +
+    '<div class="tarjeta" style="margin-bottom:var(--esp-2)">' +
+      '<div class="tarjeta__titulo">De lo planeado a lo pagado</div>' +
+      '<svg viewBox="0 0 ' + (ANCHO_BARRA + 90) + ' ' + svgAlto + '" ' +
+           'style="width:100%;height:auto;display:block;margin-top:var(--esp-1)" ' +
+           'role="img" aria-label="Comparación entre lo planeado, el costo real y lo pagado">' +
+        filasSvg +
+      '</svg>' +
+    '</div>';
+}
+
+/**
  * Categorías con su barra de gasto contra el techo.
  *
  * @param {Element} cuerpo
@@ -393,8 +534,9 @@ function pintarCategorias(cuerpo) {
   if (!categorias.length && sinResultadosDeBusqueda(cuerpo)) return;
 
   const filas = categorias.map(categoria => {
-    const techo   = Number(categoria.techo) || 0;
-    const gastado = Number(categoria.gastado) || 0;
+    const techo    = Number(categoria.techo) || 0;
+    const gastado  = Number(categoria.gastado) || 0;
+    const planeado = Number(categoria.planeado) || 0;
 
     // Sin techo no hay con qué comparar: se muestra solo lo gastado.
     const pct = techo > 0 ? porcentaje(gastado, techo) : 0;
@@ -424,10 +566,24 @@ function pintarCategorias(cuerpo) {
             '</div>'
           : '<div class="vacio__texto" style="margin-top:4px">Sin techo definido' +
             ayuda('dinero.techo') + '</div>') +
+        /* Estimado vs. real: `planeado` es lo que se pensó gastar al
+           cargar cada gasto, `gastado` es lo que costó DE VERDAD. Verlos
+           juntos avisa cuando una categoría todavía es puro cálculo —
+           no hay que confundir "lo pensado" con "lo que ya pasó". */
+        (planeado > 0
+          ? '<div class="vacio__texto" style="margin-top:4px">Estimado ' +
+            seguro(comoDinero(planeado, false)) +
+            (gastado === 0 ? ' — todavía sin costo real cargado' : '') +
+            '</div>'
+          : '') +
       '</button>';
   }).join('');
 
-  cuerpo.innerHTML = filas + botonAgregar('Nueva categoría');
+  // El gráfico es del presupuesto entero, no de las categorías que haya
+  // dejado el buscador: no tiene sentido esconderlo al filtrar.
+  const grafico = BUSQUEDA_DINERO.trim() ? '' : graficoDeFlujoDePresupuesto(DINERO.totales);
+
+  cuerpo.innerHTML = grafico + filas + botonAgregar('Nueva categoría');
 
   buscarTodos('[data-categoria]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
@@ -583,6 +739,45 @@ function pintarPagos(cuerpo) {
  * @param {Element} cuerpo
  * @returns {void}
  */
+/**
+ * Cuánto suma cada etapa del compromiso de los padrinos ("lo habló",
+ * "ya lo confirmó", "ya entregó"), para ver el embudo de un vistazo.
+ *
+ * Solo cuenta los que aportan en dinero: "en especie" no tiene un
+ * monto comparable de verdad —el que se carga es solo aproximado—, y
+ * sumarlo junto con dinero real daría un total que no significa nada.
+ *
+ * @param {Array} padrinos
+ * @returns {string} HTML, o '' si no hay ninguno que aporte en dinero.
+ */
+function resumenDePipelineDePadrinos(padrinos) {
+  const enDinero = (padrinos || []).filter(p => p.tipo_aporte !== 'especie');
+  if (!enDinero.length) return '';
+
+  const porEstado = { hablado: 0, confirmado: 0, entregado: 0 };
+  enDinero.forEach(p => {
+    const clave = porEstado.hasOwnProperty(p.estado) ? p.estado : 'hablado';
+    porEstado[clave] += Number(p.monto) || 0;
+  });
+
+  const etiquetas = [
+    ['hablado', 'Hablado'], ['confirmado', 'Confirmado'], ['entregado', 'Ya entregó'],
+  ];
+
+  return '' +
+    '<div class="tarjeta" style="margin-bottom:var(--esp-2)">' +
+      '<div class="tarjeta__titulo">Cuánto va en cada etapa' +
+        ayuda('dinero.pipeline-padrinos') + '</div>' +
+      etiquetas.map(([clave, texto]) =>
+        '<div class="detalle__rotulo" style="display:flex;justify-content:space-between;' +
+             'padding:var(--esp-1) 0">' +
+          '<span>' + seguro(texto) + '</span>' +
+          '<span class="cifra">' + seguro(comoDinero(porEstado[clave], false)) + '</span>' +
+        '</div>'
+      ).join('') +
+    '</div>';
+}
+
 function pintarPadrinos(cuerpo) {
   const padrinos = filtrarPorBusqueda(DINERO.padrinos,
     ['nombre', 'apadrina', 'telefono', 'correo', 'notas']);
@@ -607,7 +802,9 @@ function pintarPadrinos(cuerpo) {
     entregado:  ['bien',   'Entregado'],
   };
 
-  cuerpo.innerHTML = padrinos.map(padrino => {
+  cuerpo.innerHTML = resumenDePipelineDePadrinos(DINERO.padrinos) +
+
+  padrinos.map(padrino => {
     const estado = estados[padrino.estado] || estados.hablado;
 
     const monto = padrino.tipo_aporte === 'especie'
@@ -740,6 +937,21 @@ function pintarProveedores(cuerpo) {
  * @param {Element} cuerpo
  * @returns {void}
  */
+/**
+ * Un resumen de una línea de "qué incluye" una cotización, para la
+ * fila de la lista. Prefiere los ítems estructurados; si todavía no se
+ * migró (formato viejo, texto corrido), cae al texto tal cual.
+ *
+ * @param {Object} cot
+ * @returns {string}
+ */
+function resumenDeQueIncluye(cot) {
+  if (cot.detalle_items && cot.detalle_items.length) {
+    return cot.detalle_items.map(it => it.texto).join(' · ');
+  }
+  return cot.que_incluye || '';
+}
+
 function pintarCotizaciones(cuerpo) {
   const cotizaciones = filtrarPorBusqueda(DINERO.cotizaciones,
     ['servicio', 'proveedor', 'que_incluye', 'notas']);
@@ -811,7 +1023,7 @@ function pintarCotizaciones(cuerpo) {
           '<span class="lista__cuerpo">' +
             '<span class="lista__titulo">' + seguro(cot.proveedor) + '</span>' +
             '<span class="lista__pie">' +
-              seguro(acortar(cot.que_incluye || '', 60)) + '</span>' +
+              seguro(acortar(resumenDeQueIncluye(cot), 60)) + '</span>' +
             (marcas.length ? '<span class="menus-mini">' + marcas.join('') + '</span>' : '') +
           '</span>' +
           '<span class="lista__lado cifra">' + cifra + '</span>' +
@@ -876,6 +1088,20 @@ async function guardarDinero(accion, carga, mensaje) {
  * @param {Object} [existente]
  * @returns {void}
  */
+/**
+ * A qué arreglo de DINERO pertenece cada tipo de registro que edita
+ * engancharFormularioDinero(). Solo entran acá los que se pueden mutar
+ * en memoria de forma segura al editar (fila plana, sin recalcular
+ * nada agregado): cotización y categoría se quedan fuera porque su
+ * forma en DINERO es agrupada, no una lista plana por id.
+ */
+const COLECCIONES_DINERO = {
+  proveedor: 'proveedores',
+  padrino:   'padrinos',
+  gasto:     'gastos',
+  pago:      'pagos',
+};
+
 function engancharFormularioDinero(cuerpo, armarCarga, nombreAccion, existente) {
 
   /* TODAS las secciones del presupuesto llevan adjuntos: el contrato del
@@ -921,11 +1147,42 @@ function engancharFormularioDinero(cuerpo, armarCarga, nombreAccion, existente) 
     },
   });
 
-  buscar('#pie-guardar', cuerpo).addEventListener('click', () => {
+  buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
     const carga = armarCarga();
     if (!carga) return;
     if (existente) carga.id = existente.id;
-    guardarDinero('guardar_' + nombreAccion, carga, 'Guardado.');
+
+    /* Editar un registro que ya existe puede aplicarse de una: ya hay
+       una fila en memoria para mutar y repintar al instante (A1, ver
+       36-optimista.js) — mismo patrón que abrirFormularioDeInvitado()
+       en 08-vista-invitados.js. Dar de alta uno nuevo no tiene id
+       todavía, así que sigue esperando la respuesta del servidor. */
+    const coleccion = existente && COLECCIONES_DINERO[nombreAccion];
+    if (!coleccion) {
+      guardarDinero('guardar_' + nombreAccion, carga, 'Guardado.');
+      return;
+    }
+
+    cerrarHoja(true);
+    try {
+      const resultado = await aplicarOptimista(
+        'presupuesto.php?accion=guardar_' + nombreAccion, carga,
+        {
+          mutar: () => {
+            const lista = DINERO[coleccion];
+            const i = lista.findIndex(f => Number(f.id) === Number(existente.id));
+            if (i !== -1) Object.assign(lista[i], carga);
+          },
+          repintar: pintarSeccionDeDinero,
+        }
+      );
+      avisar(resultado.offline
+        ? 'Sin conexión: se guardó y se va a mandar solo.'
+        : 'Guardado.');
+      ensuciarVistas('resumen');
+    } catch (error) {
+      avisar(error.message, true);
+    }
   });
 
   const borrar = buscar('#pie-borrar', cuerpo);
@@ -1292,6 +1549,7 @@ function abrirDetalleDeProveedor(proveedor) {
 
   const cuerpo = abrirHoja(proveedor.nombre,
     '<div class="detalle">' + detalle + '</div>' +
+    vinetasDeQueIncluye(proveedor.detalle_items) +
     botonesDeContacto(proveedor) +
     '<div class="acciones" style="margin-top:var(--esp-3)">' +
       '<button class="boton boton--peligro" id="detalle-borrar">Borrar</button>' +
@@ -1353,27 +1611,35 @@ function formularioProveedor(proveedor) {
                    { valor: 'modista',   texto: 'Pruebas de vestido' },
                  ] }) +
 
+    /* Aparte de las notas libres: acá va la lista de "qué trae" el
+       proveedor, en renglones — no un párrafo. Ver 06-piezas.js. */
+    campoListaDeDetalle({ id: 'pro-detalle', rotulo: 'Qué incluye',
+                           items: d.detalle_items,
+                           plantillas: plantillasSugeridasPara(d.servicio) }) +
+
     campoLargo({ id: 'pro-notas', rotulo: 'Notas', valor: d.notas }) +
     (proveedor ? botonesDeContacto(proveedor) : '') +
     pieDeFormulario('Guardar', !!proveedor)
   );
 
   if (proveedor) engancharBotonesDeContacto(cuerpo, proveedor);
+  engancharListaDeDetalle('pro-detalle', cuerpo, plantillasSugeridasPara(d.servicio));
 
   engancharFormularioDinero(cuerpo, () => {
     const nombre = valorDe('pro-nombre', cuerpo);
     if (!nombre) { avisar('Falta el nombre.', true); return null; }
     return {
-      nombre:      nombre,
-      servicio:    valorDe('pro-servicio', cuerpo),
-      monto_total: aPesos(valorDe('pro-total', cuerpo)),
-      anticipo:    aPesos(valorDe('pro-anticipo', cuerpo)),
-      estado:      valorDe('pro-estado', cuerpo),
-      contacto:    valorDe('pro-contacto', cuerpo),
-      telefono:    valorDe('pro-telefono', cuerpo),
-      correo:      valorDe('pro-correo', cuerpo),
-      paquete:     valorDe('pro-paquete', cuerpo),
-      notas:       valorDe('pro-notas', cuerpo),
+      nombre:        nombre,
+      servicio:      valorDe('pro-servicio', cuerpo),
+      monto_total:   aPesos(valorDe('pro-total', cuerpo)),
+      anticipo:      aPesos(valorDe('pro-anticipo', cuerpo)),
+      estado:        valorDe('pro-estado', cuerpo),
+      contacto:      valorDe('pro-contacto', cuerpo),
+      telefono:      valorDe('pro-telefono', cuerpo),
+      correo:        valorDe('pro-correo', cuerpo),
+      paquete:       valorDe('pro-paquete', cuerpo),
+      notas:         valorDe('pro-notas', cuerpo),
+      detalle_items: valorDeListaDeDetalle('pro-detalle', cuerpo),
     };
   }, 'proveedor', proveedor);
 }
@@ -1475,11 +1741,22 @@ function formularioCotizacion(cotizacion) {
                  valor: d.vigencia || '' }) +
 
     campoTexto({ id: 'cot-telefono', rotulo: 'Teléfono', tipo: 'tel', valor: d.telefono }) +
-    campoLargo({ id: 'cot-incluye', rotulo: 'Qué incluye', valor: d.que_incluye }) +
+
+    /* Migra sola la primera vez que se abre: si ya tiene detalle_items
+       (formato nuevo) se usa tal cual; si no, se parte el que_incluye
+       viejo en renglones. Nada se borra hasta que se guarde. */
+    campoListaDeDetalle({
+      id: 'cot-incluye', rotulo: 'Qué incluye',
+      items: (d.detalle_items && d.detalle_items.length)
+        ? d.detalle_items : itemsDesdeTexto(d.que_incluye),
+    }) +
+
     campoCasilla({ id: 'cot-elegida', rotulo: 'Es la que elegimos',
                    marcado: Number(d.elegida) === 1 }) +
     pieDeFormulario('Guardar', !!cotizacion)
   );
+
+  engancharListaDeDetalle('cot-incluye', cuerpo);
 
   engancharFormularioDinero(cuerpo, () => {
     const servicio  = valorDe('cot-servicio', cuerpo);
@@ -1488,16 +1765,24 @@ function formularioCotizacion(cotizacion) {
       avisar('Falta el servicio o quién cotiza.', true);
       return null;
     }
+
+    const items = valorDeListaDeDetalle('cot-incluye', cuerpo);
+
     return {
-      servicio:    servicio,
-      proveedor:   proveedor,
-      tipo_precio: valorDe('cot-tipo', cuerpo),
-      monto:       aPesos(valorDe('cot-monto', cuerpo)),
-      precio_pp:   aPesos(valorDe('cot-pp', cuerpo)),
-      vigencia:    valorDe('cot-vigencia', cuerpo),
-      telefono:    valorDe('cot-telefono', cuerpo),
-      que_incluye: valorDe('cot-incluye', cuerpo),
-      elegida:     !!valorDe('cot-elegida', cuerpo),
+      servicio:      servicio,
+      proveedor:     proveedor,
+      tipo_precio:   valorDe('cot-tipo', cuerpo),
+      monto:         aPesos(valorDe('cot-monto', cuerpo)),
+      precio_pp:     aPesos(valorDe('cot-pp', cuerpo)),
+      vigencia:      valorDe('cot-vigencia', cuerpo),
+      telefono:      valorDe('cot-telefono', cuerpo),
+      detalle_items: items,
+      /* Espejo en texto plano: lo sigue leyendo el comparador viejo
+         (21-cotizador.js, "Notas del paquete"). La fuente de verdad
+         para editar es detalle_items; esto es solo para no dejarlo
+         vacío mientras ese lector no se actualice también. */
+      que_incluye:   items.map(it => it.texto).join('; '),
+      elegida:       !!valorDe('cot-elegida', cuerpo),
     };
   }, 'cotizacion', cotizacion);
 }

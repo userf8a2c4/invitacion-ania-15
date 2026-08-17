@@ -104,7 +104,11 @@ function llaveDeArranqueCorrecta($recibida) {
      *
      * Solo funciona si _lib/bd.php ya se cargó antes que este archivo,
      * que es el caso en instalar.php y diagnostico.php. */
-    if (function_exists('consultarUno') && function_exists('insertar')) {
+    /* En una base recién creada (0 tablas) intentos_login todavía no
+       existe: instalar.php es justo lo que la va a crear. Sin este chequeo,
+       la consulta de abajo revienta antes de poder crear nada. */
+    if (function_exists('consultarUno') && function_exists('insertar')
+        && function_exists('existeTabla') && existeTabla('intentos_login')) {
         $ip     = substr($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0', 0, 45);
         $fila   = consultarUno(
             'SELECT COUNT(*) AS n FROM intentos_login

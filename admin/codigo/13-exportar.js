@@ -323,6 +323,71 @@ function exportarPresupuesto(formato) {
 }
 
 /**
+ * El PDF de una reunión familiar: no la base de datos entera en tablas
+ * (eso ya lo hace exportarPresupuesto → PDF), sino las pocas cifras
+ * que importan para decidir algo, en una o dos hojas.
+ *
+ * Reusa armarPdf() con bloques armados a mano en vez de volcar tablas
+ * completas — mismo motor de impresión, contenido curado.
+ *
+ * @returns {void}
+ */
+function exportarResumenEjecutivoDinero() {
+  if (!DINERO) { avisar('Todavía no cargaron los datos.', true); return; }
+
+  const t = DINERO.totales;
+  const monto = v => comoDinero(v, false);
+
+  const lo_esencial = [
+    ['Cuesta la fiesta',              monto(t.costo)],
+    ['De tu bolsillo',                monto(t.propio)],
+    ['Cubren los padrinos (en total)', monto(t.de_padrinos)],
+    ['  · de eso, ya entregado',      monto(t.de_padrinos_entregado)],
+    ['Pagado hasta hoy',              monto(t.pagado)],
+    ['Por pagar',                     monto(t.por_pagar) +
+      (t.por_pagar_cuantos ? ' (' + t.por_pagar_cuantos + ')' : '')],
+    ['Costo por invitado confirmado',
+      t.costo_por_invitado === null || t.costo_por_invitado === undefined
+        ? 'Todavía no hay confirmados'
+        : monto(t.costo_por_invitado) + ' (' + (t.confirmados || 0) + ' personas)'],
+  ];
+
+  // Categorías al 85% de su techo o pasadas — lo único que amerita
+  // frenar y decidir algo, no la lista completa de categorías sanas.
+  const alertasTecho = (DINERO.categorias || [])
+    .filter(c => Number(c.techo) > 0 &&
+                 Number(c.gastado) / Number(c.techo) >= CONFIGURACION.dinero.avisarDesde)
+    .map(c => [
+      c.nombre,
+      Number(c.gastado) > Number(c.techo) ? 'Pasada' : 'Cerca del techo',
+      monto(c.gastado) + ' / ' + monto(c.techo),
+    ]);
+
+  const proximosPagos = (DINERO.pagos || [])
+    .filter(p => p.estado !== 'pagado' && p.fecha_limite)
+    .sort((a, b) => (a.fecha_limite < b.fecha_limite ? -1 : 1))
+    .slice(0, 8)
+    .map(p => [
+      p.concepto || p.gasto_concepto || 'Pago',
+      p.fecha_limite,
+      diasHasta(p.fecha_limite) < 0 ? 'Atrasado' : 'Pendiente',
+      monto(p.monto),
+    ]);
+
+  const bloques = [
+    { titulo: 'Lo esencial', encabezados: ['Concepto', 'Monto'], filas: lo_esencial },
+    { titulo: 'Categorías cerca o pasadas de su techo',
+      encabezados: ['Categoría', 'Situación', 'Gastado / Techo'],
+      filas: alertasTecho },
+    { titulo: 'Próximos pagos',
+      encabezados: ['Concepto', 'Vence', 'Estado', 'Monto'],
+      filas: proximosPagos },
+  ];
+
+  armarPdf('Resumen ejecutivo · Presupuesto XV de Ania', bloques);
+}
+
+/**
  * Descarga la lista de invitados.
  *
  * @param {string} formato

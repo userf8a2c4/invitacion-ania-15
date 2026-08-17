@@ -58,11 +58,26 @@ async function dibujarHoy() {
     return;
   }
 
+  // La campana (37-campana.js) reusa esto para no pedir hoy.php de
+  // nuevo solo para contar avisos.
+  if (typeof ULTIMO_HOY !== 'undefined') ULTIMO_HOY = datosDeHoy;
+  if (typeof actualizarBurbujaCampana === 'function') actualizarBurbujaCampana();
+
   const dia = datosDeHoy.dia || {};
   const alertas = alertasDelDia(datosDeHoy);
 
+  // diasParaLaFiesta() (02-utilidades.js) sale de CONFIGURACION.fiesta,
+  // no del servidor: funciona igual con o sin señal.
+  const dias = diasParaLaFiesta();
+  // La hora de la última copia necesita leer IndexedDB (async); todo lo
+  // demás de acá es síncrono, así que se resuelve antes de armar el HTML.
+  const textoConexion = await textoDeConexionConHora();
+
   vista.innerHTML =
-    bloqueEstadoDelDia(dia) +
+    '<p class="hoy__cuenta-atras' + (dias === 0 ? ' hoy__cuenta-atras--hoy' : '') + '">' +
+      seguro(textoDeCuentaAtras(dias)) +
+    '</p>' +
+    bloqueEstadoDelDia(dia, textoConexion) +
     bloqueTresAcciones() +
     bloqueAlertasDelDia(alertas) +
     '<div id="hoy-ultimas-llegadas"></div>' +
@@ -91,15 +106,17 @@ async function dibujarHoy() {
  * línea fina, si hay señal y desde cuándo no la hay.
  *
  * @param {Object} dia - datosDeHoy.dia, de hoy.php.
+ * @param {string} textoConexion - Lo que devuelve textoDeConexionConHora()
+ *   (26-sincronizacion.js), ya resuelto antes de armar este HTML.
  * @returns {string} HTML
  */
-function bloqueEstadoDelDia(dia) {
+function bloqueEstadoDelDia(dia, textoConexion) {
   const faltaAforo = dia.esperados > 0
     ? Math.min(100, Math.round((dia.llegaron / dia.esperados) * 100)) : 0;
 
   return '' +
     '<div class="tarjeta hoy-estado">' +
-      estadoDeConexionHTML() +
+      estadoDeConexionHTML(textoConexion) +
 
       '<div class="hoy-estado__cifras">' +
         '<div class="hoy-estado__cifra">' +
@@ -127,17 +144,17 @@ function bloqueEstadoDelDia(dia) {
 }
 
 /**
- * "En línea" o "Sin señal · última copia HH:MM". Se apoya en lo que ya
- * existe: SIN_LLEGADA es el mismo booleano que usa el banner de arriba
- * (26-sincronizacion.js), así que este texto nunca puede decir algo
- * distinto de lo que ya sabe el resto de la app.
+ * "En línea" o "Sin señal — última copia guardada HH:MM." El texto sale
+ * de textoDeConexionConHora() (26-sincronizacion.js), la MISMA función
+ * que arma el banner de arriba, para que los dos digan siempre lo mismo.
  *
+ * @param {string} texto - Ya resuelto por dibujarHoy() antes de llamar acá.
  * @returns {string} HTML
  */
-function estadoDeConexionHTML() {
+function estadoDeConexionHTML(texto) {
   const enLinea = !SIN_LLEGADA;
   return '<p class="hoy-estado__conexion' + (enLinea ? '' : ' hoy-estado__conexion--sin-senal') + '">' +
-    (enLinea ? 'En línea' : 'Sin señal — viendo la última copia guardada') +
+    seguro(texto) +
   '</p>';
 }
 

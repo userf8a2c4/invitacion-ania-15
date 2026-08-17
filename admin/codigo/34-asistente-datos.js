@@ -74,6 +74,23 @@ async function datosDeMesasParaElAsistente() {
   return MESAS;
 }
 
+/**
+ * PLAN (notas, tareas, agenda — 10-planificador.js) ya poblado,
+ * pidiéndolo si hace falta. Usa exactamente traerPlanificador(), la
+ * misma función que ya llena la pestaña Planificar.
+ *
+ * @returns {Promise<Object|null>}
+ */
+async function datosDePlanParaElAsistente() {
+  if (PLAN && PLAN.tareas && PLAN.tareas.length) return PLAN;
+  try {
+    await traerPlanificador();
+  } catch (error) {
+    return null;
+  }
+  return PLAN;
+}
+
 
 /* ─── 2. BUSCAR UNA ENTIDAD POR NOMBRE ──────────────────────────────── */
 

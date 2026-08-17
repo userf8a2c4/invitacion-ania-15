@@ -31,9 +31,16 @@ header('Content-Type: application/json; charset=utf-8');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 
 /* ─── CONFIGURACIÓN ───────────────────────────────────────────────────── */
+/* ⚠️ SIN RESPALDO PARA NOMBRE DE BASE NI USUARIO (Ambiente de pruebas).
+   Antes, si el .env no tenía DB_NAME/DB_USER por el motivo que fuera,
+   este archivo caía en el nombre de la base REAL como respaldo — con un
+   ambiente de pruebas aparte (pbe.aniaxv.com) eso significa que un .env
+   mal armado ahí escribiría confirmaciones de prueba en la base de
+   Lucila sin que nadie lo notara. Mejor que falle fuerte (más abajo, al
+   conectar) a que falle en silencio escribiendo en el lugar equivocado. */
 $DB_HOST      = getenv('DB_HOST')      ?: 'localhost';
-$DB_NAME      = getenv('DB_NAME')      ?: 'u164808416_invitadosxv';
-$DB_USER      = getenv('DB_USER')      ?: 'u164808416_lucila';
+$DB_NAME      = getenv('DB_NAME')      ?: '';
+$DB_USER      = getenv('DB_USER')      ?: '';
 $DB_PASSWORD  = getenv('DB_PASSWORD')  ?: '';
 
 $SMTP_HOST    = getenv('SMTP_HOST')    ?: 'smtp.hostinger.com';

@@ -1,13 +1,10 @@
 <!--
   ÍCONO DE LA PESTAÑA (favicon) · EL SELLO DE CERA
   Es el mismo lacre rojo que cierra el sobre de la invitación, con la "A"
-  cursiva de Ania grabada encima. Se ve muy chico (16×16 px), así que:
-    · la gota de cera es una forma llena, con volumen (luz arriba-izquierda,
-      sombra abajo-derecha), para que se lea como cera y no como un círculo;
-    · la "A" va en oro y con buen grosor, porque un grabado del mismo rojo
-      que la cera desaparecería a ese tamaño. Es el único permiso que nos
-      tomamos: en el sobre grande la A va hundida en la cera, acá va dorada
-      para que sobreviva al tamaño de favicon.
+  que dibujó Lucila para su hija grabada encima (recursos/logo-dibujado-
+  por-lucila.png). Se ve muy chico (16×16 px), así que la gota de cera se
+  conserva como fondo: es lo que da contraste y hace que se identifique
+  como sello a ese tamaño, algo que el trazo solo, sin fondo, no lograría.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
   <defs>
@@ -23,6 +20,23 @@
       <stop offset="50%"  stop-color="#c1a049"/>
       <stop offset="100%" stop-color="#8a6a2c"/>
     </linearGradient>
+    <!-- La foto de la firma es amarillo puro (#ffea3c), no el dorado
+         antiguo del resto de la web. Acá se usa solo su SILUETA (canal
+         alfa) como máscara, y el color de verdad lo pone el degradado de
+         arriba —el mismo dorado envejecido que ya tenía la "A" antes.
+
+         ⚠️ EL <image> DE ADENTRO ESTÁ AGRANDADO Y CORRIDO A PROPÓSITO.
+         La foto (687×927) tiene la tinta pegada al borde izquierdo y con
+         bastante aire a la derecha; dibujarla completa centrada dejaba la
+         letra visualmente corrida hacia la izquierda. Estos números
+         recortan a la caja real de tinta (medida decodificando los
+         píxeles del PNG: x 0-629, y 40-880 de 687×927) y la escalan para
+         que llene justo la caja de la máscara (x/y/width/height de acá
+         arriba, que es la que de verdad se ve). -->
+    <mask id="mascara-firma" maskUnits="userSpaceOnUse"
+          x="20" y="16" width="24" height="32" mask-type="alpha">
+      <image href="logo-dibujado-por-lucila.png" x="20" y="14.47" width="26.22" height="35.37"/>
+    </mask>
   </defs>
 
   <!-- La gota de cera: un círculo con el borde irregular, como cuando la
@@ -44,16 +58,13 @@
   <!-- brillo especular de la cera pulida -->
   <ellipse cx="24" cy="21" rx="6" ry="3.4" fill="#f0aab6" opacity=".28"/>
 
-  <!-- La "A" cursiva de un solo trazo (la misma firma que la pantalla de
-       carga), grabada: primero su sombra hundida, después el trazo dorado. -->
-  <g transform="translate(32 33) scale(0.34) translate(-49 -50)"
-     fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M10 80 C 14 74,20 74,26 78 C 32 60,42 32,52 12
-             C 62 34,73 62,88 88 C 79 75,66 64,42 64 C 34 64,29 68,26 74"
-          stroke="#3a0c17" stroke-width="9" stroke-opacity=".7"
-          transform="translate(1.5 2)"/>
-    <path d="M10 80 C 14 74,20 74,26 78 C 32 60,42 32,52 12
-             C 62 34,73 62,88 88 C 79 75,66 64,42 64 C 34 64,29 68,26 74"
-          stroke="url(#cera-a-oro)" stroke-width="8"/>
-  </g>
+  <!-- La "A" que dibujó Lucila para su hija, no una inventada por nosotros,
+       recoloreada al dorado de la web con la máscara de arriba. Se
+       conserva la gota de lacre como fondo (es lo que la hace legible a
+       16×16 px; el trazo solo, sin fondo, se perdería a ese tamaño) y el
+       drop-shadow sugiere que está hundida en la cera, como el grabado
+       que tenía antes. -->
+  <rect x="20" y="16" width="24" height="32" fill="url(#cera-a-oro)"
+        mask="url(#mascara-firma)"
+        style="filter: drop-shadow(1px 1.5px 1px rgba(58,12,23,.8))"/>
 </svg>
