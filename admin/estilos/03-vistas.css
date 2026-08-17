@@ -481,7 +481,14 @@
   border-color: var(--oro);
   color: var(--texto-sobre-principal);
   font-weight: 600;
+  /* E1: una sombra chica para que el filtro activo se sienta "elevado",
+     no solo distinto en color — quien no distingue bien los colores
+     igual nota el relieve. */
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--oro) 35%, transparent);
 }
+
+/* E1: mismo "hundido" que .boton-icono al tocar un filtro. */
+.filtro:active { transform: scale(0.96); }
 
 
 /* ─── 4. VISTA RESUMEN ─────────────────────────────────────────────── */
@@ -530,6 +537,23 @@
 /* La cifra "de tu bolsillo" va en oro porque es la que de verdad
    importa cuando se decide si algo se puede o no. */
 .dinero-resumen__cifra--propio { color: var(--oro); }
+
+
+/* ─── CUÁNTO FALTA (Fase 1 del rediseño, B1) ───────────────────────── */
+/* Mismo texto y mismos umbrales que usa Resumen (textoDeCuentaAtras(),
+   07-vista-resumen.js) — acá solo cambia dónde vive. */
+
+.hoy__cuenta-atras {
+  margin: 0 0 var(--esp-2);
+  font-size: 14px;
+  color: var(--texto-suave);
+}
+/* El día de la fiesta, un acento sutil en vez de un texto más (B3):
+   nada que grite, solo que se note que hoy es distinto. */
+.hoy__cuenta-atras--hoy {
+  color: var(--oro);
+  font-weight: 600;
+}
 
 
 /* ─── LA TARJETA DE ESTADO DE HOY (Fase 2 del rediseño) ────────────── */

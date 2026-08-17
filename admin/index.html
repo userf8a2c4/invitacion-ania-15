@@ -108,6 +108,20 @@
                 stroke-linecap="round"/>
         </svg>
       </button>
+      <!-- La campana: avisos reales tomados de hoy.php (pagos por vencer,
+           tareas atrasadas, cambios rechazados de la cola offline). Ver
+           37-campana.js. Su burbuja NUNCA comparte contador con la de
+           sincronizar: una cuenta avisos, la otra cuenta cambios sin
+           mandar — son cosas distintas aunque las dos usen ponerBurbuja(). -->
+      <button id="boton-campana" class="boton-icono" aria-label="Avisos">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
+          <path d="M12 3a5 5 0 0 0-5 5v3.2c0 .6-.2 1.2-.6 1.7L5 15h14l-1.4-2.1a2.8 2.8 0 0 1-.6-1.7V8a5 5 0 0 0-5-5Z"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M10 18a2 2 0 0 0 4 0" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <em id="burbuja-campana" class="burbuja oculto"></em>
+      </button>
       <!-- Antes acá estaban los tres puntitos del menú. Con las cuatro
            pestañas de abajo, "Más" ya es una de ellas — el menú no
            necesita un segundo camino. Este botón sincroniza a mano:
@@ -120,6 +134,7 @@
           <path d="M18 3v4h-4M6 21v-4h4" fill="none" stroke="currentColor"
                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
+        <em id="burbuja-cola" class="burbuja oculto"></em>
       </button>
     </div>
   </header>
@@ -309,12 +324,16 @@
 <script src="codigo/24-etiquetas.js"></script>
 <script src="codigo/25-hoy.js"></script>
 <script src="codigo/26-sincronizacion.js"></script>
+<!-- Usa pedir() (03) y SIN_LLEGADA (26): tiene que ir después de los dos. -->
+<script src="codigo/36-optimista.js"></script>
 <script src="codigo/27-buscador.js"></script>
 <script src="codigo/28-escaner.js"></script>
 <script src="codigo/29-fab.js"></script>
 <script src="codigo/34-asistente-datos.js"></script>
 <script src="codigo/32-asistente.js"></script>
 <script src="codigo/30-vista-hoy.js"></script>
+<!-- Usa comoFechaCorta (07), SIN_LLEGADA (26) y el hoy.php que 30 ya pide. -->
+<script src="codigo/37-campana.js"></script>
 <script src="codigo/31-vista-planificar.js"></script>
 <script src="codigo/38-metricas.js"></script>
 <script src="codigo/39-vista-metricas.js"></script>

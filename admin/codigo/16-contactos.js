@@ -236,7 +236,7 @@ async function abrirFichaDeContacto(contacto) {
         'No tiene teléfono ni correo cargado.</p>') +
 
     '<button class="boton boton--ancho" id="ficha-editar" ' +
-            'style="margin-bottom:var(--esp-3)">Abrir la ficha completa</button>' +
+            'style="margin-bottom:var(--esp-3)">Editar</button>' +
 
     '<div id="relaciones-contacto">' +
       '<div class="esqueleto"></div>' +

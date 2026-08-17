@@ -78,6 +78,11 @@ function arrancarLaApp() {
     sincronizarCola();
   });
 
+  // F1: refresca sola la vista que se esté mirando cada 60-120s con
+  // señal. Se llama una sola vez; la función misma se cuida de no
+  // duplicar el temporizador si arrancarLaApp() corriera de nuevo.
+  if (typeof arrancarRefrescoPeriodico === 'function') arrancarRefrescoPeriodico();
+
   // Si se entró desde un atajo del icono ("Invitados", "Dinero"…), se
   // abre esa vista en lugar del Resumen.
   const parametros = new URLSearchParams(location.search);
