@@ -65,20 +65,23 @@ function intencionesDelAsistente() {
 /** Las frases de fábrica de cada herramienta del FAB. */
 const FRASES_DE_FABRICA = {
   escanear: ['escanear pase', 'leer un qr', 'escanear', 'abrir el escaner'],
-  buscar:   ['buscar persona', 'buscar invitado', 'buscar', 'quien es'],
-  tarea:    ['nueva tarea', 'agregar tarea', 'crear tarea', 'anotar una tarea'],
-  nota:     ['nueva nota', 'agregar nota', 'anotar', 'tomar nota'],
-  plano:    ['ver plano', 'ver mesas', 'plano de mesas', 'como estan las mesas'],
-  pago:     ['marcar pago', 'pagos pendientes', 'marcar pagado', 'que falta pagar'],
+  buscar:   ['buscar persona', 'buscar invitado', 'buscar', 'quien es', 'donde esta', 'localizar a'],
+  tarea:    ['nueva tarea', 'agregar tarea', 'crear tarea', 'anotar una tarea', 'pendiente nuevo'],
+  nota:     ['nueva nota', 'agregar nota', 'anotar', 'tomar nota', 'apuntar algo'],
+  plano:    ['ver plano', 'ver mesas', 'plano de mesas', 'como estan las mesas', 'salon de mesas'],
+  pago:     ['marcar pago', 'pagos pendientes', 'marcar pagado', 'que falta pagar',
+             'ya pago', 'cobrar', 'liquidar pago', 'saldar cuenta'],
   sync:     ['sincronizar', 'sincronizar ahora', 'actualizar todo', 'mandar los cambios'],
 };
 
 /** A qué pestaña lleva cada frase de navegación. */
 const FRASES_DE_NAVEGACION = {
   hoy:        ['ir a hoy', 'abrir hoy', 'pantalla de hoy'],
-  resumen:    ['ir a resumen', 'ver resumen', 'como vamos', 'que necesita atencion'],
+  resumen:    ['ir a resumen', 'ver resumen', 'como vamos', 'que necesita atencion',
+               'panorama general'],
   invitados:  ['ir a gente', 'ver invitados', 'abrir gente'],
-  dinero:     ['ir a dinero', 'ver presupuesto', 'abrir presupuesto', 'cuanto llevamos gastado'],
+  dinero:     ['ir a dinero', 'ver presupuesto', 'abrir presupuesto', 'cuanto llevamos gastado',
+               'ver gastos'],
   correo:     ['ir a correo', 'ver correo', 'abrir el correo'],
   evento:     ['ir a evento', 'ver evento', 'abrir evento'],
   planificar: ['ir a planificar', 'ver herramientas'],
