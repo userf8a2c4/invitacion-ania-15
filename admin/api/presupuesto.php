@@ -176,6 +176,23 @@ case 'todo':
         ? consultarTodo('SELECT * FROM presupuestos ORDER BY creado_en')
         : [];
 
+    /* Cuánto sale la fiesta POR CADA INVITADO QUE DE VERDAD VA. No se
+       usa el total de confirmaciones (grupos), sino la gente real
+       (adultos + niños) — un costo/invitado que contara "familia
+       López" como una sola persona diría un número falso. Si todavía
+       no hay nadie confirmado, se deja explícitamente vacío (null) en
+       vez de dividir por cero o mostrar un $0 que parecería un error. */
+    $confirmados = existeTabla('confirmaciones')
+        ? consultarUno(
+            "SELECT COALESCE(SUM(adultos), 0) + COALESCE(SUM(ninos), 0) AS personas
+             FROM confirmaciones WHERE asiste = 1"
+          )
+        : ['personas' => 0];
+    $personasConfirmadas = (int) $confirmados['personas'];
+    $costoPorInvitado = $personasConfirmadas > 0
+        ? round(((float) $totales['costo']) / $personasConfirmadas, 2)
+        : null;
+
     responderBien([
         'presupuestos'       => $presupuestos,
         'presupuesto_activo' => $activo,
@@ -189,6 +206,8 @@ case 'todo':
             'pagado'        => (float) $pagado['monto'],
             'padrinos_pendientes'         => (float) $padrinosPendientes['monto'],
             'padrinos_pendientes_cuantos' => (int) $padrinosPendientes['cuantos'],
+            'confirmados'         => $personasConfirmadas,
+            'costo_por_invitado'  => $costoPorInvitado,
         ],
         'categorias'   => $categorias,
         'gastos'       => $gastos,

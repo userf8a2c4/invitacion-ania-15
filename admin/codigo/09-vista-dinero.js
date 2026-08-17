@@ -322,6 +322,17 @@ function bloqueTotales(t) {
               ' sin entregar todavía.</p>';
   }
 
+  /* costo_por_invitado viene null cuando todavía no hay nadie
+     confirmado (presupuesto.php lo calcula así a propósito): se dice
+     explícito por qué no hay número, en vez de mostrar "$0/persona"
+     como si costara gratis. */
+  const costoPorInvitado = t.costo_por_invitado === null || t.costo_por_invitado === undefined
+    ? '<p class="vacio__texto">Costo por invitado: se calcula en cuanto ' +
+      'haya al menos una confirmación que asiste.</p>'
+    : '<p class="vacio__texto">' +
+      seguro(comoDinero(t.costo_por_invitado, false)) + ' por invitado' +
+      ' (' + seguro(pluralizar(t.confirmados, 'confirmado', 'confirmados')) + ').</p>';
+
   return '' +
     selector +
     '<div class="tarjeta">' +
@@ -338,6 +349,7 @@ function bloqueTotales(t) {
             seguro(comoDinero(t.propio, false)) + '</div>' +
         '</div>' +
       '</div>' +
+      costoPorInvitado +
       avisos +
       '<button class="boton boton--chico boton--ancho" id="exportar-dinero" ' +
               'style="margin-top:var(--esp-2)">Descargar</button>' +
