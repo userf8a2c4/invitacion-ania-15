@@ -526,6 +526,28 @@ class BuzonImap {
     }
 
     /**
+     * Borra un mensaje que YA está en la papelera, para siempre — sin
+     * copiarlo a ningún lado antes, porque ahí ya no hay a dónde más
+     * mandarlo.
+     *
+     * ⚠️ Quien llama es responsable de que $carpeta sea de verdad la
+     * papelera. Usarlo sobre cualquier otra carpeta borra sin red de
+     * seguridad (ver 12-vista-correo.js: solo se pide con
+     * `definitivo: true` cuando la carpeta que se está mirando es la
+     * que el propio panel identificó como papelera).
+     *
+     * @param string $carpeta
+     * @param int    $uid
+     * @return bool
+     */
+    public function borrarDefinitivo($carpeta, $uid) {
+        if (!$this->entrarA($carpeta)) return false;
+
+        $this->ordenar("UID STORE $uid +FLAGS (\\Deleted)");
+        return $this->salioBien($this->ordenar('EXPUNGE'));
+    }
+
+    /**
      * Marca un mensaje como no leído.
      *
      * @param string $carpeta

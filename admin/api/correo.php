@@ -273,20 +273,31 @@ case 'no_leido':
         responderBien(['mensaje' => 'Marcado como no leído.']);
     }
 
-    // Borrar.
-    $salio = $buzon->borrar($carpeta, $uid);
+    // Borrar. `definitivo` lo manda 12-vista-correo.js solo cuando la
+    // carpeta que se está mirando es la que el propio panel identificó
+    // como Papelera (ver carpetasEspeciales() ahí) — un correo que ya
+    // está en la papelera no tiene a dónde más copiarse antes de irse.
+    $definitivo = !empty($datos['definitivo']);
+    $salio = $definitivo
+        ? $buzon->borrarDefinitivo($carpeta, $uid)
+        : $buzon->borrar($carpeta, $uid);
     $buzon->cerrar();
 
     if (!$salio) {
         responderMal(
-            'No se pudo borrar: el servidor no tiene una carpeta de papelera ' .
-            'donde guardarlo primero.',
+            $definitivo
+                ? 'No se pudo borrar el correo.'
+                : 'No se pudo borrar: el servidor no tiene una carpeta de papelera ' .
+                  'donde guardarlo primero.',
             502
         );
     }
 
-    anotarEnBitacora($yo, 'borró un correo', 'correo', $uid);
-    responderBien(['mensaje' => 'Correo movido a la papelera.']);
+    anotarEnBitacora($yo, $definitivo ? 'borró un correo para siempre' : 'borró un correo',
+                     'correo', $uid);
+    responderBien([
+        'mensaje' => $definitivo ? 'Correo borrado para siempre.' : 'Correo movido a la papelera.',
+    ]);
     break;
 
 
