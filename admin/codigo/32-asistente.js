@@ -504,8 +504,34 @@ function mostrarOpcionesDeEntidad(resultado, opciones, etiqueta, alElegir) {
 /* ─── 4. LA HOJA DEL ASISTENTE ──────────────────────────────────────── */
 
 /**
- * Abre el asistente: un campo para escribir, chips de contexto según
- * la pestaña donde se esté, y el resultado de lo que se pida.
+ * Pide las sugerencias de todos los agentes (40-agentes.js) y las
+ * pinta. Si un agente falla o no hay señal, se apaga en silencio —
+ * el asistente sigue sirviendo para escribir aunque las sugerencias
+ * no hayan podido cargar.
+ *
+ * @param {Element} contenedor
+ * @returns {Promise<void>}
+ */
+async function cargarSugerenciasDelAsistente(contenedor) {
+  if (!contenedor) return;
+
+  let sugerencias;
+  try {
+    sugerencias = await recogerSugerencias();
+  } catch (error) {
+    contenedor.innerHTML = '';
+    return;
+  }
+
+  contenedor.innerHTML = cajaDeSugerencias(sugerencias);
+  engancharSugerencias(contenedor, sugerencias,
+    () => cargarSugerenciasDelAsistente(contenedor));
+}
+
+/**
+ * Abre el asistente: las sugerencias de los agentes (Paso 5) arriba de
+ * todo, un campo para escribir, chips de contexto según la pestaña
+ * donde se esté, y el resultado de lo que se pida.
  *
  * @returns {void}
  */
@@ -513,6 +539,10 @@ function abrirAsistente() {
   const chips = CONTEXTO_DEL_ASISTENTE[VISTA_ACTUAL] || CONTEXTO_DEL_ASISTENTE.resumen;
 
   const cuerpo = abrirHoja('Asistente',
+    '<div id="asistente-sugerencias" style="margin-bottom:var(--esp-2)">' +
+      '<p class="vacio__texto">Revisando qué hace falta…</p>' +
+    '</div>' +
+
     // .filtros ya existe (estilos/03-vistas.css) y es exactamente esto:
     // una fila de botones chicos que se acomodan solos.
     '<div class="filtros">' +
@@ -529,6 +559,8 @@ function abrirAsistente() {
 
     '<div id="asistente-resultado" style="margin-top:var(--esp-3)"></div>'
   );
+
+  cargarSugerenciasDelAsistente(buscar('#asistente-sugerencias', cuerpo));
 
   const entrada = buscar('#asistente-entrada', cuerpo);
   const resultado = buscar('#asistente-resultado', cuerpo);
