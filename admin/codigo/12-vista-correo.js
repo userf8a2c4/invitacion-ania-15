@@ -28,6 +28,9 @@ let CORREOS = [];
     otro, así que agregar el selector después no toca esta parte. */
 let CARPETA_ACTUAL = 'INBOX';
 
+/** Qué filtro está puesto: 'todos' | 'no_leidos' | 'destacados'. */
+let FILTRO_CORREO = 'todos';
+
 /** Cuánto mide la zona de botones que queda detrás de cada correo. */
 const ANCHO_ACCIONES = 216;   // 3 botones de 72px
 
@@ -43,11 +46,32 @@ async function dibujarCorreo() {
   const vista = buscar('#vista-correo');
 
   vista.innerHTML =
-    '<button class="boton boton--principal boton--ancho" id="correo-nuevo" ' +
-            'style="margin-bottom:var(--esp-2)">Escribir un correo</button>' +
+    '<div style="display:flex;gap:var(--esp-2);margin-bottom:var(--esp-2)">' +
+      '<button class="boton boton--principal" style="flex:1" id="correo-nuevo">' +
+        'Escribir un correo</button>' +
+      '<button class="boton" id="correo-actualizar" aria-label="Actualizar la bandeja">' +
+        '↻</button>' +
+    '</div>' +
+
+    '<div class="filtros" id="filtros-correo" style="margin-bottom:var(--esp-2)">' +
+      botonFiltroCorreo('todos', 'Todos') +
+      botonFiltroCorreo('no_leidos', 'No leídos') +
+      botonFiltroCorreo('destacados', 'Destacados') +
+    '</div>' +
+
     '<div id="lista-correo"></div>';
 
   buscar('#correo-nuevo', vista).addEventListener('click', () => formularioCorreo());
+  buscar('#correo-actualizar', vista).addEventListener('click', () => dibujarCorreo());
+
+  buscarTodos('[data-filtro-correo]', vista).forEach(boton => {
+    boton.addEventListener('click', () => {
+      FILTRO_CORREO = boton.dataset.filtroCorreo;
+      buscarTodos('[data-filtro-correo]', vista).forEach(otro =>
+        otro.classList.toggle('activo', otro === boton));
+      pintarBandeja(buscar('#lista-correo', vista));
+    });
+  });
 
   const lista = buscar('#lista-correo', vista);
   lista.innerHTML =
@@ -79,12 +103,50 @@ async function dibujarCorreo() {
 }
 
 /**
+ * El HTML de un botón de filtro de la bandeja.
+ *
+ * @param {string} clave
+ * @param {string} texto
+ * @returns {string}
+ */
+function botonFiltroCorreo(clave, texto) {
+  return '<button class="filtro' + (clave === FILTRO_CORREO ? ' activo' : '') +
+         '" data-filtro-correo="' + clave + '">' + seguro(texto) + '</button>';
+}
+
+/**
+ * Si un correo pasa el filtro puesto.
+ *
+ * @param {Object} m
+ * @returns {boolean}
+ */
+function correoPasaElFiltro(m) {
+  if (FILTRO_CORREO === 'no_leidos' && m.leido) return false;
+  if (FILTRO_CORREO === 'destacados' && !m.marcado) return false;
+  return true;
+}
+
+/**
  * Pinta las filas de la bandeja.
  *
  * @param {Element} lista
  * @returns {void}
  */
 function pintarBandeja(lista) {
+  const visibles = CORREOS.filter(correoPasaElFiltro);
+
+  if (!visibles.length) {
+    lista.innerHTML = '';
+    pintarVacio(lista,
+      FILTRO_CORREO === 'no_leidos' ? 'No hay correos sin leer' :
+      FILTRO_CORREO === 'destacados' ? 'No hay correos destacados' :
+      'La bandeja está vacía',
+      FILTRO_CORREO === 'todos'
+        ? 'Aquí van a aparecer los correos que lleguen.'
+        : 'Prueba con otro filtro.');
+    return;
+  }
+
   /* La pista de deslizar se muestra solo hasta que se use por primera
      vez. Después estorba: quien ya lo sabe no necesita que se lo
      recuerden cada vez que abre el correo. */
@@ -95,7 +157,11 @@ function pintarBandeja(lista) {
       '<p class="pista-deslizar">Desliza un correo hacia la izquierda ' +
       'para responder, marcar o borrar</p>') +
 
-    CORREOS.map((m, indice) => {
+    visibles.map(m => {
+      // El índice real dentro de CORREOS, no la posición en `visibles`:
+      // es lo que usan engancharBandeja() y accionDeCorreo() para
+      // encontrar de vuelta el mensaje correcto.
+      const indice = CORREOS.indexOf(m);
       const fecha = m.fecha ? comoCuando(m.fecha.slice(0, 10)) : '';
 
       return '' +
