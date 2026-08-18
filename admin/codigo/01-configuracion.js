@@ -256,6 +256,7 @@ const CONFIGURACION = {
         ['colores',    'Elegir la paleta de colores del panel', true],
         ['fab-config', 'Elegir qué hace el botón redondo de abajo'],
         ['comandos-asistente', 'Ver y agregar frases del asistente'],
+        ['respaldo',   'Cuándo se guardó por última vez la copia de todo', true],
         ['instalar',   'Poner el acceso directo en la pantalla de inicio'],
       ],
     },
