@@ -64,6 +64,23 @@ const CATALOGO_FAB = [
   { clave: 'sync', nombre: 'Sincronizar ahora',
     descripcion: 'Mandar ya lo que haya quedado en la cola',
     ejecutar: () => sincronizarAhora() },
+
+  { clave: 'alarma', nombre: 'Nueva alarma',
+    descripcion: 'Un recordatorio con fecha y hora exactas',
+    // formularioDeAlarma() llama a `despues()` sin comprobar que exista
+    // al terminar de guardar — hace falta pasarle algo, aunque no haya
+    // ninguna lista abierta atrás para refrescar.
+    ejecutar: () => formularioDeAlarma(null, () => {}) },
+
+  { clave: 'resumen-ejecutivo', nombre: 'Resumen ejecutivo',
+    descripcion: 'El PDF del presupuesto, listo para mandar o imprimir',
+    soloAdmin: true,
+    ejecutar: () => exportarResumenEjecutivoDinero() },
+
+  { clave: 'respaldo', nombre: 'Respaldar ahora',
+    descripcion: 'Mandar por correo la copia de todo, con los archivos adjuntos',
+    soloAdmin: true,
+    ejecutar: () => abrirHojaDeRespaldo() },
 ];
 
 /**
