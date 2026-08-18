@@ -239,19 +239,21 @@
    * Nada de esto crea objetos: se recorre con índices y se reutiliza el
    * estado del pincel. Es el mismo criterio que en el lienzo de luz.
    *
+   * ⚡ YA NO TIENE SU PROPIO requestAnimationFrame. Antes lo tenía, igual
+   * que 06-petalos-con-fisica.js —dos relojes separados pintando y
+   * calculando exactamente lo mismo, cuadro a cuadro, sin ninguna razón
+   * para estar desacoplados (la física escribe `x/y/angulo` en
+   * `window.LienzoDePetalos.planos`, y esto solo los lee: es el mismo
+   * patrón productor→consumidor que ya se usa para motas y fauna dentro
+   * del lienzo de luz, ver 23-lienzo-de-luz.js). Ahora 06 llama a esta
+   * función directamente al final de su propio cuadro —un
+   * `requestAnimationFrame` menos compitiendo por el hilo principal, sin
+   * cambiar nada de lo que se ve—. Por eso ya no hace falta el guard de
+   * `hayAlgoQueMirar()` acá adentro: quien llama ya lo comprobó.
+   *
    * @returns {void}
    */
   function pintarLosPetalos() {
-    /* Sin nadie mirando no se redibuja. Los canvas conservan lo último
-       pintado, así que los pétalos quedan quietos en su sitio en vez de
-       desaparecer de golpe. hayAlgoQueMirar() (02-utilidades.js) cubre los
-       tres casos: sobre todavía cerrado, pestaña de fondo, o animaciones
-       apagadas. */
-    if (!hayAlgoQueMirar()) {
-      requestAnimationFrame(pintarLosPetalos);
-      return;
-    }
-
     for (let p = 0; p < planos.length; p++) {
       const plano = planos[p];
       const pincel = plano.pincel;
@@ -325,10 +327,10 @@
       }
       }
     }
-
-    requestAnimationFrame(pintarLosPetalos);
   }
 
-  requestAnimationFrame(pintarLosPetalos);
+  // Expuesta para que 06-petalos-con-fisica.js la llame al final de su
+  // propio cuadro, en vez de que cada uno tenga su requestAnimationFrame.
+  window.LienzoDePetalos.pintarUnCuadro = pintarLosPetalos;
 
 })();

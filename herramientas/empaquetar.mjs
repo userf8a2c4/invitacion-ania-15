@@ -1,71 +1,72 @@
 /* ══════════════════════════════════════════════════════════════════════
-   EMPAQUETAR · junta las 14 hojas de estilo en un solo archivo
+   EMPAQUETAR · junta las 14 hojas de estilo en un <style> inline
    ══════════════════════════════════════════════════════════════════════
 
    PARA QUÉ SIRVE
-   index.html pedía 14 hojas de estilo por separado. Cada petición nueva
-   paga su propia ida y vuelta al servidor antes de empezar a bajar el
-   archivo, y eso se nota sobre todo en celular. Este script las junta
-   todas en estilos/_empaquetado.css y hace que index.html pida esa sola.
+   Junta los 14 archivos de estilos/ en uno solo, minificado, y lo escribe
+   DENTRO de index.html, entre los marcadores:
 
-   ⛔ EL JAVASCRIPT NO SE EMPAQUETA, Y ES A PROPÓSITO
-   Se probó juntar también los 26 archivos de codigo/ en uno solo, se midió,
-   y fue claramente PEOR:
+       <!-- ESTILOS-EMPAQUETADOS-INICIO -->
+       <style>...</style>
+       <!-- ESTILOS-EMPAQUETADOS-FIN -->
 
-       escritorio  85 → 60      tiempo de bloqueo  190 ms → 910 ms
-       móvil       75 → 67      tiempo de bloqueo   10 ms → 260 ms
+   NO es un <link> externo — ver la explicación completa (por qué inline,
+   y por qué esta vez es una técnica distinta a las dos que ya se
+   probaron y se descartaron) en el comentario de esa sección de
+   index.html.
 
-   El motivo está en cómo se mide el "tiempo de bloqueo" (Total Blocking
-   Time): no cuenta cuánto trabajo hay en total, cuenta las TAREAS LARGAS
-   — solo suma lo que exceda de 50 ms seguidos sin soltar el hilo.
-
-   Con los archivos sueltos, el navegador compila y ejecuta cada uno como
-   una tarea independiente; ninguna llega a 50 ms, así que casi no suman.
-   Juntos en un archivo de 429 KB pasan a ser UNA sola tarea de casi un
-   segundo que el navegador no puede cortar por la mitad, y durante toda
-   esa tarea la página no responde a nada.
-
-   Con el CSS no pasa: el CSS no se compila ni se ejecuta, solo se parsea,
-   así que juntarlo no genera ninguna tarea larga — solo ahorra peticiones.
-   Por eso este script empaqueta CSS y nada más.
+   ⛔ EL JAVASCRIPT NO SE EMPAQUETA ACÁ, Y ES A PROPÓSITO
+   El JS tiene su propia herramienta (herramientas/minificar-js.mjs) que
+   lo minifica SIN juntarlo en un solo archivo — ver la explicación
+   completa ahí. Con el CSS no hay ese riesgo: el CSS no se compila ni se
+   ejecuta, solo se parsea, así que juntarlo no genera ninguna tarea larga
+   de las que sí le importan al "tiempo de bloqueo" (Total Blocking Time).
 
    POR QUÉ NO SE TOCAN LOS ARCHIVOS ORIGINALES
    Los 14 archivos de estilos/ siguen existiendo, intactos y comentados en
    español: son los que se editan siempre. Este script solo LEE su
-   contenido y arma la copia empaquetada; nunca escribe en ellos.
+   contenido y arma el bloque empaquetado; nunca escribe en ellos.
 
-   SÍ SE MINIFICA (solo comentarios y espacios, nada más)
-   El paquete sin minificar disparó dos auditorías nuevas de Lighthouse:
-   "Minify CSS" y "Reduce unused CSS" — 181 KB, buena parte comentarios
-   largos en español. Se aplica un minificado CONSERVADOR: se sacan los
-   comentarios de estilo C (barra-asterisco … asterisco-barra) y se
-   colapsa todo el espacio en blanco (saltos de línea incluidos) a un
-   solo espacio.
+   SÍ SE MINIFICA (basado en texto, sin parser — ver por qué es seguro)
+   Dos pasadas, las dos sin riesgo de romper nada:
+     1. Sacar los comentarios de estilo C (barra-asterisco … asterisco-
+        barra) y colapsar todo el espacio en blanco (saltos de línea incluidos) a un solo espacio.
+        Es seguro en CSS —a diferencia de JS— porque el espacio en blanco
+        NUNCA es significativo más allá de separar dos palabras: unir
+        todo en una sola línea no cambia el significado de ninguna regla.
+     2. Sacar el espacio pegado a `{` y a `}`, y el `;` que sobra justo
+        antes de un `}` (la última declaración de un bloque no necesita
+        punto y coma). Deliberadamente NO se toca el espacio alrededor de
+        `:` ni de `,`: ahí SÍ puede haber selectores donde el espacio
+        importa (por ejemplo `a :hover` es un selector distinto de
+        `a:hover`), y la ganancia de tocarlos es mínima comparada con el
+        riesgo. Mismo criterio conservador que el resto de este script.
 
-   Es seguro hacerlo así en CSS —a diferencia de JS, donde un regex casero
-   puede romper un string o una regex literal— porque en CSS el espacio en
-   blanco NUNCA es significativo más allá de separar dos palabras: unir
-   todo en una sola línea no cambia el significado de ninguna regla. El
-   único riesgo real serían strings con espacios múltiples a propósito
-   (`content: "a   b"`), que este proyecto no usa.
+   El único riesgo real serían strings con espacios/`;}` a propósito
+   (`content: "a   b"`, `content: ";}"`), que este proyecto no usa.
 
    El resultado no se lee, así que no importa que pierda los comentarios:
    la copia de trabajo son los 14 archivos de estilos/, no esto.
 
-   CÓMO SABE QUÉ ARCHIVOS JUNTAR, LA SEGUNDA VEZ EN ADELANTE
-   La PRIMERA vez, index.html todavía tiene la lista completa de <link>
-   sueltos: de ahí se lee el orden y se guarda en
-   herramientas/_manifiesto-empaquetado.json. Las veces siguientes, este
-   script ve que index.html ya apunta al paquete y lee la lista del
-   manifiesto, así puede regenerarlo sin tener que deshacer index.html.
+   CÓMO SABE QUÉ ARCHIVOS JUNTAR
+   Siempre de herramientas/_manifiesto-empaquetado.json (el orden de los
+   14 archivos). Si ese archivo no existe, no hay forma segura de saber
+   qué juntar — hay que reconstruirlo a mano una sola vez.
+
+   TAMBIÉN ESCRIBE estilos/_empaquetado.css, SOLO COMO REFERENCIA
+   No lo pide nadie (index.html ya no tiene ningún <link> a él): queda
+   para poder ver el CSS final con `git diff` sin tener que leerlo
+   incrustado en medio de index.html. No hace falta subirlo al hosting,
+   pero tampoco molesta si se sube.
 
    CUÁNDO CORRERLO
        node herramientas/subir-version.mjs
        node herramientas/empaquetar.mjs
+       node herramientas/minificar-js.mjs
 
    ⚠️ SI SE EDITA CUALQUIER ARCHIVO DE estilos/, HAY QUE VOLVER A CORRER
    ESTO antes de subir — si no, el cambio queda en el archivo fuente pero
-   la web sigue sirviendo el paquete viejo.
+   index.html sigue teniendo el CSS inline viejo.
    ══════════════════════════════════════════════════════════════════════ */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -76,59 +77,19 @@ const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 const rutaIndex = join(raiz, 'index.html');
 const rutaManifiesto = join(raiz, 'herramientas', '_manifiesto-empaquetado.json');
 
-const html = readFileSync(rutaIndex, 'utf8');
+const MARCADOR_INICIO = '<!-- ESTILOS-EMPAQUETADOS-INICIO -->';
+const MARCADOR_FIN = '<!-- ESTILOS-EMPAQUETADOS-FIN -->';
 
-const patronCss = /<link rel="stylesheet" href="estilos\/([\w.-]+\.css)(?:\?v=(\d+))?">/g;
-
-function recolectar(patron, texto) {
-  const encontrados = [];
-  for (const coincidencia of texto.matchAll(patron)) {
-    encontrados.push({
-      textoCompleto: coincidencia[0],
-      archivo: coincidencia[1],
-      version: coincidencia[2] ? Number(coincidencia[2]) : null,
-    });
-  }
-  return encontrados;
+/* ─── 1. La lista de archivos siempre sale del manifiesto ─────────────── */
+if (!existsSync(rutaManifiesto)) {
+  console.error(`✗ No existe ${rutaManifiesto}.`);
+  console.error('  Sin él no hay forma de saber qué archivos de estilos/ juntar.');
+  console.error('  Hay que reconstruirlo a mano una sola vez: un JSON con');
+  console.error('  { "css": ["00-tipografias.css", "01-fundamentos.css", ...] }');
+  process.exit(1);
 }
-
-/* ─── 1. ¿La lista sale de index.html o del manifiesto? ────────────────── */
-let hojasDeEstilo = recolectar(patronCss, html);
-
-const yaEstaEmpaquetado =
-  hojasDeEstilo.length === 1 && hojasDeEstilo[0].archivo === '_empaquetado.css';
-
-let hayQueReescribirIndex = true;
-
-if (yaEstaEmpaquetado) {
-  if (!existsSync(rutaManifiesto)) {
-    console.error('✗ index.html ya apunta al paquete, pero no existe el manifiesto');
-    console.error(`  (${rutaManifiesto}). Sin él no hay forma de saber qué archivos`);
-    console.error('  originales hay que volver a juntar. Habría que reconstruir a mano');
-    console.error('  la lista de <link> en index.html y correr este script desde ahí.');
-    process.exit(1);
-  }
-  const manifiesto = JSON.parse(readFileSync(rutaManifiesto, 'utf8'));
-  hojasDeEstilo = manifiesto.css.map(archivo => ({ archivo, version: null }));
-  hayQueReescribirIndex = false;
-  console.log(`(leyendo la lista del manifiesto: ${hojasDeEstilo.length} CSS)`);
-} else {
-  if (hojasDeEstilo.length === 0) {
-    console.error('✗ No se encontraron <link rel="stylesheet"> con el patrón esperado.');
-    console.error('  Este script espera exactamente:');
-    console.error('  <link rel="stylesheet" href="estilos/archivo.css?v=NN">');
-    process.exit(1);
-  }
-  /* Se guarda el manifiesto ANTES de tocar index.html, para que si algo
-     falla después no quede un index.html empaquetado sin su manifiesto. */
-  const manifiestoPrevio = existsSync(rutaManifiesto)
-    ? JSON.parse(readFileSync(rutaManifiesto, 'utf8'))
-    : {};
-  writeFileSync(rutaManifiesto, JSON.stringify({
-    ...manifiestoPrevio,
-    css: hojasDeEstilo.map(x => x.archivo),
-  }, null, 2));
-}
+const manifiesto = JSON.parse(readFileSync(rutaManifiesto, 'utf8'));
+const archivosCss = manifiesto.css;
 
 /* ─── 2. Leer cada archivo y armar el contenido combinado ─────────────── */
 const partes = [
@@ -137,10 +98,10 @@ const partes = [
   '   a correr el script. Ver ese archivo para la explicación completa. */\n'
 ];
 
-for (const { archivo } of hojasDeEstilo) {
+for (const archivo of archivosCss) {
   const ruta = join(raiz, 'estilos', archivo);
   if (!existsSync(ruta)) {
-    console.error(`✗ No existe estilos/${archivo} (parte del manifiesto o de index.html).`);
+    console.error(`✗ No existe estilos/${archivo} (parte del manifiesto).`);
     process.exit(1);
   }
   partes.push(`\n/* ═══ ${archivo} ═══ */\n`, readFileSync(ruta, 'utf8'));
@@ -149,8 +110,9 @@ for (const { archivo } of hojasDeEstilo) {
 const cssSinMinificar = partes.join('');
 
 /**
- * Minificado conservador: solo comentarios y espacio en blanco.
- * Ver la explicación completa en el encabezado de este archivo.
+ * Minificado conservador: comentarios, espacio en blanco, y el espacio/
+ * `;` que sobra pegado a `{` `}`. Ver la explicación completa en el
+ * encabezado de este archivo — a propósito NO toca `:` ni `,`.
  * @param {string} codigo
  * @returns {string}
  */
@@ -158,41 +120,43 @@ function minificarCss(codigo) {
   return codigo
     .replace(/\/\*[\s\S]*?\*\//g, ' ')   // fuera los comentarios
     .replace(/\s+/g, ' ')                 // todo el espacio en blanco, uno solo
+    .replace(/\s*\{\s*/g, '{')            // sin espacio pegado a la llave que abre
+    .replace(/\s*\}\s*/g, '}')            // sin espacio pegado a la llave que cierra
+    .replace(/;\}/g, '}')                 // el ; de la última declaración no hace falta
     .trim();
 }
 
 const cssEmpaquetado = minificarCss(cssSinMinificar);
 
-/* ─── 3. Versión ───────────────────────────────────────────────────────── */
-let version;
-if (hayQueReescribirIndex) {
-  const versiones = hojasDeEstilo.map(x => x.version).filter(v => v !== null);
-  version = versiones.length ? Math.max(...versiones) : 1;
-} else {
-  const actual = html.match(/_empaquetado\.css\?v=(\d+)/);
-  version = actual ? Number(actual[1]) : 1;
-}
-
+/* ─── 3. Artefacto de referencia (no se enlaza desde index.html) ──────── */
 writeFileSync(join(raiz, 'estilos', '_empaquetado.css'), cssEmpaquetado);
 
-/* ─── 4. Reescribir index.html — SOLO la primera vez ──────────────────── */
-if (hayQueReescribirIndex) {
-  let htmlNuevo = html.replace(
-    hojasDeEstilo[0].textoCompleto,
-    `<link rel="stylesheet" href="estilos/_empaquetado.css?v=${version}">`
-  );
-  for (let i = 1; i < hojasDeEstilo.length; i++) {
-    htmlNuevo = htmlNuevo.replace('\n' + hojasDeEstilo[i].textoCompleto, '');
-    htmlNuevo = htmlNuevo.replace(hojasDeEstilo[i].textoCompleto, '');
-  }
-  writeFileSync(rutaIndex, htmlNuevo);
+/* ─── 4. Inyectar entre los marcadores de index.html ───────────────────── */
+const html = readFileSync(rutaIndex, 'utf8');
+
+if (!html.includes(MARCADOR_INICIO) || !html.includes(MARCADOR_FIN)) {
+  console.error('✗ No se encontraron los marcadores ESTILOS-EMPAQUETADOS-INICIO/FIN en index.html.');
+  console.error('  Sin ellos no hay dónde inyectar el CSS de forma segura.');
+  process.exit(1);
 }
 
-console.log(`✓ CSS empaquetado con versión v=${version}`);
-console.log(`  estilos/_empaquetado.css  ← ${hojasDeEstilo.length} archivos (${(cssEmpaquetado.length / 1024).toFixed(0)} KB)`);
-console.log(hayQueReescribirIndex
-  ? `  index.html reescrito: ${hojasDeEstilo.length} etiquetas → 1`
-  : '  index.html: sin cambios (ya apuntaba al paquete)');
+const inicio = html.indexOf(MARCADOR_INICIO) + MARCADOR_INICIO.length;
+const fin = html.indexOf(MARCADOR_FIN);
+
+if (fin < inicio) {
+  console.error('✗ El marcador de FIN aparece antes que el de INICIO. Revisar index.html a mano.');
+  process.exit(1);
+}
+
+const htmlNuevo =
+  html.slice(0, inicio) +
+  `\n  <style>${cssEmpaquetado}</style>\n  ` +
+  html.slice(fin);
+
+writeFileSync(rutaIndex, htmlNuevo);
+
+console.log(`✓ CSS empaquetado (${archivosCss.length} archivos, ${(cssEmpaquetado.length / 1024).toFixed(0)} KB) inyectado inline en index.html`);
+console.log('  estilos/_empaquetado.css escrito solo como referencia (no se enlaza).');
 console.log('');
-console.log('El JavaScript NO se empaqueta a propósito — ver la explicación al');
-console.log('principio de este script. Los archivos de estilos/ siguen intactos.');
+console.log('El JavaScript NO se toca acá — correr node herramientas/minificar-js.mjs');
+console.log('aparte. Los archivos de estilos/ siguen intactos.');

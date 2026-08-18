@@ -58,6 +58,17 @@
   Require all denied
 </FilesMatch>
 
+# package.json/package-lock.json (de terser, para minificar-js.mjs) no
+# esconden nada secreto, pero tampoco hay motivo para que se puedan pedir
+# desde afuera. node_modules/ ni se sube (está en .gitignore), esto es
+# nomás por las dudas de que alguna vez se suba sin querer.
+<FilesMatch "^package(-lock)?\.json$">
+  Require all denied
+</FilesMatch>
+<IfModule mod_rewrite.c>
+  RewriteRule ^node_modules/ - [F,L]
+</IfModule>
+
 # ─── Rutas que este sitio no tiene ──────────────────────────────────────
 # Todos los días llegan escaneos automáticos buscando WordPress: prueban
 # wp-login.php, xmlrpc.php, carpetas de plugins, un .git expuesto, un
