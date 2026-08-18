@@ -329,6 +329,95 @@ async function abrirHojaDeCuenta() {
   });
 }
 
+/**
+ * Cuándo fue la última vez que se guardó la copia semanal de todo (base
+ * de datos + los archivos adjuntos de verdad), y un botón para correrla
+ * en el momento. Ver cron_respaldo.php: el respaldo puede fallar en
+ * silencio si el cron de Hostinger apunta al archivo equivocado —esto es
+ * justamente para notarlo antes de que pasen meses, como pasó una vez.
+ *
+ * @returns {Promise<void>}
+ */
+async function abrirHojaDeRespaldo() {
+  const cuerpo = abrirHoja('Estado del respaldo', '<div id="respaldo-estado"></div>');
+  const donde = buscar('#respaldo-estado', cuerpo);
+  pintarCargando(donde, 2);
+
+  const pintar = async () => {
+    let estado;
+    try {
+      estado = await traer('cron_respaldo.php?accion=estado');
+    } catch (error) {
+      pintarError(donde, error.message, pintar);
+      return;
+    }
+
+    if (!estado) {
+      donde.innerHTML =
+        '<p class="aviso-error">Todavía no corrió ni una vez. Si el cron ya está ' +
+        'programado en hPanel, revisa que el comando apunte exactamente a ' +
+        'admin/api/cron_respaldo.php — un cron apuntando a otro archivo no avisa ' +
+        'de ningún error, simplemente nunca hace nada.</p>' +
+        '<button type="button" class="boton boton--principal boton--ancho" ' +
+                'id="respaldo-correr" style="margin-top:var(--esp-3)">' +
+          'Respaldar ahora' +
+        '</button>';
+    } else {
+      const dias = diasHasta(String(estado.cuando).slice(0, 10));
+      const haceCuanto = dias === 0 ? 'hoy'
+        : dias === -1 ? 'ayer'
+        : dias < 0 ? 'hace ' + (-dias) + ' días'
+        : 'en el futuro (revisa la hora del servidor)';
+
+      const vieja = dias < -10;
+
+      donde.innerHTML =
+        '<div class="detalle">' +
+          '<span class="detalle__rotulo">Última vez</span>' +
+          '<span class="detalle__valor">' + seguro(comoFecha(String(estado.cuando).slice(0, 10))) +
+            ' (' + haceCuanto + ')</span>' +
+          '<span class="detalle__rotulo">Registros guardados</span>' +
+          '<span class="detalle__valor">' + seguro(estado.registros) + '</span>' +
+          '<span class="detalle__rotulo">Archivos adjuntos incluidos</span>' +
+          '<span class="detalle__valor">' + seguro(estado.archivos_incluidos) +
+            (estado.archivos_afuera
+              ? ' (' + estado.archivos_afuera + ' quedaron afuera por peso, se reintentan solos)'
+              : '') + '</span>' +
+          '<span class="detalle__rotulo">Correos enviados</span>' +
+          '<span class="detalle__valor">' + seguro(estado.enviados) +
+            (estado.errores ? ' (' + estado.errores + ' con error)' : '') + '</span>' +
+        '</div>' +
+        (vieja
+          ? '<p class="aviso-error" style="margin-top:var(--esp-2)">Van más de 10 días ' +
+            'sin respaldo. Revisa en hPanel que el cron semanal siga programado y ' +
+            'apuntando a este archivo.</p>'
+          : '') +
+        '<button type="button" class="boton boton--principal boton--ancho" ' +
+                'id="respaldo-correr" style="margin-top:var(--esp-3)">' +
+          'Respaldar ahora' +
+        '</button>';
+    }
+
+    buscar('#respaldo-correr', donde).addEventListener('click', async () => {
+      const boton = buscar('#respaldo-correr', donde);
+      boton.disabled = true;
+      boton.textContent = 'Respaldando…';
+
+      try {
+        await mandar('cron_respaldo.php', {});
+        avisar('Respaldo enviado.');
+        pintar();
+      } catch (error) {
+        avisar(error.message, true);
+        boton.disabled = false;
+        boton.textContent = 'Respaldar ahora';
+      }
+    });
+  };
+
+  pintar();
+}
+
 /* La gestión de avisos y la instalación viven en 15-instalar-y-avisos.js:
    abrirHojaDeAvisos(), instalarLaApp() y abrirHojaDeNuevoAdministrador(). */
 

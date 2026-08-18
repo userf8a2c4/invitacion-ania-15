@@ -325,6 +325,7 @@ function nombreDeOpcionDeMenu(clave) {
     'colores':     'Colores del panel',
     'fab-config':  'Mis herramientas rápidas',
     'comandos-asistente': 'Comandos del asistente',
+    'respaldo':    'Estado del respaldo',
     'instalar':    'Instalar en la pantalla de inicio',
     'metricas':    'Métricas de uso',
   };
@@ -385,6 +386,10 @@ function atenderMenu(opcion) {
 
     case 'bitacora':
       abrirHojaDeBitacora();
+      break;
+
+    case 'respaldo':
+      abrirHojaDeRespaldo();
       break;
 
     case 'colores':
