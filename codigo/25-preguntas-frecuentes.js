@@ -16,19 +16,38 @@
    de texto no hay nada que escapar: desaparece toda una familia de
    agujeros de seguridad.
 
-   DE DÓNDE SALE EL CONTENIDO
-   De PREGUNTAS_FRECUENTES, en codigo/00-conocimiento-chatbot.js. Acá no
-   hay ni un dato de la fiesta escrito a mano.
+   DE DÓNDE SALE EL CONTENIDO — Y POR QUÉ NO SE CARGA SOLO
+   De PREGUNTAS_FRECUENTES, en codigo/00-conocimiento-chatbot.js (13 KB).
+   Acá no hay ni un dato de la fiesta escrito a mano. Ese archivo es el
+   único contenido de la web que la mayoría de los invitados nunca llega
+   a abrir —hay que tocar el botón "?" para necesitarlo— así que en vez
+   de bajarlo y parsearlo siempre (aunque nadie lo use), se pide recién
+   al primer toque del botón. Mismo truco que ya usa
+   codigo/26-mapa-a-pedido.js con el iframe de Google Maps.
 
    ÍNDICE
      1. Los elementos de la página
-     2. Armar la lista
-     3. Abrir y cerrar el panel
-     4. El acordeón
-     5. Aparecer recién cuando se abrió el sobre
+     2. Armar la lista (ahora es una función, no corre sola)
+     3. Cargar codigo/00-conocimiento-chatbot.js al primer toque
+     4. Abrir y cerrar el panel
+     5. El acordeón
+     6. Aparecer recién cuando se abrió el sobre
    ══════════════════════════════════════════════════════════════════════ */
 
 (function preparaLasPreguntasFrecuentes() {
+
+  /* Hay que leerlo ACÁ, antes de cualquier otra cosa: document.currentScript
+     solo es válido mientras este archivo se está ejecutando por primera
+     vez, no más tarde (por ejemplo, ya no sirve adentro de un evento de
+     clic). Se arma la dirección del archivo de datos reemplazando el
+     nombre en la propia URL de este script, así queda con el mismo
+     "?v=NN" y la misma carpeta (codigo/ o codigo/produccion/) sin tener
+     que repetirlos a mano — y sin desincronizarse nunca de index.html. */
+  const scriptActual = document.currentScript;
+  const origenDeLosDatos = scriptActual
+    ? scriptActual.src.replace('25-preguntas-frecuentes.js', '00-conocimiento-chatbot.js')
+    : 'codigo/00-conocimiento-chatbot.js';
+
 
   /* ─── 1. LOS ELEMENTOS DE LA PÁGINA ────────────────────────────────── */
 
@@ -40,10 +59,9 @@
 
   // Si falta cualquier pieza, este módulo se calla y la web sigue andando.
   if (!boton || !panel || !lista) return;
-  if (typeof PREGUNTAS_FRECUENTES === 'undefined') return;
 
 
-  /* ─── 2. ARMAR LA LISTA ────────────────────────────────────────────── */
+  /* ─── 2. ARMAR LA LISTA (función — no corre sola) ──────────────────── */
 
   /**
    * Resuelve la respuesta de una entrada. Pueden ser función o texto
@@ -64,64 +82,103 @@
     }
   }
 
-  let contador = 0;
+  /**
+   * Lee PREGUNTAS_FRECUENTES (ya tiene que estar cargado) y arma el
+   * acordeón adentro de `lista`. Se llama una sola vez, la primera vez
+   * que se abre el panel.
+   * @returns {boolean} true si quedó alguna pregunta con respuesta.
+   */
+  function armarLista() {
+    let contador = 0;
 
-  PREGUNTAS_FRECUENTES.forEach(entrada => {
-    const respuesta = resolverRespuesta(entrada);
+    PREGUNTAS_FRECUENTES.forEach(entrada => {
+      const respuesta = resolverRespuesta(entrada);
 
-    // Sin respuesta, la pregunta no se muestra. Vale más que no esté a
-    // que se abra y adentro no haya nada.
-    if (!respuesta || !entrada.pregunta) return;
+      // Sin respuesta, la pregunta no se muestra. Vale más que no esté a
+      // que se abra y adentro no haya nada.
+      if (!respuesta || !entrada.pregunta) return;
 
-    contador += 1;
-    const idPregunta  = `qa-p-${contador}`;
-    const idRespuesta = `qa-r-${contador}`;
+      contador += 1;
+      const idPregunta  = `qa-p-${contador}`;
+      const idRespuesta = `qa-r-${contador}`;
 
-    const item = document.createElement('div');
-    item.className = 'qa__item';
+      const item = document.createElement('div');
+      item.className = 'qa__item';
 
-    // LA PREGUNTA. Va con textContent y no con innerHTML: es texto, y
-    // tratarlo como texto es gratis y cierra la puerta de una vez.
-    const botonPregunta = document.createElement('button');
-    botonPregunta.type = 'button';
-    botonPregunta.className = 'qa__pregunta';
-    botonPregunta.id = idPregunta;
-    botonPregunta.setAttribute('aria-expanded', 'false');
-    botonPregunta.setAttribute('aria-controls', idRespuesta);
-    botonPregunta.textContent = entrada.pregunta;
+      // LA PREGUNTA. Va con textContent y no con innerHTML: es texto, y
+      // tratarlo como texto es gratis y cierra la puerta de una vez.
+      const botonPregunta = document.createElement('button');
+      botonPregunta.type = 'button';
+      botonPregunta.className = 'qa__pregunta';
+      botonPregunta.id = idPregunta;
+      botonPregunta.setAttribute('aria-expanded', 'false');
+      botonPregunta.setAttribute('aria-controls', idRespuesta);
+      botonPregunta.textContent = entrada.pregunta;
 
-    const flecha = document.createElement('span');
-    flecha.className = 'qa__flecha';
-    flecha.setAttribute('aria-hidden', 'true');
-    flecha.textContent = '›';
-    botonPregunta.appendChild(flecha);
+      const flecha = document.createElement('span');
+      flecha.className = 'qa__flecha';
+      flecha.setAttribute('aria-hidden', 'true');
+      flecha.textContent = '›';
+      botonPregunta.appendChild(flecha);
 
-    // LA RESPUESTA. Acá sí va innerHTML, porque el texto es nuestro y
-    // lleva <b> y enlaces a propósito (el mapa, la mesa de regalos).
-    const cajaRespuesta = document.createElement('div');
-    cajaRespuesta.className = 'qa__respuesta';
-    cajaRespuesta.id = idRespuesta;
-    cajaRespuesta.setAttribute('role', 'region');
-    cajaRespuesta.setAttribute('aria-labelledby', idPregunta);
+      // LA RESPUESTA. Acá sí va innerHTML, porque el texto es nuestro y
+      // lleva <b> y enlaces a propósito (el mapa, la mesa de regalos).
+      const cajaRespuesta = document.createElement('div');
+      cajaRespuesta.className = 'qa__respuesta';
+      cajaRespuesta.id = idRespuesta;
+      cajaRespuesta.setAttribute('role', 'region');
+      cajaRespuesta.setAttribute('aria-labelledby', idPregunta);
 
-    const texto = document.createElement('div');
-    texto.className = 'qa__texto';
-    texto.innerHTML = respuesta;
-    cajaRespuesta.appendChild(texto);
+      const texto = document.createElement('div');
+      texto.className = 'qa__texto';
+      texto.innerHTML = respuesta;
+      cajaRespuesta.appendChild(texto);
 
-    item.appendChild(botonPregunta);
-    item.appendChild(cajaRespuesta);
-    lista.appendChild(item);
-  });
+      item.appendChild(botonPregunta);
+      item.appendChild(cajaRespuesta);
+      lista.appendChild(item);
+    });
 
-  // Si no quedó ninguna pregunta con respuesta, el botón no tiene sentido.
-  if (contador === 0) {
-    boton.remove();
-    return;
+    return contador > 0;
   }
 
 
-  /* ─── 3. ABRIR Y CERRAR EL PANEL ───────────────────────────────────── */
+  /* ─── 3. CARGAR codigo/00-conocimiento-chatbot.js AL PRIMER TOQUE ──── */
+
+  /* Promesa única: si se toca el botón varias veces rápido, todas esperan
+     la MISMA carga en vez de inyectar el <script> más de una vez. */
+  let cargaDeDatos = null;
+
+  /**
+   * Inyecta codigo/00-conocimiento-chatbot.js si todavía no está, y arma
+   * la lista apenas termina de cargar. Sin red o con el archivo roto, el
+   * panel se abre igual mostrando "no se pudo cargar" en vez de romperse.
+   * @returns {Promise<boolean>} true si el panel tiene contenido para mostrar.
+   */
+  function cargarConocimientoYArmar() {
+    if (cargaDeDatos) return cargaDeDatos;
+
+    cargaDeDatos = new Promise(resolver => {
+      // Ya está (por ejemplo, si algún día se decide precargarlo antes).
+      if (typeof PREGUNTAS_FRECUENTES !== 'undefined') {
+        resolver(armarLista());
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = origenDeLosDatos;
+      script.onload = () => {
+        resolver(typeof PREGUNTAS_FRECUENTES !== 'undefined' && armarLista());
+      };
+      script.onerror = () => resolver(false);
+      document.head.appendChild(script);
+    });
+
+    return cargaDeDatos;
+  }
+
+
+  /* ─── 4. ABRIR Y CERRAR EL PANEL ───────────────────────────────────── */
 
   let estaAbierto = false;
 
@@ -154,7 +211,15 @@
     }
   }
 
-  boton.addEventListener('click', () => alternarPanel(!estaAbierto));
+  // El primer toque dispara la carga (ver sección 3) y recién abre cuando
+  // termina; los toques siguientes abren directo, porque la promesa de
+  // carga ya está resuelta y se devuelve al instante. Con el panel
+  // abierto, tocar el botón de nuevo cierra — mismo comportamiento de
+  // siempre, sin esperar nada.
+  boton.addEventListener('click', () => {
+    if (estaAbierto) { alternarPanel(false); return; }
+    cargarConocimientoYArmar().then(() => alternarPanel(true));
+  });
   if (cerrar) cerrar.addEventListener('click', () => alternarPanel(false));
   if (velo)   velo.addEventListener('click',   () => alternarPanel(false));
 
@@ -172,7 +237,7 @@
   });
 
 
-  /* ─── 4. EL ACORDEÓN ───────────────────────────────────────────────── */
+  /* ─── 5. EL ACORDEÓN ───────────────────────────────────────────────── */
 
   /* Una sola respuesta abierta a la vez. Con diez preguntas desplegadas
      el panel se vuelve un muro de texto con scroll infinito, que es
@@ -195,7 +260,7 @@
   });
 
 
-  /* ─── 5. APARECER RECIÉN CUANDO SE ABRIÓ EL SOBRE ──────────────────── */
+  /* ─── 6. APARECER RECIÉN CUANDO SE ABRIÓ EL SOBRE ──────────────────── */
 
   /* Mientras se ve el sobre cerrado, la pantalla tiene que ser el sobre y
      nada más. Un botón de ayuda flotando ahí adelanta que hay una web
