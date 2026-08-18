@@ -25,16 +25,63 @@
      hPanel → Avanzado → Trabajos cron → Crear
      Comando:  php /home/USUARIO/domains/aniaxv.com/public_html/admin/api/cron_respaldo.php
      Cuándo:   una vez por semana, domingo a las 3 de la mañana
+
+   ⚠️ REVISÁ QUE EL CRON APUNTE ACÁ Y NO A OTRO ARCHIVO.
+   El incidente de agosto 2026 (contratos y fotos perdidos sin ninguna
+   copia) pasó, entre otras cosas, porque el cron de "domingo 3 AM" que
+   se creó en hPanel apuntaba por error a cron_alarmas.php — el respaldo
+   nunca corrió, ni una sola vez, y nadie se enteró hasta que fue tarde.
+   Desde Ajustes → Estado del respaldo (dentro del panel) se puede ver
+   cuándo fue la última vez sin tener que entrar a hPanel.
+
+   QUÉ SE LE PUEDE PEDIR
+     (sin parámetros)      corre el respaldo — desde CLI (el cron), con
+                            ?llave=… (a mano, como instalar.php), o con
+                            sesión de administradora (el botón del panel)
+     GET ?accion=estado    cuándo fue la última vez, sin correr nada —
+                            exige sesión de administradora
    ══════════════════════════════════════════════════════════════════════ */
 
 require_once __DIR__ . '/_lib/bd.php';
+require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
 require_once __DIR__ . '/_lib/correo.php';
 
 $desdeLaConsola = (php_sapi_name() === 'cli');
 
-if (!$desdeLaConsola && !llaveDeArranqueCorrecta($_GET['llave'] ?? '')) {
-    responderMal('Llave incorrecta.', 403);
+/* ─── ver el estado, sin correr el respaldo ──────────────────────────── */
+/* Lee cuándo fue la última vez, para poder mostrarlo en Ajustes → Estado
+   del respaldo — así un cron mal configurado (como el que causó la
+   pérdida de archivos de agosto 2026: apuntaba a cron_alarmas.php en vez
+   de a este archivo) se nota a la semana, no meses después. Exige sesión
+   de administradora: no hace falta la llave del .env solo para MIRAR. */
+if (!$desdeLaConsola && ($_GET['accion'] ?? '') === 'estado') {
+    exigirAdministrador();
+    $fila = existeTabla('ajustes')
+        ? consultarUno("SELECT valor FROM ajustes WHERE clave = 'ultimo_respaldo'")
+        : null;
+    responderBien($fila ? json_decode($fila['valor'], true) : null);
+}
+
+/* ─── correr el respaldo ──────────────────────────────────────────────── */
+/* Tres formas de autorizarlo, para los tres lugares desde donde se llama:
+     · CLI          → el cron de Hostinger, sin sesión ni llave posibles.
+     · llave         → abrir la URL a mano, como diagnostico.php e instalar.php.
+     · sesión admin  → el botón "Respaldar ahora" de Ajustes. A propósito
+       NO se usa la llave para ese botón: significaría escribirla en el
+       JavaScript del panel, visible para cualquiera que abra las
+       herramientas del navegador — exactamente lo que la nota de
+       entorno.php sobre "la llave viaja en la URL" advierte que hay que
+       evitar. Una sesión de administradora ya es prueba suficiente de
+       quién es. */
+if (!$desdeLaConsola) {
+    $llaveVale = llaveDeArranqueCorrecta($_GET['llave'] ?? '');
+
+    // Sin llave válida, que valga una sesión de administradora — y si
+    // tampoco hay eso, no hay forma de autorizar la petición.
+    if (!$llaveVale) {
+        exigirAdministrador();
+    }
 }
 
 
@@ -333,6 +380,29 @@ foreach ($destinatarios as $destino) {
 
     if ($resultado === true) $enviados++;
     else $errores[] = "$destino: $resultado";
+}
+
+/* Queda registrado ACÁ, no solo en el log del servidor (que nadie del
+   lado de Lucila puede leer): así "Ajustes → Estado del respaldo" puede
+   mostrar la fecha real sin tener que abrir hPanel. Se guarda incluso si
+   el envío por correo falló entero — un respaldo que se armó pero no
+   pudo mandarse igual es información útil ("está corriendo, algo pasa
+   con el correo"), muy distinta de "no corre desde hace dos meses". */
+if (existeTabla('ajustes')) {
+    $estado = json_encode([
+        'cuando'            => date('Y-m-d H:i:s'),
+        'registros'         => $cuantasFilas,
+        'archivos_incluidos'=> count($archivosParaRespaldar),
+        'archivos_afuera'   => count($archivosQueNoEntraron),
+        'enviados'          => $enviados,
+        'errores'           => count($errores),
+    ], JSON_UNESCAPED_UNICODE);
+
+    ejecutar(
+        "INSERT INTO ajustes (clave, valor) VALUES ('ultimo_respaldo', :v)
+         ON DUPLICATE KEY UPDATE valor = :v2",
+        [':v' => $estado, ':v2' => $estado]
+    );
 }
 
 terminarRespaldo([
