@@ -494,6 +494,13 @@ CREATE TABLE IF NOT EXISTS preferencias_invitado (
 -- Se guarda una sola fila por par, con el id más chico primero, para no
 -- terminar con "A no va con B" y "B no va con A" como dos reglas
 -- distintas que después se contradicen.
+--
+-- invitado_a/invitado_b son ids de CONFIRMACIÓN (la familia entera).
+-- acompanante_a/acompanante_b (ver más abajo, se agregan por
+-- instalar.php) son la versión fina: cuando los dos están puestos, la
+-- regla es entre esas dos PERSONAS puntuales, aunque sean de la misma
+-- familia — "el tío Fulano no con el tío Mengano" sin tener que separar
+-- a las dos familias enteras si el resto se lleva bien.
 CREATE TABLE IF NOT EXISTS incompatibilidades (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   invitado_a INT NOT NULL,
@@ -503,6 +510,60 @@ CREATE TABLE IF NOT EXISTS incompatibilidades (
   UNIQUE KEY un_par (invitado_a, invitado_b),
   KEY por_a (invitado_a),
   KEY por_b (invitado_b)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ─────────────────────────────────────────────────────────────────────
+-- REGLAS POR PERSONA, NO SOLO POR FAMILIA (Fase 9)
+--
+-- POR QUÉ HACÍA FALTA
+-- Hasta acá, `preferencias_invitado` e `incompatibilidades` trabajan a
+-- nivel de CONFIRMACIÓN: la familia entera se mueve como un solo bloque
+-- a una mesa. Sirve para "los amigos de baile juntos" o "los tíos que
+-- se pelean" —cada uno suele confirmar por su cuenta, así que ya
+-- funciona— pero no alcanza para "el hijo adolescente de esta familia
+-- se sienta con los jóvenes, sus papás con los adultos": ahí hace
+-- falta poder sacar a UNA persona de su familia sin tocar al resto.
+--
+-- CÓMO FUNCIONA
+-- Una fila en `acompanante_reglas` para una persona SIGNIFICA que esa
+-- persona se saca del bloque de su familia y se sienta por su cuenta
+-- (con su propio grupo o su propia mesa preferida). Sin fila, sigue
+-- exactamente igual que hasta ahora: viaja con el resto de su familia.
+-- Es aditivo a propósito — nadie que no tenga una fila acá nota ningún
+-- cambio de comportamiento.
+CREATE TABLE IF NOT EXISTS acompanante_reglas (
+  acompanante_id INT NOT NULL PRIMARY KEY,
+  grupo_id       INT DEFAULT NULL,
+  mesa_preferida INT DEFAULT NULL,
+  notas          VARCHAR(300) NOT NULL DEFAULT '',
+  KEY por_grupo (grupo_id),
+  CONSTRAINT acomp_regla_grupo FOREIGN KEY (grupo_id)
+    REFERENCES grupos_invitados(id) ON DELETE SET NULL,
+  CONSTRAINT acomp_regla_acompanante FOREIGN KEY (acompanante_id)
+    REFERENCES acompanantes(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Dónde queda sentada una persona que se sacó de su familia (tiene fila
+-- en acompanante_reglas). Tabla APARTE de asignacion_mesas, no una
+-- columna nueva ahí: asignacion_mesas tiene UNIQUE(confirmacion_id) —
+-- una fila por familia — y forzar ahí una excepción por persona
+-- hubiera significado tocar esa llave única en una tabla que ya tiene
+-- datos reales de producción. Separada, no hay nada que migrar y nada
+-- que romper.
+CREATE TABLE IF NOT EXISTS asignacion_mesas_persona (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  acompanante_id INT NOT NULL,
+  mesa_id        INT NOT NULL,
+  fijada         TINYINT(1) NOT NULL DEFAULT 0,
+  notas          VARCHAR(200) NOT NULL DEFAULT '',
+  UNIQUE KEY una_mesa_por_persona (acompanante_id),
+  KEY por_mesa (mesa_id),
+  CONSTRAINT asig_persona_acompanante FOREIGN KEY (acompanante_id)
+    REFERENCES acompanantes(id) ON DELETE CASCADE,
+  CONSTRAINT asig_persona_mesa FOREIGN KEY (mesa_id)
+    REFERENCES mesas(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

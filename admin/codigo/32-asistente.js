@@ -517,7 +517,7 @@ async function cargarSugerenciasDelAsistente(contenedor) {
 
   let sugerencias;
   try {
-    sugerencias = await recogerSugerencias();
+    sugerencias = await recogerSugerencias(VISTA_ACTUAL);
   } catch (error) {
     contenedor.innerHTML = '';
     return;
@@ -624,6 +624,19 @@ function abrirAsistente() {
       return;
     }
 
+    // Antes de rendirse: ¿es una muestra de cariño o jerga afectiva
+    // reconocida (46-agente-motivador.js)? Acá, en el chat libre, es
+    // donde esta capa tiene que notarse más — no hay una pantalla más
+    // "de charla" que esta. No cuenta como frase fallida: entendió
+    // perfectamente lo que se le dijo, solo que no era un comando.
+    if (typeof respuestaCarinosaPara === 'function') {
+      const carinosa = respuestaCarinosaPara(texto);
+      if (carinosa) {
+        resultado.innerHTML = '<p style="margin:var(--esp-1) 0">' + seguro(carinosa) + '</p>';
+        return;
+      }
+    }
+
     registrarEvento('asistente', 'frase_fallida', { texto: texto.trim() });
 
     resultado.innerHTML =
@@ -661,6 +674,11 @@ function abrirComandosDelAsistente() {
     '</p>' +
     '<div id="comandos-lista"></div>'
   );
+
+  // La sección de "Palabras cariñosas" (46-agente-motivador.js) vive acá
+  // mismo, debajo de la lista de comandos — mismo espíritu ("enseñarle
+  // cómo hablo yo"), sin sumar otra entrada al menú de Ajustes.
+  if (typeof pintarSeccionCarinosa === 'function') pintarSeccionCarinosa(cuerpo);
 
   const pintar = () => {
     buscar('#comandos-lista', cuerpo).innerHTML = intenciones.map(intencion => {
