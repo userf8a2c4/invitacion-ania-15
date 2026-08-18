@@ -121,6 +121,21 @@
   /** Cuánto los arrastra el movimiento del mouse (el "aire" de la mano). */
   const ARRASTRE_DEL_MOUSE = 0.22;
 
+  /* ⚡ TECHO DE VELOCIDAD — POR QUÉ HACÍA FALTA.
+     FUERZA_DE_EMPUJE se pensó para un MOUSE, que atraviesa el radio de
+     influencia en un par de cuadros de un movimiento continuo. Un DEDO se
+     queda quieto encima de un pétalo varios cientos de milisegundos —no
+     "pasa de largo", "se queda"—, y ahí el empujón compone cuadro a
+     cuadro sin nada que lo frene de verdad (ROZAMIENTO_DEL_AIRE solo saca
+     un 1 % por cuadro): la velocidad de régimen ronda los 2300 px/s,
+     suficiente para cruzar una pantalla de celular en menos de 200 ms.
+     Eso es lo que se sentía como "el pétalo sale disparado" en vez de "el
+     viento lo aparta". `velocidadAngular` ya tenía este mismo tipo de
+     techo (ver el `limitar(...)` más abajo); a `velocidadX/Y` les
+     faltaba. El número es a ojo — se puede subir o bajar según cómo se
+     sienta el empujón, igual que se ajustó el tope de giro. */
+  const VELOCIDAD_MAXIMA_DEL_EMPUJE = 320;   // px/s
+
   /** Los tres dibujos de pétalo que se van alternando. */
   const IMAGENES_DE_PETALO = [
     'recursos/petalo-rosa-1.svg',
@@ -453,9 +468,21 @@
     petalo.velocidadX += direccionX * FUERZA_DE_EMPUJE * influenciaSuavizada * dt;
     petalo.velocidadY += direccionY * FUERZA_DE_EMPUJE * influenciaSuavizada * dt;
 
-    // b) Arrastre: el pétalo se lleva parte de la velocidad de la mano
-    petalo.velocidadX += velocidadMouseX * ARRASTRE_DEL_MOUSE * influenciaSuavizada;
-    petalo.velocidadY += velocidadMouseY * ARRASTRE_DEL_MOUSE * influenciaSuavizada;
+    // b) Arrastre: el pétalo se lleva parte de la velocidad de la mano.
+    //
+    // ⚡ ESCALADO POR dt — POR QUÉ HACÍA FALTA.
+    // velocidadMouseX/Y ya viene normalizada a "distancia por cuadro de
+    // 60 Hz" (ver el `* 0.016` fijo en dibujarCuadro), pero acá se SUMABA
+    // una vez por cuadro de física sin volver a tener en cuenta cuánto duró
+    // ese cuadro. En una pantalla de 60 Hz eso es correcto (cada cuadro
+    // dura ~16 ms, coincide con la normalización); en una de 90 o 120 Hz,
+    // el mismo empujón se aplicaba más veces por segundo real, así que el
+    // arrastre pegaba más fuerte cuanto mejor la pantalla del invitado.
+    // Dividiendo por esos mismos 0.016 ms de referencia, el total por
+    // segundo queda igual sin importar la tasa de refresco.
+    const escalaDelCuadro = dt / 0.016;
+    petalo.velocidadX += velocidadMouseX * ARRASTRE_DEL_MOUSE * influenciaSuavizada * escalaDelCuadro;
+    petalo.velocidadY += velocidadMouseY * ARRASTRE_DEL_MOUSE * influenciaSuavizada * escalaDelCuadro;
 
     // c) Giro provocado por el roce del aire
     const torsion = (direccionX * velocidadMouseY - direccionY * velocidadMouseX);
@@ -495,6 +522,11 @@
     // Tope de giro, para que nunca parezca una hélice
     petalo.velocidadAngular = limitar(petalo.velocidadAngular, -420, 420);
 
+    // Tope de velocidad lineal: el empujón del mouse/dedo aparta, no dispara
+    // (ver VELOCIDAD_MAXIMA_DEL_EMPUJE más arriba).
+    petalo.velocidadX = limitar(petalo.velocidadX, -VELOCIDAD_MAXIMA_DEL_EMPUJE, VELOCIDAD_MAXIMA_DEL_EMPUJE);
+    petalo.velocidadY = limitar(petalo.velocidadY, -VELOCIDAD_MAXIMA_DEL_EMPUJE, VELOCIDAD_MAXIMA_DEL_EMPUJE);
+
     // POSICIÓN = posición anterior + velocidad × tiempo
     petalo.x += petalo.velocidadX * dt;
     petalo.y += petalo.velocidadY * dt;
@@ -522,9 +554,21 @@
       petalo.velocidadAngular = numeroAlAzar(-45, 45);
     }
 
-    // Si se fue por un costado, reaparece por el otro
-    if (petalo.x < -60) petalo.x = anchoDePantalla + 40;
-    if (petalo.x > anchoDePantalla + 60) petalo.x = -40;
+    /* Si se fue por un costado, reaparece por el otro.
+       ⚡ ACÁ TAMBIÉN SE FRENA LA VELOCIDAD, Y ES POR ESTO: un pétalo
+       empujado con fuerza hacia un borde salía de pantalla y volvía a
+       entrar por el otro lado CONSERVANDO toda su velocidad (a diferencia
+       del reciclado de abajo, unas líneas más arriba, que sí la
+       reiniciaba). Al ojo eso no se lee como "cruzó y volvió": se lee
+       como "salió disparado de la nada" desde el borde de reaparición —
+       y como reaparece siempre del lado opuesto al que se lo empujó, es
+       lo que se venía viendo como "siempre hacia la izquierda" cuando en
+       realidad el empujón podía haber sido hacia cualquier lado. Con el
+       techo de velocidad de más arriba esto ya casi no debería pasar,
+       pero conservar velocidad en un teletransporte es incorrecto de
+       todas formas, pase lo que pase con el resto. */
+    if (petalo.x < -60) { petalo.x = anchoDePantalla + 40; petalo.velocidadX *= 0.2; }
+    if (petalo.x > anchoDePantalla + 60) { petalo.x = -40; petalo.velocidadX *= 0.2; }
 
     /* ⚡ CON EL LIENZO NO SE ESCRIBE NADA ACÁ.
        La posición y el giro ya quedaron en petalo.x / .y / .angulo, y el
@@ -589,6 +633,17 @@
     for (const petalo of petalos) {
       if (!petalo.activo) continue;   // desactivado por el gobernador: se saltea
       moverPetalo(petalo, dt, tiempoTranscurrido);
+    }
+
+    /* ⚡ ACÁ SE DIBUJA TAMBIÉN, EN VEZ DE QUE 24-lienzo-de-petalos.js TENGA
+       SU PROPIO requestAnimationFrame. Los dos hacían exactamente lo mismo
+       cuadro a cuadro (uno calcula, el otro pinta lo que el primero
+       calculó), así que tenerlos desacoplados solo sumaba un callback de
+       rAF de más compitiendo por el hilo principal — sin ganar nada, ya
+       que uno siempre tiene que ir después del otro. Mismo criterio que ya
+       usa el lienzo de luz con motas y fauna. */
+    if (window.LienzoDePetalos.activo && window.LienzoDePetalos.pintarUnCuadro) {
+      window.LienzoDePetalos.pintarUnCuadro();
     }
 
     requestAnimationFrame(dibujarCuadro);

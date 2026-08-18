@@ -5,3 +5,7 @@
 # proyecto: es la herramienta con la que se construyó, no algo que la
 # app necesite para funcionar.
 .claude/
+
+# Dependencias de build (terser, para herramientas/minificar-js.mjs).
+# Se reinstalan con `npm install`; no se suben ni al repo ni al hosting.
+node_modules/
