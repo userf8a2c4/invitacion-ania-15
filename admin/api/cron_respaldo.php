@@ -44,7 +44,21 @@ if (!$desdeLaConsola && !llaveDeArranqueCorrecta($_GET['llave'] ?? '')) {
      · sesiones e intentos_login → basura temporal
      · usuarios → tiene las contraseñas hasheadas; mandarlas por correo
        sería regalar el panel a cualquiera que lea ese buzón
-     · archivos → solo la lista, no los archivos en sí (pesarían megas) */
+
+   `archivos` SÍ entra en la lista de tablas: son los renglones (nombre,
+   tamaño, a qué está atado) de cada contrato/comprobante subido. Los
+   ARCHIVOS EN SÍ (las fotos y PDF de verdad) se respaldan aparte, más
+   abajo — ver "TAMBIÉN LOS ARCHIVOS DE VERDAD".
+
+   ⚠️ HASTA ACÁ, ESE RESPALDO NO EXISTÍA. Un incidente real (agosto 2026)
+   dejó filas en `archivos` apuntando a contratos y comprobantes que ya
+   no estaban en el disco del servidor — probablemente porque en algún
+   momento se reemplazó la carpeta admin/ entera en el hosting en vez de
+   subir archivo por archivo, y admin/archivos/ nunca viajó por git (son
+   fotos subidas desde el teléfono, no código). Esos archivos puntuales
+   se perdieron para siempre porque no había ninguna copia en ningún
+   lado. Este respaldo nuevo existe para que la próxima vez que algo así
+   pase, haya de dónde recuperarlos. */
 $tablas = [
     'confirmaciones', 'preferencias_invitado', 'grupos_invitados',
     'incompatibilidades', 'mesas', 'asignacion_mesas',
@@ -150,6 +164,56 @@ $clave = (string) env('RESPALDO_CLAVE', '');
 $adjuntos = [];
 $avisoDelAdjunto = '';
 
+/* ─── TAMBIÉN LOS ARCHIVOS DE VERDAD ───────────────────────────────────
+ *
+ * Las fotos y PDF que se ven en admin/archivos/. Van DENTRO del mismo
+ * ZIP cifrado, en una carpeta "archivos/" — mismo candado, misma clave,
+ * ninguna protección nueva que mantener.
+ *
+ * TOPE DE PESO: los adjuntos de correo viajan codificados en base64, que
+ * pesa ~37% más que el archivo original — y muchos proveedores (Gmail
+ * incluido) rechazan el correo completo si el mensaje pasa de 25 MB.
+ * Con un tope de entrada de 12 MB, el ZIP codificado se queda bien
+ * debajo de eso incluso sumando el JSON de la base de datos. Se agregan
+ * archivos MÁS NUEVOS PRIMERO hasta llegar al tope, y los que no
+ * entraron quedan listados en el correo — así se ve QUÉ falta respaldar
+ * esta semana, en vez de que el cron fallara entero o se cortara a la
+ * mitad de un archivo. La próxima semana, si esos archivos siguen sin
+ * bajar de peso el resto, vuelven a intentarlo (no hay "ya se hizo" que
+ * recordar: cada corrida arranca de cero). */
+const PESO_MAXIMO_DE_ARCHIVOS_EN_RESPALDO = 12 * 1024 * 1024;
+
+$CARPETA_ARCHIVOS = dirname(__DIR__) . '/archivos';
+$archivosParaRespaldar = [];
+$archivosQueNoEntraron = [];
+
+if (existeTabla('archivos')) {
+    $filasArchivos = consultarTodo(
+        'SELECT nombre_disco, nombre_real, tamano_bytes
+         FROM archivos ORDER BY creado_en DESC'
+    );
+
+    $pesoAcumulado = 0;
+    foreach ($filasArchivos as $fila) {
+        $ruta = $CARPETA_ARCHIVOS . '/' . basename($fila['nombre_disco']);
+
+        // No está en el disco: ni se cuenta ni se intenta — este es
+        // justo el caso que este respaldo nuevo existe para evitar que
+        // se repita sin que nadie se entere.
+        if (!is_file($ruta)) continue;
+
+        $peso = (int) $fila['tamano_bytes'] ?: filesize($ruta);
+
+        if ($pesoAcumulado + $peso > PESO_MAXIMO_DE_ARCHIVOS_EN_RESPALDO) {
+            $archivosQueNoEntraron[] = $fila['nombre_real'];
+            continue;
+        }
+
+        $pesoAcumulado += $peso;
+        $archivosParaRespaldar[] = ['ruta' => $ruta, 'nombre' => $fila['nombre_disco']];
+    }
+}
+
 if ($clave === '') {
     $avisoDelAdjunto = 'No se adjuntó el respaldo porque falta RESPALDO_CLAVE ' .
                        'en el .env del servidor.';
@@ -169,11 +233,25 @@ if ($clave === '') {
         $zip->setPassword($clave);
         $zip->addFromString($nombre, $json);
 
+        $nombresEnElZip = [$nombre];
+        foreach ($archivosParaRespaldar as $a) {
+            if ($zip->addFile($a['ruta'], 'archivos/' . $a['nombre'])) {
+                $nombresEnElZip[] = 'archivos/' . $a['nombre'];
+            }
+        }
+
         /* setEncryptionName necesita libzip 1.2 o más nuevo. Si no está,
            el ZIP se crearía SIN cifrar aunque se le haya puesto
-           contraseña, que es exactamente la trampa que hay que evitar. */
+           contraseña, que es exactamente la trampa que hay que evitar.
+           Se pide para CADA archivo del ZIP: si uno solo quedara sin
+           cifrar, ese uno solo alcanzaría para filtrar datos privados. */
         if (method_exists($zip, 'setEncryptionName')) {
-            $cifrado = $zip->setEncryptionName($nombre, ZipArchive::EM_AES_256);
+            $cifrado = true;
+            foreach ($nombresEnElZip as $n) {
+                if (!$zip->setEncryptionName($n, ZipArchive::EM_AES_256)) {
+                    $cifrado = false;
+                }
+            }
         }
         $zip->close();
     }
@@ -192,9 +270,36 @@ if ($clave === '') {
     if (is_file($zipRuta)) @unlink($zipRuta);
 }
 
+/* Ambos avisos (este y el de más abajo) se agregan reemplazando
+   "</body></html>" y no "</table></body></html>": así cada uno se puede
+   sumar sin pisar al otro, sin importar el orden en que se agreguen. */
+if (count($archivosParaRespaldar)) {
+    $pesoArchivos = round(array_sum(array_map(
+        function ($a) { return filesize($a['ruta']); }, $archivosParaRespaldar
+    )) / 1024 / 1024, 1);
+    $html = str_replace('</body></html>',
+        "<p style='padding:0 24px;font-size:13px;color:#666'>" .
+        'También van adentro ' . count($archivosParaRespaldar) .
+        ' archivo' . (count($archivosParaRespaldar) === 1 ? '' : 's') .
+        ' (contratos, comprobantes y fotos), ' . $pesoArchivos . ' MB.' .
+        "</p></body></html>", $html);
+}
+if (count($archivosQueNoEntraron)) {
+    $html = str_replace('</body></html>',
+        "<p style='padding:0 24px;font-size:13px;color:#b00'>⚠️ " .
+        count($archivosQueNoEntraron) . ' archivo' .
+        (count($archivosQueNoEntraron) === 1 ? '' : 's') .
+        ' no entró' . (count($archivosQueNoEntraron) === 1 ? '' : 'aron') .
+        ' en este respaldo por peso (se reintenta la próxima semana): ' .
+        htmlspecialchars(implode(', ', $archivosQueNoEntraron), ENT_QUOTES, 'UTF-8') .
+        "</p></body></html>", $html);
+    error_log('[Ania XV · respaldo] Archivos que no entraron por peso: ' .
+              implode(', ', $archivosQueNoEntraron));
+}
+
 if ($avisoDelAdjunto !== '') {
-    $html = str_replace('</table></body></html>',
-        "</table><p style='color:#b00;font-size:13px;padding:0 24px'>⚠️ " .
+    $html = str_replace('</body></html>',
+        "<p style='color:#b00;font-size:13px;padding:0 24px'>⚠️ " .
         htmlspecialchars($avisoDelAdjunto, ENT_QUOTES, 'UTF-8') .
         "</p></body></html>", $html);
     error_log('[Ania XV · respaldo] ' . $avisoDelAdjunto);
