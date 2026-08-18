@@ -25,6 +25,32 @@
    resultado bueno en milisegundos, y lo que no le guste se corrige a
    mano y queda fijado.
 
+   FASE 9 · REGLAS POR PERSONA, NO SOLO POR FAMILIA
+   Hasta acá, quien se sentaba era SIEMPRE la confirmación entera (la
+   familia, en bloque). Ahora una persona puntual (un `acompanante`)
+   puede tener su PROPIA fila en `acompanante_reglas` — eso la saca del
+   bloque de su familia y la convierte en su propia "unidad" para
+   sentar, con su propio grupo o mesa preferida. El resto de su familia
+   sigue moviéndose junto, con un lugar menos por cada persona que se
+   sacó.
+
+   Por eso de acá en más una "unidad para sentar" puede ser de dos
+   tipos, y las funciones de este archivo hablan de "unidades", no ya
+   de "invitados": una CONFIRMACIÓN (una familia, o lo que queda de
+   ella) o un ACOMPAÑANTE suelto. Cada una tiene una CLAVE compuesta
+   ('c5' o 'a12') para no confundir un id de confirmación con uno de
+   acompañante — son espacios de ids completamente distintos y un '5'
+   de cada uno no tiene nada que ver con el otro.
+
+   ⚠️ LÍMITE A PROPÓSITO: una incompatibilidad puesta entre dos personas
+   puntuales (acompanante_a + acompanante_b) solo se hace cumplir cuando
+   LAS DOS están sacadas de su familia (las dos tienen fila en
+   acompanante_reglas). Si alguna sigue viajando con su familia, la
+   regla queda guardada pero todavía no actúa — resolver eso en
+   general (bloquear a la FAMILIA entera por la pelea de un solo
+   integrante) es un paso más que se puede sumar después; mientras
+   tanto es mejor que una regla no actúe todavía a que actúe mal.
+
    ÍNDICE
      1. Juntar los datos
      2. Las reglas
@@ -38,7 +64,22 @@ require_once __DIR__ . '/bd.php';
 /* ─── 1. JUNTAR LOS DATOS ─────────────────────────────────────────────── */
 
 /**
- * Trae todo lo que hace falta para repartir: mesas, invitados y reglas.
+ * La clave compuesta de una unidad: 'c5' (confirmación 5) o 'a12'
+ * (acompañante 12). Los dos espacios de ids son independientes — sin
+ * esto, una confirmación 5 y un acompañante 5 se pisarían en cualquier
+ * mapa indexado por id crudo.
+ *
+ * @param string $tipo 'confirmacion' | 'acompanante'
+ * @param int    $id
+ * @return string
+ */
+function claveDeUnidad($tipo, $id) {
+    return ($tipo === 'acompanante' ? 'a' : 'c') . (int) $id;
+}
+
+/**
+ * Trae todo lo que hace falta para repartir: mesas, unidades para
+ * sentar (confirmaciones y acompañantes sueltos) y reglas.
  *
  * @return array
  */
@@ -69,15 +110,67 @@ function panoramaDeMesas() {
         return strnatcasecmp($a['nombre'], $b['nombre']);
     });
 
-    /* Los invitados que hay que sentar: los que confirmaron que asisten
-       y traen al menos una persona. */
-    $invitados = [];
+    /* ─── Personas sacadas de su familia (Fase 9) ────────────────────── */
+
+    /* $sueltosPorFamilia: confirmacion_id => cuántos de sus integrantes
+       se sacaron (para restarle esa cantidad de lugares al bloque de la
+       familia). $idsSueltos: acompanante_id => true, para no volver a
+       agregar a esa persona como parte del bloque familiar más abajo. */
+    $sueltosPorFamilia = [];
+    $idsSueltos = [];
+    $unidades   = [];
+
+    if (existeTabla('acompanante_reglas') && existeTabla('acompanantes')) {
+        $filas = consultarTodo(
+            'SELECT a.id, a.nombre, a.confirmacion_id,
+                    r.grupo_id, r.mesa_preferida,
+                    g.nombre AS grupo_nombre, g.orden AS grupo_orden,
+                    am.mesa_id, am.fijada
+             FROM acompanante_reglas r
+             JOIN acompanantes a    ON a.id = r.acompanante_id
+             JOIN confirmaciones c  ON c.id = a.confirmacion_id AND c.asiste = 1
+             LEFT JOIN grupos_invitados g          ON g.id = r.grupo_id
+             LEFT JOIN asignacion_mesas_persona am ON am.acompanante_id = a.id'
+        );
+
+        foreach ($filas as $f) {
+            $confId = (int) $f['confirmacion_id'];
+            $idsSueltos[(int) $f['id']] = true;
+            $sueltosPorFamilia[$confId] = ($sueltosPorFamilia[$confId] ?? 0) + 1;
+
+            $unidades[] = [
+                'tipo'               => 'acompanante',
+                'id'                 => (int) $f['id'],
+                'nombre'             => $f['nombre'],
+                'lugares_necesarios' => 1,
+                'grupo_id'           => $f['grupo_id'] ? (int) $f['grupo_id'] : null,
+                'grupo_nombre'       => $f['grupo_nombre'],
+                'grupo_orden'        => (int) ($f['grupo_orden'] ?? 50),
+                'mesa_preferida'     => $f['mesa_preferida'] ? (int) $f['mesa_preferida'] : null,
+                'mesa_id'            => $f['mesa_id'] ? (int) $f['mesa_id'] : null,
+                'fijada'             => (int) ($f['fijada'] ?? 0),
+            ];
+        }
+    }
+
+    /* Mapa de CADA acompañante a su familia, tenga o no fila propia en
+       acompanante_reglas — hace falta para poder resolver las
+       incompatibilidades individuales más abajo (indiceDePeleas). */
+    $familiaDeAcompanante = [];
+    if (existeTabla('acompanantes')) {
+        foreach (consultarTodo('SELECT id, confirmacion_id FROM acompanantes') as $a) {
+            $familiaDeAcompanante[(int) $a['id']] = (int) $a['confirmacion_id'];
+        }
+    }
+
+    /* ─── Las familias (confirmaciones), con lugares sueltos restados ── */
+
     if (existeTabla('confirmaciones')) {
-        $invitados = consultarTodo(
+        $filas = consultarTodo(
             'SELECT c.id, c.nombre, c.adultos, c.ninos,
                     p.grupo_id, p.sillas_extra, p.mesa_preferida, p.notas AS nota_mesa,
                     g.nombre AS grupo_nombre, g.orden AS grupo_orden,
-                    a.mesa_id, a.fijada, a.lugares
+                    a.mesa_id, a.fijada
              FROM confirmaciones c
              LEFT JOIN preferencias_invitado p ON p.confirmacion_id = c.id
              LEFT JOIN grupos_invitados g      ON g.id = p.grupo_id
@@ -85,13 +178,34 @@ function panoramaDeMesas() {
              WHERE c.asiste = 1
              ORDER BY c.nombre'
         );
-    }
 
-    // Cuántos lugares ocupa cada uno, ya calculado.
-    foreach ($invitados as &$invitado) {
-        $invitado['lugares_necesarios'] = lugaresQueOcupa($invitado);
+        foreach ($filas as $fila) {
+            $confId  = (int) $fila['id'];
+            $sacados = $sueltosPorFamilia[$confId] ?? 0;
+
+            $gente   = (int) $fila['adultos'] + (int) $fila['ninos'];
+            $extra   = (int) ($fila['sillas_extra'] ?? 0);
+            $lugares = max(0, $gente + $extra - $sacados);
+
+            /* Si se sacó a TODA la familia (el caso típico: una
+               confirmación de una sola persona con su propia regla), no
+               queda nada del bloque familiar que sentar aparte. */
+            if ($lugares <= 0) continue;
+
+            $unidades[] = [
+                'tipo'               => 'confirmacion',
+                'id'                 => $confId,
+                'nombre'             => $fila['nombre'],
+                'lugares_necesarios' => $lugares,
+                'grupo_id'           => $fila['grupo_id'] ? (int) $fila['grupo_id'] : null,
+                'grupo_nombre'       => $fila['grupo_nombre'],
+                'grupo_orden'        => (int) ($fila['grupo_orden'] ?? 50),
+                'mesa_preferida'     => $fila['mesa_preferida'] ? (int) $fila['mesa_preferida'] : null,
+                'mesa_id'            => $fila['mesa_id'] ? (int) $fila['mesa_id'] : null,
+                'fijada'             => (int) ($fila['fijada'] ?? 0),
+            ];
+        }
     }
-    unset($invitado);
 
     $grupos = existeTabla('grupos_invitados')
         ? consultarTodo('SELECT * FROM grupos_invitados ORDER BY orden, nombre')
@@ -102,15 +216,22 @@ function panoramaDeMesas() {
         : [];
 
     return [
-        'mesas'      => $mesas,
-        'invitados'  => $invitados,
-        'grupos'     => $grupos,
-        'peleas'     => $peleas,
+        'mesas'                 => $mesas,
+        'invitados'             => $unidades,
+        'grupos'                => $grupos,
+        'peleas'                => $peleas,
+        'ids_sueltos'           => $idsSueltos,
+        'familia_de_acompanante'=> $familiaDeAcompanante,
     ];
 }
 
 /**
- * Cuántas sillas necesita una confirmación.
+ * Cuántas sillas necesita una confirmación (la familia completa, sin
+ * restar a nadie que se haya sacado — eso lo resuelve panoramaDeMesas()
+ * porque hace falta saber cuántos se sacaron, algo que esta función por
+ * sí sola no puede calcular). La siguen usando mesas.php y
+ * guardarPlanDeMesas() para el caso simple, más común: cuando nadie de
+ * esa familia tiene reglas propias, esto ES el total real.
  *
  * @param array $invitado
  * @return int Nunca menos de 1: si confirmó, ocupa aunque sea una silla.
@@ -125,44 +246,66 @@ function lugaresQueOcupa($invitado) {
 /* ─── 2. LAS REGLAS ───────────────────────────────────────────────────── */
 
 /**
- * Arma un índice rápido de quién no se banca a quién.
+ * Arma un índice rápido de quién no se banca a quién, ya resuelto a
+ * CLAVES de unidad ('c5', 'a12') en vez de ids crudos.
  *
- * Se guarda en los dos sentidos aunque la tabla tenga una sola fila por
- * par: así preguntar "¿A se lleva con B?" es inmediato sin importar el
- * orden en que se pregunte.
+ * Cada fila de `incompatibilidades` puede ser:
+ *   · Entre dos FAMILIAS (invitado_a/invitado_b con los ids de
+ *     confirmación de siempre) — se traduce a 'c<id>' de cada lado.
+ *   · Entre dos PERSONAS puntuales (acompanante_a/acompanante_b) —
+ *     ⚠️ SOLO se hace cumplir si LAS DOS tienen su propia unidad hoy
+ *     (están sacadas de su familia, ver la nota del encabezado del
+ *     archivo). Si alguna sigue en el bloque familiar, esa fila se
+ *     salta sin romper nada — la regla queda guardada en la base para
+ *     el día que esa persona también se saque.
  *
- * @param array $peleas
- * @return array id => [otros ids]
+ * @param array $peleas   Filas crudas de `incompatibilidades`.
+ * @param array $idsSueltos acompanante_id => true (de panoramaDeMesas()).
+ * @return array clave => [otras claves]
  */
-function indiceDePeleas($peleas) {
+function indiceDePeleas($peleas, $idsSueltos = []) {
     $indice = [];
 
+    $anotar = function ($claveA, $claveB) use (&$indice) {
+        if (!isset($indice[$claveA])) $indice[$claveA] = [];
+        if (!isset($indice[$claveB])) $indice[$claveB] = [];
+        $indice[$claveA][] = $claveB;
+        $indice[$claveB][] = $claveA;
+    };
+
     foreach ($peleas as $pelea) {
+        $acompA = (int) ($pelea['acompanante_a'] ?? 0);
+        $acompB = (int) ($pelea['acompanante_b'] ?? 0);
+
+        if ($acompA > 0 && $acompB > 0) {
+            if (!isset($idsSueltos[$acompA]) || !isset($idsSueltos[$acompB])) {
+                continue;   // Todavía no están las dos sacadas: regla dormida.
+            }
+            $anotar(claveDeUnidad('acompanante', $acompA), claveDeUnidad('acompanante', $acompB));
+            continue;
+        }
+
         $a = (int) $pelea['invitado_a'];
         $b = (int) $pelea['invitado_b'];
-
-        if (!isset($indice[$a])) $indice[$a] = [];
-        if (!isset($indice[$b])) $indice[$b] = [];
-
-        $indice[$a][] = $b;
-        $indice[$b][] = $a;
+        $anotar(claveDeUnidad('confirmacion', $a), claveDeUnidad('confirmacion', $b));
     }
+
     return $indice;
 }
 
 /**
- * Dice si un invitado puede sentarse en una mesa donde ya hay otros.
+ * Dice si una unidad puede sentarse en una mesa donde ya hay otras.
  *
- * @param int   $quien
- * @param array $yaSentados ids de los que están en esa mesa.
- * @param array $peleas     El índice de indiceDePeleas().
+ * @param string $clave      La de quien se quiere sentar.
+ * @param array  $yaSentados Claves de los que están en esa mesa.
+ * @param array  $peleas     El índice de indiceDePeleas().
  * @return bool
  */
-function seLlevaBienCon($quien, $yaSentados, $peleas) {
-    if (empty($peleas[$quien])) return true;
+function seLlevaBienCon($clave, $yaSentados, $peleas) {
+    if (empty($peleas[$clave])) return true;
 
-    foreach ($yaSentados as $otro) {
-        if (in_array((int) $otro, $peleas[$quien], true)) return false;
+    foreach ($yaSentados as $otra) {
+        if (in_array($otra, $peleas[$clave], true)) return false;
     }
     return true;
 }
@@ -171,7 +314,7 @@ function seLlevaBienCon($quien, $yaSentados, $peleas) {
 /* ─── 3. REPARTIR ─────────────────────────────────────────────────────── */
 
 /**
- * Reparte a todos los invitados en las mesas.
+ * Reparte a todos en las mesas.
  *
  * NO escribe en la base: devuelve el plan. Quien lo llama decide si lo
  * guarda. Eso permite mostrar una vista previa antes de aplicar nada.
@@ -182,7 +325,7 @@ function seLlevaBienCon($quien, $yaSentados, $peleas) {
 function repartirEnMesas($respetarFijados = true) {
     $datos  = panoramaDeMesas();
     $mesas  = $datos['mesas'];
-    $peleas = indiceDePeleas($datos['peleas']);
+    $peleas = indiceDePeleas($datos['peleas'], $datos['ids_sueltos']);
 
     if (empty($mesas)) {
         return ['ok' => false, 'error' => 'Todavía no hay mesas creadas.'];
@@ -201,33 +344,32 @@ function repartirEnMesas($respetarFijados = true) {
         ];
     }
 
-    $plan       = [];   // confirmacion_id => mesa_id
+    $plan       = [];   // lista de ['tipo','id','mesa_id']
     $sinLugar   = [];
     $porResolver = [];
 
     /* ─── Primero, lo intocable ────────────────────────────────────── */
-    foreach ($datos['invitados'] as $invitado) {
-        $id      = (int) $invitado['id'];
-        $lugares = $invitado['lugares_necesarios'];
+    foreach ($datos['invitados'] as $unidad) {
+        $clave   = claveDeUnidad($unidad['tipo'], $unidad['id']);
+        $lugares = $unidad['lugares_necesarios'];
 
         $fijado = $respetarFijados
-               && !empty($invitado['mesa_id'])
-               && (int) $invitado['fijada'] === 1;
+               && !empty($unidad['mesa_id'])
+               && (int) $unidad['fijada'] === 1;
 
         // Una mesa preferida vale tanto como una asignación fijada.
-        $preferida = !empty($invitado['mesa_preferida'])
-                   ? (int) $invitado['mesa_preferida'] : 0;
+        $preferida = !empty($unidad['mesa_preferida']) ? (int) $unidad['mesa_preferida'] : 0;
 
-        $mesaForzada = $fijado ? (int) $invitado['mesa_id'] : $preferida;
+        $mesaForzada = $fijado ? (int) $unidad['mesa_id'] : $preferida;
 
         if ($mesaForzada && isset($estado[$mesaForzada])) {
             $estado[$mesaForzada]['libres'] -= $lugares;
-            $estado[$mesaForzada]['sentados'][] = $id;
-            $plan[$id] = $mesaForzada;
+            $estado[$mesaForzada]['sentados'][] = $clave;
+            $plan[] = ['tipo' => $unidad['tipo'], 'id' => $unidad['id'], 'mesa_id' => $mesaForzada];
             continue;
         }
 
-        $porResolver[] = $invitado;
+        $porResolver[] = $unidad;
     }
 
     /* ─── Después, por grupos ──────────────────────────────────────── */
@@ -236,21 +378,21 @@ function repartirEnMesas($respetarFijados = true) {
        porque son los más difíciles de ubicar. Dejarlos para el final
        garantiza que no entren en ningún lado. */
     $porGrupo = [];
-    foreach ($porResolver as $invitado) {
+    foreach ($porResolver as $unidad) {
         // Los que no tienen grupo van cada uno por su cuenta.
-        $clave = !empty($invitado['grupo_id'])
-               ? 'g' . $invitado['grupo_id']
-               : 'solo' . $invitado['id'];
+        $claveGrupo = !empty($unidad['grupo_id'])
+               ? 'g' . $unidad['grupo_id']
+               : 'solo' . claveDeUnidad($unidad['tipo'], $unidad['id']);
 
-        if (!isset($porGrupo[$clave])) {
-            $porGrupo[$clave] = [
-                'orden'     => (int) ($invitado['grupo_orden'] ?? 50),
+        if (!isset($porGrupo[$claveGrupo])) {
+            $porGrupo[$claveGrupo] = [
+                'orden'     => (int) ($unidad['grupo_orden'] ?? 50),
                 'gente'     => 0,
                 'invitados' => [],
             ];
         }
-        $porGrupo[$clave]['gente'] += $invitado['lugares_necesarios'];
-        $porGrupo[$clave]['invitados'][] = $invitado;
+        $porGrupo[$claveGrupo]['gente'] += $unidad['lugares_necesarios'];
+        $porGrupo[$claveGrupo]['invitados'][] = $unidad;
     }
 
     uasort($porGrupo, function ($a, $b) {
@@ -265,36 +407,36 @@ function repartirEnMesas($respetarFijados = true) {
         /* Se intenta meter al grupo ENTERO en una sola mesa. Si no
            entra, se lo parte y cada parte busca lugar por su cuenta,
            pero prefiriendo mesas donde ya haya gente del mismo grupo. */
-        $mesaDelGrupo = mejorMesaPara($grupo['gente'], $grupo['invitados'],
-                                      $estado, $peleas);
+        $mesaDelGrupo = mejorMesaPara($grupo['gente'], $grupo['invitados'], $estado, $peleas);
 
-        foreach ($grupo['invitados'] as $invitado) {
-            $id      = (int) $invitado['id'];
-            $lugares = $invitado['lugares_necesarios'];
+        foreach ($grupo['invitados'] as $unidad) {
+            $clave   = claveDeUnidad($unidad['tipo'], $unidad['id']);
+            $lugares = $unidad['lugares_necesarios'];
 
             $destino = 0;
 
             // ¿Sigue entrando en la mesa que se eligió para el grupo?
             if ($mesaDelGrupo
                 && $estado[$mesaDelGrupo]['libres'] >= $lugares
-                && seLlevaBienCon($id, $estado[$mesaDelGrupo]['sentados'], $peleas)) {
+                && seLlevaBienCon($clave, $estado[$mesaDelGrupo]['sentados'], $peleas)) {
                 $destino = $mesaDelGrupo;
             } else {
-                $destino = mejorMesaPara($lugares, [$invitado], $estado, $peleas);
+                $destino = mejorMesaPara($lugares, [$unidad], $estado, $peleas);
             }
 
             if (!$destino) {
                 $sinLugar[] = [
-                    'id'      => $id,
-                    'nombre'  => $invitado['nombre'],
+                    'id'      => $unidad['id'],
+                    'tipo'    => $unidad['tipo'],
+                    'nombre'  => $unidad['nombre'],
                     'lugares' => $lugares,
                 ];
                 continue;
             }
 
             $estado[$destino]['libres'] -= $lugares;
-            $estado[$destino]['sentados'][] = $id;
-            $plan[$id] = $destino;
+            $estado[$destino]['sentados'][] = $clave;
+            $plan[] = ['tipo' => $unidad['tipo'], 'id' => $unidad['id'], 'mesa_id' => $destino];
         }
     }
 
@@ -317,27 +459,32 @@ function repartirEnMesas($respetarFijados = true) {
  * para animarse a tocar el botón: no "cuántos entran" sino "qué se me va
  * a desarmar de lo que ya tenía".
  *
- * @param array $plan       confirmacion_id => mesa_id
- * @param array $invitados  Con su mesa_id actual.
+ * @param array $plan       Lista de ['tipo','id','mesa_id'].
+ * @param array $unidades   Con su mesa_id actual.
  * @param array $mesas      Para poder poner los nombres.
  * @return array
  */
-function movimientosDelPlan($plan, $invitados, $mesas) {
+function movimientosDelPlan($plan, $unidades, $mesas) {
     $comoSeLlama = [];
     foreach ($mesas as $m) $comoSeLlama[(int) $m['id']] = $m['nombre'];
 
+    $mesaEnElPlan = [];
+    foreach ($plan as $entrada) {
+        $mesaEnElPlan[claveDeUnidad($entrada['tipo'], $entrada['id'])] = (int) $entrada['mesa_id'];
+    }
+
     $movimientos = [];
 
-    foreach ($invitados as $invitado) {
-        $id     = (int) $invitado['id'];
-        $antes  = (int) ($invitado['mesa_id'] ?? 0);
-        $ahora  = (int) ($plan[$id] ?? 0);
+    foreach ($unidades as $unidad) {
+        $clave  = claveDeUnidad($unidad['tipo'], $unidad['id']);
+        $antes  = (int) ($unidad['mesa_id'] ?? 0);
+        $ahora  = (int) ($mesaEnElPlan[$clave] ?? 0);
 
         // Se queda donde estaba: no hay nada que contar.
         if ($antes === $ahora) continue;
 
         $movimientos[] = [
-            'nombre'     => $invitado['nombre'],
+            'nombre'     => $unidad['nombre'],
             'de'         => $antes ? ($comoSeLlama[$antes] ?? 'otra mesa') : '',
             'a'          => $ahora ? ($comoSeLlama[$ahora] ?? 'otra mesa') : '',
             /* Tres formas distintas de cambiar, y no dan la misma
@@ -359,7 +506,7 @@ function movimientosDelPlan($plan, $invitados, $mesas) {
  * mesas a medio ocupar, que en un salón se ve vacío y desangelado.
  *
  * @param int   $lugares  Cuántas sillas hacen falta.
- * @param array $quienes  Los invitados (para comprobar peleas).
+ * @param array $quienes  Las unidades (para comprobar peleas).
  * @param array $estado   El estado de las mesas.
  * @param array $peleas
  * @return int El id de la mesa, o 0 si no entra en ninguna.
@@ -374,7 +521,8 @@ function mejorMesaPara($lugares, $quienes, $estado, $peleas) {
         // Que ninguno de los que van a entrar esté peleado con los que ya están.
         $seLlevanTodos = true;
         foreach ($quienes as $quien) {
-            if (!seLlevaBienCon((int) $quien['id'], $mesa['sentados'], $peleas)) {
+            $claveQuien = claveDeUnidad($quien['tipo'], $quien['id']);
+            if (!seLlevaBienCon($claveQuien, $mesa['sentados'], $peleas)) {
                 $seLlevanTodos = false;
                 break;
             }
@@ -392,32 +540,58 @@ function mejorMesaPara($lugares, $quienes, $estado, $peleas) {
 }
 
 /**
- * Guarda un plan en la base de datos.
+ * Guarda un plan en la base de datos: las unidades tipo 'confirmacion'
+ * en `asignacion_mesas`, las tipo 'acompanante' en
+ * `asignacion_mesas_persona` — dos tablas separadas, ver la nota de
+ * Fase 9 en migracion.sql.
  *
- * @param array $plan  confirmacion_id => mesa_id
+ * @param array $plan  Lista de ['tipo','id','mesa_id'].
  * @param bool  $respetarFijados
  * @return int Cuántos se sentaron.
  */
 function guardarPlanDeMesas($plan, $respetarFijados = true) {
-    /* Se borran las asignaciones anteriores salvo las fijadas, y se
-       escriben las nuevas. Se hace en una transacción para que no pueda
-       quedar a medias: o se acomoda todo, o no se toca nada. */
     bd()->beginTransaction();
 
     try {
         if ($respetarFijados) {
             ejecutar('DELETE FROM asignacion_mesas WHERE fijada = 0');
+            if (existeTabla('asignacion_mesas_persona')) {
+                ejecutar('DELETE FROM asignacion_mesas_persona WHERE fijada = 0');
+            }
         } else {
             ejecutar('DELETE FROM asignacion_mesas');
+            if (existeTabla('asignacion_mesas_persona')) {
+                ejecutar('DELETE FROM asignacion_mesas_persona');
+            }
         }
 
         $cuantos = 0;
 
-        foreach ($plan as $confirmacionId => $mesaId) {
+        foreach ($plan as $entrada) {
+            $tipo   = $entrada['tipo'];
+            $id     = (int) $entrada['id'];
+            $mesaId = (int) $entrada['mesa_id'];
+
+            if ($tipo === 'acompanante') {
+                $yaEsta = consultarUno(
+                    'SELECT id FROM asignacion_mesas_persona WHERE acompanante_id = :a',
+                    [':a' => $id]
+                );
+                if ($yaEsta) { $cuantos++; continue; }
+
+                insertar('asignacion_mesas_persona', [
+                    'acompanante_id' => $id,
+                    'mesa_id'        => $mesaId,
+                    'fijada'         => 0,
+                ]);
+                $cuantos++;
+                continue;
+            }
+
             // Las fijadas ya están en la base: no se vuelven a escribir.
             $yaEsta = consultarUno(
                 'SELECT id FROM asignacion_mesas WHERE confirmacion_id = :c',
-                [':c' => (int) $confirmacionId]
+                [':c' => $id]
             );
             if ($yaEsta) { $cuantos++; continue; }
 
@@ -426,13 +600,32 @@ function guardarPlanDeMesas($plan, $respetarFijados = true) {
                  FROM confirmaciones c
                  LEFT JOIN preferencias_invitado p ON p.confirmacion_id = c.id
                  WHERE c.id = :id',
-                [':id' => (int) $confirmacionId]
+                [':id' => $id]
             );
 
+            /* El total de la familia, MENOS los que se sentaron aparte
+               en este mismo plan (mismo criterio que panoramaDeMesas()
+               al armar la unidad: no volver a contar a quien ya tiene
+               su propia silla en otro lado). */
+            $sacadosDeEstaFamilia = 0;
+            foreach ($plan as $otra) {
+                if ($otra['tipo'] !== 'acompanante') continue;
+                $familiaDeEsa = consultarUno(
+                    'SELECT confirmacion_id FROM acompanantes WHERE id = :a',
+                    [':a' => (int) $otra['id']]
+                );
+                if ($familiaDeEsa && (int) $familiaDeEsa['confirmacion_id'] === $id) {
+                    $sacadosDeEstaFamilia++;
+                }
+            }
+
+            $totalFamilia = lugaresQueOcupa($gente ?: []);
+            $lugares = max(1, $totalFamilia - $sacadosDeEstaFamilia);
+
             insertar('asignacion_mesas', [
-                'confirmacion_id' => (int) $confirmacionId,
-                'mesa_id'         => (int) $mesaId,
-                'lugares'         => lugaresQueOcupa($gente ?: []),
+                'confirmacion_id' => $id,
+                'mesa_id'         => $mesaId,
+                'lugares'         => $lugares,
                 'fijada'          => 0,
             ]);
             $cuantos++;
@@ -462,6 +655,10 @@ const CUANTOS_RESPALDOS = 5;
  * forma de volver atrás, la función da miedo — y una función que da
  * miedo no se usa, por buena que sea. Esto es lo que permite probar.
  *
+ * Incluye tanto asignacion_mesas como asignacion_mesas_persona (Fase 9)
+ * en la misma foto, para que "volver atrás" deshaga las dos tablas
+ * juntas y nunca queden desalineadas entre sí.
+ *
  * @param string $motivo
  * @param int    $usuarioId
  * @return void
@@ -471,11 +668,17 @@ function guardarFotoDelAcomodo($motivo, $usuarioId = 0) {
 
     try {
         $filas = consultarTodo('SELECT * FROM asignacion_mesas');
+        $filasPersona = existeTabla('asignacion_mesas_persona')
+            ? consultarTodo('SELECT * FROM asignacion_mesas_persona')
+            : [];
 
         insertar('acomodo_respaldo', [
-            'contenido'  => json_encode($filas, JSON_UNESCAPED_UNICODE),
+            'contenido'  => json_encode(
+                ['familias' => $filas, 'personas' => $filasPersona],
+                JSON_UNESCAPED_UNICODE
+            ),
             'motivo'     => $motivo,
-            'cuantos'    => count($filas),
+            'cuantos'    => count($filas) + count($filasPersona),
             'usuario_id' => $usuarioId ?: null,
         ]);
 
@@ -497,6 +700,12 @@ function guardarFotoDelAcomodo($motivo, $usuarioId = 0) {
 /**
  * Vuelve al acomodo anterior.
  *
+ * ⚠️ COMPATIBLE CON FOTOS VIEJAS: antes de Fase 9, `contenido` era
+ * directamente la lista de filas de `asignacion_mesas` (sin el
+ * envoltorio {familias, personas}). Si el JSON decodificado es una
+ * lista plana, se lo trata como "familias" y "personas" queda vacío —
+ * así una foto tomada la semana pasada se puede seguir restaurando.
+ *
  * @return array ['ok' => bool, 'cuantos' => int, 'error' => string]
  */
 function volverAlAcomodoAnterior() {
@@ -509,16 +718,20 @@ function volverAlAcomodoAnterior() {
     );
     if (!$ultimo) return ['ok' => false, 'error' => 'No hay ningún acomodo anterior guardado.'];
 
-    $filas = json_decode($ultimo['contenido'], true);
-    if (!is_array($filas)) {
+    $contenido = json_decode($ultimo['contenido'], true);
+    if (!is_array($contenido)) {
         return ['ok' => false, 'error' => 'El respaldo está dañado.'];
     }
+
+    $esFormatoViejo = array_keys($contenido) === range(0, count($contenido) - 1);
+    $filasFamilias = $esFormatoViejo ? $contenido : ($contenido['familias'] ?? []);
+    $filasPersonas = $esFormatoViejo ? [] : ($contenido['personas'] ?? []);
 
     bd()->beginTransaction();
     try {
         ejecutar('DELETE FROM asignacion_mesas');
 
-        foreach ($filas as $f) {
+        foreach ($filasFamilias as $f) {
             insertar('asignacion_mesas', [
                 'confirmacion_id' => (int) $f['confirmacion_id'],
                 'mesa_id'         => (int) $f['mesa_id'],
@@ -528,12 +741,24 @@ function volverAlAcomodoAnterior() {
             ]);
         }
 
+        if (existeTabla('asignacion_mesas_persona')) {
+            ejecutar('DELETE FROM asignacion_mesas_persona');
+            foreach ($filasPersonas as $f) {
+                insertar('asignacion_mesas_persona', [
+                    'acompanante_id' => (int) $f['acompanante_id'],
+                    'mesa_id'        => (int) $f['mesa_id'],
+                    'fijada'         => (int) $f['fijada'],
+                    'notas'          => (string) ($f['notas'] ?? ''),
+                ]);
+            }
+        }
+
         /* El respaldo usado se descarta: si quedara, tocar deshacer dos
            veces volvería a lo mismo y parecería que no funciona. */
         ejecutar('DELETE FROM acomodo_respaldo WHERE id = :id', [':id' => $ultimo['id']]);
 
         bd()->commit();
-        return ['ok' => true, 'cuantos' => count($filas)];
+        return ['ok' => true, 'cuantos' => count($filasFamilias) + count($filasPersonas)];
 
     } catch (Exception $e) {
         bd()->rollBack();
@@ -547,40 +772,60 @@ function volverAlAcomodoAnterior() {
 
 /**
  * La MISMA búsqueda que hace sentarAUnoSolo(), pero sin escribir nada
- * — para que el agente de mesas (Paso 5, ver 42-agente-mesas.js) pueda
- * PROPONER antes de asignar de verdad. Confirmar la propuesta manda a
+ * — para que el agente de mesas (ver 42-agente-mesas.js) pueda PROPONER
+ * antes de asignar de verdad. Confirmar la propuesta manda a
  * sentarAUnoSolo(), que llama a esta misma función para el puntaje: la
  * propuesta que se ve y lo que de verdad se asigna nunca pueden
  * quedar desalineadas, porque es literalmente el mismo cálculo.
  *
- * @param int $confirmacionId
+ * @param int    $confirmacionId
+ * @param int    $acompananteId  0 para la familia entera (de siempre);
+ *                                >0 para sentar a ESA persona puntual
+ *                                por su cuenta (Fase 9) — tiene que
+ *                                tener su fila en acompanante_reglas.
  * @return array {ok, error?, mesa_id?, mesa_nombre?, por_grupo?, ya_estaba?}
  */
-function previsualizarAsientoPara($confirmacionId) {
+function previsualizarAsientoPara($confirmacionId, $acompananteId = 0) {
     if (!existeTabla('mesas') || !existeTabla('asignacion_mesas')) {
         return ['ok' => false, 'error' => 'Faltan las tablas de mesas.'];
     }
 
+    $tipo  = $acompananteId > 0 ? 'acompanante' : 'confirmacion';
+    $id    = $acompananteId > 0 ? $acompananteId : $confirmacionId;
+    $clave = claveDeUnidad($tipo, $id);
+
     // Si ya está sentado, no hay nada que proponer.
-    $yaEsta = consultarUno(
-        'SELECT mesa_id FROM asignacion_mesas WHERE confirmacion_id = :c',
-        [':c' => (int) $confirmacionId]
-    );
+    if ($tipo === 'acompanante') {
+        $yaEsta = consultarUno(
+            'SELECT mesa_id FROM asignacion_mesas_persona WHERE acompanante_id = :a',
+            [':a' => $id]
+        );
+    } else {
+        $yaEsta = consultarUno(
+            'SELECT mesa_id FROM asignacion_mesas WHERE confirmacion_id = :c',
+            [':c' => $id]
+        );
+    }
     if ($yaEsta) {
         return ['ok' => true, 'mesa_id' => (int) $yaEsta['mesa_id'], 'ya_estaba' => true];
     }
 
     $datos  = panoramaDeMesas();
-    $peleas = indiceDePeleas($datos['peleas']);
+    $peleas = indiceDePeleas($datos['peleas'], $datos['ids_sueltos']);
 
     // Quién es y cuánto ocupa.
     $quien = null;
-    foreach ($datos['invitados'] as $invitado) {
-        if ((int) $invitado['id'] === (int) $confirmacionId) { $quien = $invitado; break; }
+    foreach ($datos['invitados'] as $unidad) {
+        if ($unidad['tipo'] === $tipo && (int) $unidad['id'] === (int) $id) { $quien = $unidad; break; }
     }
-    if (!$quien) return ['ok' => false, 'error' => 'Esa confirmación no existe o no asiste.'];
+    if (!$quien) {
+        return ['ok' => false, 'error' => $tipo === 'acompanante'
+            ? 'Esa persona no tiene una regla propia todavía, o no asiste.'
+            : 'Esa confirmación no existe o no asiste.'];
+    }
 
-    // El estado actual de las mesas, con lo que ya hay sentado.
+    // El estado actual de las mesas, con lo que ya hay sentado —
+    // familias Y personas sueltas, las dos fuentes a la vez.
     $estado = [];
     foreach ($datos['mesas'] as $mesa) {
         $estado[$mesa['id']] = [
@@ -589,10 +834,10 @@ function previsualizarAsientoPara($confirmacionId) {
             'libres' => (int) $mesa['capacidad'], 'sentados' => [],
         ];
     }
-    foreach ($datos['invitados'] as $invitado) {
-        if (empty($invitado['mesa_id']) || !isset($estado[$invitado['mesa_id']])) continue;
-        $estado[$invitado['mesa_id']]['libres'] -= $invitado['lugares_necesarios'];
-        $estado[$invitado['mesa_id']]['sentados'][] = (int) $invitado['id'];
+    foreach ($datos['invitados'] as $unidad) {
+        if (empty($unidad['mesa_id']) || !isset($estado[$unidad['mesa_id']])) continue;
+        $estado[$unidad['mesa_id']]['libres'] -= $unidad['lugares_necesarios'];
+        $estado[$unidad['mesa_id']]['sentados'][] = claveDeUnidad($unidad['tipo'], $unidad['id']);
     }
 
     /* Se prefiere una mesa donde ya haya gente de su mismo grupo: es
@@ -602,10 +847,10 @@ function previsualizarAsientoPara($confirmacionId) {
     $porGrupo = false;
     if (!empty($quien['grupo_id'])) {
         $conSuGrupo = [];
-        foreach ($datos['invitados'] as $invitado) {
-            if ((int) ($invitado['grupo_id'] ?? 0) !== (int) $quien['grupo_id']) continue;
-            if (empty($invitado['mesa_id'])) continue;
-            $conSuGrupo[(int) $invitado['mesa_id']] = true;
+        foreach ($datos['invitados'] as $unidad) {
+            if ((int) ($unidad['grupo_id'] ?? 0) !== (int) $quien['grupo_id']) continue;
+            if (empty($unidad['mesa_id'])) continue;
+            $conSuGrupo[(int) $unidad['mesa_id']] = true;
         }
 
         $soloEsas = array_intersect_key($estado, $conSuGrupo);
@@ -631,25 +876,38 @@ function previsualizarAsientoPara($confirmacionId) {
 }
 
 /**
- * Busca lugar para UNA confirmación sin tocar a nadie más, y la sienta
- * de verdad.
+ * Busca lugar para UNA unidad sin tocar a nadie más, y la sienta de
+ * verdad.
  *
  * Es lo que corre cuando llega una confirmación nueva: no tiene sentido
  * reacomodar la fiesta entera porque confirmó un invitado más.
  *
  * @param int $confirmacionId
+ * @param int $acompananteId  Ver previsualizarAsientoPara().
  * @return array ['ok' => bool, 'mesa_id' => int, 'mesa' => string]
  */
-function sentarAUnoSolo($confirmacionId) {
-    $previa = previsualizarAsientoPara($confirmacionId);
+function sentarAUnoSolo($confirmacionId, $acompananteId = 0) {
+    $previa = previsualizarAsientoPara($confirmacionId, $acompananteId);
     if (!$previa['ok'] || !empty($previa['ya_estaba'])) return $previa;
+
+    if ($acompananteId > 0) {
+        insertar('asignacion_mesas_persona', [
+            'acompanante_id' => $acompananteId,
+            'mesa_id'        => $previa['mesa_id'],
+            'fijada'         => 0,
+        ]);
+        return ['ok' => true, 'mesa_id' => $previa['mesa_id'], 'mesa' => $previa['mesa_nombre']];
+    }
 
     // Se necesita lugares_necesarios para el INSERT, que
     // previsualizarAsientoPara() no devuelve (no es parte de "adónde").
     $datos = panoramaDeMesas();
     $quien = null;
-    foreach ($datos['invitados'] as $invitado) {
-        if ((int) $invitado['id'] === (int) $confirmacionId) { $quien = $invitado; break; }
+    foreach ($datos['invitados'] as $unidad) {
+        if ($unidad['tipo'] === 'confirmacion' && (int) $unidad['id'] === (int) $confirmacionId) {
+            $quien = $unidad;
+            break;
+        }
     }
     if (!$quien) return ['ok' => false, 'error' => 'Esa confirmación no existe o no asiste.'];
 

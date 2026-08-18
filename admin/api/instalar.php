@@ -184,6 +184,14 @@ $agregarColumna('gastos', 'presupuesto_id', 'INT NOT NULL DEFAULT 1');
 $agregarColumna('usuarios', 'pregunta_seguridad', 'VARCHAR(200) NULL DEFAULT NULL');
 $agregarColumna('usuarios', 'respuesta_seguridad_hash', 'VARCHAR(255) NULL DEFAULT NULL');
 
+/* Reglas por persona, no solo por familia (Fase 9). Ver la nota larga
+ * en migracion.sql, junto a acompanante_reglas. Sin FK: mismo criterio
+ * que invitado_a/invitado_b de esta misma tabla, que tampoco la tienen
+ * — son "el id de una confirmación o de un acompañante", y una FK
+ * exigiría elegir una sola tabla de las dos. */
+$agregarColumna('incompatibilidades', 'acompanante_a', 'INT NULL DEFAULT NULL');
+$agregarColumna('incompatibilidades', 'acompanante_b', 'INT NULL DEFAULT NULL');
+
 
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 
@@ -198,6 +206,7 @@ $tablasEsperadas = [
     'regalos', 'foraneos', 'ceremonia', 'requisitos_ceremonia', 'musica',
     'citas_arreglo', 'tomas_foto', 'acompanantes', 'permisos_usuario', 'llegadas',
     'comandos_usuario', 'presupuestos', 'eventos_uso',
+    'acompanante_reglas', 'asignacion_mesas_persona',
 ];
 
 $faltantes = [];
