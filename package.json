@@ -1,0 +1,9 @@
+{
+  "name": "invitacion-ania-15",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Herramientas de build (no se sube al hosting). Ver herramientas/*.mjs.",
+  "devDependencies": {
+    "terser": "^5.50.0"
+  }
+}
