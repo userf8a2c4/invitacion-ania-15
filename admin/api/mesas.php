@@ -20,6 +20,12 @@
      POST ?accion=pelea           "estos dos no se sientan juntos"
      POST ?accion=borrar_pelea
      POST ?accion=auto_al_confirmar  prende o apaga el acomodo automático
+
+     Fase 9 — reglas por persona, no solo por familia:
+     POST ?accion=regla_persona   saca a alguien de su familia (o lo
+                                   devuelve, mandando todo en 0/vacío)
+     GET  ?accion=personas_de&confirmacion_id=N  los acompañantes de una
+                                   familia, con su regla si tiene una
    ══════════════════════════════════════════════════════════════════════ */
 
 require_once __DIR__ . '/_lib/bd.php';
@@ -69,6 +75,11 @@ case 'todo':
 
         $ficha = [
             'id'       => (int) $invitado['id'],
+            // Fase 9: 'confirmacion' (una familia, o lo que queda de
+            // ella) o 'acompanante' (una persona que se sacó de la
+            // suya). El frontend lo necesita para saber a qué acción
+            // mandar (sentar/fijar con o sin acompanante_id).
+            'tipo'     => $invitado['tipo'],
             'nombre'   => $invitado['nombre'],
             'lugares'  => $invitado['lugares_necesarios'],
             'grupo'    => $invitado['grupo_nombre'],
@@ -305,8 +316,61 @@ case 'sentar':
     exigirMetodo('POST');
     $datos = cuerpoJson();
 
-    $confirmacion = campoEntero($datos, 'confirmacion_id', 1);
-    $mesa         = campoEntero($datos, 'mesa_id', 0);
+    $confirmacion  = campoEntero($datos, 'confirmacion_id', 1);
+    $acompanante   = campoEntero($datos, 'acompanante_id', 0);   // Fase 9
+    $mesa          = campoEntero($datos, 'mesa_id', 0);
+
+    /* ─── Sentar a una PERSONA puntual, sacada de su familia ─────────── */
+    if ($acompanante > 0) {
+        $persona = consultarUno(
+            'SELECT a.nombre FROM acompanante_reglas r
+             JOIN acompanantes a ON a.id = r.acompanante_id
+             WHERE r.acompanante_id = :a',
+            [':a' => $acompanante]
+        );
+        if (!$persona) {
+            responderMal('Esa persona todavía no se sacó de su familia (falta la regla).', 400);
+        }
+
+        if ($mesa === 0) {
+            ejecutar('DELETE FROM asignacion_mesas_persona WHERE acompanante_id = :a',
+                     [':a' => $acompanante]);
+            responderBien(['mensaje' => 'Se quitó de la mesa.']);
+        }
+
+        $mesaInfo = consultarUno('SELECT nombre, capacidad FROM mesas WHERE id = :m', [':m' => $mesa]);
+        if (!$mesaInfo) responderMal('Esa mesa no existe.', 404);
+
+        $ocupados = (int) (consultarUno(
+            'SELECT COALESCE(SUM(lugares), 0) AS n FROM asignacion_mesas WHERE mesa_id = :m',
+            [':m' => $mesa]
+        )['n'] ?? 0) + (int) (consultarUno(
+            'SELECT COUNT(*) AS n FROM asignacion_mesas_persona
+             WHERE mesa_id = :m AND acompanante_id <> :a',
+            [':m' => $mesa, ':a' => $acompanante]
+        )['n'] ?? 0);
+
+        $seExcede = ($ocupados + 1) > (int) $mesaInfo['capacidad'];
+
+        ejecutar('DELETE FROM asignacion_mesas_persona WHERE acompanante_id = :a',
+                 [':a' => $acompanante]);
+        insertar('asignacion_mesas_persona', [
+            'acompanante_id' => $acompanante,
+            'mesa_id'        => $mesa,
+            'fijada'         => 0,
+        ]);
+
+        anotarEnBitacora($yo, 'sentó a una persona a mano', 'asignacion_mesas_persona',
+                         $acompanante, $persona['nombre'] . ' → ' . $mesaInfo['nombre']);
+
+        responderBien([
+            'mensaje'   => $persona['nombre'] . ' quedó en ' . $mesaInfo['nombre'] . '.',
+            'se_excede' => $seExcede,
+            'aviso'     => $seExcede ? 'Ojo: la mesa queda con más gente que sillas.' : '',
+        ]);
+    }
+
+    /* ─── Sentar a una FAMILIA (de siempre) ──────────────────────────── */
 
     // Mesa 0 significa sacarlo del acomodo.
     if ($mesa === 0) {
@@ -324,7 +388,15 @@ case 'sentar':
     );
     if (!$gente) responderMal('Esa confirmación no existe.', 404);
 
-    $lugares = lugaresQueOcupa($gente);
+    // Lugares de la familia, menos quienes ya se sacaron a su cuenta
+    // (Fase 9) — mismo criterio que panoramaDeMesas() y guardarPlanDeMesas().
+    $sacados = (int) (consultarUno(
+        'SELECT COUNT(*) AS n FROM acompanante_reglas r
+         JOIN acompanantes a ON a.id = r.acompanante_id
+         WHERE a.confirmacion_id = :c',
+        [':c' => $confirmacion]
+    )['n'] ?? 0);
+    $lugares = max(1, lugaresQueOcupa($gente) - $sacados);
 
     /* Se avisa si no entra, pero se deja hacer igual: quien acomoda
        puede saber que van a agregar una silla, o que dos chicos van a
@@ -333,13 +405,16 @@ case 'sentar':
                              [':m' => $mesa]);
     if (!$mesaInfo) responderMal('Esa mesa no existe.', 404);
 
-    $ocupados = consultarUno(
+    $ocupados = (int) (consultarUno(
         'SELECT COALESCE(SUM(lugares), 0) AS n FROM asignacion_mesas
          WHERE mesa_id = :m AND confirmacion_id <> :c',
         [':m' => $mesa, ':c' => $confirmacion]
-    );
+    )['n'] ?? 0) + (int) (consultarUno(
+        'SELECT COUNT(*) AS n FROM asignacion_mesas_persona WHERE mesa_id = :m',
+        [':m' => $mesa]
+    )['n'] ?? 0);
 
-    $seExcede = ((int) $ocupados['n'] + $lugares) > (int) $mesaInfo['capacidad'];
+    $seExcede = ($ocupados + $lugares) > (int) $mesaInfo['capacidad'];
 
     ejecutar('DELETE FROM asignacion_mesas WHERE confirmacion_id = :c',
              [':c' => $confirmacion]);
@@ -380,8 +455,9 @@ case 'sentar_auto':
     exigirMetodo('POST');
     $datos = cuerpoJson();
     $confirmacion = campoEntero($datos, 'confirmacion_id', 1);
+    $acompanante  = campoEntero($datos, 'acompanante_id', 0);   // Fase 9
 
-    $r = sentarAUnoSolo($confirmacion);
+    $r = sentarAUnoSolo($confirmacion, $acompanante);
     if (!$r['ok']) responderMal($r['error'], 400);
 
     if (!empty($r['ya_estaba'])) {
@@ -407,8 +483,9 @@ case 'sentar_auto':
 case 'sugerir_asiento':
     exigirMetodo('GET');
     $confirmacion = campoEntero($_GET, 'confirmacion_id', 1);
+    $acompanante  = campoEntero($_GET, 'acompanante_id', 0);   // Fase 9
 
-    $r = previsualizarAsientoPara($confirmacion);
+    $r = previsualizarAsientoPara($confirmacion, $acompanante);
     if (!$r['ok']) responderMal($r['error'], 400);
 
     responderBien($r);
@@ -419,6 +496,26 @@ case 'fijar':
     exigirMetodo('POST');
     $datos = cuerpoJson();
     $confirmacion = campoEntero($datos, 'confirmacion_id', 1);
+    $acompanante  = campoEntero($datos, 'acompanante_id', 0);   // Fase 9
+
+    if ($acompanante > 0) {
+        $fila = consultarUno(
+            'SELECT fijada FROM asignacion_mesas_persona WHERE acompanante_id = :a',
+            [':a' => $acompanante]
+        );
+        if (!$fila) responderMal('Esa persona no está sentada en ninguna mesa.', 404);
+
+        $nuevo = ((int) $fila['fijada'] === 1) ? 0 : 1;
+        ejecutar('UPDATE asignacion_mesas_persona SET fijada = :f WHERE acompanante_id = :a',
+                 [':f' => $nuevo, ':a' => $acompanante]);
+
+        responderBien([
+            'fijada'  => $nuevo === 1,
+            'mensaje' => $nuevo
+                ? 'Fijado: el acomodo automático ya no lo va a mover.'
+                : 'Liberado: el acomodo automático puede moverlo.',
+        ]);
+    }
 
     $fila = consultarUno('SELECT fijada FROM asignacion_mesas WHERE confirmacion_id = :c',
                          [':c' => $confirmacion]);
@@ -541,6 +638,70 @@ case 'pelea':
     exigirMetodo('POST');
     $datos = cuerpoJson();
 
+    /* Fase 9: si vienen acompanante_a/acompanante_b, la regla es entre
+     * DOS PERSONAS puntuales (aunque sean de la misma familia). Si no,
+     * es la de siempre: entre dos familias completas (invitado_a/b,
+     * los ids de confirmación). Los dos casos van a la misma tabla,
+     * distinguidos por qué columnas tienen valor — ver la nota de
+     * indiceDePeleas() en _lib/mesas.php sobre cuándo se hace cumplir
+     * cada una. */
+    $acompA = campoEntero($datos, 'acompanante_a', 0);
+    $acompB = campoEntero($datos, 'acompanante_b', 0);
+
+    if ($acompA > 0 && $acompB > 0) {
+        if ($acompA === $acompB) responderMal('No se puede pelear con uno mismo.', 400);
+        if ($acompA > $acompB) { $t = $acompA; $acompA = $acompB; $acompB = $t; }
+
+        $yaEsta = consultarUno(
+            'SELECT id FROM incompatibilidades WHERE acompanante_a = :a AND acompanante_b = :b',
+            [':a' => $acompA, ':b' => $acompB]
+        );
+        if ($yaEsta) responderMal('Esa regla ya estaba puesta.', 409);
+
+        /* invitado_a/invitado_b siguen siendo NOT NULL en la tabla: se
+         * completan con los ids de las confirmaciones de cada persona,
+         * así una fila de este tipo también es válida para el motor
+         * viejo si alguna vez hiciera falta leerla sin las columnas
+         * nuevas — nunca quedan en 0, que rompería esa fila. */
+        $familias = consultarTodo(
+            'SELECT id, confirmacion_id FROM acompanantes WHERE id IN (:a, :b)',
+            [':a' => $acompA, ':b' => $acompB]
+        );
+        $confDe = [];
+        foreach ($familias as $f) $confDe[(int) $f['id']] = (int) $f['confirmacion_id'];
+        if (!isset($confDe[$acompA]) || !isset($confDe[$acompB])) {
+            responderMal('Esas personas no existen.', 404);
+        }
+
+        /* ⚠️ La llave única de la tabla (invitado_a, invitado_b) se
+         * pensó para una fila por PAR DE FAMILIAS. Si dos personas de
+         * la MISMA familia (mismo invitado_a=invitado_b calculado
+         * arriba) necesitan cada una su propia pelea individual con
+         * alguien más de esa familia, dos filas distintas podrían
+         * chocar contra esa llave — un caso raro (hermanos peleados con
+         * dos personas distintas de su propia familia) que la tabla no
+         * contempló. Se atrapa acá con un mensaje claro en vez de dejar
+         * pasar el error crudo de MySQL. */
+        try {
+            $id = insertar('incompatibilidades', [
+                'invitado_a'    => $confDe[$acompA],
+                'invitado_b'    => $confDe[$acompB],
+                'acompanante_a' => $acompA,
+                'acompanante_b' => $acompB,
+                'motivo'        => campoTexto($datos, 'motivo', 200),
+            ]);
+        } catch (PDOException $e) {
+            responderMal(
+                'No se pudo guardar esta regla puntual — probablemente porque ya hay ' .
+                'otra pelea entre estas mismas dos familias. Avisale a quien mantiene el ' .
+                'panel si esto se repite seguido.',
+                409, $e->getMessage()
+            );
+        }
+
+        responderBien(['id' => $id, 'mensaje' => 'Anotado: no se van a sentar juntos.'], 201);
+    }
+
     $a = campoEntero($datos, 'invitado_a', 1);
     $b = campoEntero($datos, 'invitado_b', 1);
 
@@ -594,6 +755,95 @@ case 'auto_al_confirmar':
             ? 'Listo: cada confirmación nueva se va a sentar sola.'
             : 'Apagado: las confirmaciones nuevas quedan sin mesa.',
     ]);
+    break;
+
+
+/* ─── FASE 9: REGLAS POR PERSONA ───────────────────────────────────────── */
+
+/*
+   Sacar a alguien de su familia le da su propio grupo y/o mesa
+   preferida, independiente del resto — a partir de ahí el motor la
+   trata como su propia unidad para sentar (ver panoramaDeMesas() en
+   _lib/mesas.php). Mandar grupo_id=0 Y mesa_preferida=0 juntos la
+   DEVUELVE a viajar con su familia (se borra la fila): no hace falta
+   una acción de "borrar" aparte.
+*/
+case 'regla_persona':
+    exigirMetodo('POST');
+    $datos = cuerpoJson();
+
+    $acompanante = campoEntero($datos, 'acompanante_id', 1);
+    $grupo       = campoEntero($datos, 'grupo_id', 0);
+    $mesa        = campoEntero($datos, 'mesa_preferida', 0);
+    $notas       = campoTexto($datos, 'notas', 300);
+
+    $persona = consultarUno('SELECT id, nombre FROM acompanantes WHERE id = :a',
+                            [':a' => $acompanante]);
+    if (!$persona) responderMal('Esa persona no existe.', 404);
+
+    if ($grupo === 0 && $mesa === 0 && $notas === '') {
+        ejecutar('DELETE FROM acompanante_reglas WHERE acompanante_id = :a',
+                 [':a' => $acompanante]);
+        // Si tenía su propia silla asignada, se la lleva puesta al
+        // volver al bloque familiar: no tiene sentido que siga
+        // "sentada aparte" alguien que ya no tiene regla propia.
+        ejecutar('DELETE FROM asignacion_mesas_persona WHERE acompanante_id = :a',
+                 [':a' => $acompanante]);
+
+        anotarEnBitacora($yo, 'devolvió a alguien a su familia', 'acompanante_reglas',
+                         $acompanante, $persona['nombre']);
+        responderBien(['mensaje' => $persona['nombre'] . ' vuelve a viajar con su familia.']);
+    }
+
+    ejecutar(
+        'REPLACE INTO acompanante_reglas (acompanante_id, grupo_id, mesa_preferida, notas)
+         VALUES (:a, :g, :m, :n)',
+        [
+            ':a' => $acompanante,
+            ':g' => $grupo > 0 ? $grupo : null,
+            ':m' => $mesa > 0 ? $mesa : null,
+            ':n' => $notas,
+        ]
+    );
+
+    anotarEnBitacora($yo, 'sacó a alguien de su familia para sentarlo aparte',
+                     'acompanante_reglas', $acompanante, $persona['nombre']);
+    responderBien(['mensaje' => $persona['nombre'] . ' ahora se sienta por su cuenta.']);
+    break;
+
+
+case 'personas_de':
+    exigirMetodo('GET');
+    $confirmacion = campoEntero($_GET, 'confirmacion_id', 1);
+
+    $personas = consultarTodo(
+        'SELECT a.id, a.nombre, a.tipo,
+                r.grupo_id, r.mesa_preferida, r.notas,
+                g.nombre AS grupo_nombre,
+                am.mesa_id
+         FROM acompanantes a
+         LEFT JOIN acompanante_reglas r ON r.acompanante_id = a.id
+         LEFT JOIN grupos_invitados g   ON g.id = r.grupo_id
+         LEFT JOIN asignacion_mesas_persona am ON am.acompanante_id = a.id
+         WHERE a.confirmacion_id = :c
+         ORDER BY a.nombre',
+        [':c' => $confirmacion]
+    );
+
+    responderBien(array_map(function ($p) {
+        return [
+            'id'             => (int) $p['id'],
+            'nombre'         => $p['nombre'],
+            'tipo'           => $p['tipo'],
+            'tiene_regla'    => $p['grupo_id'] !== null || $p['mesa_preferida'] !== null
+                              || ($p['notas'] ?? '') !== '',
+            'grupo_id'       => $p['grupo_id'] ? (int) $p['grupo_id'] : null,
+            'grupo_nombre'   => $p['grupo_nombre'],
+            'mesa_preferida' => $p['mesa_preferida'] ? (int) $p['mesa_preferida'] : null,
+            'mesa_id'        => $p['mesa_id'] ? (int) $p['mesa_id'] : null,
+            'notas'          => $p['notas'] ?? '',
+        ];
+    }, $personas));
     break;
 
 
