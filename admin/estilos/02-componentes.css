@@ -764,6 +764,72 @@ select.campo__control {
 }
 .tostada--mal { border-color: var(--alerta); color: var(--alerta); }
 
+/* El globo de novedades: una tarjeta chica que apunta a un elemento
+   puntual (ver codigo/40-novedades.js). Deliberadamente NO tiene un
+   fondo oscuro tapando toda la pantalla — es un aviso liviano, no un
+   tutorial que bloquea todo lo demás. */
+.novedad__tarjeta {
+  position: fixed;
+  z-index: 95;
+  width: 260px;
+  max-width: calc(100vw - 24px);
+  padding: var(--esp-3);
+  background: var(--fondo-elevado);
+  border: 1px solid var(--oro);
+  border-radius: var(--redondeo);
+  box-shadow: var(--sombra), var(--brillo-oro);
+  animation: aparecer 180ms ease;
+}
+.novedad__contador {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--oro);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.novedad__texto {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--texto);
+  margin-bottom: var(--esp-2);
+}
+.novedad__boton { width: 100%; min-height: 40px; }
+
+/* La flechita triangular que conecta la tarjeta con lo que señala. */
+.novedad__flecha {
+  position: fixed;
+  z-index: 95;
+  width: 14px;
+  height: 14px;
+  background: var(--fondo-elevado);
+  transform: rotate(45deg);
+}
+.novedad__flecha--abajo {
+  border-right: 1px solid var(--oro);
+  border-bottom: 1px solid var(--oro);
+}
+.novedad__flecha--arriba {
+  border-left: 1px solid var(--oro);
+  border-top: 1px solid var(--oro);
+}
+
+/* El elemento señalado se resalta con un anillo suave — para que se
+   note de un vistazo QUÉ es lo nuevo, sin recurrir a oscurecer todo
+   alrededor. */
+.novedad__resaltado {
+  position: relative;
+  z-index: 90;
+  outline: 2px solid var(--oro);
+  outline-offset: 3px;
+  border-radius: var(--redondeo-chico, 8px);
+  animation: novedad-pulso 1.6s ease-in-out infinite;
+}
+@keyframes novedad-pulso {
+  0%, 100% { outline-color: var(--oro); }
+  50%      { outline-color: color-mix(in srgb, var(--oro) 40%, transparent); }
+}
+
 /* El aviso fijo de "sin conexión" / "cambios por enviar", arriba de todo. */
 .banner-conexion {
   padding: 6px var(--esp-2);

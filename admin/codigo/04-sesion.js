@@ -118,6 +118,8 @@ function mostrarPantallaDeEntrada(aviso) {
   // El campo de contraseña se limpia siempre: si la sesión venció con la
   // app abierta, no queda escrita de antes.
   buscar('#entrada-contrasena').value = '';
+
+  if (typeof mostrarNovedadesDePantalla === 'function') mostrarNovedadesDePantalla('login');
 }
 
 
