@@ -152,9 +152,28 @@ function armarTxt(titulo, bloques) {
 }
 
 /**
+ * Con qué nombre y fecha sugerir el archivo al "Guardar como PDF" del
+ * navegador — que usa el <title> de la página como nombre sugerido.
+ * Sin la fecha, guardar dos resúmenes en semanas distintas termina en
+ * "Resumen ejecutivo.pdf" y "Resumen ejecutivo (1).pdf", indistinguibles
+ * a simple vista un mes después.
+ *
+ * @param {string} base - El título limpio, sin fecha.
+ * @returns {string}
+ */
+function nombreConFechaYHora(base) {
+  const ahora = new Date();
+  const dos = n => String(n).padStart(2, '0');
+
+  return base + ' · ' +
+    ahora.getFullYear() + '-' + dos(ahora.getMonth() + 1) + '-' + dos(ahora.getDate()) +
+    ' ' + dos(ahora.getHours()) + 'h' + dos(ahora.getMinutes());
+}
+
+/**
  * Abre una ventana lista para imprimir o guardar como PDF.
  *
- * @param {string} titulo
+ * @param {string} titulo - El encabezado visible en la hoja (sin fecha).
  * @param {Array} bloques
  * @returns {void}
  */
@@ -190,7 +209,7 @@ function armarPdf(titulo, bloques) {
 
   ventana.document.write(
     '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">' +
-    '<title>' + seguro(titulo) + '</title><style>' +
+    '<title>' + seguro(nombreConFechaYHora(titulo)) + '</title><style>' +
       // Impreso en papel: fondo blanco y letra negra, no la paleta oscura.
       'body{font-family:Georgia,serif;color:#222;padding:24px;}' +
       'h1{color:#8a6a2c;border-bottom:2px solid #d4a843;padding-bottom:8px;}' +
@@ -228,6 +247,13 @@ function armarPdf(titulo, bloques) {
  */
 function exportar(formato, nombreBase, titulo, bloques) {
   if (formato === 'pdf') { armarPdf(titulo, bloques); return; }
+
+  // Mismo motivo que en el PDF: sin fecha, dos descargas de semanas
+  // distintas se pisan o quedan indistinguibles ("(1)", "(2)"…).
+  const ahora = new Date();
+  const dos = n => String(n).padStart(2, '0');
+  nombreBase += '-' + ahora.getFullYear() + dos(ahora.getMonth() + 1) + dos(ahora.getDate()) +
+                '-' + dos(ahora.getHours()) + dos(ahora.getMinutes());
 
   if (formato === 'excel') {
     bajarArchivo(nombreBase + '.xls', armarExcel(titulo, bloques),
@@ -351,11 +377,16 @@ function exportarResumenEjecutivoDinero() {
   const t = DINERO.totales;
   const monto = v => comoDinero(v, false);
 
+  // Cuánto del presupuesto original ya se comprometió — el número que un
+  // asesor mira primero para saber si todavía hay margen de maniobra.
+  const pctComprometido = t.planeado > 0 ? Math.round((t.costo / t.planeado) * 100) : null;
+
   const panorama = [
     ['Costo total del evento',        monto(t.costo)],
     ['Presupuestado originalmente',   monto(t.planeado)],
     ['Desvío contra lo planeado',
-      (t.costo > t.planeado ? '+' : '') + monto(t.costo - t.planeado)],
+      (t.costo > t.planeado ? '+' : '') + monto(t.costo - t.planeado) +
+      (pctComprometido !== null ? ' (' + pctComprometido + '% de lo planeado)' : '')],
     ['Pagado hasta hoy',              monto(t.pagado)],
     ['Por pagar',                     monto(t.por_pagar) +
       (t.por_pagar_cuantos ? ' (' + t.por_pagar_cuantos +
@@ -372,27 +403,50 @@ function exportarResumenEjecutivoDinero() {
    * de un padrino que YA está asignado a un gasto concreto — así que un
    * padrino recién cargado, con su monto prometido pero sin un gasto
    * todavía enlazado, no suma ahí y el reporte mostraba $0 aunque hubiera
-   * padrinos reales con plata comprometida. Acá se sacan las tres capas
-   * por separado, calculadas del propio arreglo de padrinos (ya viene
+   * padrinos reales con plata comprometida. Acá se sacan las capas por
+   * separado, calculadas del propio arreglo de padrinos (ya viene
    * cargado, no hace falta pedirlo de nuevo): cuánto se PROMETIÓ en
    * total, cuánto ya ENTREGARON, y cuánto de eso ya quedó APLICADO a un
    * gasto puntual. Las tres cuentan una parte distinta de la misma
-   * historia y ver solo una desorienta. */
+   * historia y ver solo una desorienta.
+   *
+   * "De tu bolsillo si nadie más entrega" usa `entregadoTotal` (calculado
+   * acá mismo) y NO `t.bolsillo_si_nadie_mas_entrega` (que manda el
+   * servidor): ese número del servidor resta solo lo YA APLICADO a un
+   * gasto puntual, así que con aportes entregados pero todavía sin
+   * asignar a un gasto (el caso más común: el padrino ya pagó, falta
+   * cargar en qué se usó) mostraba el costo total completo como si nadie
+   * hubiera entregado nada — contradecía a la propia fila de arriba. */
   const padrinosDinero = (DINERO.padrinos || []).filter(p => p.tipo_aporte === 'dinero');
   const prometidoTotal = padrinosDinero.reduce((s, p) => s + (Number(p.monto) || 0), 0);
   const entregadoTotal = padrinosDinero
     .filter(p => p.estado === 'entregado')
     .reduce((s, p) => s + (Number(p.monto) || 0), 0);
+  const coberturaPct = t.costo > 0 ? Math.round((prometidoTotal / t.costo) * 100) : null;
 
   const padrinos = prometidoTotal > 0 || (t.de_padrinos > 0) ? [
     ['Comprometido en total (' + padrinosDinero.length +
-      (padrinosDinero.length === 1 ? ' padrino)' : ' padrinos)'), monto(prometidoTotal)],
+      (padrinosDinero.length === 1 ? ' padrino)' : ' padrinos)'), monto(prometidoTotal) +
+      (coberturaPct !== null ? ' (cubre ' + coberturaPct + '% del costo total)' : '')],
     ['Ya entregado',                     monto(entregadoTotal)],
     ['Todavía prometido, sin entregar',  monto(prometidoTotal - entregadoTotal) +
       (t.padrinos_pendientes_cuantos ? ' (' + t.padrinos_pendientes_cuantos + ')' : '')],
     ['  · de eso, ya aplicado a un gasto concreto', monto(t.de_padrinos)],
-    ['De tu bolsillo si nadie más entrega', monto(t.bolsillo_si_nadie_mas_entrega)],
+    ['De tu bolsillo si nadie más entrega', monto(Math.max(0, t.costo - entregadoTotal))],
   ] : [];
+
+  // El desglose padrino por padrino: quién falta, no solo cuánto falta.
+  const detallePadrinos = padrinosDinero
+    .slice()
+    .sort((a, b) => (a.estado === 'entregado') - (b.estado === 'entregado'))
+    .map(p => [
+      p.nombre,
+      p.apadrina || '—',
+      monto(p.monto),
+      p.estado === 'entregado' ? 'Entregado'
+        : p.estado === 'confirmado' ? 'Confirmado, sin entregar'
+        : 'Solo hablado',
+    ]);
 
   // Categorías al 85% de su techo o pasadas — lo único que amerita
   // frenar y decidir algo, no la lista completa de categorías sanas.
@@ -437,6 +491,11 @@ function exportarResumenEjecutivoDinero() {
       ' prometidos por padrinos que todavía no entraron: hasta que eso se entregue, ese monto sale del bolsillo propio si hay que pagarlo antes.');
   }
 
+  if (coberturaPct !== null && padrinosDinero.length) {
+    lectura.push('Los padrinos cubren ' + coberturaPct + '% del costo total si todos entregan lo prometido' +
+      (coberturaPct < 100 ? '; el ' + (100 - coberturaPct) + '% restante sale del bolsillo propio pase lo que pase.' : '.'));
+  }
+
   if (t.por_pagar > 0) {
     lectura.push('Quedan ' + monto(t.por_pagar) + ' comprometidos en pagos pendientes' +
       (alertasTecho.length ? ', con ' + alertasTecho.length +
@@ -452,6 +511,9 @@ function exportarResumenEjecutivoDinero() {
   if (padrinos.length) {
     bloques.push({ titulo: 'Compromiso de los padrinos',
       encabezados: ['Concepto', 'Monto'], filas: padrinos });
+    bloques.push({ titulo: 'Padrino por padrino',
+      encabezados: ['Padrino', 'Apadrina', 'Monto', 'Estado'],
+      filas: detallePadrinos });
   }
 
   bloques.push(
