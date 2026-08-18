@@ -470,6 +470,7 @@ async function encender() {
     // leer su localStorage.
     cargarSandwichGuardadoEnElTelefono();
     cargarFrasesAprendidasEnElTelefono();
+    cargarDiccionarioCarinosoEnElTelefono();
 
     arrancarLaApp();
 
@@ -482,6 +483,7 @@ async function encender() {
     sincronizarPaletaConServidor();
     sincronizarSandwichConServidor();
     sincronizarFrasesConServidor();
+    sincronizarDiccionarioCarinosoConServidor();
 
     // Deja guardada una copia de cada sección por si se corta la señal
     // más tarde (Fase 8 del rediseño). Mismo criterio: no se espera, no
