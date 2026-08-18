@@ -293,6 +293,43 @@
   const CADA_CUANTO_REPINTAR = 45;
   let ultimoRepintado = 0;
 
+  /* ⚡ EL BRILLO DE LAS VELAS "A TIRONES" — Y POR QUÉ NO ES EL THROTTLE.
+     El throttle de arriba está bien como está (no se toca: ver la nota
+     grande más abajo). El problema es OTRO: este lienzo repinta cada
+     ~45 ms, pero 19-velas.js recalcula el titileo cada 30-90 ms según la
+     calidad (su propio throttle, independiente de este) — dos relojes por
+     separado, sin ninguna relación de fase entre sí. El resultado es que
+     a veces este repintado agarra DOS o TRES actualizaciones de titileo
+     de golpe (salto grande) y a veces ninguna (se repite el mismo valor).
+     Esa irregularidad en el TAMAÑO del salto, no el framerate en sí, es lo
+     que se ve "a tirones".
+
+     La solución NO es sincronizar los relojes (más invasivo, y ninguno de
+     los dos está mal calibrado por separado). Es más simple: en vez de
+     dibujar el valor crudo que dejó 19-velas (`f.alfa`), se dibuja un
+     valor que se ACERCA a él un poco en cada repintado, proporcional al
+     tiempo real transcurrido — así, si el reloj de 19-velas "adelantó" dos
+     pasos de una, ese salto se reparte en el tiempo en vez de mostrarse de
+     un tirón. No cambia CUÁNDO se calcula ni CUÁNDO se repinta, solo QUÉ
+     valor se dibuja. */
+  const CONSTANTE_DE_SUAVIZADO_MS = 45;
+
+  /**
+   * Acerca `mostrado` a `objetivo`, un paso proporcional a `dtMs` en vez de
+   * un porcentaje fijo "por repintado" — así el resultado no depende de
+   * cada cuánto se llame. `constanteMs` es "cuánto tarda en cerrar ~63%
+   * de la diferencia": más chica, alcanza más rápido.
+   * @param {number} mostrado
+   * @param {number} objetivo
+   * @param {number} dtMs
+   * @param {number} constanteMs
+   * @returns {number}
+   */
+  function acercar(mostrado, objetivo, dtMs, constanteMs) {
+    const factor = 1 - Math.exp(-dtMs / constanteMs);
+    return mostrado + (objetivo - mostrado) * factor;
+  }
+
   /** El scroll con el que se dibujó el último cuadro. Ver la nota grande
    *  en pintarLaLuz(): si cambió, el throttle se salta para que la luz
    *  no se quede atrás de la llama real (DOM) durante el scroll. */
@@ -319,9 +356,14 @@
   /**
    * Un cuadro completo (o solo la luz fija, si `conMovimiento` es false).
    * @param {boolean} conMovimiento - false = sin haces ni motas.
+   * @param {number} [dtMs] - Milisegundos reales desde el repintado
+   *   anterior, para el suavizado del brillo (ver CONSTANTE_DE_SUAVIZADO_MS
+   *   más arriba). Sin valor (la pasada de "estado quieto"), se salta
+   *   directo al valor final: ahí no hay más cuadros después que lo sigan
+   *   suavizando.
    * @returns {void}
    */
-  function dibujarUnCuadro(conMovimiento) {
+  function dibujarUnCuadro(conMovimiento, dtMs) {
     pincel.setTransform(escalaDelLienzo, 0, 0, escalaDelLienzo, 0, 0);
     pincel.clearRect(0, 0, anchoCss, altoCss);
 
@@ -373,13 +415,20 @@
 
     for (let i = 0; i < fuentes.length; i++) {
       const f = fuentes[i];
-      if (f.alfa <= 0.004 || f.radio <= 0) continue;
+
+      // Primer cuadro de esta fuente: arranca directo en su valor, nada que suavizar.
+      if (f.mostrado === undefined) f.mostrado = f.alfa;
+      f.mostrado = (dtMs === undefined)
+        ? f.alfa   // pasada de "estado quieto": salta directo, no queda nadie mirando
+        : acercar(f.mostrado, f.alfa, dtMs, CONSTANTE_DE_SUAVIZADO_MS);
+
+      if (f.mostrado <= 0.004 || f.radio <= 0) continue;
 
       const y = f.y - desplazamiento;
       if (y < -MARGEN - f.radio || y > altoCss + MARGEN + f.radio) continue;
       if (f.x < -MARGEN - f.radio || f.x > anchoCss + MARGEN + f.radio) continue;
 
-      const alfa = f.alfa * fuerzaDeVelas;
+      const alfa = f.mostrado * fuerzaDeVelas;
       pincel.globalAlpha = alfa > 1 ? 1 : alfa;
       const lado = f.radio * 2;
       pincel.drawImage(f.derrame ? SELLO_DERRAME : SELLO_NUCLEO,
@@ -498,9 +547,15 @@
       requestAnimationFrame(pintarLaLuz);
       return;
     }
+    // Tiempo real desde el repintado anterior, para suavizar el brillo
+    // (ver CONSTANTE_DE_SUAVIZADO_MS) — se mide ANTES de pisar ultimoRepintado.
+    // Se acota por las dudas (pestaña recién vuelta a primer plano, etc.).
+    const dtDesdeElUltimoRepintado = ultimoRepintado
+      ? Math.min(ahora - ultimoRepintado, 250)
+      : CADA_CUANTO_REPINTAR;
     ultimoRepintado = ahora;
     ultimoDesplazamientoDibujado = desplazamientoActual;
-    dibujarUnCuadro(true);
+    dibujarUnCuadro(true, dtDesdeElUltimoRepintado);
 
     requestAnimationFrame(pintarLaLuz);
   }
