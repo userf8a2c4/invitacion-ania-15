@@ -183,9 +183,18 @@ function panoramaDeMesas() {
             $confId  = (int) $fila['id'];
             $sacados = $sueltosPorFamilia[$confId] ?? 0;
 
-            $gente   = (int) $fila['adultos'] + (int) $fila['ninos'];
-            $extra   = (int) ($fila['sillas_extra'] ?? 0);
-            $lugares = max(0, $gente + $extra - $sacados);
+            /* ⚠️ El mínimo de 1 va PRIMERO, sobre el total de la
+               familia — antes de restar a los que se sacaron — para
+               que una familia sin nadie sacado (el 99% de los casos)
+               dé EXACTAMENTE lo mismo que lugaresQueOcupa() de
+               siempre. Restar los sacados y recién ahí poner el
+               mínimo hacía desaparecer del panorama a cualquier
+               confirmación con 0 en adultos/niños/extra — que
+               lugaresQueOcupa() SIEMPRE mostraba con 1 lugar. */
+            $gente = (int) $fila['adultos'] + (int) $fila['ninos'];
+            $extra = (int) ($fila['sillas_extra'] ?? 0);
+            $totalDeLaFamilia = max(1, $gente + $extra);
+            $lugares = max(0, $totalDeLaFamilia - $sacados);
 
             /* Si se sacó a TODA la familia (el caso típico: una
                confirmación de una sola persona con su propia regla), no

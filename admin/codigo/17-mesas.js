@@ -1232,6 +1232,9 @@ function abrirPreferenciasDe(quien, refrescar) {
     '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">' +
       'No sentarlo con' +
     '</div>' +
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-1)">' +
+      'El acomodo automático nunca los va a sentar en la misma mesa.' +
+    '</p>' +
 
     (misPeleas.length
       ? misPeleas.map(p => {
@@ -1250,14 +1253,25 @@ function abrirPreferenciasDe(quien, refrescar) {
             '</button>' +
           '</div>';
         }).join('')
-      : '<p class="vacio__texto">Se lleva bien con todos.</p>') +
+      : '<p class="vacio__texto" style="font-style:italic">Por ahora, ninguna regla puesta.</p>') +
 
-    campoLista({
-      id: 'pref-pelea', rotulo: 'Agregar a alguien',
-      valor: '',
-      opciones: [{ valor: '', texto: 'Elegir…' }].concat(
-        todos.map(p => ({ valor: String(p.id), texto: p.nombre }))),
-    }) +
+    (todos.length
+      ? campoLista({
+          id: 'pref-pelea', rotulo: 'Agregar a alguien más',
+          valor: '',
+          opciones: [{ valor: '', texto: 'Elegir…' }].concat(
+            todos.map(p => ({ valor: String(p.id), texto: p.nombre }))),
+        }) +
+        campoTexto({ id: 'pref-pelea-motivo', rotulo: 'Motivo (opcional)',
+                     pista: 'Ej. "no se hablan", "pelea de terrenos"…' })
+      : '<p class="vacio__texto" style="margin-top:var(--esp-1)">' +
+          'Todavía no hay nadie más confirmado para elegir — cuando confirme otra ' +
+          'persona, va a aparecer acá.' +
+        '</p>') +
+
+    '<p class="vacio__texto" style="margin-top:var(--esp-2)">' +
+      'Tocá Guardar para que la regla quede puesta.' +
+    '</p>' +
 
     pieDeFormulario('Guardar')
   );
@@ -1275,6 +1289,7 @@ function abrirPreferenciasDe(quien, refrescar) {
         await mandar('mesas.php?accion=pelea', {
           invitado_a: quien.id,
           invitado_b: Number(conQuien),
+          motivo: valorDe('pref-pelea-motivo', cuerpo),
         });
       }
 
