@@ -105,9 +105,23 @@
     return { localX, localY, vbX: CENTRO_X + localX, vbY: CENTRO_Y + localY };
   }
 
+  /**
+   * Fija el punto de giro UNA sola vez, como transform-origin de CSS en vez
+   * de como parte del atributo `transform` (ver la nota grande en
+   * aplicarRotacion: mismo arreglo que ya tiene 07-marco-y-enredaderas.js).
+   * @param {Element} elemento
+   * @param {{localX:number, localY:number}} pivote
+   * @returns {void}
+   */
+  function fijarOrigenDeGiro(elemento, pivote) {
+    elemento.style.transformBox = 'view-box';
+    elemento.style.transformOrigin = pivote.localX + 'px ' + pivote.localY + 'px';
+  }
+
   // Borlas: cada una es un péndulo rígido de un solo ángulo.
   const borlas = buscarTodos('.portada__marco .joya-colgante').map(elemento => {
     const p = leerPivote(elemento);
+    fijarOrigenDeGiro(elemento, p);
     return {
       elemento, pivote: p,
       angulo: 0, velocidad: 0,
@@ -123,6 +137,7 @@
   const cadenas = buscarTodos('.portada__marco .cadena-colgante').map(cadena => {
     const eslabones = Array.from(cadena.querySelectorAll('.eslabon')).map((elemento, i) => {
       const p = leerPivote(elemento);
+      fijarOrigenDeGiro(elemento, p);
       return {
         elemento, pivote: p,
         angulo: 0, velocidad: 0,
@@ -223,16 +238,24 @@
   /**
    * Gira una pieza… pero solo si de verdad se movió.
    *
-   * ⚡ ESTE `if` VALE MÁS DE LO QUE PARECE. Era el bucle más caro de toda la
-   * web (30,4 ms en el perfil), y no por la física —son cuatro sumas por
-   * eslabón— sino por las escrituras: entre eslabones, gemas y borlas se
-   * reescribían decenas de atributos `transform` en CADA cuadro.
+   * ⚡ ESTE `if` VALE MÁS DE LO QUE PARECE, Y `style.transform` TAMBIÉN.
+   * Este era el bucle más caro de toda la web (30,4 ms en el perfil), y no
+   * por la física —son cuatro sumas por eslabón— sino por las escrituras:
+   * entre eslabones, gemas y borlas se reescribían decenas de ATRIBUTOS
+   * `transform` en CADA cuadro.
    *
-   * Cambiar el atributo `transform` de un nodo SVG es de las cosas más caras
-   * que se le puede pedir al navegador: a diferencia de un `transform` de
-   * CSS —que resuelve el compositor sin tocar nada más—, en SVG pasa por el
-   * camino de LAYOUT, porque los nodos SVG tienen objetos de layout propios.
-   * Ahí estaba buena parte del 17,7 % de "Layout" del perfil.
+   * Cambiar el ATRIBUTO `transform` de un nodo SVG es de las cosas más
+   * caras que se le puede pedir al navegador: a diferencia de un
+   * `transform` de CSS —que resuelve el compositor sin tocar nada más—, el
+   * atributo pasa por el camino de LAYOUT, porque los nodos SVG tienen
+   * objetos de layout propios. Ahí estaba buena parte del 17,7 % de
+   * "Layout" del perfil. Por eso acá se escribe `elemento.style.transform`
+   * (propiedad de CSS) y no `elemento.setAttribute('transform', ...)`: el
+   * punto de giro se fija UNA sola vez como `transform-origin`
+   * (fijarOrigenDeGiro, más arriba, en la construcción de cada pieza) y
+   * después cada cuadro solo cambia el ángulo, sin tocar layout — mismo
+   * arreglo que ya tiene 07-marco-y-enredaderas.js para sus nudos y
+   * plantas; acá nunca se había aplicado.
    *
    * Y encima cada escritura fabricaba un string nuevo: cientos por segundo,
    * que después el recolector de basura tenía que limpiar (5,9 % del perfil
@@ -260,14 +283,7 @@
     if (giro === pieza.ultimoGiroEscrito) return;
     pieza.ultimoGiroEscrito = giro;
 
-    /* La cola del atributo (el pivote) no cambia nunca: se arma una sola vez
-       la primera vez y se reutiliza. */
-    if (!pieza.textoDelPivote) {
-      pieza.textoDelPivote = ' ' + pieza.pivote.localX + ' ' + pieza.pivote.localY + ')';
-    }
-
-    pieza.elemento.setAttribute('transform',
-      'rotate(' + (giro / 100) + pieza.textoDelPivote);
+    pieza.elemento.style.transform = 'rotate(' + (giro / 100) + 'deg)';
   }
 
   function dibujarCuadro(momentoActual) {
