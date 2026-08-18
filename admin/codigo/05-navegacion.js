@@ -154,6 +154,12 @@ function irA(cual, recargar) {
   // conviene refrescar el número cada vez que se navega, no solo al
   // entrar a Hoy.
   if (typeof actualizarBurbujaCampana === 'function') actualizarBurbujaCampana();
+
+  // Novedades (40-novedades.js): un solo gancho acá cubre las ocho
+  // pantallas, igual que la campana de arriba. Va al final, después de
+  // pedir dibujar la vista: sus elementos tienen que existir ya (o
+  // reintenta solo un rato si la vista todavía está cargando datos).
+  if (typeof mostrarNovedadesDePantalla === 'function') mostrarNovedadesDePantalla(cual);
 }
 
 /**

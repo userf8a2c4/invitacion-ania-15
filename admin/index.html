@@ -318,6 +318,21 @@
 <!-- Mensajito que aparece abajo y se va solo ("Guardado", "Sin conexión"…). -->
 <div id="tostada" class="tostada oculto" role="status" aria-live="polite"></div>
 
+<!-- El globo de novedades: una tarjeta chica que apunta a un botón o
+     elemento puntual para explicar algo nuevo, en lenguaje simple. Ver
+     codigo/31-novedades.js. Vive suelto en el body, no dentro de #app,
+     porque también se usa en la pantalla de login. -->
+<div id="novedad" class="novedad oculto" role="status" aria-live="polite">
+  <div id="novedad-flecha" class="novedad__flecha"></div>
+  <div class="novedad__tarjeta">
+    <p id="novedad-contador" class="novedad__contador"></p>
+    <p id="novedad-texto" class="novedad__texto"></p>
+    <button type="button" id="novedad-boton" class="boton boton--principal novedad__boton">
+      Siguiente
+    </button>
+  </div>
+</div>
+
 
 <!-- ═══ CÓDIGO ═════════════════════════════════════════════════════════
      El orden importa: cada archivo usa cosas de los anteriores. -->
@@ -331,6 +346,7 @@
 <script src="codigo/03-servidor.js"></script>
 <script src="codigo/04-sesion.js"></script>
 <script src="codigo/05-navegacion.js"></script>
+<script src="codigo/40-novedades.js"></script>
 <script src="codigo/06-piezas.js"></script>
 <script src="codigo/07-vista-resumen.js"></script>
 <script src="codigo/08-vista-invitados.js"></script>
