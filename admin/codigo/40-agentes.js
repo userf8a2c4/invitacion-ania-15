@@ -46,11 +46,17 @@ const REGISTRO_DE_AGENTES = [];
 
 /**
  * Anota un agente. Se llama una vez por archivo de agente (41, 42, 43,
- * 44), así agregar uno nuevo no obliga a tocar este archivo.
+ * 44, 46), así agregar uno nuevo no obliga a tocar este archivo.
  *
- * @param {string} clave - 'dinero' | 'mesas' | 'fechas' | 'hoy'…
+ * @param {string} clave - 'dinero' | 'mesas' | 'fechas' | 'hoy' | 'motivador'…
  * @param {string} nombre - Para mostrar si hiciera falta.
- * @param {Function} generar - async () => Sugerencia[]
+ * @param {Function} generar - async (pantalla?: string) => Sugerencia[]
+ *   El parámetro es OPCIONAL: un agente que no lo necesita simplemente
+ *   no lo declara en su función y JS lo ignora solo — no hace falta
+ *   tocar los agentes que ya existían para que esto funcione. Es la
+ *   pestaña donde está parada la persona ahora mismo (VISTA_ACTUAL,
+ *   05-navegacion.js) — para que un agente pueda, si quiere, sugerir
+ *   distinto según qué se está mirando en este momento.
  * @returns {void}
  */
 function registrarAgente(clave, nombre, generar) {
@@ -66,13 +72,14 @@ function registrarAgente(clave, nombre, generar) {
  * un error cualquiera) no tira abajo a los demás: se salta y sigue —
  * mejor mostrar tres sugerencias buenas que ninguna por culpa de una.
  *
+ * @param {string} [pantalla] - VISTA_ACTUAL, para agentes que la usan.
  * @returns {Promise<Array>} De mayor a menor prioridad.
  */
-async function recogerSugerencias() {
+async function recogerSugerencias(pantalla) {
   const listas = await Promise.all(
     REGISTRO_DE_AGENTES.map(async agente => {
       try {
-        const propias = await agente.generar();
+        const propias = await agente.generar(pantalla);
         return Array.isArray(propias) ? propias : [];
       } catch (error) {
         return [];

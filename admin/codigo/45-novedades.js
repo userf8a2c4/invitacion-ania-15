@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════
-   40 · NOVEDADES
+   45 · NOVEDADES
 
    QUÉ HACE ESTE ARCHIVO
    Cuando se agrega algo nuevo al panel (un botón, una pantalla), un
@@ -65,6 +65,12 @@ const NOVEDADES = [
     // cada fila del menú — no hizo falta agregar ninguno nuevo.
     selector: '[data-indice="respaldo"]',
     texto: 'Nuevo: acá ves cuándo se guardó la última copia de seguridad de todo (con los archivos adjuntos incluidos) y podés mandar una nueva cuando quieras, con un toque.',
+  },
+  {
+    id: 'v58-comandos-asistente',
+    pantalla: 'mas',
+    selector: '[data-indice="comandos-asistente"]',
+    texto: 'Nuevo: acá abajo podés enseñarle al asistente tu propia jerga cariñosa (como "abacho") y las frases que te gusta que te digan — las va a usar cuando se las escribas en el chat.',
   },
 ];
 
