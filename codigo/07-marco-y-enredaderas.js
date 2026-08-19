@@ -797,7 +797,19 @@
          lugar de dejarlo con puntas que sobresalen. */
       const cercaniaAlCentro = 1 - Math.abs(reparto - 0.5) * 2;
       const pasos = azar.entero(7, 10);
-      const largoDelPaso = azar.entre(11, 16) * (0.68 + cercaniaAlCentro * 0.42);
+      /* ⚡ EL LARGO SUBIÓ (era entre(11,16)) PORQUE EL ABANICO SE QUEDABA
+         CORTO. Con el largo viejo, un tallo típico llegaba a ~100-140
+         unidades desde la esquina — en un lienzo de 380×270 pensado a
+         propósito más grande que el racimo (ver ANCHO_DEL_RAMILLETE más
+         arriba), eso es apenas un cuarto del ancho disponible. Todo
+         —tallos, hojas y las flores de relleno que se anclan a ellos—
+         quedaba apretado junto a la esquina, dejando vacío el resto del
+         lienzo que la regla 2 ("más ancho que alto") pide usar. Con este
+         largo, un tallo central llega a ~150-210 unidades: usa bastante
+         más del ancho sin llegar a estirarse hasta el borde (ahí es donde
+         "el lienzo más grande que el racimo" deja de ser un margen y pasa
+         a ser un hueco). */
+      const largoDelPaso = azar.entre(16, 23) * (0.68 + cercaniaAlCentro * 0.42);
 
       const tallo = crecerTallo(azar, {
         xInicial: xDeLaBase,
@@ -812,7 +824,17 @@
         xObjetivo: ANCHO_DEL_RAMILLETE * 0.8,
         atraccion: azar.entre(0.0006, 0.0018),
       });
-      puntosDelAbanico.push(...tallo);
+      /* ⚠️ SIN LOS PRIMEROS DOS PASOS: todos los tallos —hasta 46— nacen
+         del MISMO punto (xDeLaBase, yDeLaBase) y recién se separan unos
+         pasos después. Si se guardaran también esos primeros puntos, el
+         relleno de más abajo (que ancla sorteando UN punto al azar de
+         puntosDelAbanico) sortearía la zona de la esquina muchas más veces
+         que el resto del abanico —ahí caen los primeros puntos de CADA
+         tallo, todos casi superpuestos— y las rosas de relleno se
+         amontonarían justo ahí, dejando vacía el área ancha que el propio
+         abanico ya abrió (la regla 2 de más arriba: "más ancho que alto").
+         Se salta a partir de donde el abanico ya se separó de verdad. */
+      puntosDelAbanico.push(...tallo.slice(2));
 
       /* ⚠️ RELLENO DE RESERVA: el degradado #rosa-tallo vive en un <svg> de
          0×0 aparte (la biblioteca de rosas compartida). Ese patrón —un
@@ -907,7 +929,11 @@
          los tallos cortos, los que quedan cerca de la esquina, se
          permiten una flor algo mayor. */
       const punta = tallo[tallo.length - 1];
-      const esCorto = largoDelPaso * pasos < 95;
+      // 95 subió a 137 en la misma proporción que largoDelPaso (ver la nota
+      // de más arriba): si no, con tallos más largos casi ninguno calificaba
+      // como "corto" y la regla 3 (flor grande solo en los tallos cortos)
+      // dejaba de aplicarse casi siempre.
+      const esCorto = largoDelPaso * pasos < 137;
       const sorteo = azar.numero();
 
       if (esCorto && sorteo < 0.55) {
