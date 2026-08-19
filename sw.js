@@ -24,36 +24,28 @@
    pero tenía un costo: al cambiar el CÓDIGO, el visitante seguía viendo la
    versión vieja hasta que se subiera VERSION. Ahora se separan dos casos:
 
-     · EL DOCUMENTO (index.html y las navegaciones) → "primero la RED". Es lo
-       único que de verdad puede llegar "viejo": ES el que decide qué URLs de
-       código pedir. Si hay internet, siempre se ve lo último; si no hay, cae
-       a la copia guardada y la web igual abre.
+     · CÓDIGO de la app (el documento HTML, los .css y los .js) → "primero la
+       RED". Si hay internet, siempre se ve lo último; si no hay, cae a la
+       copia guardada y la web igual abre. Así un cambio se ve con UNA sola
+       recarga, sin depender de VERSION.
 
-     · TODO LO DEMÁS (el código .js con `?v=NN`, y los assets pesados y
-       estables: imágenes, .svg, la canción .mp3, fuentes) → "primero la
-       COPIA". Servirlos del caché es instantáneo y ahorra datos.
+     · ASSETS pesados y estables (imágenes, .svg, la canción .mp3, fuentes) →
+       "primero la COPIA". Casi nunca cambian y pesan: servirlos del caché es
+       instantáneo y ahorra datos. Si algún día cambian, se renueva con VERSION.
 
-   ⚡ POR QUÉ EL CÓDIGO YA NO VA "PRIMERO LA RED" (esto cambió)
-   Antes .js e .css iban por red primero, mismo motivo que el documento:
-   "que un cambio se vea sin depender de VERSION". Pero esos archivos SIEMPRE
-   se piden con `?v=NN` (ver herramientas/subir-version.mjs) — la URL entera
-   cambia en cada cambio de código, así que ya son inmutables por diseño: el
-   navegador jamás va a pedir `01-configuracion.js?v=75` esperando otra
-   respuesta que la que ya tiene guardada. Pedirla "primero por red" en cada
-   visita no compraba frescura (la frescura ya la da el número de versión en
-   la URL): solo sumaba una ida y vuelta al servidor por cada archivo, todas
-   las veces, para nada. En un perfil real esto se notaba fuerte: 27 pedidos
-   ?v= disparados juntos hacían que el servidor tardara cada vez más en
-   contestar los últimos (de ~300 ms los primeros a más de 1,3 s los últimos),
-   y eso inflaba el tiempo de bloqueo medido en escritorio. "Primero la copia"
-   saca esa ida y vuelta de encima para siempre, en cualquier visita que no
-   sea la primera — y en la primera visita el costo es el mismo que antes,
-   porque no hay nada guardado todavía. El documento (index.html) sigue yendo
-   por red primero, porque ÉL es el único que puede envejecer: es el que trae
-   los `?v=NN` nuevos.
+   ⚠️ SE PROBÓ "primero la copia" TAMBIÉN PARA EL CÓDIGO VERSIONADO (`?v=NN`)
+   y SE REVIRTIÓ, junto con el empaquetado de JS en paquetes (ver la nota en
+   herramientas/minificar-js.mjs). La idea era ahorrar una ida y vuelta al
+   servidor en visitas repetidas, pero después de subirlo a PBE el First
+   Contentful Paint y el Largest Contentful Paint empeoraron (en vez de
+   mejorar) tanto en escritorio como en móvil. No se aisló si la causa fue
+   este cambio específico o el empaquetado, así que ante la duda se
+   revirtieron los dos juntos y se volvió a esta versión, ya probada. Si se
+   quiere retomar la idea, hay que aislarla del empaquetado y medir en PBE
+   antes de subir a producción.
    ══════════════════════════════════════════════════════════════════════ */
 
-const VERSION = 'ania-xv-v75';
+const VERSION = 'ania-xv-v77';
 
 /** Extensiones de assets pesados/estables: para esos, "primero la copia". */
 const ASSETS_ESTABLES = /\.(?:mp3|ogg|wav|png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf)$/i;
@@ -122,11 +114,9 @@ self.addEventListener('fetch', evento => {
          recibiría una página web donde esperaba datos. */
   if (url.pathname.startsWith('/admin')) return;
 
-  /* Solo el DOCUMENTO (la navegación en sí, sin `?v=`) va por red primero:
-     es el único que puede envejecer. Todo lo demás —código versionado con
-     `?v=NN` y los assets pesados y estables— va por copia primero, porque su
-     URL exacta ya es inmutable (ver la explicación de arriba). */
-  const esVersionado = url.searchParams.has('v');
+  /* Navegaciones (abrir la página) y assets NO estables (HTML, CSS, JS) van
+     por red primero, así los cambios se ven con una sola recarga. Los assets
+     pesados y estables van por copia primero, por velocidad y ahorro. */
   const esAssetEstable = ASSETS_ESTABLES.test(url.pathname);
-  evento.respondWith((esVersionado || esAssetEstable) ? primeroLaCopia(pedido) : primeroLaRed(pedido));
+  evento.respondWith(esAssetEstable ? primeroLaCopia(pedido) : primeroLaRed(pedido));
 });
