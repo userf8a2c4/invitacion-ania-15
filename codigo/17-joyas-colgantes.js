@@ -302,6 +302,17 @@
     const caja = medidaDelRelicario();
     if (!caja) { requestAnimationFrame(dibujarCuadro); return; }
 
+    /* El scroll pierde fuerza solo: el envión es un golpe, no un empuje fijo.
+       ⚡ ESTO VA ANTES DEL CULLING DE ABAJO, A PROPÓSITO. La primera versión
+       de este culling lo tenía después, y el decaimiento se congelaba
+       entero mientras el relicario estaba lejos del viewport —no "de a
+       poco", sino directamente detenido—. Al volver a acercarse, el envión
+       de scroll acumulado se aplicaba de una sola vez en vez de entrar ya
+       atenuado: eso era el "salto" que se sentía en las joyas/la cadena al
+       scrollear. Decayendo siempre, esté cerca o lejos el relicario, la
+       velocidad ya llega mansa cuando el culling deja pasar de nuevo. */
+    velocidadDeScroll *= 0.85;
+
     /* ⚡ SI EL RELICARIO NO SE VE, NO SE ANIMA — Y ES POR ESTO.
        A diferencia de las velas (VENTANA_POR_CALIDAD, 19-velas.js) o las
        enredaderas (estaCerca, 07-marco-y-enredaderas.js), este bucle no
@@ -326,9 +337,6 @@
     }
 
     const escala = caja.width / ANCHO_DEL_VIEWBOX;
-
-    // El scroll pierde fuerza solo: el envión es un golpe, no un empuje fijo.
-    velocidadDeScroll *= 0.85;
 
     contadorDeCuadro++;
     const tocaRecalcularElMouse = (contadorDeCuadro % saltoDelMouse === 0);
