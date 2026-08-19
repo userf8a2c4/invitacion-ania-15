@@ -53,7 +53,7 @@
 
      La otra mitad del arreglo está en codigo/09-cuenta-regresiva.js: no se
      reescribe el número si no cambió. */
-     ⛔ SIN `paint`: el número lleva un text-shadow de 26 px de radio, y la
+  /* ⛔ SIN `paint`: el número lleva un text-shadow de 26 px de radio, y la
      contención de pintado lo cortaría en el borde de la cartela. Con
      `layout` y `style` alcanza —son las que impiden que el recálculo se
      propague—, y el resplandor del número queda intacto. */
