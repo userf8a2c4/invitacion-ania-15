@@ -184,23 +184,17 @@ body.sobre-visible { overflow: hidden; }
    completo: filter animado no es compositable, y esto latía SIN PARAR
    mientras el sobre estaba en pantalla.
 
-   ⚡ will-change: transform — Y ESTO ES DISTINTO A ANIMAR EL FILTRO.
-   Este grupo tiene hijos con filter="url(#sob-grumo)" (el relieve del
-   lacre) y además vive dentro de un <g filter="url(#sob-sombra)"> que
-   envuelve el sobre entero (index.html). Un perfilado real en vivo mostró
-   que, aun sin animar ningún filtro, el solo hecho de escalar ESTE
-   elemento sin parar —dos veces por segundo, todo el rato que el sobre
-   está en pantalla— obligaba al navegador a recomponer ese subárbol
-   filtrado completo en cada pulso ("Layerize" dominando el perfil). Con
-   will-change el navegador separa el sello en su propia capa de
-   antemano: el scale() lo resuelve el compositor solo, sin volver a tocar
-   el filtro del padre. Mismo criterio ya usado en este proyecto para
-   #capa-fondo y el cursor (#cursor-anillo/#cursor-punto). No cambia nada
-   visual, solo cómo se compone. */
+   ⚡ SIN will-change ACÁ (probado y revertido). La hipótesis era que,
+   como este grupo vive dentro de un <g filter="url(#sob-sombra)"> que
+   envuelve el sobre entero (index.html), separar el sello en su propia
+   capa de antemano evitaría recomponer ese subárbol filtrado en cada
+   pulso. Medido con Layerize antes/después: 37.4% → 36.4%, dentro del
+   ruido — no funcionó. Y cada will-change es una capa de composición
+   permanente más, que es justo el recurso saturado en esta página. Se
+   revierte para no dejar capas extra sin beneficio medido. */
 .sobre__sello {
   transform-box: view-box;
   transform-origin: 220px 152px;
-  will-change: transform;
   animation: latir-sello-escala 2.8s ease-in-out infinite;
 }
 @keyframes latir-sello-escala {
@@ -218,7 +212,6 @@ body.sobre-visible { overflow: hidden; }
   transform-origin: 220px 152px;
   pointer-events: none;
   filter: drop-shadow(0 0 16px rgba(192, 24, 26, .5));
-  will-change: transform;
   animation: latir-sello-escala 2.8s ease-in-out infinite,
              latir-sello-brillo 2.8s ease-in-out infinite;
 }
