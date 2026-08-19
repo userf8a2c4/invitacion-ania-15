@@ -75,10 +75,19 @@
      arreglo que ya tienen los nudos/plantas/flores de 07-marco-y-
      enredaderas.js y las joyas colgantes: style.transform en vez de
      setAttribute('transform'), para que el giro lo resuelva el compositor
-     y no pase por LAYOUT). */
+     y no pase por LAYOUT).
+
+     ⚡ '0px 0px', NO 'center'. El <g> de la enredadera vive adentro de otro
+     <g transform="translate(430 408)"> (index.html) — su dibujo ya está
+     centrado en SU PROPIO origen local. El `rotate(deg)` de SVG que tenía
+     antes giraba ahí, en (0,0), sin ambigüedad. El keyword `center` con
+     transform-box:view-box depende de que el motor resuelva bien esa caja
+     de referencia A TRAVÉS del translate del padre — es una zona con
+     diferencias conocidas entre navegadores. Un punto explícito en píxeles
+     no necesita resolver nada: es exactamente el mismo (0,0) de siempre. */
   if (enredaderaDelMarco) {
     enredaderaDelMarco.style.transformBox = 'view-box';
-    enredaderaDelMarco.style.transformOrigin = 'center';
+    enredaderaDelMarco.style.transformOrigin = '0px 0px';
   }
 
   /** Evita hacer cuentas de más: solo una por cuadro de animación. */
