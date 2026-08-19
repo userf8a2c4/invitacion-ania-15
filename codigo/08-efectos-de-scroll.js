@@ -59,6 +59,28 @@
     if (calidad === CALIDAD_GRAFICA.BAJA && capaDeFondo) capaDeFondo.style.transform = '';
   });
 
+  /* ⚡ EL SOBRANTE SE MIDE UNA VEZ, NO EN CADA SCROLL.
+     capaDeFondo.offsetHeight fuerza al navegador a recalcular el layout de
+     toda la página si hay algo pendiente de invalidar — un perfilado real
+     en vivo lo mostró como parte de un reprocesamiento forzado. El alto de
+     #capa-fondo (125vh) solo cambia si cambia el alto de la ventana, así
+     que se mide al cargar y en cada resize, igual que medidaDelRelicario()
+     en 02-utilidades.js — nunca dentro de actualizarEfectos(). */
+  let sobranteDisponible = 0;
+  function medirElSobrante() {
+    if (capaDeFondo) sobranteDisponible = capaDeFondo.offsetHeight - window.innerHeight;
+  }
+
+  /* Punto de giro de la enredadera del marco, fijado una sola vez (mismo
+     arreglo que ya tienen los nudos/plantas/flores de 07-marco-y-
+     enredaderas.js y las joyas colgantes: style.transform en vez de
+     setAttribute('transform'), para que el giro lo resuelva el compositor
+     y no pase por LAYOUT). */
+  if (enredaderaDelMarco) {
+    enredaderaDelMarco.style.transformBox = 'view-box';
+    enredaderaDelMarco.style.transformOrigin = 'center';
+  }
+
   /** Evita hacer cuentas de más: solo una por cuadro de animación. */
   let hayUnCuadroPendiente = false;
 
@@ -67,19 +89,18 @@
    * @returns {void}
    */
   function actualizarEfectos() {
-    const posicionDelScroll = window.scrollY;
+    // scrollActualY() y no window.scrollY: leerlo directo, en cada cuadro
+    // de scroll, es otra de las lecturas que un perfilado real mostró
+    // forzando layout — mismo motivo que ya documentan 02-utilidades.js,
+    // 07/14/17/19/23-*.js.
+    const posicionDelScroll = scrollActualY();
 
     /* ── Parallax del fondo ──────────────────────────────────────────
        El fondo mide 125vh, o sea que tiene 25vh de sobra para desplazarse.
        Nunca lo movemos más que ese sobrante, porque entonces se vería el
-       borde de abajo.
-
-       El sobrante se lee del elemento, no de un número escrito acá: si
-       algún día cambia el alto en el CSS, esto se adapta solo. (Medía 160vh
-       y se bajó a 125 para aligerar la textura; ver la nota en
-       estilos/01-fundamentos.css.) */
+       borde de abajo. (Medía 160vh y se bajó a 125 para aligerar la
+       textura; ver la nota en estilos/01-fundamentos.css.) */
     if (capaDeFondo && calidad !== CALIDAD_GRAFICA.BAJA) {
-      const sobranteDisponible = capaDeFondo.offsetHeight - window.innerHeight;
       const cuantoSeMueve = Math.min(posicionDelScroll * VELOCIDAD_DEL_PARALLAX, sobranteDisponible);
       capaDeFondo.style.transform = `translateY(-${cuantoSeMueve.toFixed(1)}px)`;
     }
@@ -93,10 +114,7 @@
     /* ── Enredadera que rodea el óvalo de la portada ────────────────
        Gira lentísimo a medida que se baja: le da vida sin distraer. */
     if (enredaderaDelMarco) {
-      enredaderaDelMarco.setAttribute(
-        'transform',
-        `rotate(${(posicionDelScroll * 0.018).toFixed(2)})`
-      );
+      enredaderaDelMarco.style.transform = `rotate(${(posicionDelScroll * 0.018).toFixed(2)}deg)`;
     }
 
     hayUnCuadroPendiente = false;
@@ -117,7 +135,8 @@
   // { passive: true } le promete al navegador que no vamos a cancelar el
   // scroll, y eso le permite desplazarse sin esperar a nuestro código.
   window.addEventListener('scroll', alHacerScroll, { passive: true });
-  window.addEventListener('resize', alHacerScroll);
+  window.addEventListener('resize', () => { medirElSobrante(); alHacerScroll(); });
+  medirElSobrante();
   actualizarEfectos();
 
 })();
