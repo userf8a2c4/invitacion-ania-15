@@ -301,6 +301,30 @@
        hacían falta. */
     const caja = medidaDelRelicario();
     if (!caja) { requestAnimationFrame(dibujarCuadro); return; }
+
+    /* ⚡ SI EL RELICARIO NO SE VE, NO SE ANIMA — Y ES POR ESTO.
+       A diferencia de las velas (VENTANA_POR_CALIDAD, 19-velas.js) o las
+       enredaderas (estaCerca, 07-marco-y-enredaderas.js), este bucle no
+       tenía NINGÚN culling por posición: corría sesenta veces por segundo
+       aunque el relicario estuviera a miles de píxeles de la pantalla —en
+       la cuenta regresiva, en el formulario, donde sea—. Un perfilado real
+       en vivo mostró que eso pesaba: el relicario vive dentro de un
+       `filter` de CSS (.portada__marco, ver estilos/04-portada.css), y un
+       filtro le impide al navegador componer a sus hijos por separado —
+       cada cambio de ángulo de una joya obliga a repintar el SVG entero
+       (~150 nodos) como una sola unidad ("Layerize" en el perfil), sin
+       importar si alguien lo está mirando.
+
+       Mismo margen que ya usa 06-petalos-con-fisica.js para el mismo
+       relicario (150px): afuera de eso, ni se integra el resorte ni se
+       escribe nada. Las piezas quedan con su último ángulo — no se
+       "apagan"—, y retoman solas en cuanto el relicario vuelve a
+       acercarse a la pantalla. */
+    if (caja.top + caja.height < -150 || caja.top > window.innerHeight + 150) {
+      requestAnimationFrame(dibujarCuadro);
+      return;
+    }
+
     const escala = caja.width / ANCHO_DEL_VIEWBOX;
 
     // El scroll pierde fuerza solo: el envión es un golpe, no un empuje fijo.

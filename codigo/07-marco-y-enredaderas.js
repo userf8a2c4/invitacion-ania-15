@@ -1424,9 +1424,19 @@
       planta.estadoDeLasFlores = planta.flores.map(flor => {
         const azar = crearAzarConSemilla(semilla++);
         const escala = parseFloat(flor.dataset.escala) || 0.5;
+        const movil = flor.querySelector('.flor-de-enredadera__movil');
+
+        /* Mismo arreglo que ya tienen los nudos del tallo (más abajo, ver
+           "El pivote va como transform-origin de CSS"): el punto de giro se
+           fija UNA sola vez acá, como transform-origin, en vez de mandarlo
+           en el propio atributo `transform` cada vez que se escribe. */
+        if (movil) {
+          movil.style.transformBox = 'view-box';
+          movil.style.transformOrigin = '0px ' + (6 + 34 * escala).toFixed(1) + 'px';
+        }
 
         return {
-          movil: flor.querySelector('.flor-de-enredadera__movil'),
+          movil,
           // Posición en el documento; se calcula al medir
           xEnElDocumento: 0,
           yEnElDocumento: 0,
@@ -1448,10 +1458,6 @@
              pivota. Va por debajo del centro del capullo, y más lejos
              cuanto más grande sea la flor. */
           largoDelPeduculo: 6 + 34 * escala,
-
-          /* La cola del atributo `transform`, armada una sola vez: el cuello
-             de la flor no se mueve nunca. Ver la nota de textoDelPivote. */
-          textoDelCuello: ' 0 ' + (6 + 34 * escala).toFixed(1) + ')',
 
           /* No hay amplitud, velocidad ni fase propias: la flor ya no
              respira por su cuenta. El vaivén de reposo lo carga el tallo
@@ -1932,14 +1938,23 @@
         /* Se gira alrededor del CUELLO, que está por debajo de la flor.
            Ese punto de pivote es lo que convierte el giro en un cabeceo
            creíble: la flor describe un arco corto, como colgada de su
-           tallo, en lugar de orbitar por el aire. */
-        /* Mismo criterio que en los nudos: entero para comparar, y el resto
-           del atributo precalculado. Acá hay hasta ~255 flores. */
+           tallo, en lugar de orbitar por el aire. El punto en sí ya quedó
+           fijado como transform-origin al construir la flor (ver más
+           arriba); acá solo cambia el ángulo.
+
+           ⚡ style.transform, NO setAttribute('transform'). Esta era la
+           única escritura por cuadro que le quedaba a las flores con
+           `setAttribute` — el mismo costo de LAYOUT que ya se sacó de los
+           nudos/plantas de esta planta y de las joyas colgantes (ronda 2).
+           Solo escribe la flor que el mouse está tocando o que todavía se
+           está acomodando (ver el `continue` de arriba), pero un perfilado
+           real en vivo mostró que esa única escritura alcanzaba para
+           ensuciar el layout de toda la página y encarecer las lecturas de
+           scroll de 23-lienzo-de-luz.js más adelante en el mismo cuadro. */
         const giroDeLaFlor = Math.round(flor.flexion * 100);
         if (giroDeLaFlor !== flor.ultimoGiroEscrito) {
           flor.ultimoGiroEscrito = giroDeLaFlor;
-          flor.movil.setAttribute('transform',
-            'rotate(' + (giroDeLaFlor / 100) + flor.textoDelCuello);
+          flor.movil.style.transform = 'rotate(' + (giroDeLaFlor / 100) + 'deg)';
         }
       }
     }
