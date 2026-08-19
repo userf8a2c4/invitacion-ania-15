@@ -38,7 +38,7 @@
    "que un cambio se vea sin depender de VERSION". Pero esos archivos SIEMPRE
    se piden con `?v=NN` (ver herramientas/subir-version.mjs) — la URL entera
    cambia en cada cambio de código, así que ya son inmutables por diseño: el
-   navegador jamás va a pedir `paquete-1-nucleo.js?v=74` esperando otra
+   navegador jamás va a pedir `01-configuracion.js?v=75` esperando otra
    respuesta que la que ya tiene guardada. Pedirla "primero por red" en cada
    visita no compraba frescura (la frescura ya la da el número de versión en
    la URL): solo sumaba una ida y vuelta al servidor por cada archivo, todas
@@ -53,7 +53,7 @@
    los `?v=NN` nuevos.
    ══════════════════════════════════════════════════════════════════════ */
 
-const VERSION = 'ania-xv-v74';
+const VERSION = 'ania-xv-v75';
 
 /** Extensiones de assets pesados/estables: para esos, "primero la copia". */
 const ASSETS_ESTABLES = /\.(?:mp3|ogg|wav|png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf)$/i;
