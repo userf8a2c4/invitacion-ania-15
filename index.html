@@ -2082,82 +2082,94 @@
 
 
 <!-- ═══ 14. ARCHIVOS DE CÓDIGO ══════════════════════════════════════
-     Se cargan en orden numérico, y ese orden importa: por ejemplo,
-     01-configuracion.js tiene que estar antes que todos los demás,
-     porque el resto lee los datos de ahí.
+     Se cargan en 5 PAQUETES (más 2 sueltos, ver abajo), y el orden entre
+     ellos importa: adentro de cada paquete quedan, uno detrás del otro,
+     los mismos archivos que antes eran <script> sueltos, en el mismo
+     orden que tenían. Por ejemplo 01-configuracion.js sigue siendo lo
+     primero que corre, porque el resto lee los datos de ahí.
 
      TODOS LLEVAN "defer", Y ESO NO ROMPE EL ORDEN.
      Es la confusión habitual con este atributo: "defer" NO significa "cada
      uno cuando pueda". Significa "descargalos en paralelo mientras seguís
      armando la página, y después ejecutalos TODOS EN EL ORDEN EN QUE ESTÁN
-     ESCRITOS". O sea que 01 sigue corriendo antes que 02, y se respetan los
-     dos órdenes críticos que están explicados más abajo (el 24 antes del 06,
-     y el 23 antes del 14, 18 y 19).
+     ESCRITOS". Por eso el paquete 1 sigue corriendo antes que el 2, y por
+     eso alcanza con que 24 esté antes que 06 DENTRO del mismo paquete (y
+     23 antes que 14/18/19) — ver la nota en herramientas/minificar-js.mjs.
 
-     ⛔ Y NO, NO CONVIENE JUNTARLOS EN UN SOLO ARCHIVO. Se probó, se midió,
-     y fue peor: el puntaje de escritorio cayó de 85 a 60 y el de móvil de
-     75 a 67.
+     ⛔→✅ POR QUÉ AHORA SÍ SON POCOS PAQUETES (esto cambió, y vale la pena
+     leerlo si en algún momento se vuelve a tocar esta parte).
 
-     El motivo tiene que ver con cómo se mide el "tiempo de bloqueo" (Total
-     Blocking Time): no cuenta cuánto trabajo hay en total, cuenta las
-     TAREAS LARGAS — solo suma lo que exceda de 50 ms seguidos sin soltar
-     el hilo. Con 25 archivos sueltos, el navegador compila y ejecuta cada
-     uno como una tarea aparte; ninguna llega a 50 ms, así que el tiempo de
-     bloqueo quedaba casi en cero (190 ms en escritorio, 10 ms en móvil).
-     Al juntarlos en un archivo de 429 KB pasó a ser UNA sola tarea de casi
-     un segundo que el navegador no puede interrumpir: 910 ms de bloqueo en
-     escritorio, 260 ms en móvil.
+     Hace tiempo se probó juntar TODO en un solo archivo y salió peor: el
+     puntaje de escritorio cayó de 85 a 60. La causa medida entonces: se
+     había juntado el código FUENTE sin minificar (429 KB, comentarios y
+     todo) en un solo archivo, así que el navegador tenía que parsear y
+     ejecutar eso entero como UNA tarea de casi un segundo que no podía
+     interrumpir — exactamente lo que el "Total Blocking Time" castiga. La
+     lección que quedó fue "no juntar", y con 27 archivos sueltos el
+     tiempo de bloqueo por ejecución de JS era chico.
 
-     O sea: tener los archivos separados no es un descuido que haya que
-     "optimizar", es lo que mantiene la página respondiendo. El CSS sí va
-     empaquetado (ver la sección de ESTILOS): el CSS no se compila ni se
-     ejecuta, así que ahí juntar no genera ninguna tarea larga.
+     Pero con el sitio ya en producción, un perfil real de PageSpeed
+     (escritorio) mostró un problema DISTINTO: 27 pedidos disparados juntos
+     (así trabaja `defer`: todos en paralelo) hacían que el SERVIDOR
+     tardara cada vez más en contestar — los primeros 3 volvían en ~300 ms,
+     del 4° en adelante más de 1.300 ms cada uno, y ESO era lo que inflaba
+     el tiempo de bloqueo, no la ejecución del código en sí (que sumaba
+     apenas ~85 ms entre los 27 archivos). Muchos pedidos chicos resultó
+     ser tan caro como un pedido gigante, solo que por el lado de la red
+     en vez del lado de la CPU.
+
+     La solución no es volver al extremo de antes (1 archivo) ni quedarse
+     en el otro extremo (27 archivos): son 5 paquetes, y cada uno YA VIENE
+     MINIFICADO antes de agruparse (100 KB en total, no 429). Con el
+     trabajo real repartido en 5 en vez de 1, ningún paquete se acerca a
+     los 50 ms de una tarea larga — el más pesado (el que carga las
+     enredaderas) todavía deja margen de sobra. Y con 5 pedidos en vez de
+     27, el servidor deja de acumular esa cola.
+
+     Si una medición futura mostrara que 5 todavía es demasiado pocos (el
+     servidor sigue lento) o demasiados (reaparece una tarea larga), el
+     ajuste es CAMBIAR LA CANTIDAD de paquetes en herramientas/minificar-
+     js.mjs — nunca volver a los 27 archivos sueltos: ese problema (la cola
+     del servidor) no se arregla solo, empeora con cada archivo de más.
+
+     El CSS no compite por nada de esto: va inline en este mismo
+     documento (ver la sección de ESTILOS), cero pedidos aparte.
 
      ¿POR QUÉ codigo/produccion/ Y NO codigo/ A SECAS?
-     Lo de arriba es sobre CANTIDAD de archivos, esto es sobre el PESO de
-     cada uno. codigo/*.js es el código fuente: comentado en español a
-     propósito, para quien lo tenga que tocar después. Antes de subir se
-     corre `node herramientas/minificar-js.mjs`, que lee cada archivo de
-     codigo/ y escribe una copia sin comentarios ni espacios de más en
-     codigo/produccion/ — mismo nombre, mismo orden, mismo "defer", solo
-     que pesa un 80% menos. Acá abajo se pide la copia liviana; el
-     original comentado sigue intacto en codigo/, es el que se edita.
-═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/produccion/01-configuracion.js?v=73"></script>
-<script defer src="codigo/produccion/02-utilidades.js?v=73"></script>
-<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=73"></script>
-<script defer src="codigo/produccion/04-invitado-personalizado.js?v=73"></script>
-<script defer src="codigo/produccion/05-cursor-personalizado.js?v=73"></script>
-<!-- EL LIENZO DE PÉTALOS. Va ANTES que 06-petalos-con-fisica.js porque ese
-     archivo le pregunta al arrancar si debe crear elementos o solo números.
-     Con  ?petalos=dom  vuelve el sistema de divs. -->
-<script defer src="codigo/produccion/24-lienzo-de-petalos.js?v=73"></script>
-<script defer src="codigo/produccion/06-petalos-con-fisica.js?v=73"></script>
-<script defer src="codigo/produccion/07-marco-y-enredaderas.js?v=73"></script>
-<script defer src="codigo/produccion/08-efectos-de-scroll.js?v=73"></script>
-<script defer src="codigo/produccion/09-cuenta-regresiva.js?v=73"></script>
-<script defer src="codigo/produccion/10-reproductor-de-musica.js?v=73"></script>
-<script defer src="codigo/produccion/11-formulario-confirmacion.js?v=73"></script>
-<script defer src="codigo/produccion/12-pase-de-acceso.js?v=73"></script>
-<script defer src="codigo/produccion/13-agregar-al-calendario.js?v=73"></script>
-<!-- EL LIENZO DE LUZ. Dibuja los tres sistemas de luz —velas, haces y polvo—
-     en un solo <canvas>, en vez de en ~140 elementos con `mix-blend-mode`.
+     codigo/*.js es el código fuente: comentado en español a propósito,
+     para quien lo tenga que tocar después. Antes de subir se corre
+     `node herramientas/minificar-js.mjs`, que lee cada archivo de codigo/,
+     lo minifica, y pega los que van juntos en cada paquete dentro de
+     codigo/produccion/. Acá abajo se piden esos paquetes; el original
+     comentado sigue intacto en codigo/, es el que se edita.
 
-     ⚠️ VA ANTES QUE 14, 18 Y 19 A PROPÓSITO: los tres le preguntan al
-     arrancar si deben crear elementos o solo publicar números. Si cargara
-     después, ya habrían decidido y la escena quedaría a oscuras.
+     DOS ARCHIVOS QUEDAN SUELTOS, A PROPÓSITO (no entran en ningún paquete):
+       · 25-preguntas-frecuentes.js: necesita su PROPIO nombre de archivo
+         para encontrar a 00-conocimiento-chatbot.js (lee su propia
+         etiqueta <script> y le reemplaza el nombre — ver el comentario
+         ahí). Metido en un paquete con otro nombre, ese truco se rompe.
+       · 00-conocimiento-chatbot.js: no se carga acá — se inyecta recién
+         al primer toque del botón "?" (lo pide 25). No tiene sentido
+         bajarlo si la mayoría de las visitas nunca lo necesitan.
+═══════════════════════════════════════════════════════════════════ -->
+<script defer src="codigo/produccion/paquete-1-nucleo.js?v=74"></script>
+<!-- Paquete 2: el lienzo de pétalos va primero adentro de este paquete
+     porque 06-petalos-con-fisica.js le pregunta al arrancar si debe crear
+     elementos o solo números. Con  ?petalos=dom  vuelve el sistema de divs. -->
+<script defer src="codigo/produccion/paquete-2-petalos-y-marco.js?v=74"></script>
+<script defer src="codigo/produccion/paquete-3-interaccion.js?v=74"></script>
+<!-- Paquete 4: el lienzo de luz va primero adentro de este paquete.
+     Dibuja los tres sistemas de luz —velas, haces y polvo— en un solo
+     <canvas>, en vez de en ~140 elementos con `mix-blend-mode`.
+
+     ⚠️ TIENE QUE IR PRIMERO A PROPÓSITO: los módulos de velas, motas y
+     haces (más abajo, en el mismo paquete) le preguntan al arrancar si
+     deben crear elementos o solo publicar números. Si se leyeran antes,
+     ya habrían decidido y la escena quedaría a oscuras.
 
      Con  ?luz=dom  este módulo se queda dormido y vuelve el sistema
      anterior completo, sin tocar código. -->
-<script defer src="codigo/produccion/23-lienzo-de-luz.js?v=73"></script>
-<!-- FAUNA NOCTURNA: luciérnagas y termitas, dibujadas por el lienzo de
-     arriba. Va después de 23 (que crea window.LienzoDeLuz) — el orden
-     respecto de 19-velas.js no importa, porque este módulo espera el
-     evento 'invitacion-visible' antes de buscar los candelabros, que
-     19-velas.js recién crea ahí. -->
-<script defer src="codigo/produccion/27-fauna-nocturna.js?v=73"></script>
-<script defer src="codigo/produccion/14-haces-de-luz.js?v=73"></script>
-<script defer src="codigo/produccion/15-registro-de-confirmaciones.js?v=73"></script>
+<script defer src="codigo/produccion/paquete-4-luz-y-ambiente.js?v=74"></script>
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda).
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
      —incluso sobre el sobre de entrada— para que quien tenga un equipo
@@ -2172,28 +2184,28 @@
   <span class="boton-animaciones__texto">Animación</span>
 </button>
 
-<script defer src="codigo/produccion/16-volver-arriba.js?v=73"></script>
-<script defer src="codigo/produccion/17-joyas-colgantes.js?v=73"></script>
-<script defer src="codigo/produccion/18-motas-de-polvo.js?v=73"></script>
-<script defer src="codigo/produccion/19-velas.js?v=73"></script>
-<script defer src="codigo/produccion/20-boton-de-animaciones.js?v=73"></script>
-<script defer src="codigo/produccion/21-monitor-de-rendimiento.js?v=73"></script>
-<!-- Tiñe la luz que entra por los ventanales según la hora del día. Va
-     después de los haces y las motas, porque escribe sobre sus capas. -->
-<script defer src="codigo/produccion/22-luz-de-la-hora.js?v=73"></script>
+<!-- 16-volver-arriba.js, 17-joyas-colgantes.js, 18-motas-de-polvo.js y
+     19-velas.js ya se cargaron arriba, adentro del paquete 4 (junto con
+     23-lienzo-de-luz.js, que tiene que ir primero — ver la nota de más
+     arriba). El botón de animaciones queda en el medio porque así estaba
+     ubicado siempre en el documento; no cambia el orden de ejecución del
+     código, que lo decide el orden de los <script>, no el de este botón. -->
+<script defer src="codigo/produccion/paquete-5-controles.js?v=74"></script>
+<!-- Ese paquete trae, en orden: 20-boton-de-animaciones.js,
+     21-monitor-de-rendimiento.js, 22-luz-de-la-hora.js (después de los
+     haces y las motas, porque escribe sobre sus capas — cargados en el
+     paquete 4, arriba) y 26-mapa-a-pedido.js. -->
 
 <!-- PREGUNTAS FRECUENTES (el botón "?" de la fila de controles).
      El 00 (los datos: fecha, lugar, vestimenta, regalos) NO se carga acá.
      Es el único contenido de la web que la mayoría de los invitados nunca
      llega a abrir, así que 25-preguntas-frecuentes.js lo pide recién al
-     primer toque del botón "?" —mismo truco que ya usa el mapa, más abajo—
-     en vez de bajarlo y parsearlo siempre de arriba. -->
-<script defer src="codigo/produccion/25-preguntas-frecuentes.js?v=73"></script>
-
-<!-- EL MAPA A PEDIDO. El iframe de Google Maps recién se crea cuando se
-     toca "Ver el mapa" (ver el comentario junto a .mapa-marco--a-pedido
-     más arriba). -->
-<script defer src="codigo/produccion/26-mapa-a-pedido.js?v=73"></script>
+     primer toque del botón "?" —mismo truco que ya usa el mapa, cargado
+     arriba en el paquete 5— en vez de bajarlo y parsearlo siempre de
+     arriba. Queda SUELTO, sin paquete: necesita su propio nombre de
+     archivo para encontrar a 00-conocimiento-chatbot.js (ver el
+     comentario ahí, y la nota general más arriba). -->
+<script defer src="codigo/produccion/25-preguntas-frecuentes.js?v=74"></script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
      internet y se pueda instalar. Va al final y falla en silencio si el
