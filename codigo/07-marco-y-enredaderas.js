@@ -752,6 +752,11 @@
 
     const piezas = [];
     const flores = [];
+    /* Puntos reales del abanico de tallos y ramas (coordenadas del
+       viewBox), para anclar ahí el relleno en vez de tirarlo al azar en
+       una caja que llega más lejos que los tallos — ver la nota del
+       relleno más abajo. */
+    const puntosDelAbanico = [];
 
     /* ── El abanico de tallos (regla 1) ──
        Los ángulos van de 0,16 rad (casi horizontal, corriendo por debajo
@@ -771,11 +776,14 @@
        —que ya adelgaza a propósito hasta un solo píxel— quedaba tapada
        entera: rosas que parecen flotar sin nada que las sostenga.
 
-       Math.max(densidad, 1) para no ADELGAZAR el tallo en pantallas
+       Math.max(densidad, 1.6) para no ADELGAZAR el tallo en pantallas
        angostas: ahí la densidad baja de 1 y también hay menos rosas, así
        que el grosor de siempre ya alcanza. Solo se engruesa cuando hace
-       falta, nunca se afina de más. */
-    const grosorDelTallo = Math.max(densidad, 1);
+       falta, nunca se afina de más. El piso subió de 1 a 1.6 porque en
+       celular (ramillete a escala ~0.45) una punta de grosor 1 queda en
+       0.45px CSS —subpíxel, invisible—; con 1.6 la punta mínima queda
+       en ~0.7px, ya visible. */
+    const grosorDelTallo = Math.max(densidad, 1.6);
 
     for (let i = 0; i < cuantosTallos; i++) {
       const reparto = i / (cuantosTallos - 1);
@@ -804,6 +812,7 @@
         xObjetivo: ANCHO_DEL_RAMILLETE * 0.8,
         atraccion: azar.entre(0.0006, 0.0018),
       });
+      puntosDelAbanico.push(...tallo);
 
       /* ⚠️ RELLENO DE RESERVA: el degradado #rosa-tallo vive en un <svg> de
          0×0 aparte (la biblioteca de rosas compartida). Ese patrón —un
@@ -857,6 +866,7 @@
           xObjetivo: ANCHO_DEL_RAMILLETE * 0.8,
           atraccion: 0.001,
         });
+        puntosDelAbanico.push(...rama);
 
         // Mismo relleno de reserva que el tallo principal (ver la nota de arriba).
         // Y el mismo engrosamiento por densidad (ver grosorDelTallo, arriba).
@@ -960,9 +970,17 @@
        tiene lugar para leerse. */
     const cuantasDeRelleno = escalar(azar.entero(18, 23), 3, 46);
     for (let i = 0; i < cuantasDeRelleno; i++) {
+      /* Antes esto tiraba las flores de relleno en una caja fija
+         (x: 30-210, y: 25-180) que llega ~277 unidades desde la base,
+         mientras el abanico de tallos alcanza apenas ~95-115: una de
+         cada tres o cuatro quedaba flotando sin tallo debajo. Ahora se
+         ancla a un punto real del abanico —tallo o rama— con un jitter
+         chico, igual que ya hace la enredadera lateral con la punta de
+         cada brote. */
+      const anclaje = puntosDelAbanico[azar.entero(0, puntosDelAbanico.length - 1)];
       flores.push({
-        x: xDeLaBase + azar.entre(30, 210),
-        y: yDeLaBase + azar.entre(25, 180),
+        x: anclaje.x + azar.entre(-8, 8),
+        y: anclaje.y + azar.entre(-8, 8),
         tipo: azar.numero() < 0.5 ? 'rosa-tres-cuartos' : 'rosa-media',
         escala: azar.entre(0.42, 0.6),
         giro: azar.entre(-40, 40),
@@ -1432,7 +1450,15 @@
            en el propio atributo `transform` cada vez que se escribe. */
         if (movil) {
           movil.style.transformBox = 'view-box';
-          movil.style.transformOrigin = '0px ' + (6 + 34 * escala).toFixed(1) + 'px';
+          /* La flor vive dentro de <g class="flor-de-enredadera"
+             transform="translate(x y)">, así que con transform-box: view-box
+             el origen se mide desde el origen del viewBox, no desde la flor.
+             Hay que compensar con las mismas coordenadas absolutas que el
+             template ya deja en data-x/data-y (igual que hacen los nudos
+             con data-pivote-x/y) o el pivote queda corrido y la flor salta. */
+          movil.style.transformOrigin =
+            (parseFloat(flor.dataset.x) || 0) + 'px ' +
+            ((parseFloat(flor.dataset.y) || 0) + 6 + 34 * escala).toFixed(1) + 'px';
         }
 
         return {

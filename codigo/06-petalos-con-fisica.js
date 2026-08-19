@@ -304,6 +304,13 @@
     if (!evento || evento.type === 'mouseleave' || evento.pointerType === 'touch') {
       mouseX = -9999;
       mouseY = -9999;
+      // Si no se resetean también estos, la velocidad calculada en el
+      // próximo cuadro usa el salto a -9999 como si fuera un manotazo real
+      // y queda congelada en un valor enorme hacia la izquierda para siempre.
+      mouseXAnterior = -9999;
+      mouseYAnterior = -9999;
+      velocidadMouseX = 0;
+      velocidadMouseY = 0;
     }
   }
   document.addEventListener('mouseleave', soltarPuntero);
