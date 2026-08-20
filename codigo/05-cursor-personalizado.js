@@ -194,16 +194,13 @@
   window.addEventListener('blur',  ocultarCursor);
   window.addEventListener('focus', mostrarCursor);
 
-  /* Si el gobernador de rendimiento degrada a calidad BAJA a mitad de
-     sesión (equipo que empezó bien y se puso a sufrir), se apaga el
-     cursor propio y vuelve el del sistema. No hace falta lo contrario
-     —si mejora, no vale la pena reactivarlo recién ahí—: es un ajuste
-     menor y así se evita complejidad de más. */
-  document.addEventListener('calidad-cambio', evento => {
-    if ((evento.detail && evento.detail.calidad) === CALIDAD_GRAFICA.BAJA) {
-      document.documentElement.classList.remove('con-cursor-propio');
-      ocultarCursor();
-    }
-  });
+  /* ⚡ ANTES, AL DEGRADAR A CALIDAD BAJA, SE APAGABA EL CURSOR PROPIO Y
+     VOLVÍA LA FLECHITA DEL SISTEMA. Se sacó a pedido: el cursor propio es
+     parte de la identidad visual de la invitación en todo momento, y el
+     costo de mantenerlo encendido es mínimo — un solo `transform`
+     (translate3d) por cuadro, lo más barato que hay, compositable, sin
+     tocar layout ni pintura. No es de ahí de donde viene el peso cuando
+     la calidad baja; apagarlo no compraba casi nada de rendimiento a
+     cambio de un cambio de aspecto que se nota. */
 
 })();
