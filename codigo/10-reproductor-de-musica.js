@@ -160,6 +160,22 @@
    * @returns {void}
    */
   function reproducirLaCancion(conEco = false) {
+    /* ⚡ EL CONTEXTO DE WEBAUDIO TAMBIÉN HAY QUE DESPERTARLO ACÁ, NO SOLO
+       LA PRIMERA VEZ. Antes esto solo pasaba dentro de entrarComoEcoLejano(),
+       que se llama una única vez (al abrir el sobre). El problema: cuando
+       el teléfono apaga la pantalla por inactividad, el navegador suspende
+       el AudioContext (además de pausar el <audio>). Al desbloquear, este
+       reproducirLaCancion() volvía a llamar audioDeFondo.play() y el
+       elemento SE PONÍA "sonando" —el ícono cambiaba, currentTime avanzaba—
+       pero como el audio sale enrutado POR el contexto (fuente → filtro →
+       destino, ver prepararElGrafoDeAudio) y ese contexto seguía suspendido,
+       no salía ningún sonido: la música quedaba "trabada", sonando en el
+       papel pero muda. Despertarlo acá, en cada intento de reproducir, lo
+       arregla para siempre sin agregar ningún bucle ni reintento. */
+    if (grafoDeAudio && grafoDeAudio.contexto.state === 'suspended') {
+      grafoDeAudio.contexto.resume();
+    }
+
     audioDeFondo.play()
       .then(() => {
         subirElVolumenDeAPoco();
@@ -212,12 +228,46 @@
      el revelado por luz. */
   document.addEventListener('sobre-abierto', () => reproducirLaCancion(true), { once: true });
 
-  /* Red de seguridad: si por lo que sea la música no arrancó, el primer
-     clic en cualquier lado la larga. { once: true } hace que este
-     escuchador se borre solo después de usarse una vez. */
-  document.addEventListener('click', function intentarUnaVezMas() {
+  /* Red de seguridad: si por lo que sea la música no arrancó (o quedó
+     pausada por el navegador y no se pudo retomar sola, ver más abajo),
+     cualquier clic la intenta de nuevo.
+
+     ⚡ YA NO ES { once: true }. Antes se borraba sola después del primer
+     clic de toda la sesión —normalmente el de abrir el sobre— y a partir
+     de ahí no quedaba ninguna red para el resto de la visita. Si el
+     intento automático de retomar tras desbloquear el teléfono (ver el
+     bloque de visibilitychange, abajo) fallara por la política de
+     autoplay del navegador, no había forma de reintentarlo sin encontrar
+     el botón de play exacto. Ahora CUALQUIER toque, en cualquier momento,
+     sirve de red — sin bucles ni temporizadores, solo reacciona a un
+     click real de la persona. */
+  document.addEventListener('click', () => {
     if (audioDeFondo.paused) reproducirLaCancion();
-  }, { once: true });
+  });
+
+
+  /* ─── LA PANTALLA SE BLOQUEA Y SE DESBLOQUEA ───────────────────────
+     Cuando el teléfono apaga la pantalla por inactividad, el navegador
+     pausa el <audio> solo (no lo hacemos nosotros). Sin este bloque, al
+     desbloquear la música se queda pausada para siempre —el evento
+     'pause' ya pintó el botón en ▶, así que ni siquiera se ve como un
+     error, solo se quedó ahí—.
+
+     Se retoma sola, UNA sola vez por cada regreso, y solo si sonaba
+     antes de que la pantalla se apagara (si la persona la había pausado
+     a propósito, tiene que seguir pausada). Como el <audio> no pierde su
+     posición al pausarse, retoma justo donde se quedó — no arranca de
+     nuevo ni hace ningún bucle. */
+  let sonabaAntesDeOcultarse = false;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      sonabaAntesDeOcultarse = !audioDeFondo.paused;
+      return;
+    }
+    if (sonabaAntesDeOcultarse && audioDeFondo.paused) {
+      reproducirLaCancion();
+    }
+  });
 
 
   /* ─── 3. VOLUMEN Y SILENCIO ────────────────────────────────────── */

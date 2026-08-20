@@ -104,9 +104,21 @@
   const RIGIDEZ_DE_LA_PLANTA = 0.05;
   const AMORTIGUACION_DE_LA_PLANTA = 0.13;
 
-  /** Lo mismo para cada flor por separado (más suelto, más vivo). */
+  /** Lo mismo para cada flor por separado (más suelto, más vivo).
+   *
+   *  ⚡ LA AMORTIGUACIÓN SUBIÓ (era 0.16) — ESTO ES LO QUE ARREGLA "LAS
+   *  FLORES VOLADORAS". Con 0.16, el resorte de la flor está MUY por
+   *  debajo del amortiguamiento crítico (ζ ≈ 0,27): un toque del mouse no
+   *  la hacía inclinarse y volver una vez, la hacía pasarse de largo del
+   *  reposo y OSCILAR varias veces de un lado al otro antes de quedarse
+   *  quieta, cada vez más cerca del tope de 24° (FLEXION_MAXIMA). Esa
+   *  oscilación —la flor pasando de lado a lado, no un solo cabeceo— es
+   *  lo que se lee como "vuela" o "flota", no como una flor real
+   *  doblándose sobre su tallo. Con 0.5 el resorte queda cerca del
+   *  amortiguamiento crítico (ζ ≈ 0,8-0,9): se inclina, frena suave y
+   *  vuelve, sin pasarse de largo ni rebotar. */
   const RIGIDEZ_DE_LA_FLOR = 0.09;
-  const AMORTIGUACION_DE_LA_FLOR = 0.16;
+  const AMORTIGUACION_DE_LA_FLOR = 0.5;
 
   /** Grados de inclinación por cada píxel de scroll por cuadro. */
   const GRADOS_POR_VELOCIDAD = 0.4;
@@ -139,7 +151,12 @@
      Los valores son más chicos que los de la flor porque el doblado se
      ACUMULA: si los seis nudos se inclinan 5°, la punta termina a 30°. */
   const RIGIDEZ_DEL_NUDO      = 0.055;
-  const AMORTIGUACION_DEL_NUDO = 0.14;
+  /* ⚡ SUBIÓ (era 0.14) por el mismo motivo que AMORTIGUACION_DE_LA_FLOR:
+     estaba lejos del amortiguamiento crítico y el nudo se pasaba de largo
+     y oscilaba en vez de doblarse y volver una sola vez. Como el doblado
+     de los nudos se ACUMULA hacia la punta (ver la nota de arriba), una
+     oscilación acá se notaba más todavía que en una flor sola. */
+  const AMORTIGUACION_DEL_NUDO = 0.42;
 
   /** Cuánto dobla el mouse a cada nudo (torque, igual que en la flor). */
   const FUERZA_DEL_MOUSE_EN_EL_TALLO = 26;
