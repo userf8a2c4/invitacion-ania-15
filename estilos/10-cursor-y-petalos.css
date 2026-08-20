@@ -74,18 +74,20 @@
   transition: border-color .28s, box-shadow .28s, opacity .3s;
 }
 
-/* Cuatro pequeños trazos alrededor del anillo, como una brújula
-   ornamentada. Giran despacio todo el tiempo. */
+/* Trazos punteados alrededor del anillo, como una brújula ornamentada.
+   ⚡ YA NO GIRAN. Giraban siempre, 9s por vuelta, sin importar si el
+   mouse estaba quieto — y como el cursor se queda parado sobre lo que
+   se está leyendo, ese giro caía justo encima del relicario cada vez
+   que alguien se detenía a mirarlo. Se leía como si el propio relicario
+   tuviera algo moviéndose solo, y llevó varias rondas encontrar que el
+   "anillo que se mueve" era esto. El punteado queda fijo: sigue dando
+   textura al cursor, ya no compite con la decoración de abajo. */
 #cursor-anillo::before {
   content: '';
   position: absolute;
   inset: -6px;
   border-radius: 50%;
   border: 1px dashed rgba(201, 168, 76, .35);
-  animation: girar-anillo 9s linear infinite;
-}
-@keyframes girar-anillo {
-  to { transform: rotate(360deg); }
 }
 
 /* El punto central */
