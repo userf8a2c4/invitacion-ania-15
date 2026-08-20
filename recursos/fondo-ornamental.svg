@@ -1,69 +1,100 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 2100" preserveAspectRatio="xMidYMid slice">
   <defs>
-    <!-- ══ ATMÓSFERA ══ -->
+    <!-- ══ ATMÓSFERA ══
+         ⚡ PALETA "VICTORIANO OSCURO" (2026-08-20), A PEDIDO — reemplaza la
+         paleta dorada/ámbar original por esta, cerrada y de solo 5 colores:
+
+             Gateway Arch    #86776B  — piedra vieja / hueso, el ÚNICO tono
+                                        claro: se usa apenas, para el filo
+                                        que agarra la poca luz que hay.
+             Cordovan Leather #59463B — cuero envejecido, el tono medio.
+             Rustic Red      #39141B — sangre seca, vino oscuro.
+             Belladonna      #28050B — la flor venenosa: casi negro, con
+                                        un pulso de rojo adentro.
+             Black Sheep     #0D0D0E — el vacío, los bordes del cuadro.
+
+         NINGÚN otro color entra: ni el dorado de antes, ni verde en las
+         hojas (una enredadera de cementerio no tiene por qué ser verde:
+         se pensó CENIZA, no viva — ahí están las referencias a Lovecraft
+         y a Stoker que pediste). El único acento es Gateway Arch, y se
+         raciona: si todo brilla, nada es precioso.
+
+         Este archivo es una IMAGEN APARTE de index.html (que sigue con su
+         paleta dorada de siempre, sin tocar — el pedido fue "solo el
+         fondo"). Los ids de los degradados se mantuvieron para no romper
+         ninguna referencia; lo que cambió es el color adentro de cada uno. -->
     <radialGradient id="base" cx="50%" cy="30%" r="95%">
-      <stop offset="0%"   stop-color="#33200f"/>
-      <stop offset="30%"  stop-color="#24160b"/>
-      <stop offset="62%"  stop-color="#150c06"/>
-      <stop offset="100%" stop-color="#070403"/>
+      <stop offset="0%"   stop-color="#59463B"/>
+      <stop offset="30%"  stop-color="#39141B"/>
+      <stop offset="62%"  stop-color="#28050B"/>
+      <stop offset="100%" stop-color="#0D0D0E"/>
     </radialGradient>
     <radialGradient id="warmPool" cx="50%" cy="50%" r="50%">
-      <stop offset="0%"   stop-color="#c9a84c" stop-opacity=".22"/>
-      <stop offset="55%"  stop-color="#96742f" stop-opacity=".09"/>
-      <stop offset="100%" stop-color="#96742f" stop-opacity="0"/>
+      <!-- Ya no es un pozo DORADO: es luz de luna sobre piedra vieja. -->
+      <stop offset="0%"   stop-color="#86776B" stop-opacity=".16"/>
+      <stop offset="55%"  stop-color="#59463B" stop-opacity=".07"/>
+      <stop offset="100%" stop-color="#59463B" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="bloodPool" cx="50%" cy="50%" r="50%">
-      <stop offset="0%"   stop-color="#7a1522" stop-opacity=".42"/>
-      <stop offset="55%"  stop-color="#4a0d16" stop-opacity=".18"/>
-      <stop offset="100%" stop-color="#4a0d16" stop-opacity="0"/>
+      <stop offset="0%"   stop-color="#39141B" stop-opacity=".48"/>
+      <stop offset="55%"  stop-color="#28050B" stop-opacity=".22"/>
+      <stop offset="100%" stop-color="#28050B" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="vignette" cx="50%" cy="45%" r="72%">
-      <stop offset="55%"  stop-color="#000" stop-opacity="0"/>
-      <stop offset="82%"  stop-color="#000" stop-opacity=".35"/>
-      <stop offset="100%" stop-color="#000" stop-opacity=".78"/>
+      <stop offset="55%"  stop-color="#0D0D0E" stop-opacity="0"/>
+      <stop offset="82%"  stop-color="#0D0D0E" stop-opacity=".4"/>
+      <stop offset="100%" stop-color="#0D0D0E" stop-opacity=".85"/>
     </radialGradient>
 
     <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%"   stop-color="#f4e2a0"/>
-      <stop offset="38%"  stop-color="#c9a84c"/>
-      <stop offset="74%"  stop-color="#8f6d2b"/>
-      <stop offset="100%" stop-color="#5f4820"/>
+      <stop offset="0%"   stop-color="#86776B"/>
+      <stop offset="38%"  stop-color="#59463B"/>
+      <stop offset="74%"  stop-color="#39141B"/>
+      <stop offset="100%" stop-color="#28050B"/>
     </linearGradient>
     <linearGradient id="goldV" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%"   stop-color="#e8cf7a"/>
-      <stop offset="55%"  stop-color="#a8862f"/>
-      <stop offset="100%" stop-color="#6b5122"/>
+      <!-- El tallo ya no es dorado: es cuero y madera vieja, apenas tocada
+           de luz arriba y hundida en sangre seca hacia la base. -->
+      <stop offset="0%"   stop-color="#86776B"/>
+      <stop offset="55%"  stop-color="#59463B"/>
+      <stop offset="100%" stop-color="#28050B"/>
     </linearGradient>
     <!-- ══ PÉTALOS ══
-         Estos degradados son EXACTAMENTE los mismos que usa la biblioteca
-         de rosas del index.html. Este archivo es independiente (es una
-         imagen aparte), así que hay que mantenerlos sincronizados a mano:
-         si cambiás la paleta allá, copiala también acá. -->
+         ⚠️ A PROPÓSITO YA NO COINCIDEN CON LA BIBLIOTECA DE ROSAS DE
+         index.html. Antes sí, y el archivo pedía mantenerlos sincronizados
+         a mano — pero esta paleta es SOLO para este fondo (el pedido fue
+         "te limitarás solo al fondo"); las rosas del relicario y las
+         enredaderas de la página siguen con su rojo vino de siempre. Si
+         algún día se unifica todo a esta paleta, ahí sí habría que
+         retocar también la biblioteca de rosas — hasta entonces, son dos
+         paletas distintas a propósito. -->
     <linearGradient id="petCara" x1="0" y1="1" x2=".18" y2="0">
-      <stop offset="0%"   stop-color="#2c070e"/>
-      <stop offset="38%"  stop-color="#5c1220"/>
-      <stop offset="78%"  stop-color="#7e1b2c"/>
-      <stop offset="100%" stop-color="#9c2436"/>
+      <stop offset="0%"   stop-color="#0D0D0E"/>
+      <stop offset="38%"  stop-color="#28050B"/>
+      <stop offset="78%"  stop-color="#39141B"/>
+      <stop offset="100%" stop-color="#59463B"/>
     </linearGradient>
     <linearGradient id="petMedia" x1="0" y1="1" x2=".12" y2="0">
-      <stop offset="0%"   stop-color="#240610"/>
-      <stop offset="48%"  stop-color="#4e0f1c"/>
-      <stop offset="100%" stop-color="#7a1928"/>
+      <stop offset="0%"   stop-color="#0D0D0E"/>
+      <stop offset="48%"  stop-color="#28050B"/>
+      <stop offset="100%" stop-color="#39141B"/>
     </linearGradient>
     <linearGradient id="petInterior" x1="0" y1="1" x2="0" y2="0">
-      <stop offset="0%"   stop-color="#170309"/>
-      <stop offset="55%"  stop-color="#3d0b15"/>
-      <stop offset="100%" stop-color="#5e1422"/>
+      <stop offset="0%"   stop-color="#0D0D0E"/>
+      <stop offset="55%"  stop-color="#28050B"/>
+      <stop offset="100%" stop-color="#39141B"/>
     </linearGradient>
     <linearGradient id="petDorso" x1="0" y1="1" x2="0" y2="0">
-      <stop offset="0%"   stop-color="#1c050b"/>
-      <stop offset="58%"  stop-color="#3f0f19"/>
-      <stop offset="100%" stop-color="#63202c"/>
+      <stop offset="0%"   stop-color="#28050B"/>
+      <stop offset="58%"  stop-color="#39141B"/>
+      <stop offset="100%" stop-color="#59463B"/>
     </linearGradient>
     <linearGradient id="calizVerde" x1="0" y1="1" x2="1" y2="0">
-      <stop offset="0%"   stop-color="#1a2410"/>
-      <stop offset="55%"  stop-color="#38441a"/>
-      <stop offset="100%" stop-color="#5d6b2c"/>
+      <!-- La hoja deja de ser verde: es hoja seca, sin vida, del mismo
+           cuero envejecido que el tallo. Una enredadera de mausoleo. -->
+      <stop offset="0%"   stop-color="#0D0D0E"/>
+      <stop offset="55%"  stop-color="#59463B"/>
+      <stop offset="100%" stop-color="#86776B"/>
     </linearGradient>
 
     <!-- ══ FILTROS: profundidad y trazo orgánico ══ -->
@@ -88,16 +119,17 @@
       <feGaussianBlur stdDeviation="7" result="b"/>
       <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-    <!-- textura de piedra / lienzo -->
+    <!-- textura de piedra / lienzo — el grano ahora sale de Gateway Arch
+         (piedra vieja) en vez del tostado dorado que tenía. -->
     <filter id="grain" x="0" y="0" width="100%" height="100%">
       <feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="4" stitchTiles="stitch" result="n"/>
       <feColorMatrix in="n" type="matrix"
-        values="0 0 0 0 .80  0 0 0 0 .67  0 0 0 0 .34  0 0 0 .07 0"/>
+        values="0 0 0 0 .53  0 0 0 0 .47  0 0 0 0 .42  0 0 0 .07 0"/>
     </filter>
     <filter id="cloudTexture" x="0" y="0" width="100%" height="100%">
       <feTurbulence type="fractalNoise" baseFrequency=".004 .006" numOctaves="5" seed="15" result="n"/>
       <feColorMatrix in="n" type="matrix"
-        values="0 0 0 0 .45  0 0 0 0 .22  0 0 0 0 .10  0 0 0 .30 0"/>
+        values="0 0 0 0 .35  0 0 0 0 .18  0 0 0 0 .11  0 0 0 .30 0"/>
     </filter>
 
     <!-- ══ CRAQUELADO ══
@@ -124,7 +156,7 @@
                     numOctaves="5" seed="23" result="nube"/>
       <!-- El canal rojo de la nube pasa a ser la transparencia -->
       <feColorMatrix in="nube" type="matrix" result="nubeEnAlfa"
-        values="0 0 0 0 0.03   0 0 0 0 0.02   0 0 0 0 0.015   1 0 0 0 0"/>
+        values="0 0 0 0 0.02   0 0 0 0 0.01   0 0 0 0 0.012   1 0 0 0 0"/>
       <!-- El pico angosto convierte la nube en líneas -->
       <feComponentTransfer in="nubeEnAlfa">
         <feFuncA type="table" tableValues="0 0 0 0 1 0 0 0 0"/>
@@ -135,8 +167,10 @@
             color-interpolation-filters="sRGB">
       <feTurbulence type="fractalNoise" baseFrequency="0.009 0.011"
                     numOctaves="5" seed="23" result="nube"/>
+      <!-- Gateway Arch exacto (135,120,108 → .53 .47 .42): el barniz viejo
+           agarra ESTE tono de luz, no el dorado que tenía antes. -->
       <feColorMatrix in="nube" type="matrix" result="nubeEnAlfa"
-        values="0 0 0 0 0.78   0 0 0 0 0.66   0 0 0 0 0.42   1 0 0 0 0"/>
+        values="0 0 0 0 0.53   0 0 0 0 0.47   0 0 0 0 0.42   1 0 0 0 0"/>
       <feComponentTransfer in="nubeEnAlfa" result="lineas">
         <feFuncA type="table" tableValues="0 0 0 0 1 0 0 0 0"/>
       </feComponentTransfer>
@@ -150,7 +184,7 @@
       <feTurbulence type="fractalNoise" baseFrequency="0.0035 0.0042"
                     numOctaves="4" seed="41" result="nube"/>
       <feColorMatrix in="nube" type="matrix" result="nubeEnAlfa"
-        values="0 0 0 0 0.02   0 0 0 0 0.012   0 0 0 0 0.01   1 0 0 0 0"/>
+        values="0 0 0 0 0.09   0 0 0 0 0.015   0 0 0 0 0.025   1 0 0 0 0"/>
       <feComponentTransfer in="nubeEnAlfa">
         <feFuncA type="table" tableValues="0 0 0 1 0 0 0"/>
       </feComponentTransfer>
@@ -185,9 +219,9 @@
 
     <g id="leaf">
       <path d="M0 0 C 24 -9,48 -5,63 13 C 48 17,39 15,30 11 C 37 20,39 28,37 39 C 24 33,15 24,11 13 C 9 22,4 28,-2 33 C -7 20,-4 7,0 0 Z"
-            fill="url(#calizVerde)" fill-opacity=".72" stroke="#1f2a0c" stroke-width="1" stroke-opacity=".6"/>
-      <path d="M2 2 C 21 6,37 15,48 28" fill="none" stroke="#6d7a35" stroke-width=".8" stroke-opacity=".45"/>
-      <path d="M12 6 l 8 8 M22 10 l 8 9 M32 16 l 7 8" stroke="#5d6b2c" stroke-width=".6" stroke-opacity=".3"/>
+            fill="url(#calizVerde)" fill-opacity=".72" stroke="#0D0D0E" stroke-width="1" stroke-opacity=".6"/>
+      <path d="M2 2 C 21 6,37 15,48 28" fill="none" stroke="#59463B" stroke-width=".8" stroke-opacity=".45"/>
+      <path d="M12 6 l 8 8 M22 10 l 8 9 M32 16 l 7 8" stroke="#59463B" stroke-width=".6" stroke-opacity=".3"/>
     </g>
 
     <g id="bud">
@@ -196,14 +230,14 @@
       <path d="M0 -30 C 7 -23,11 -12,10 -1 C 9 8,5 14,1 16 C 0 8,1 -2,0 -10 C -1 -18,-1 -25,0 -30 Z"
             fill="url(#petCara)" stroke="#1b0508" stroke-width=".85"/>
       <path d="M0 -28 C 5 -21,8 -11,7 -1 C 6 6,3 11,1 13" fill="none"
-            stroke="#a15361" stroke-width="1" stroke-opacity=".32" stroke-linecap="round"/>
-      <g fill="url(#calizVerde)" stroke="#1f2a0c" stroke-width=".7">
+            stroke="#39141B" stroke-width="1" stroke-opacity=".32" stroke-linecap="round"/>
+      <g fill="url(#calizVerde)" stroke="#0D0D0E" stroke-width=".7">
         <path d="M-9 2 C -16 5,-21 14,-20 23 C -14 16,-10 9,-7 4 Z"/>
         <path d="M9 2 C 16 5,21 14,20 23 C 14 16,10 9,7 4 Z"/>
         <path d="M-5 11 C -8 18,-8 26,-4 31 C -2 24,-2 17,-2 12 Z"/>
         <path d="M5 11 C 8 18,8 26,4 31 C 2 24,2 17,2 12 Z"/>
       </g>
-      <path d="M0 13 C 0 21,0 27,0 33" fill="none" stroke="#38441a" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M0 13 C 0 21,0 27,0 33" fill="none" stroke="#28050B" stroke-width="2.4" stroke-linecap="round"/>
     </g>
 
     <!-- ══ RAMA ORGÁNICA (unidad compositiva) ══ -->
@@ -213,7 +247,7 @@
             fill="none" stroke="url(#goldV)" stroke-width="3.4" stroke-opacity=".62" stroke-linecap="round"/>
       <!-- tallo secundario -->
       <path d="M18 40 C 66 130, 34 232, 84 330 C 128 416, 78 512, 116 604"
-            fill="none" stroke="#c9a84c" stroke-width="1.3" stroke-opacity=".3"/>
+            fill="none" stroke="#59463B" stroke-width="1.3" stroke-opacity=".3"/>
       <!-- ramitas -->
       <path d="M40 150 C 84 168, 112 206, 120 254 M78 400 C 34 420, 8 456, 4 502
                M104 660 C 150 678, 178 716, 184 762 M120 860 C 76 878, 52 912, 48 954"
@@ -304,8 +338,11 @@
       <use href="#bud"  transform="translate(120 306) rotate(158) scale(.66)"/>
     </g>
 
-    <!-- ══ BRASA / LUCIÉRNAGA ══ -->
-    <g id="ember"><circle r="2.6" fill="#f4e2a0"/></g>
+    <!-- ══ BRASA / LUCIÉRNAGA ══
+         Ya no es un destello dorado: es polvo o ceniza suspendida, apenas
+         iluminada — el único punto claro de la escena (Gateway Arch), pero
+         chico y disperso, no un brillo mágico. -->
+    <g id="ember"><circle r="2.6" fill="#86776B"/></g>
   </defs>
 
   <!-- ══════════ COMPOSICIÓN POR CAPAS ══════════ -->
@@ -357,7 +394,7 @@
     <path d="M250 1990 C 400 1918, 590 1908, 700 1962 C 810 1908, 1000 1918, 1150 1990"
           fill="none" stroke="url(#goldV)" stroke-width="3" stroke-opacity=".55" stroke-linecap="round"/>
     <path d="M320 1978 C 460 1926, 606 1924, 700 1954 C 794 1924, 940 1926, 1080 1978"
-          fill="none" stroke="#c9a84c" stroke-width="1.2" stroke-opacity=".3"/>
+          fill="none" stroke="#59463B" stroke-width="1.2" stroke-opacity=".3"/>
     <use href="#rose"  transform="translate(700 1962) scale(.66)"/>
     <use href="#rose"  transform="translate(470 1930) scale(.44)"/>
     <use href="#rose"  transform="translate(930 1930) scale(.44)"/>
