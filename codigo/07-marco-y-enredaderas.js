@@ -818,12 +818,38 @@
          ⚡ SUBIÓ OTRA VEZ (era entre(16,23)): seguía sin abrir lo
          suficiente. Un tallo central ahora llega a ~200-280 unidades,
          bastante más cerca del 80% del ancho (304) al que ya apunta
-         xObjetivo más abajo. */
-      const largoDelPaso = azar.entre(21, 30) * (0.68 + cercaniaAlCentro * 0.42);
+         xObjetivo más abajo.
+
+         ⚡ SUBIÓ UNA TERCERA VEZ (era entre(21,30)) A PEDIDO: seguía
+         leyéndose "amontonado y aplastado" pese a los dos aumentos
+         anteriores — el problema real no era solo el largo (ver la nota
+         de xRaiz/yRaiz más abajo), pero un empujón más de alcance ayuda a
+         que la copa del ramillete respire más lejos de la esquina. */
+      const largoDelPaso = azar.entre(26, 36) * (0.68 + cercaniaAlCentro * 0.42);
+
+      /* ⚡ LA RAÍZ DE CADA TALLO YA NO ES UN SOLO PUNTO — Y ESTO ES LO QUE
+         DE VERDAD ARREGLA "AMONTONADO EN LA ESQUINA".
+         Hasta acá, los 46 tallos nacían del MISMO (xDeLaBase, yDeLaBase):
+         un abanico entero brotando de un pinchazo. Por más largos que
+         fueran los tallos o por más ancho que se hiciera el contenedor
+         CSS, la geometría de un abanico de un solo origen concentra la
+         masa cerca de ese punto — es matemática, no un problema de
+         cantidad: alargar los tallos solo estira dos brazos flacos desde
+         el mismo pinchazo, nunca hace que el conjunto "rodee" nada.
+
+         La corrección real: cada tallo nace un poco CORRIDO a lo largo de
+         la moldura que le corresponde. Los tallos casi horizontales
+         (reparto→0) corren su raíz a lo largo del borde de ARRIBA; los
+         casi verticales (reparto→1) la corren a lo largo del borde
+         LATERAL. Así la base del ramillete pasa de ser un punto a ser un
+         TRAMO de ~70 unidades sobre cada moldura — el conjunto abraza el
+         relicario en vez de brotar de una esquina puntual. */
+      const xRaiz = xDeLaBase + (1 - reparto) * azar.entre(-4, 70);
+      const yRaiz = yDeLaBase + reparto * azar.entre(-4, 70);
 
       const tallo = crecerTallo(azar, {
-        xInicial: xDeLaBase,
-        yInicial: yDeLaBase,
+        xInicial: xRaiz,
+        yInicial: yRaiz,
         anguloInicial: anguloDeSalida,
         pasos,
         largoDelPaso,
@@ -949,11 +975,12 @@
          los tallos cortos, los que quedan cerca de la esquina, se
          permiten una flor algo mayor. */
       const punta = tallo[tallo.length - 1];
-      // 95 subió a 137 en la misma proporción que largoDelPaso (ver la nota
-      // de más arriba): si no, con tallos más largos casi ninguno calificaba
-      // como "corto" y la regla 3 (flor grande solo en los tallos cortos)
-      // dejaba de aplicarse casi siempre.
-      const esCorto = largoDelPaso * pasos < 180;
+      // 95 subió a 137 y a 180 en la misma proporción que largoDelPaso (ver
+      // la nota de más arriba): si no, con tallos más largos casi ninguno
+      // calificaba como "corto" y la regla 3 (flor grande solo en los
+      // tallos cortos) dejaba de aplicarse casi siempre. Subió a 220 en la
+      // misma proporción que el último aumento de largoDelPaso.
+      const esCorto = largoDelPaso * pasos < 220;
       const sorteo = azar.numero();
 
       if (esCorto && sorteo < 0.55) {

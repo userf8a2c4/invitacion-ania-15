@@ -324,13 +324,17 @@ html.calidad-baja #marco-victoriano::after { display: none; }
 .marco__ramillete {
   position: absolute;
   top: calc(var(--marco-grosor) * .35);
-  /* ⚡ SUBIÓ (era min(36vw, 620px)) A PEDIDO: repartir mejor las rosas
-     puertas adentro del dibujo (ver codigo/07-marco-y-enredaderas.js) no
-     alcanzaba si el dibujo entero seguía chico en pantalla — la
-     redistribución interna solo reordena DÓNDE caen las rosas DENTRO
-     del recuadro; agrandar el recuadro es lo que hace que ocupen más
-     lugar de verdad en la página. */
-  width: min(48vw, 820px);
+  /* ⚡ SUBIÓ (era min(36vw, 620px), después min(48vw, 820px)) A PEDIDO:
+     repartir mejor las rosas puertas adentro del dibujo (ver codigo/
+     07-marco-y-enredaderas.js) no alcanzaba si el dibujo entero seguía
+     chico en pantalla — la redistribución interna solo reordena DÓNDE
+     caen las rosas DENTRO del recuadro; agrandar el recuadro es lo que
+     hace que ocupen más lugar de verdad en la página. Subió otra vez
+     porque seguía leyéndose chico y apretado en la esquina — junto con
+     el cambio de raíz de los tallos en el JS (ver la nota grande ahí),
+     esto es lo que hace que el ramillete se sienta "grande y abierto"
+     en vez de "amontonado". */
+  width: min(54vw, 920px);
   z-index: 3;            /* por encima de la moldura, debajo del contenido */
   pointer-events: none;
 
