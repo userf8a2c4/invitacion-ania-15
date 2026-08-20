@@ -866,8 +866,17 @@
 
       /* Hojas repartidas por el tallo, siempre levantadas hacia afuera.
          Son las que dan el follaje: sin suficientes hojas el ramillete
-         se ve como alambres con flores en la punta. */
-      const cuantasHojas = azar.entero(4, 7);
+         se ve como alambres con flores en la punta.
+
+         ⚡ BAJÓ (era entero(4,7)) A PEDIDO: con hasta 46 tallos en una
+         pantalla ancha (ver cuantosTallos, arriba), 4-7 hojas POR TALLO
+         sumaban a más de 250 hojas solo en los tallos principales —antes
+         de contar las de las ramas secundarias más abajo—. Se leía como
+         un matorral tupido, no como rosas trepando con su follaje. Con
+         menos hojas por tallo el ramillete sigue teniendo follaje real
+         (nunca se ve "puro alambre"), pero deja de competir en cantidad
+         con las propias rosas. */
+      const cuantasHojas = azar.entero(2, 4);
       for (let h = 0; h < cuantasHojas; h++) {
         const punto = tallo[azar.entero(1, tallo.length - 2)];
         const hacia = azar.signo();
@@ -920,8 +929,9 @@
           giro: (puntaDeLaRama.angulo * 180 / Math.PI) + 90 + azar.entre(-20, 20),
         });
 
-        // Un par de hojitas también en la rama
-        for (let h = 0; h < azar.entero(1, 3); h++) {
+        // Un par de hojitas también en la rama (bajó de entero(1,3), mismo
+        // motivo que el tallo principal: menos hojas, follaje más natural).
+        for (let h = 0; h < azar.entero(1, 2); h++) {
           const punto = rama[azar.entero(1, rama.length - 1)];
           const hacia = azar.signo();
           const escala = azar.entre(0.3, 0.5);
