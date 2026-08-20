@@ -1485,15 +1485,33 @@
           <path d="M350 6 C 334 62,292 116,220 150" fill="none"
                 stroke="url(#mo-oro-vertical)" stroke-width="1.6" stroke-dasharray="0.1 9"
                 stroke-linecap="round" stroke-opacity=".7"/>
-          <!-- Las borlas cuelgan de verdad: codigo/17-joyas-colgantes.js
-               las hace pivotar sobre su punto de amarre (data-pivote-*),
-               balanceándose con el scroll y el mouse como péndulos. -->
-          <g class="joya-colgante" data-pivote-x="-340" data-pivote-y="140">
-            <use href="#mo-borla" transform="translate(-340 140) scale(.9)"/>
-          </g>
-          <g class="joya-colgante" data-pivote-x="340" data-pivote-y="140">
-            <use href="#mo-borla" transform="translate(340 140) scale(.9)"/>
-          </g>
+        </g>
+
+        <!-- Las borlas cuelgan de verdad: codigo/17-joyas-colgantes.js las
+             hace pivotar sobre su punto de amarre (data-pivote-*),
+             balanceándose con el scroll y el mouse como péndulos.
+
+             ⚡ AFUERA DEL <g filter="url(#mo-relieve)"> DE ARRIBA, A
+             PROPÓSITO — Y ES DISTINTO DE LO YA PROBADO CON EL SELLO DEL
+             SOBRE (estilos/03-sobre-de-apertura.css: ahí un will-change
+             sobre el elemento que YA vivía adentro de un filtro no sirvió
+             de nada, 37,4%→36,4%, ruido — porque un filtro necesita el
+             píxel final de TODO su subárbol, así que nada adentro se
+             puede componer aparte por más will-change que tenga). Acá el
+             cambio es otro: sacar el elemento del subárbol filtrado en
+             vez de pedirle al navegador que lo aísle desde adentro. Sin
+             estar anidadas, cada giro de una borla ya no obliga a
+             recalcular el drop-shadow de las guirnaldas de al lado.
+
+             No hace falta ningún ajuste de coordenadas: esta rama sigue
+             colgando del mismo <g transform="translate(430 408)"> que
+             las alas, así que translate(-340 140) sigue cayendo en el
+             mismo lugar de siempre. -->
+        <g class="joya-colgante" data-pivote-x="-340" data-pivote-y="140">
+          <use href="#mo-borla" transform="translate(-340 140) scale(.9)"/>
+        </g>
+        <g class="joya-colgante" data-pivote-x="340" data-pivote-y="140">
+          <use href="#mo-borla" transform="translate(340 140) scale(.9)"/>
         </g>
 
         <!-- Base con lambrequín y pendiente -->
@@ -1505,52 +1523,57 @@
           <path d="M-168 250 C -110 292,-54 306,0 306 C 54 306,110 292,168 250" fill="none"
                 stroke="url(#mo-oro-vertical)" stroke-width="2" stroke-dasharray="0.1 11"
                 stroke-linecap="round" stroke-opacity=".75"/>
-          <!-- EL PENDIENTE CENTRAL CUELGA CON PESO REAL.
-               Antes la cadena y la gema giraban como una sola barra rígida.
-               Ahora la cadena está ARTICULADA en tres eslabones anidados
-               (.eslabon), cada uno con su punto de amarre (data-pivote-*).
-               codigo/17-joyas-colgantes.js los mueve como un péndulo
-               compuesto: cada eslabón gira un poco respecto del de arriba,
-               las rotaciones se acumulan y la cadena se CURVA, con la gema
-               —el eslabón más pesado— quedándose atrás (lag) al balancearse.
-               Así se siente el peso de una joya, no una varilla tiesa.
-
-               La rosa-engarce fija y las capullos van FUERA de la cadena
-               (no cuelgan). -->
-          <!-- CADENA CON VOLUMEN: cada tramo son ANILLOS de oro entrelazados
-               (uno de frente, uno de canto), no una línea. Los anillos van
-               DENTRO de cada .eslabon, así giran con la física (17-joyas-
-               colgantes.js): la cadena se curva y la gema queda atrás al
-               mecerse. El realce claro interno le da el brillo del metal. -->
-          <g class="cadena-colgante">
-            <g class="eslabon" data-pivote-x="0" data-pivote-y="228">
-              <!-- eslabón 1: tramo alto -->
-              <ellipse cx="0" cy="236" rx="4.4" ry="8"   fill="none" stroke="url(#mo-oro)" stroke-width="2.4"/>
-              <ellipse cx="-1.3" cy="235" rx="1.7" ry="4.6" fill="none" stroke="#f6e8b4" stroke-width=".9" opacity=".5"/>
-              <ellipse cx="0" cy="248" rx="6.4" ry="2.6" fill="none" stroke="url(#mo-oro-vertical)" stroke-width="2.2"/>
-              <ellipse cx="0" cy="260" rx="4.4" ry="8"   fill="none" stroke="url(#mo-oro)" stroke-width="2.4"/>
-              <ellipse cx="-1.3" cy="259" rx="1.7" ry="4.6" fill="none" stroke="#f6e8b4" stroke-width=".9" opacity=".5"/>
-              <g class="eslabon" data-pivote-x="0" data-pivote-y="264">
-                <!-- eslabón 2: tramo bajo -->
-                <ellipse cx="0" cy="272" rx="4.4" ry="8"   fill="none" stroke="url(#mo-oro)" stroke-width="2.4"/>
-                <ellipse cx="-1.3" cy="271" rx="1.7" ry="4.6" fill="none" stroke="#f6e8b4" stroke-width=".9" opacity=".5"/>
-                <ellipse cx="0" cy="284" rx="6.4" ry="2.6" fill="none" stroke="url(#mo-oro-vertical)" stroke-width="2.2"/>
-                <ellipse cx="0" cy="296" rx="4.4" ry="8"   fill="none" stroke="url(#mo-oro)" stroke-width="2.4"/>
-                <ellipse cx="-1.3" cy="295" rx="1.7" ry="4.6" fill="none" stroke="#f6e8b4" stroke-width=".9" opacity=".5"/>
-                <g class="eslabon" data-pivote-x="0" data-pivote-y="300">
-                  <!-- eslabón 3: último anillo + la gema y la gota (el peso) -->
-                  <ellipse cx="0" cy="306" rx="4" ry="6.5" fill="none" stroke="url(#mo-oro)" stroke-width="2.2"/>
-                  <use href="#mo-gema" transform="translate(0 314) scale(1.05)"/>
-                  <ellipse cx="0" cy="329" rx="3" ry="2" fill="none" stroke="url(#mo-oro-vertical)" stroke-width="1.4"/>
-                  <path d="M0 333 C -9 345,-6 359,0 369 C 6 359,9 345,0 333 Z"
-                        fill="url(#mo-petalo)" stroke="url(#mo-oro)" stroke-width="1.2"/>
-                </g>
-              </g>
-            </g>
-          </g>
           <use href="#rosa-frente" transform="translate(0 228) scale(0.64)"/>
           <use href="#rosa-capullo" transform="translate(-222 296) rotate(-52) scale(.78)"/>
           <use href="#rosa-capullo" transform="translate(222 296) rotate(52) scale(.78)"/>
+        </g>
+
+        <!-- EL PENDIENTE CENTRAL CUELGA CON PESO REAL.
+             Antes la cadena y la gema giraban como una sola barra rígida.
+             Ahora la cadena está ARTICULADA en tres eslabones anidados
+             (.eslabon), cada uno con su punto de amarre (data-pivote-*).
+             codigo/17-joyas-colgantes.js los mueve como un péndulo
+             compuesto: cada eslabón gira un poco respecto del de arriba,
+             las rotaciones se acumulan y la cadena se CURVA, con la gema
+             —el eslabón más pesado— quedándose atrás (lag) al balancearse.
+             Así se siente el peso de una joya, no una varilla tiesa.
+
+             CADENA CON VOLUMEN: cada tramo son ANILLOS de oro entrelazados
+             (uno de frente, uno de canto), no una línea. Los anillos van
+             DENTRO de cada .eslabon, así giran con la física (17-joyas-
+             colgantes.js): la cadena se curva y la gema queda atrás al
+             mecerse. El realce claro interno le da el brillo del metal.
+
+             ⚡ AFUERA DEL <g filter="url(#mo-relieve)"> DE LA BASE, mismo
+             motivo que las borlas de arriba: la cadena es lo que más
+             gira, así que es lo que más beneficio saca de no forzar el
+             recálculo del drop-shadow del lambrequín en cada cuadro.
+             Mismas coordenadas de siempre, mismo <g transform> de afuera. -->
+        <g class="cadena-colgante">
+          <g class="eslabon" data-pivote-x="0" data-pivote-y="228">
+            <!-- eslabón 1: tramo alto -->
+            <ellipse cx="0" cy="236" rx="4.4" ry="8"   fill="none" stroke="url(#mo-oro)" stroke-width="2.4"/>
+            <ellipse cx="-1.3" cy="235" rx="1.7" ry="4.6" fill="none" stroke="#f6e8b4" stroke-width=".9" opacity=".5"/>
+            <ellipse cx="0" cy="248" rx="6.4" ry="2.6" fill="none" stroke="url(#mo-oro-vertical)" stroke-width="2.2"/>
+            <ellipse cx="0" cy="260" rx="4.4" ry="8"   fill="none" stroke="url(#mo-oro)" stroke-width="2.4"/>
+            <ellipse cx="-1.3" cy="259" rx="1.7" ry="4.6" fill="none" stroke="#f6e8b4" stroke-width=".9" opacity=".5"/>
+            <g class="eslabon" data-pivote-x="0" data-pivote-y="264">
+              <!-- eslabón 2: tramo bajo -->
+              <ellipse cx="0" cy="272" rx="4.4" ry="8"   fill="none" stroke="url(#mo-oro)" stroke-width="2.4"/>
+              <ellipse cx="-1.3" cy="271" rx="1.7" ry="4.6" fill="none" stroke="#f6e8b4" stroke-width=".9" opacity=".5"/>
+              <ellipse cx="0" cy="284" rx="6.4" ry="2.6" fill="none" stroke="url(#mo-oro-vertical)" stroke-width="2.2"/>
+              <ellipse cx="0" cy="296" rx="4.4" ry="8"   fill="none" stroke="url(#mo-oro)" stroke-width="2.4"/>
+              <ellipse cx="-1.3" cy="295" rx="1.7" ry="4.6" fill="none" stroke="#f6e8b4" stroke-width=".9" opacity=".5"/>
+              <g class="eslabon" data-pivote-x="0" data-pivote-y="300">
+                <!-- eslabón 3: último anillo + la gema y la gota (el peso) -->
+                <ellipse cx="0" cy="306" rx="4" ry="6.5" fill="none" stroke="url(#mo-oro)" stroke-width="2.2"/>
+                <use href="#mo-gema" transform="translate(0 314) scale(1.05)"/>
+                <ellipse cx="0" cy="329" rx="3" ry="2" fill="none" stroke="url(#mo-oro-vertical)" stroke-width="1.4"/>
+                <path d="M0 333 C -9 345,-6 359,0 369 C 6 359,9 345,0 333 Z"
+                      fill="url(#mo-petalo)" stroke="url(#mo-oro)" stroke-width="1.2"/>
+              </g>
+            </g>
+          </g>
         </g>
       </g>
     </svg>
@@ -2133,23 +2156,23 @@
      que pesa un 80% menos. Acá abajo se pide la copia liviana; el
      original comentado sigue intacto en codigo/, es el que se edita.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/produccion/01-configuracion.js?v=78"></script>
-<script defer src="codigo/produccion/02-utilidades.js?v=78"></script>
-<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=78"></script>
-<script defer src="codigo/produccion/04-invitado-personalizado.js?v=78"></script>
-<script defer src="codigo/produccion/05-cursor-personalizado.js?v=78"></script>
+<script defer src="codigo/produccion/01-configuracion.js?v=79"></script>
+<script defer src="codigo/produccion/02-utilidades.js?v=79"></script>
+<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=79"></script>
+<script defer src="codigo/produccion/04-invitado-personalizado.js?v=79"></script>
+<script defer src="codigo/produccion/05-cursor-personalizado.js?v=79"></script>
 <!-- EL LIENZO DE PÉTALOS. Va ANTES que 06-petalos-con-fisica.js porque ese
      archivo le pregunta al arrancar si debe crear elementos o solo números.
      Con  ?petalos=dom  vuelve el sistema de divs. -->
-<script defer src="codigo/produccion/24-lienzo-de-petalos.js?v=78"></script>
-<script defer src="codigo/produccion/06-petalos-con-fisica.js?v=78"></script>
-<script defer src="codigo/produccion/07-marco-y-enredaderas.js?v=78"></script>
-<script defer src="codigo/produccion/08-efectos-de-scroll.js?v=78"></script>
-<script defer src="codigo/produccion/09-cuenta-regresiva.js?v=78"></script>
-<script defer src="codigo/produccion/10-reproductor-de-musica.js?v=78"></script>
-<script defer src="codigo/produccion/11-formulario-confirmacion.js?v=78"></script>
-<script defer src="codigo/produccion/12-pase-de-acceso.js?v=78"></script>
-<script defer src="codigo/produccion/13-agregar-al-calendario.js?v=78"></script>
+<script defer src="codigo/produccion/24-lienzo-de-petalos.js?v=79"></script>
+<script defer src="codigo/produccion/06-petalos-con-fisica.js?v=79"></script>
+<script defer src="codigo/produccion/07-marco-y-enredaderas.js?v=79"></script>
+<script defer src="codigo/produccion/08-efectos-de-scroll.js?v=79"></script>
+<script defer src="codigo/produccion/09-cuenta-regresiva.js?v=79"></script>
+<script defer src="codigo/produccion/10-reproductor-de-musica.js?v=79"></script>
+<script defer src="codigo/produccion/11-formulario-confirmacion.js?v=79"></script>
+<script defer src="codigo/produccion/12-pase-de-acceso.js?v=79"></script>
+<script defer src="codigo/produccion/13-agregar-al-calendario.js?v=79"></script>
 <!-- EL LIENZO DE LUZ. Dibuja los tres sistemas de luz —velas, haces y polvo—
      en un solo <canvas>, en vez de en ~140 elementos con `mix-blend-mode`.
 
@@ -2159,15 +2182,15 @@
 
      Con  ?luz=dom  este módulo se queda dormido y vuelve el sistema
      anterior completo, sin tocar código. -->
-<script defer src="codigo/produccion/23-lienzo-de-luz.js?v=78"></script>
+<script defer src="codigo/produccion/23-lienzo-de-luz.js?v=79"></script>
 <!-- FAUNA NOCTURNA: luciérnagas y termitas, dibujadas por el lienzo de
      arriba. Va después de 23 (que crea window.LienzoDeLuz) — el orden
      respecto de 19-velas.js no importa, porque este módulo espera el
      evento 'invitacion-visible' antes de buscar los candelabros, que
      19-velas.js recién crea ahí. -->
-<script defer src="codigo/produccion/27-fauna-nocturna.js?v=78"></script>
-<script defer src="codigo/produccion/14-haces-de-luz.js?v=78"></script>
-<script defer src="codigo/produccion/15-registro-de-confirmaciones.js?v=78"></script>
+<script defer src="codigo/produccion/27-fauna-nocturna.js?v=79"></script>
+<script defer src="codigo/produccion/14-haces-de-luz.js?v=79"></script>
+<script defer src="codigo/produccion/15-registro-de-confirmaciones.js?v=79"></script>
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda).
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
      —incluso sobre el sobre de entrada— para que quien tenga un equipo
@@ -2182,15 +2205,15 @@
   <span class="boton-animaciones__texto">Animación</span>
 </button>
 
-<script defer src="codigo/produccion/16-volver-arriba.js?v=78"></script>
-<script defer src="codigo/produccion/17-joyas-colgantes.js?v=78"></script>
-<script defer src="codigo/produccion/18-motas-de-polvo.js?v=78"></script>
-<script defer src="codigo/produccion/19-velas.js?v=78"></script>
-<script defer src="codigo/produccion/20-boton-de-animaciones.js?v=78"></script>
-<script defer src="codigo/produccion/21-monitor-de-rendimiento.js?v=78"></script>
+<script defer src="codigo/produccion/16-volver-arriba.js?v=79"></script>
+<script defer src="codigo/produccion/17-joyas-colgantes.js?v=79"></script>
+<script defer src="codigo/produccion/18-motas-de-polvo.js?v=79"></script>
+<script defer src="codigo/produccion/19-velas.js?v=79"></script>
+<script defer src="codigo/produccion/20-boton-de-animaciones.js?v=79"></script>
+<script defer src="codigo/produccion/21-monitor-de-rendimiento.js?v=79"></script>
 <!-- Tiñe la luz que entra por los ventanales según la hora del día. Va
      después de los haces y las motas, porque escribe sobre sus capas. -->
-<script defer src="codigo/produccion/22-luz-de-la-hora.js?v=78"></script>
+<script defer src="codigo/produccion/22-luz-de-la-hora.js?v=79"></script>
 
 <!-- PREGUNTAS FRECUENTES (el botón "?" de la fila de controles).
      El 00 (los datos: fecha, lugar, vestimenta, regalos) NO se carga acá.
@@ -2198,12 +2221,12 @@
      llega a abrir, así que 25-preguntas-frecuentes.js lo pide recién al
      primer toque del botón "?" —mismo truco que ya usa el mapa, más abajo—
      en vez de bajarlo y parsearlo siempre de arriba. -->
-<script defer src="codigo/produccion/25-preguntas-frecuentes.js?v=78"></script>
+<script defer src="codigo/produccion/25-preguntas-frecuentes.js?v=79"></script>
 
 <!-- EL MAPA A PEDIDO. El iframe de Google Maps recién se crea cuando se
      toca "Ver el mapa" (ver el comentario junto a .mapa-marco--a-pedido
      más arriba). -->
-<script defer src="codigo/produccion/26-mapa-a-pedido.js?v=78"></script>
+<script defer src="codigo/produccion/26-mapa-a-pedido.js?v=79"></script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
      internet y se pueda instalar. Va al final y falla en silencio si el
