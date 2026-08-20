@@ -51,8 +51,18 @@
       hazBorde:   [200, 124, 88, 0.11],
       motaCentro: [255, 238, 216, 0.90],
       motaBorde:  [246, 208, 168, 0.52],
-      ambienteAlto: [148, 66, 60, 0.28],
-      tinteDeSala:  [126, 86, 92, 0.13],
+      /* ⚡ AMBIENTE Y TINTE DE SALA, REBAJADOS (2026-08-20) — ESTO ES LO
+         QUE ARREGLABA "EL FONDO SE VE NARANJA Y ALEGRE". Estos dos
+         valores tiñen el fondo entero (ver veloDeLaSala y --ambiente-alto
+         más abajo), y estaban calibrados para el fondo SEPIA CÁLIDO
+         original — el propio comentario de este archivo lo decía. Con el
+         fondo nuevo (victoriano oscuro, recursos/fondo-ornamental.svg)
+         ese naranja de mediodía/atardecer quedaba encima como un filtro
+         alegre sobre un cuadro que tiene que sentirse una cripta. Los
+         valores de noche (20h en adelante) NO se tocaron: ya eran oscuros
+         y encajan sin ajustar. */
+      ambienteAlto: [80, 26, 30, 0.22],
+      tinteDeSala:  [64, 28, 30, 0.09],
       tinteDelVelo: [96, 58, 58, 0.14],
       anguloDelSol: 34,
       largoDelHaz:  1.3,
@@ -66,7 +76,9 @@
       hazBorde:   [210, 190, 128, 0.09],
       motaCentro: [255, 250, 236, 0.92],
       motaBorde:  [248, 238, 200, 0.54],
-      ambienteAlto: [146, 74, 44, 0.16],
+      // Mismo motivo que a las 7h: era un halo naranja/terroso brillante
+      // sobre un fondo que ahora es piedra vieja y sangre seca, no sepia.
+      ambienteAlto: [72, 30, 24, 0.13],
       tinteDeSala:  [255, 238, 206, 0.00],
       tinteDelVelo: [64, 46, 28, 0.06],
       anguloDelSol: 10,
@@ -81,8 +93,11 @@
       hazBorde:   [206, 108, 44, 0.15],
       motaCentro: [255, 236, 196, 0.95],
       motaBorde:  [250, 206, 132, 0.58],
-      ambienteAlto: [168, 52, 18, 0.30],
-      tinteDeSala:  [198, 116, 48, 0.14],
+      // Mismo motivo: el naranja de "hora dorada" era justamente el más
+      // fuerte de los tres (alfa .30/.14) — el que más se notaba mal.
+      // Ahora es un rojo oscuro profundo, no un atardecer de postal.
+      ambienteAlto: [92, 24, 18, 0.24],
+      tinteDeSala:  [80, 26, 18, 0.11],
       tinteDelVelo: [104, 48, 16, 0.16],
       anguloDelSol: -26,
       largoDelHaz:  1.28,
