@@ -183,24 +183,17 @@
      (La otra mitad del arreglo está en el filtro #mo-resplandor de
      index.html, cuya región era demasiado chica y producía un cuadrado.) */
   overflow: visible;
-  /* Dos sombras: el halo dorado que ya tenía (aura de la luz) y una
-     sombra oscura y BAJA que le da PESO —el relicario deja de flotar y se
-     siente un objeto pesado apoyado sobre terciopelo, no un dibujo plano—.
-     Es parte de la presencia del centro: arriba reina la luz y el objeto
-     que la recibe tiene cuerpo. */
-  /* ⚡ EL FILTRO QUEDA FIJO, Y LA ANIMACIÓN SOLO TOCA LA OPACIDAD.
-     Antes el filtro (las dos sombras) también animaba, de invisible a su
-     valor final, en paralelo con la opacidad. Pero a opacidad 0 CUALQUIER
-     sombra ya es invisible —animarla en simultáneo no sumaba nada que la
-     opacidad sola no hiciera—, y en cambio `filter` es una propiedad que
-     Lighthouse marca como "no compuesta": cada cuadro de esa animación
-     obligaba al navegador a recalcular estilos en el hilo principal en
-     vez de dejárselo a la GPU. Con el filtro fijo, la sombra "aparece"
-     exactamente igual, como efecto colateral de que el elemento entero
-     aparece, pero ahora la animación es 100% compositable. */
-  filter:
-    drop-shadow(0 0 45px rgba(201, 168, 76, .16))
-    drop-shadow(0 26px 30px rgba(0, 0, 0, .55));
+  /* ⚡ EL FILTRO YA NO VIVE ACÁ — se mudó a .marco__sombra-exterior, más
+     abajo. Antes envolvía TODO este SVG (~216 nodos): la enredadera, las
+     borlas y la cadena giran todo el tiempo (scroll o un rAF continuo,
+     ver codigo/08-efectos-de-scroll.js y codigo/17-joyas-colgantes.js), y
+     un filtro CSS obliga a repintar el subárbol ENTERO como una sola
+     unidad ante cualquier cambio de un descendiente — así que cada giro
+     de una borla repintaba el relicario completo. Ver la nota grande en
+     index.html, justo antes de envolver el núcleo/filigrana/gemas/Corona/
+     Alas y la Base: esas partes SÍ quedan bajo el nuevo filtro porque no
+     se mueven solas; la enredadera, las borlas y la cadena quedan afuera
+     de cualquier filtro. */
   will-change: opacity;
 
   /* La entrada anima SOLO la opacidad, nunca el tamaño: así el broche
@@ -211,6 +204,22 @@
 @keyframes aparecer-marco {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+
+/* La sombra exterior del relicario, mudada acá desde .portada__marco (ver
+   la nota de arriba). Dos sombras: el halo dorado (aura de la luz) y una
+   sombra oscura y BAJA que le da PESO —el relicario deja de flotar y se
+   siente un objeto pesado apoyado sobre terciopelo, no un dibujo plano—.
+
+   Se aplica a 3 envoltorios puestos en index.html alrededor de lo que NO
+   se mueve solo (el arco de fondo; núcleo+filigrana+gemas+Corona+Alas; la
+   Base), nunca sobre la enredadera/borlas/cadena. Ni un valor cambió, solo
+   el alcance: misma sombra, mismo aspecto, ahora sin forzar el repintado
+   de todo el relicario en cada giro de una borla. */
+.marco__sombra-exterior {
+  filter:
+    drop-shadow(0 0 45px rgba(201, 168, 76, .16))
+    drop-shadow(0 26px 30px rgba(0, 0, 0, .55));
 }
 
 
