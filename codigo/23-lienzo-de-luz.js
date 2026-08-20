@@ -289,8 +289,33 @@
      mostrar una imagen que cambia veinte veces por segundo.
 
      A 45 ms se ve idéntico —el titileo se GENERA a 20 fps, dibujarlo a 60
-     es enseñar la misma imagen tres veces— y cuesta un tercio. */
-  const CADA_CUANTO_REPINTAR = 45;
+     es enseñar la misma imagen tres veces— y cuesta un tercio.
+
+     ⚡ Y AHORA SIGUE A LA CALIDAD, NO UN NÚMERO FIJO — ESTO ES LO QUE
+     ARREGLA LA FALTA DE FLUIDEZ. codigo/19-velas.js recalcula el titileo
+     a un ritmo DISTINTO según la calidad (30 ms en ALTA, 50 en MEDIA, 90
+     en BAJA — ver CADA_CUANTO_POR_CALIDAD ahí), pero este lienzo repintaba
+     siempre a 45 ms fijos, sin importar cuál de los tres estuviera activo.
+     Eso eran dos problemas a la vez, en direcciones opuestas:
+
+       · En calidad ALTA (equipo con margen), el titileo SÍ tiene un dato
+         nuevo cada 30 ms, pero el lienzo lo hacía esperar hasta 45 ms para
+         mostrarlo — la luz se veía menos viva de lo que el propio equipo
+         podía sostener, un freno artificial que no hacía falta.
+       · En calidad BAJA (equipo justo), el dato cambia recién cada 90 ms,
+         pero el lienzo lo seguía repintando cada 45 — el doble de seguido
+         de lo necesario, exactamente el desperdicio que este mismo bloque
+         de comentarios dice evitar.
+
+     Con el número atado a la calidad, cada equipo repinta EXACTAMENTE
+     tan seguido como cambian sus propios datos: ni de más (BAJA) ni de
+     menos (ALTA). */
+  const CADA_CUANTO_REPINTAR_POR_CALIDAD = { 0: 30, 1: 50, 2: 90 };
+  let cadaCuantoRepintar = CADA_CUANTO_REPINTAR_POR_CALIDAD[nivelDeCalidad()] ?? 45;
+  document.addEventListener('calidad-cambio', evento => {
+    const calidad = (evento.detail && evento.detail.calidad) ?? 0;
+    cadaCuantoRepintar = CADA_CUANTO_REPINTAR_POR_CALIDAD[calidad] ?? 45;
+  });
   let ultimoRepintado = 0;
 
   /* ⚡ EL BRILLO DE LAS VELAS "A TIRONES" — Y POR QUÉ NO ES EL THROTTLE.
@@ -543,7 +568,7 @@
     const desplazamientoActual = window.scrollY;
     const seMovioElScroll = desplazamientoActual !== ultimoDesplazamientoDibujado;
 
-    if (!seMovioElScroll && ahora - ultimoRepintado < CADA_CUANTO_REPINTAR) {
+    if (!seMovioElScroll && ahora - ultimoRepintado < cadaCuantoRepintar) {
       requestAnimationFrame(pintarLaLuz);
       return;
     }
@@ -552,7 +577,7 @@
     // Se acota por las dudas (pestaña recién vuelta a primer plano, etc.).
     const dtDesdeElUltimoRepintado = ultimoRepintado
       ? Math.min(ahora - ultimoRepintado, 250)
-      : CADA_CUANTO_REPINTAR;
+      : cadaCuantoRepintar;
     ultimoRepintado = ahora;
     ultimoDesplazamientoDibujado = desplazamientoActual;
     dibujarUnCuadro(true, dtDesdeElUltimoRepintado);
