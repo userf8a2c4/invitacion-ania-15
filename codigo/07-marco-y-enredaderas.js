@@ -969,17 +969,29 @@
     }
 
     /* ── El corazón del ramillete, en la esquina (regla 3) ──
-       Dos o tres rosas grandes apiladas justo donde nacen los tallos.
-       Ahí es donde tiene que estar el peso: es lo que hace que la
-       esquina se sienta ocupada, y de paso tapa el nacimiento de todos
-       los tallos, que si se viera parecería un manojo atado. */
+       Varias rosas grandes apiladas justo donde nacen los tallos. Ahí
+       es donde tiene que estar el peso: es lo que hace que la esquina
+       se sienta ocupada, y de paso tapa el nacimiento de todos los
+       tallos, que si se viera parecería un manojo atado.
+
+       ⚠️ LA CAJA CRECIÓ (era 64×56, fija). Con hasta 19 rosas de este
+       tamaño (escala 0.52-0.8, grandes) metidas en una caja de 64×56,
+       terminaban pisándose unas a otras y se leían como un borrón denso
+       en vez de un ramo — la propia regla 3 pide "la esquina ocupada",
+       no "la esquina tapada". La cantidad de rosas no cambió; lo que
+       cambió es cuánto lugar tienen para acomodarse sin superponerse
+       tanto. Sigue siendo chica en relación al resto del ramillete
+       (~90×78 contra los ~380×270 del lienzo entero): la masa sigue
+       yendo en la esquina, solo que respira. */
     const cuantasDelCorazon = escalar(azar.entero(15, 19), 4, 40);
+    const anchoDelCorazon = escalar(90, 90, 170);
+    const altoDelCorazon  = escalar(78, 78, 145);
     const orientaciones = ['rosa-frente', 'rosa-tres-cuartos', 'rosa-media'];
 
     for (let i = 0; i < cuantasDelCorazon; i++) {
       flores.push({
-        x: xDeLaBase + azar.entre(2, 64),
-        y: yDeLaBase + azar.entre(2, 56),
+        x: xDeLaBase + azar.entre(2, anchoDelCorazon),
+        y: yDeLaBase + azar.entre(2, altoDelCorazon),
         tipo: orientaciones[azar.entero(0, orientaciones.length - 1)],
         escala: azar.entre(0.52, 0.8),
         giro: azar.entre(-30, 30),
