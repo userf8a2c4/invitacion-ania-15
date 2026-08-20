@@ -93,6 +93,24 @@
   /** Evita hacer cuentas de más: solo una por cuadro de animación. */
   let hayUnCuadroPendiente = false;
 
+  /* ⚡ POR QUÉ LA ENREDADERA NECESITA SU PROPIO "¿CAMBIÓ DE VERDAD?".
+     La enredadera vive dentro de <svg class="portada__marco"> (index.html),
+     que tiene un filter: drop-shadow fijo (estilos/04-portada.css) para el
+     resplandor del relicario entero. Un filtro necesita el píxel final de
+     TODO su subárbol —igual que el filter="url(#mo-relieve)" que ya se le
+     sacó a las joyas colgantes, ver el comentario ahí—, así que escribir
+     el rotate() de la enredadera en CADA evento de scroll (decenas por
+     segundo en un gesto rápido) forzaba recomponer el SVG entero una y
+     otra vez. Acá no se puede sacar el elemento del filtro sin partir el
+     SVG en dos coordenadas distintas (mucho más riesgo para un giro que
+     ya de por sí es casi imperceptible), así que se ataca por el otro
+     lado: escribir MENOS seguido. Redondeando a un cuarto de grado, la
+     rotación (0,018°/px) recién cambia de valor escrito cada ~14 px de
+     scroll en vez de en cada evento — invisible para el ojo (es un giro
+     "lentísimo" a propósito), pero muchas menos veces que el navegador
+     tiene que rehacer esos 209 nodos. */
+  let ultimoCuartoDeGradoEscrito = null;
+
   /**
    * Recalcula todos los efectos que dependen del scroll.
    * @returns {void}
@@ -121,9 +139,18 @@
        scroll). Su opacidad la maneja solo el CSS (la animación de entrada). */
 
     /* ── Enredadera que rodea el óvalo de la portada ────────────────
-       Gira lentísimo a medida que se baja: le da vida sin distraer. */
+       Gira lentísimo a medida que se baja: le da vida sin distraer.
+       Se escribe solo si el cuarto de grado cambió (ver la nota de
+       ultimoCuartoDeGradoEscrito, arriba): el filtro del relicario hace
+       que cada escritura sea cara, y a esta velocidad de giro nadie
+       nota la diferencia entre actualizar cada scroll y cada 14 px. */
     if (enredaderaDelMarco) {
-      enredaderaDelMarco.style.transform = `rotate(${(posicionDelScroll * 0.018).toFixed(2)}deg)`;
+      const anguloActual = posicionDelScroll * 0.018;
+      const cuartoDeGrado = Math.round(anguloActual * 4);
+      if (cuartoDeGrado !== ultimoCuartoDeGradoEscrito) {
+        ultimoCuartoDeGradoEscrito = cuartoDeGrado;
+        enredaderaDelMarco.style.transform = `rotate(${anguloActual.toFixed(2)}deg)`;
+      }
     }
 
     hayUnCuadroPendiente = false;

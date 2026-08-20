@@ -263,6 +263,25 @@ body.sobre-visible { overflow: hidden; }
   100% { transform: scale(.6) rotate(60deg) translateY(120px); opacity: 0; }
 }
 
+/* ⚡ EL BRILLO DEL SELLO SEGUÍA LATIENDO PARA SIEMPRE, Y NADIE LO VEÍA.
+   Esta regla le para las dos animaciones infinitas (late-sello-escala +
+   latir-sello-brillo, declaradas en .sobre__sello-brillo más arriba) en
+   cuanto arranca la apertura. `.se-esta-abriendo` se agrega una vez y
+   NUNCA se saca (ver codigo/03-sobre-de-apertura.js) así que esta regla,
+   de más especificidad que la de base, queda aplicada el resto de la
+   visita entera.
+
+   Sin esto: el sobre se oculta con opacity:0 + visibility:hidden
+   (.oculto, más abajo) — pero eso NO frena una animación CSS en marcha,
+   solo la vuelve invisible. El navegador seguía recalculando el estilo
+   de estos dos elementos cada ~2,8 s, PARA SIEMPRE, por el resto de la
+   visita — trabajo puro perdido que le restaba margen a todo lo demás
+   (joyas, velas, pétalos) sin que se notara la causa, porque nada se
+   veía mal: el sello estaba invisible. */
+#sobre-de-apertura.se-esta-abriendo .sobre__sello-brillo {
+  animation: none;
+}
+
 #sobre-de-apertura.se-esta-abriendo .sobre__solapa {
   transform: rotateX(-172deg);
 }
