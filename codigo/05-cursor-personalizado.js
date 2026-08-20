@@ -194,13 +194,24 @@
   window.addEventListener('blur',  ocultarCursor);
   window.addEventListener('focus', mostrarCursor);
 
-  /* ⚡ ANTES, AL DEGRADAR A CALIDAD BAJA, SE APAGABA EL CURSOR PROPIO Y
-     VOLVÍA LA FLECHITA DEL SISTEMA. Se sacó a pedido: el cursor propio es
-     parte de la identidad visual de la invitación en todo momento, y el
-     costo de mantenerlo encendido es mínimo — un solo `transform`
-     (translate3d) por cuadro, lo más barato que hay, compositable, sin
-     tocar layout ni pintura. No es de ahí de donde viene el peso cuando
-     la calidad baja; apagarlo no compraba casi nada de rendimiento a
-     cambio de un cambio de aspecto que se nota. */
+  /* ⚡ VUELVE A APAGARSE EN CALIDAD BAJA (se había sacado, y se revirtió).
+     El argumento de "el cursor es barato, un solo transform" seguía
+     siendo cierto para ESTE archivo solo — pero un downgrade de calidad
+     es la señal de que el EQUIPO, en conjunto, ya está exigido, y ahí
+     cualquier margen que se pueda ceder importa, así sea chico. En un
+     equipo justo, un `transform` de más por cuadro sí puede ser la
+     diferencia entre sostener el nivel bajo o seguir bajando. La
+     prioridad, dicho explícitamente, es no perder fps — no la
+     consistencia visual del cursor. Si el "anillo que se mueve solo"
+     preocupaba porque parecía parte de la decoración del relicario, la
+     causa real de esa confusión no era esto: era que el anillo gira
+     solo, siempre, aunque el mouse esté quieto (ver girar-anillo en
+     estilos/10-cursor-y-petalos.css) — y ESO se corrigió aparte. */
+  document.addEventListener('calidad-cambio', evento => {
+    if ((evento.detail && evento.detail.calidad) === CALIDAD_GRAFICA.BAJA) {
+      document.documentElement.classList.remove('con-cursor-propio');
+      ocultarCursor();
+    }
+  });
 
 })();
