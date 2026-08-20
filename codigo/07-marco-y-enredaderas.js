@@ -464,12 +464,17 @@
       const nacimiento = recorrido[indice];
       const hacia = azar.signo();
 
+      /* ⚡ SE ACORTÓ UN POCO (pasos era 5-11, largoDelPaso era 9-17).
+         Los rosales de los costados no son el foco de este ajuste —los
+         ramilletes de las esquinas superiores sí— así que los brotes se
+         recortan apenas, lo justo para que no compitan en volumen con
+         la esquina que ahora se abrió más. */
       const brote = crecerTallo(azar, {
         xInicial: nacimiento.x,
         yInicial: nacimiento.y,
         anguloInicial: nacimiento.angulo + hacia * azar.entre(0.5, 1.05),
-        pasos: azar.entero(5, 11),
-        largoDelPaso: azar.entre(9, 17),
+        pasos: azar.entero(4, 9),
+        largoDelPaso: azar.entre(7, 13),
         giroMaximo: azar.entre(0.10, 0.24),
         inercia: azar.entre(0.4, 0.7),
         xObjetivo: columnaDeApoyo,
@@ -808,8 +813,13 @@
          largo, un tallo central llega a ~150-210 unidades: usa bastante
          más del ancho sin llegar a estirarse hasta el borde (ahí es donde
          "el lienzo más grande que el racimo" deja de ser un margen y pasa
-         a ser un hueco). */
-      const largoDelPaso = azar.entre(16, 23) * (0.68 + cercaniaAlCentro * 0.42);
+         a ser un hueco).
+
+         ⚡ SUBIÓ OTRA VEZ (era entre(16,23)): seguía sin abrir lo
+         suficiente. Un tallo central ahora llega a ~200-280 unidades,
+         bastante más cerca del 80% del ancho (304) al que ya apunta
+         xObjetivo más abajo. */
+      const largoDelPaso = azar.entre(21, 30) * (0.68 + cercaniaAlCentro * 0.42);
 
       const tallo = crecerTallo(azar, {
         xInicial: xDeLaBase,
@@ -933,7 +943,7 @@
       // de más arriba): si no, con tallos más largos casi ninguno calificaba
       // como "corto" y la regla 3 (flor grande solo en los tallos cortos)
       // dejaba de aplicarse casi siempre.
-      const esCorto = largoDelPaso * pasos < 137;
+      const esCorto = largoDelPaso * pasos < 180;
       const sorteo = azar.numero();
 
       if (esCorto && sorteo < 0.55) {
@@ -974,18 +984,12 @@
        lo que hace que la esquina se sienta ocupada y tapa el nacimiento
        de los tallos, que si se viera parecería un manojo atado.
 
-       ⚠️ BAJÓ DE 15-19 A 6-8, Y NO ES LA MISMA CORRECCIÓN QUE LA VEZ
-       PASADA. Agrandar la caja (64×56 → 90×78, ronda anterior) no
-       alcanzó: con 15-19 rosas grandes (escala 0.52-0.8) SEGUÍAN
-       pisándose, porque el problema no era solo el tamaño de la caja —el
-       comentario original de este archivo decía "dos o tres rosas
-       grandes", y la cantidad real nunca se pareció a eso, en ninguna
-       caja razonable. Ahora sí se acerca: 6-8 rosas alcanzan y sobran
-       para sentir la esquina "ocupada" sin que se tapen entre sí, y el
-       resto del peso que antes cargaba el corazón ahora lo lleva el
-       relleno de abajo, que sí tiene todo el ramillete para repartirse
-       (ver la nota de sesgoHaciaAfuera). */
-    const cuantasDelCorazon = escalar(azar.entero(6, 8), 3, 16);
+       ⚠️ BAJÓ DE NUEVO (15-19 → 6-8 → 3-4). El comentario original de
+       este archivo siempre dijo "dos o tres rosas grandes" — se tardó
+       tres rondas en creerle. Con 3-4 el acento de la esquina sigue ahí
+       (regla 3), pero ya no compite en cantidad con el relleno, que es
+       el que de verdad tiene que leerse "alrededor" del relicario. */
+    const cuantasDelCorazon = escalar(azar.entero(3, 4), 2, 10);
     const anchoDelCorazon = escalar(90, 90, 170);
     const altoDelCorazon  = escalar(78, 78, 145);
     const orientaciones = ['rosa-frente', 'rosa-tres-cuartos', 'rosa-media'];
@@ -1002,12 +1006,12 @@
 
     /* Y varias flores sueltas metidas ENTRE los tallos y a lo largo de
        ellos. Son las que de verdad "adornan alrededor" del relicario en
-       vez de amontonarse en la esquina: hay más que antes, porque ahora
-       cargan la parte del peso que el corazón dejó de cargar arriba. */
-    const cuantasDeRelleno = escalar(azar.entero(28, 34), 6, 60);
+       vez de amontonarse en la esquina: son más que antes, porque ahora
+       cargan casi todo el peso que el corazón dejó de cargar arriba. */
+    const cuantasDeRelleno = escalar(azar.entero(40, 46), 8, 70);
     for (let i = 0; i < cuantasDeRelleno; i++) {
       /* ⚠️ POR QUÉ NO ALCANZABA CON ANCLAR A "CUALQUIER" PUNTO DEL
-         ABANICO (ronda anterior). Los ~20 tallos nacen todos del MISMO
+         ABANICO (dos rondas atrás). Los ~20 tallos nacen todos del MISMO
          punto y solo se separan angularmente: es una cuña, angosta cerca
          de la esquina y ancha lejos. Guardar puntos "parejos a lo largo
          de cada tallo" en puntosDelAbanico y sortear uno al azar todavía
@@ -1016,18 +1020,22 @@
          mayoría de las flores de relleno seguían cayendo cerca del
          corazón en vez de repartirse por el ramillete.
 
-         La corrección: sortear DOS candidatos y quedarse con el más
-         lejano de la base ("el más lejano de 2"). Es la forma más simple
-         de contrarrestar ese sesgo geométrico sin tener que calcular una
-         probabilidad exacta por punto: no cambia qué puntos son válidos
-         (siguen siendo puntos reales de un tallo, así que la flor sigue
-         apoyada en algo), solo hace que los puntos lejanos —que antes
-         perdían el sorteo por ser minoría— ganen más seguido. */
+         La corrección, subida un escalón (era "el más lejano de 2",
+         ronda anterior): ahora se sortean TRES candidatos y se queda con
+         el más lejano de la base. Cuantos más candidatos entran en la
+         comparación, más fuerte el sesgo hacia afuera —con 2 ya se
+         notaba, pero no alcanzaba a vaciar del todo la esquina; con 3
+         pesa más el punto lejano de la terna—. Sigue sin cambiar QUÉ
+         puntos son válidos (siguen siendo puntos reales de un tallo, la
+         flor sigue apoyada en algo), solo cuánto pesa cada uno en el
+         sorteo. */
       const candidatoA = puntosDelAbanico[azar.entero(0, puntosDelAbanico.length - 1)];
       const candidatoB = puntosDelAbanico[azar.entero(0, puntosDelAbanico.length - 1)];
-      const distanciaA = (candidatoA.x - xDeLaBase) ** 2 + (candidatoA.y - yDeLaBase) ** 2;
-      const distanciaB = (candidatoB.x - xDeLaBase) ** 2 + (candidatoB.y - yDeLaBase) ** 2;
-      const anclaje = distanciaA >= distanciaB ? candidatoA : candidatoB;
+      const candidatoC = puntosDelAbanico[azar.entero(0, puntosDelAbanico.length - 1)];
+      const distancia = (p) => (p.x - xDeLaBase) ** 2 + (p.y - yDeLaBase) ** 2;
+      let anclaje = candidatoA;
+      if (distancia(candidatoB) > distancia(anclaje)) anclaje = candidatoB;
+      if (distancia(candidatoC) > distancia(anclaje)) anclaje = candidatoC;
       flores.push({
         x: anclaje.x + azar.entre(-8, 8),
         y: anclaje.y + azar.entre(-8, 8),
