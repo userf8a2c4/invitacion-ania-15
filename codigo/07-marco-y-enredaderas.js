@@ -969,21 +969,23 @@
     }
 
     /* ── El corazón del ramillete, en la esquina (regla 3) ──
-       Varias rosas grandes apiladas justo donde nacen los tallos. Ahí
-       es donde tiene que estar el peso: es lo que hace que la esquina
-       se sienta ocupada, y de paso tapa el nacimiento de todos los
-       tallos, que si se viera parecería un manojo atado.
+       Unas pocas rosas grandes apiladas justo donde nacen los tallos.
+       Ahí es donde tiene que estar EL ACENTO, no el ramillete entero: es
+       lo que hace que la esquina se sienta ocupada y tapa el nacimiento
+       de los tallos, que si se viera parecería un manojo atado.
 
-       ⚠️ LA CAJA CRECIÓ (era 64×56, fija). Con hasta 19 rosas de este
-       tamaño (escala 0.52-0.8, grandes) metidas en una caja de 64×56,
-       terminaban pisándose unas a otras y se leían como un borrón denso
-       en vez de un ramo — la propia regla 3 pide "la esquina ocupada",
-       no "la esquina tapada". La cantidad de rosas no cambió; lo que
-       cambió es cuánto lugar tienen para acomodarse sin superponerse
-       tanto. Sigue siendo chica en relación al resto del ramillete
-       (~90×78 contra los ~380×270 del lienzo entero): la masa sigue
-       yendo en la esquina, solo que respira. */
-    const cuantasDelCorazon = escalar(azar.entero(15, 19), 4, 40);
+       ⚠️ BAJÓ DE 15-19 A 6-8, Y NO ES LA MISMA CORRECCIÓN QUE LA VEZ
+       PASADA. Agrandar la caja (64×56 → 90×78, ronda anterior) no
+       alcanzó: con 15-19 rosas grandes (escala 0.52-0.8) SEGUÍAN
+       pisándose, porque el problema no era solo el tamaño de la caja —el
+       comentario original de este archivo decía "dos o tres rosas
+       grandes", y la cantidad real nunca se pareció a eso, en ninguna
+       caja razonable. Ahora sí se acerca: 6-8 rosas alcanzan y sobran
+       para sentir la esquina "ocupada" sin que se tapen entre sí, y el
+       resto del peso que antes cargaba el corazón ahora lo lleva el
+       relleno de abajo, que sí tiene todo el ramillete para repartirse
+       (ver la nota de sesgoHaciaAfuera). */
+    const cuantasDelCorazon = escalar(azar.entero(6, 8), 3, 16);
     const anchoDelCorazon = escalar(90, 90, 170);
     const altoDelCorazon  = escalar(78, 78, 145);
     const orientaciones = ['rosa-frente', 'rosa-tres-cuartos', 'rosa-media'];
@@ -998,24 +1000,34 @@
       });
     }
 
-    /* Y unas cuantas flores sueltas metidas ENTRE los tallos, a media
-       distancia. Son las que terminan de cerrar el ramo: sin ellas
-       queda un corazón denso y después aire hasta las puntas, que es
-       justamente el vacío que había que llenar. */
-    /* Un poco menos que antes y algo más grandes: apretujar muchas
-       flores diminutas las convertía en un borrón oscuro donde no se
-       distinguía ninguna rosa. Con menos y un pelín más grandes, cada una
-       tiene lugar para leerse. */
-    const cuantasDeRelleno = escalar(azar.entero(18, 23), 3, 46);
+    /* Y varias flores sueltas metidas ENTRE los tallos y a lo largo de
+       ellos. Son las que de verdad "adornan alrededor" del relicario en
+       vez de amontonarse en la esquina: hay más que antes, porque ahora
+       cargan la parte del peso que el corazón dejó de cargar arriba. */
+    const cuantasDeRelleno = escalar(azar.entero(28, 34), 6, 60);
     for (let i = 0; i < cuantasDeRelleno; i++) {
-      /* Antes esto tiraba las flores de relleno en una caja fija
-         (x: 30-210, y: 25-180) que llega ~277 unidades desde la base,
-         mientras el abanico de tallos alcanza apenas ~95-115: una de
-         cada tres o cuatro quedaba flotando sin tallo debajo. Ahora se
-         ancla a un punto real del abanico —tallo o rama— con un jitter
-         chico, igual que ya hace la enredadera lateral con la punta de
-         cada brote. */
-      const anclaje = puntosDelAbanico[azar.entero(0, puntosDelAbanico.length - 1)];
+      /* ⚠️ POR QUÉ NO ALCANZABA CON ANCLAR A "CUALQUIER" PUNTO DEL
+         ABANICO (ronda anterior). Los ~20 tallos nacen todos del MISMO
+         punto y solo se separan angularmente: es una cuña, angosta cerca
+         de la esquina y ancha lejos. Guardar puntos "parejos a lo largo
+         de cada tallo" en puntosDelAbanico y sortear uno al azar todavía
+         da MÁS densidad de puntos por área cerca de la esquina que lejos
+         —es geometría de abanico, no un error de conteo—, así que la
+         mayoría de las flores de relleno seguían cayendo cerca del
+         corazón en vez de repartirse por el ramillete.
+
+         La corrección: sortear DOS candidatos y quedarse con el más
+         lejano de la base ("el más lejano de 2"). Es la forma más simple
+         de contrarrestar ese sesgo geométrico sin tener que calcular una
+         probabilidad exacta por punto: no cambia qué puntos son válidos
+         (siguen siendo puntos reales de un tallo, así que la flor sigue
+         apoyada en algo), solo hace que los puntos lejanos —que antes
+         perdían el sorteo por ser minoría— ganen más seguido. */
+      const candidatoA = puntosDelAbanico[azar.entero(0, puntosDelAbanico.length - 1)];
+      const candidatoB = puntosDelAbanico[azar.entero(0, puntosDelAbanico.length - 1)];
+      const distanciaA = (candidatoA.x - xDeLaBase) ** 2 + (candidatoA.y - yDeLaBase) ** 2;
+      const distanciaB = (candidatoB.x - xDeLaBase) ** 2 + (candidatoB.y - yDeLaBase) ** 2;
+      const anclaje = distanciaA >= distanciaB ? candidatoA : candidatoB;
       flores.push({
         x: anclaje.x + azar.entre(-8, 8),
         y: anclaje.y + azar.entre(-8, 8),
