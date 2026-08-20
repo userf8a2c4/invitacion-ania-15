@@ -918,8 +918,12 @@
          un matorral tupido, no como rosas trepando con su follaje. Con
          menos hojas por tallo el ramillete sigue teniendo follaje real
          (nunca se ve "puro alambre"), pero deja de competir en cantidad
-         con las propias rosas. */
-      const cuantasHojas = azar.entero(2, 4);
+         con las propias rosas.
+
+         ⚡ BAJÓ OTRA VEZ (era entero(2,4), promedio 3) A PEDIDO EXPLÍCITO
+         de reducir las hojas un 50 % más: entero(1,2) promedia 1.5, la
+         mitad exacta de 3. */
+      const cuantasHojas = azar.entero(1, 2);
       for (let h = 0; h < cuantasHojas; h++) {
         const punto = tallo[azar.entero(1, tallo.length - 2)];
         const hacia = azar.signo();
@@ -972,9 +976,10 @@
           giro: (puntaDeLaRama.angulo * 180 / Math.PI) + 90 + azar.entre(-20, 20),
         });
 
-        // Un par de hojitas también en la rama (bajó de entero(1,3), mismo
-        // motivo que el tallo principal: menos hojas, follaje más natural).
-        for (let h = 0; h < azar.entero(1, 2); h++) {
+        // Un par de hojitas también en la rama (bajó de entero(1,3), y de
+        // nuevo un 50% más: promedio 1.5 → promedio .75, con 75% de
+        // probabilidad de una sola hoja y 25% de ninguna).
+        for (let h = 0; h < (azar.numero() < 0.75 ? 1 : 0); h++) {
           const punto = rama[azar.entero(1, rama.length - 1)];
           const hacia = azar.signo();
           const escala = azar.entre(0.3, 0.5);
@@ -1049,11 +1054,32 @@
     const orientaciones = ['rosa-frente', 'rosa-tres-cuartos', 'rosa-media'];
 
     for (let i = 0; i < cuantasDelCorazon; i++) {
+      const xFlor = xDeLaBase + azar.entre(2, anchoDelCorazon);
+      const yFlor = yDeLaBase + azar.entre(2, altoDelCorazon);
+
+      /* ⚡ EL PEDÚNCULO QUE FALTABA — ESTO ES LO QUE ARREGLA "LAS FLORES
+         VUELAN". Esta rosa se posicionaba en un punto SUELTO del recuadro
+         del corazón, sin ningún trazo que la uniera a nada: quedaba
+         flotando sobre el fondo, sin tallo visible debajo. Ahora cada una
+         lleva un tallito corto y curvo desde donde nacen los tallos de
+         verdad (xDeLaBase, yDeLaBase) hasta su propia base — la flor
+         queda anclada al mismo punto de origen que todo el ramillete, en
+         vez de suelta en el aire. */
+      piezas.push(
+        `<path d="M${xDeLaBase.toFixed(1)} ${yDeLaBase.toFixed(1)} Q ` +
+        `${(xDeLaBase + (xFlor - xDeLaBase) * 0.5 + azar.entre(-6, 6)).toFixed(1)} ` +
+        `${(yDeLaBase + (yFlor - yDeLaBase) * 0.5 + azar.entre(-6, 6)).toFixed(1)}, ` +
+        `${xFlor.toFixed(1)} ${yFlor.toFixed(1)}" fill="none" ` +
+        `stroke="url(#rosa-tallo)" stroke-width="${(2.2 * grosorDelTallo).toFixed(1)}" ` +
+        `stroke-linecap="round" stroke-opacity=".8"/>`
+      );
+
       flores.push({
-        x: xDeLaBase + azar.entre(2, anchoDelCorazon),
-        y: yDeLaBase + azar.entre(2, altoDelCorazon),
+        x: xFlor, y: yFlor,
         tipo: orientaciones[azar.entero(0, orientaciones.length - 1)],
-        escala: azar.entre(0.52, 0.8),
+        // ⚡ SUBIÓ (era entre(.52,.8)) A PEDIDO: más área cubierta por
+        // flor, sin sumar más cantidad — ver la nota igual en el relleno.
+        escala: azar.entre(0.58, 0.9),
         giro: azar.entre(-30, 30),
       });
     }
@@ -1061,8 +1087,13 @@
     /* Y varias flores sueltas metidas ENTRE los tallos y a lo largo de
        ellos. Son las que de verdad "adornan alrededor" del relicario en
        vez de amontonarse en la esquina: son más que antes, porque ahora
-       cargan casi todo el peso que el corazón dejó de cargar arriba. */
-    const cuantasDeRelleno = escalar(azar.entero(40, 46), 8, 70);
+       cargan casi todo el peso que el corazón dejó de cargar arriba.
+
+       ⚡ SUBIÓ (era entero(40,46)) A PEDIDO: ~40% más de área cubierta.
+       Subir la CANTIDAD de flores (en vez de solo agrandarlas) multiplica
+       el área que ocupan de forma casi directa, sin agrandar cada una por
+       separado hasta un tamaño que se vea desproporcionado. */
+    const cuantasDeRelleno = escalar(azar.entero(56, 64), 8, 70);
     for (let i = 0; i < cuantasDeRelleno; i++) {
       /* ⚠️ POR QUÉ NO ALCANZABA CON ANCLAR A "CUALQUIER" PUNTO DEL
          ABANICO (dos rondas atrás). Los ~20 tallos nacen todos del MISMO
@@ -1090,11 +1121,29 @@
       let anclaje = candidatoA;
       if (distancia(candidatoB) > distancia(anclaje)) anclaje = candidatoB;
       if (distancia(candidatoC) > distancia(anclaje)) anclaje = candidatoC;
+
+      /* ⚡ EL SALTO BAJÓ (era entre(-8,8)) Y AHORA LLEVA SU PROPIO
+         PEDÚNCULO — esto es lo que arregla "las flores vuelan". Antes la
+         flor se corría hasta 8 unidades del punto real del tallo Y no
+         quedaba nada dibujado entre una cosa y la otra: para el ojo, la
+         flor flotaba sola cerca de una rama, no colgada de ella. Ahora el
+         salto es chico (nomás variedad, no separación) y un tallito corto
+         la une de verdad al punto de anclaje, que es un punto REAL de un
+         tallo (ver la nota de arriba). */
+      const xFlor = anclaje.x + azar.entre(-3, 3);
+      const yFlor = anclaje.y + azar.entre(-3, 3);
+      piezas.push(
+        `<path d="M${anclaje.x.toFixed(1)} ${anclaje.y.toFixed(1)} L${xFlor.toFixed(1)} ${yFlor.toFixed(1)}" ` +
+        `fill="none" stroke="url(#rosa-tallo)" stroke-width="${(1.6 * grosorDelTallo).toFixed(1)}" ` +
+        `stroke-linecap="round" stroke-opacity=".7"/>`
+      );
+
       flores.push({
-        x: anclaje.x + azar.entre(-8, 8),
-        y: anclaje.y + azar.entre(-8, 8),
+        x: xFlor, y: yFlor,
         tipo: azar.numero() < 0.5 ? 'rosa-tres-cuartos' : 'rosa-media',
-        escala: azar.entre(0.42, 0.6),
+        // ⚡ SUBIÓ (era entre(.42,.6)) A PEDIDO, junto con la cantidad de
+        // arriba: entre las dos, ~40% más de área cubierta por el relleno.
+        escala: azar.entre(0.46, 0.66),
         giro: azar.entre(-40, 40),
       });
     }
