@@ -271,8 +271,16 @@ h2 {
 
      El parallax sigue funcionando: 08-efectos-de-scroll.js calcula el
      recorrido como `offsetHeight - innerHeight`, así que se adapta solo.
-     Solo se acorta el desplazamiento, que era muy generoso. */
+     Solo se acorta el desplazamiento, que era muy generoso.
+
+     ⚡ `125svh` Y NO `125vh` A SECAS: esta capa tiene will-change:transform
+     (textura propia en GPU) y con `vh` a secas se recalculaba —y se
+     recomponía entera— cada vez que la barra del navegador aparecía o
+     desaparecía en celular al hacer scroll, exactamente el momento más
+     caro para pedirle una recomposición de la capa más pesada de toda
+     la página. `svh` es fijo, no se recalcula nunca. */
   height: 125vh;
+  height: 125svh;
   z-index: -1;      /* detrás de absolutamente todo */
 
   /* TRES capas superpuestas, de arriba abajo:

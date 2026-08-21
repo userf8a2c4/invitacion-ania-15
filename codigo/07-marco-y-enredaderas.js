@@ -2193,10 +2193,19 @@
      ratito después del último cambio para no recalcular cien veces
      mientras se arrastra el borde (a eso se le dice "debounce"). */
   let temporizadorDeRedimension = null;
-  window.addEventListener('resize', () => {
+  /* ⚡ SOLO SI EL ANCHO CAMBIÓ DE VERDAD (ver alCambiarElAncho en
+     02-utilidades.js). Esto es LO MÁS CARO de todo lo que escucha
+     'resize' en el proyecto: repartirPlantas() tira TODO —enredaderas,
+     ramilletes de esquina— y lo vuelve a dibujar de cero. En celular,
+     la barra de navegación (Edge, Chrome) dispara 'resize' cada vez que
+     aparece o desaparece al hacer scroll, aunque el ancho real de la
+     pantalla no cambió nada — sin este filtro, cada aparición de la
+     barra reconstruía el ramillete entero, y ESE redibujado de golpe es
+     lo que se sentía como el salto de tamaño y posición del relicario. */
+  window.addEventListener('resize', alCambiarElAncho(() => {
     clearTimeout(temporizadorDeRedimension);
     temporizadorDeRedimension = setTimeout(repartirPlantas, 350);
-  });
+  }));
 
   /* ⛔ ACÁ NO VA UN LISTENER DE 'calidad-cambio' QUE RECONSTRUYA.
      Se probó y fue el bug que hizo desaparecer el ramillete de la esquina
