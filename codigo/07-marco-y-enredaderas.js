@@ -1098,12 +1098,13 @@
        base es lo que de verdad baja la cantidad ahí; solo bajar la base
        sin tocar el tope no habría cambiado nada en esas pantallas.
 
-       ⚡ AJUSTADO A -30% (no -40%), A PEDIDO EXPLÍCITO: 49 es el 70% de
-       70. La escala de cada flor sube más abajo para compensar el área
-       —el pedido fue que lo que resalte sean las FLORES, no los tallos
-       ni las hojas, así que el ajuste va todo del lado de agrandar la
-       flor, nunca del lado de la rama. */
-    const cuantasDeRelleno = escalar(azar.entero(39, 45), 8, 49);
+       ⚡ EL MECANISMO SE INVIRTIÓ, A PEDIDO EXPLÍCITO: la ronda anterior
+       compensaba el área agrandando cada flor cuando bajaba la cantidad.
+       Ahora es al revés — el área la tiene que cubrir la CANTIDAD de
+       flores, no el tamaño de cada una. Por eso la cantidad sube (tope
+       78, más que el 70 original) y la escala baja más abajo, en vez de
+       subir. */
+    const cuantasDeRelleno = escalar(azar.entero(64, 74), 8, 78);
     for (let i = 0; i < cuantasDeRelleno; i++) {
       /* ⚠️ POR QUÉ NO ALCANZABA CON ANCLAR A "CUALQUIER" PUNTO DEL
          ABANICO (dos rondas atrás). Los ~20 tallos nacen todos del MISMO
@@ -1151,14 +1152,13 @@
       flores.push({
         x: xFlor, y: yFlor,
         tipo: azar.numero() < 0.5 ? 'rosa-tres-cuartos' : 'rosa-media',
-        // ⚡ SUBIÓ (era entre(.46,.66)) A PEDIDO: la cantidad bajó un 30%
-        // (arriba), así que cada flor tiene que agrandarse para que el
-        // ÁREA total no baje con ella — el pedido fue "mismo área o
-        // hasta 20% más" con menos flores, y que lo que resalte sea LA
-        // FLOR, no la rama. Con -30% de cantidad y esta escala (×1,28 en
-        // cada lado, ×1,64 en área), el total queda ~15% arriba del área
-        // de antes: adentro del rango pedido.
-        escala: azar.entre(0.59, 0.85),
+        // ⚡ BAJÓ (era entre(.59,.85), antes entre(.46,.66)) A PEDIDO
+        // EXPLÍCITO: el área ahora la cubre la CANTIDAD de flores (subida
+        // arriba), no el tamaño de cada una — es lo opuesto al ajuste de
+        // la ronda anterior. Cada flor queda más chica, pero proporcional
+        // (nunca un punto sin forma): el conjunto se lee más tupido y
+        // parejo en vez de unas pocas flores grandes destacando solas.
+        escala: azar.entre(0.32, 0.48),
         giro: azar.entre(-40, 40),
       });
     }
