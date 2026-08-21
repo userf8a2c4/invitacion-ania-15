@@ -573,14 +573,40 @@
    */
   function acomodarTodo(alTerminar) {
     const anchoRef = anchoBase();
-    const usaElLienzo = !!(window.LienzoDeLuz && window.LienzoDeLuz.activo);
 
+    /* ⚡ LAS VELAS YA NO ENTRAN AL LIENZO DE LUZ (2026-08-20), A PEDIDO —
+       ESTO DESACOPLA SU SINCRONÍA DEL SCROLL DE RAÍZ.
+       Con el lienzo, el resplandor es un <canvas> que un script en
+       23-lienzo-de-luz.js reposiciona a mano en cada evento de scroll; la
+       llama, en cambio, es un elemento normal que el navegador mueve solo,
+       por compositor, sin que ningún JavaScript tenga que enterarse. Por
+       más rápido que reaccione ese script (y reacciona rápido: escucha el
+       scroll directo, sin esperar al siguiente cuadro — ver la nota
+       grande en 23-lienzo-de-luz.js), sigue habiendo un paso de JavaScript
+       de por medio que la llama no tiene. Esa diferencia, mínima pero
+       real, es la que se venía reportando como "la luz se atrasa".
+
+       La única forma de que sean CERO diferencia, no una diferencia
+       chica, es que el resplandor también sea un elemento normal que el
+       navegador mueva por su cuenta — que es exactamente lo que ya hacía
+       este archivo ANTES de que existiera el lienzo (ver rearmarLasFuentes-
+       DeLuz(), más abajo, y la nota de arriba sobre `?luz=dom`). No hace
+       falta reconstruir nada: alcanza con no entregarle los fuegos al
+       lienzo, así el navegador sigue moviendo estos divs con el mismo
+       scroll nativo que mueve la llama — cero JavaScript de por medio,
+       cero diferencia posible.
+
+       Los haces de luz, las motas de polvo y las luciérnagas SIGUEN en el
+       lienzo (el pedido fue solo sobre las velas): esos vienen de otros
+       arreglos de window.LienzoDeLuz (.haces/.motas/.fauna), que esto no
+       toca. El costo de rendimiento que esto reintroduce es el que ya
+       estaba documentado cuando se armó el lienzo (~104 escrituras de
+       estilo por cuadro en vez de 2 lecturas de canvas) — una decisión a
+       propósito, no un descuido: acá se prioriza la sincronía perfecta
+       por sobre ese ahorro. */
     trabajarPorTandas(
       piezas.length,
-      i => {
-        colocarPieza(piezas[i], anchoRef);
-        if (usaElLienzo) rearmarLasFuentesDeLuz();
-      },
+      i => colocarPieza(piezas[i], anchoRef),
       () => {
         if (typeof alTerminar === 'function') alTerminar();
       }
@@ -889,8 +915,16 @@
   let ultimoCalculo = 0;
 
   /** ¿Está pintando el canvas? Se consulta una vez por cuadro, no por vela. */
+  /* ⚡ SIEMPRE false, A PROPÓSITO (2026-08-20) — ver la nota grande en
+     acomodarTodo(), más arriba: las velas dejaron de entregarle sus
+     fuegos al lienzo para que el resplandor se mueva con el mismo scroll
+     nativo que mueve la llama, sin ningún paso de JavaScript de por
+     medio. Este archivo queda listo para volver a usar el lienzo el día
+     que haga falta (alcanza con restaurar esta función y la llamada a
+     rearmarLasFuentesDeLuz() en acomodarTodo()); rearmarLasFuentesDeLuz()
+     en sí no se borró, por eso. */
   function usaElLienzoAhora() {
-    return !!(window.LienzoDeLuz && window.LienzoDeLuz.activo);
+    return false;
   }
 
   /* En calidad baja, la llama deja de "respirar" en tamaño (solo titila en
