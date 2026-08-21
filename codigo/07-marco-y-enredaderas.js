@@ -1086,9 +1086,15 @@
       flores.push({
         x: xFlor, y: yFlor,
         tipo: orientaciones[azar.entero(0, orientaciones.length - 1)],
-        // ⚡ SUBIÓ (era entre(.52,.8)) A PEDIDO: más área cubierta por
-        // flor, sin sumar más cantidad — ver la nota igual en el relleno.
-        escala: azar.entre(0.58, 0.9),
+        // ⚡ BAJÓ FUERTE (era entre(.58,.9)) A PEDIDO EXPLÍCITO: "esas
+        // flores actuales son gigantescas". La suba anterior (de .52,.8)
+        // perseguía cubrir área con tamaño en vez de cantidad, pero a
+        // .9 de escala una sola rosa del corazón ocupa una porción
+        // enorme del recuadro de 380×270 — junto con la reducción a la
+        // mitad del contenedor CSS (ver estilos/02-marco-victoriano.css),
+        // volver acá a un tamaño más contenido es lo que evita que seis
+        // rosas gigantes sigan dominando la esquina.
+        escala: azar.entre(0.4, 0.56),
         giro: azar.entre(-30, 30),
       });
     }
@@ -1165,14 +1171,14 @@
       flores.push({
         x: xFlor, y: yFlor,
         tipo: azar.numero() < 0.5 ? 'rosa-tres-cuartos' : 'rosa-media',
-        // ⚡ SE ABRIÓ EL RANGO (era entre(.32,.48), angosto y parejo — el
-        // "todas iguales de chicas" que se leía como maleza junto con la
-        // cantidad de esa misma prueba). Ahora hay MÁS variedad de
-        // tamaño dentro del mismo relleno: algunas quedan chicas, otras
-        // notablemente más grandes, y esa jerarquía es lo que un ojo lee
-        // como "ramillete armado" en vez de "matorral parejo". Ver
-        // también la baja de cantidad, arriba (26-30, tope 34).
-        escala: azar.entre(0.4, 0.72),
+        // ⚡ BAJÓ (era entre(.4,.72)) A PEDIDO EXPLÍCITO: el rango
+        // anterior buscaba jerarquía de tamaño, pero el techo de .72
+        // volvía a leerse como "flor gigante" en varias de relleno, no
+        // solo en el corazón. Se mantiene un rango (sigue habiendo
+        // variedad, no todas iguales) pero corrido hacia abajo, en línea
+        // con la reducción a la mitad del recuadro entero (ver
+        // estilos/02-marco-victoriano.css).
+        escala: azar.entre(0.28, 0.48),
         giro: azar.entre(-40, 40),
       });
     }
