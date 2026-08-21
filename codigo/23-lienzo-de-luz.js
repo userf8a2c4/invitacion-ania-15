@@ -158,7 +158,17 @@
   }
 
   ajustarElLienzo();
-  window.addEventListener('resize', rebotar(ajustarElLienzo, 200));
+  /* ⚡ alCambiarElAncho: ignora el 'resize' falso de la barra del navegador
+     en celular (ver la nota grande junto a la función, en 02-utilidades.js).
+     Sin esto, cada aparición/desaparición de la barra al hacer scroll
+     reasignaba lienzo.width/height —una operación cara: limpia y reserva
+     de nuevo toda la textura del canvas— exactamente el "tirón" que se
+     reportó. El canvas es position:fixed cubriendo toda la ventana; si la
+     barra se esconde y el canvas queda un poco más bajo que el alto real
+     hasta el próximo cambio de ancho de verdad, la franja de más abajo
+     queda sin haces/motas por un instante — muchísimo menos notorio que
+     el tirón que causaba reasignar el canvas en pleno scroll. */
+  window.addEventListener('resize', alCambiarElAncho(rebotar(ajustarElLienzo, 200)));
   document.addEventListener('calidad-cambio', () => setTimeout(ajustarElLienzo, 50));
 
 
