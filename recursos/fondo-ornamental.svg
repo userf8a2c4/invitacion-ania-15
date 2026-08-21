@@ -72,8 +72,8 @@
          ronda anterior lo había metido en la misma familia oscura que el
          resto del fondo por error de alcance — acá se corrige, usando la
          MISMA familia de oro que ya usa el resto del sitio
-         (estilos/01-fundamentos.css: --color-oro-claro/--color-oro/
-         --color-oro-apagado), no un dorado inventado nuevo. -->
+         (estilos/01-fundamentos.css: variables color-oro-claro, color-oro
+         y color-oro-apagado), no un dorado inventado nuevo. -->
     <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%"   stop-color="#dcc079"/>
       <stop offset="45%"  stop-color="#c1a049"/>
@@ -157,6 +157,83 @@
       <feTurbulence type="fractalNoise" baseFrequency=".004 .006" numOctaves="5" seed="15" result="n"/>
       <feColorMatrix in="n" type="matrix"
         values="0 0 0 0 .35  0 0 0 0 .18  0 0 0 0 .11  0 0 0 .30 0"/>
+    </filter>
+
+    <!-- ══ VETEADO DE PIEDRA (2026-08-21) — POR QUÉ EXISTE ESTO ══
+         El fondo era un degradado de 2 paradas (Belladonna → Black Sheep):
+         en una pantalla grande, donde el centro del lienzo queda vacío
+         entre la flora de los bordes, ese degradado liso se nota como lo
+         que es —color plano, sin presencia—. La propia paleta ya lo
+         insinuaba: el comentario original describe Belladonna como "la
+         flor venenosa: casi negro, con un pulso de rojo adentro" — eso es
+         literalmente una piedra oscura veteada (una obsidiana con hilos
+         de sangre), no una pared pintada.
+
+         LA MISMA TÉCNICA QUE YA USA EL CRAQUELADO, a otra escala: acá
+         abajo, "craquelado" convierte ruido en grietas finas y nítidas
+         (feTurbulence → feColorMatrix pinta el ruido de un color fijo →
+         feComponentTransfer con un pico angosto deja solo una red de
+         líneas). Con una frecuencia mucho más baja (barridos grandes en
+         vez de grietas finas) y una meseta ANCHA en vez de un pico
+         angosto, el mismo mecanismo da vetas de piedra en vez de grietas
+         de barniz. Tres capas, de la veta más grande a la más fina —
+         igual criterio que las 3 capas del craquelado, más abajo. Ningún
+         color nuevo: los tres usan los 5 hex ya aprobados. -->
+    <filter id="vetaMayor" x="0" y="0" width="100%" height="100%"
+            color-interpolation-filters="sRGB">
+      <!-- Rustic Red (57,20,27 → .22 .08 .11): el barrido grande y difuso,
+           la veta principal que se nota a la distancia de una pantalla
+           entera. Frecuencia muy baja = curvas anchas, no líneas. -->
+      <feTurbulence type="fractalNoise" baseFrequency="0.0018 0.0024"
+                    numOctaves="4" seed="77" result="nube"/>
+      <!-- ⚡ CONTRASTE SUBIDO (2026-08-21): la primera versión, con el
+           canal R de la turbulencia usado tal cual (coeficiente 1, sin
+           desplazamiento), quedaba casi imperceptible — el ruido rara vez
+           se acerca a los extremos 0/1, así que la meseta del
+           feComponentTransfer casi nunca se alcanzaba de verdad. El
+           "2.2 ... -0.55" estira ese rango angosto hacia los extremos
+           antes de pasar por la meseta, para que la veta se note de
+           verdad a la distancia de una pantalla completa. -->
+      <feColorMatrix in="nube" type="matrix" result="nubeEnAlfa"
+        values="0 0 0 0 0.22   0 0 0 0 0.08   0 0 0 0 0.11   2.2 0 0 0 -0.55"/>
+      <!-- Meseta ANCHA (no el pico angosto del craquelado): banda suave
+           de veta, no una línea de un píxel. -->
+      <feComponentTransfer in="nubeEnAlfa">
+        <feFuncA type="table" tableValues="0 .15 .45 .75 .95 .75 .45 .15 0"/>
+      </feComponentTransfer>
+    </filter>
+
+    <filter id="vetaMedia" x="0" y="0" width="100%" height="100%"
+            color-interpolation-filters="sRGB">
+      <!-- Cordovan Leather (89,70,59 → .35 .27 .23): vetas intermedias,
+           dan la sensación de estratos dentro de la piedra. -->
+      <feTurbulence type="fractalNoise" baseFrequency="0.006 0.008"
+                    numOctaves="4" seed="88" result="nube"/>
+      <!-- Mismo estiramiento de contraste que vetaMayor, ver esa nota. -->
+      <feColorMatrix in="nube" type="matrix" result="nubeEnAlfa"
+        values="0 0 0 0 0.35   0 0 0 0 0.27   0 0 0 0 0.23   2.2 0 0 0 -0.55"/>
+      <feComponentTransfer in="nubeEnAlfa">
+        <feFuncA type="table" tableValues="0 .1 .35 .65 .35 .1 0"/>
+      </feComponentTransfer>
+    </filter>
+
+    <filter id="vetaFina" x="0" y="0" width="100%" height="100%"
+            color-interpolation-filters="sRGB">
+      <!-- Gateway Arch (135,120,108 → .53 .47 .42): el hilo pulido que
+           atrapa la poca luz que hay — disperso y escaso, igual de
+           angosto que craquelado-luz pero con otra semilla/frecuencia
+           para no duplicarlo, así se lee como veta de piedra y no como
+           otra pasada de la misma grieta. -->
+      <feTurbulence type="fractalNoise" baseFrequency="0.014 0.017"
+                    numOctaves="4" seed="99" result="nube"/>
+      <!-- Mismo estiramiento de contraste que vetaMayor/vetaMedia, pero
+           más suave: esta veta debe seguir angosta y escasa, solo
+           necesita dejar de ser invisible. -->
+      <feColorMatrix in="nube" type="matrix" result="nubeEnAlfa"
+        values="0 0 0 0 0.53   0 0 0 0 0.47   0 0 0 0 0.42   1.6 0 0 0 -0.32"/>
+      <feComponentTransfer in="nubeEnAlfa">
+        <feFuncA type="table" tableValues="0 0 0 0 1 0 0 0 0"/>
+      </feComponentTransfer>
     </filter>
 
     <!-- ══ CRAQUELADO ══
@@ -391,6 +468,16 @@
   <!-- 1 · atmósfera base -->
   <rect width="1400" height="2100" fill="url(#base)"/>
   <rect width="1400" height="2100" filter="url(#cloudTexture)" opacity=".55"/>
+
+  <!-- 1B · VETEADO DE PIEDRA — el lienzo deja de ser un degradado liso.
+       Va por detrás de la luz, la flora y el craquelado (nada de eso se
+       tocó): es solo la superficie de la piedra sobre la que después cae
+       todo lo demás. De la veta más grande a la más fina, igual criterio
+       que las 3 capas de craquelado de más abajo. Ver la nota grande
+       junto a los filtros vetaMayor/vetaMedia/vetaFina, en los defs. -->
+  <rect width="1400" height="2100" filter="url(#vetaMayor)" opacity=".5"/>
+  <rect width="1400" height="2100" filter="url(#vetaMedia)" opacity=".35"/>
+  <rect width="1400" height="2100" filter="url(#vetaFina)"  opacity=".2"/>
 
   <!-- 2 · pozos de luz (profundidad lumínica) -->
   <ellipse cx="700" cy="330"  rx="720" ry="520" fill="url(#bloodPool)"/>
