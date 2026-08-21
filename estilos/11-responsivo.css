@@ -76,8 +76,19 @@
   /* Se achica la ÚNICA medida de la que depende todo el broche, así el
      marco y el texto se reducen juntos y el óvalo nunca se deforma.
      (No se usa max-height sobre el marco: eso lo encajonaría y el texto
-     terminaría más ancho que el óvalo.) */
-  .portada__broche { --ancho-broche: min(92vw, 640px, 80vh); }
+     terminaría más ancho que el óvalo.)
+
+     ⚡ ESTE `80vh` SE HABÍA QUEDADO AFUERA de la corrección de svh que ya
+     se había hecho en estilos/04-portada.css — y por eso el salto seguía
+     apareciendo en celular pese a ese arreglo anterior. Esta regla
+     REEMPLAZA --ancho-broche cuando la pantalla es baja (celular
+     apaisado, o un celular en vertical con el bajo alto efectivo que deja
+     la barra del navegador) — que sea justo ESTE valor el que se haya
+     quedado en `vh` a secas explica por qué, en Edge/Chrome de celular,
+     mostrar u ocultar la barra seguía recalculando el tamaño del
+     relicario en vivo. Mismo motivo y mismo arreglo que ya se aplicó en
+     04-portada.css: `svh` es fijo, no se recalcula con la barra. */
+  .portada__broche { --ancho-broche: min(92vw, 640px, 80svh); }
   .portada__desliza { display: none; }   /* no hay lugar: se oculta */
 }
 

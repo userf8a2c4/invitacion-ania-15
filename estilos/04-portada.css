@@ -505,7 +505,11 @@
    alineados por construcción: ya no hay forma de que se desalineen.
    ---------------------------------------------------------------------- */
 .portada__desliza {
+  /* svh y no vh a secas: mismo motivo que el resto de esta sección (ver
+     la nota grande junto a #portada, arriba) — que no se corra con la
+     barra del navegador en celular. */
   margin-top: clamp(1rem, 3vh, 2.2rem);
+  margin-top: clamp(1rem, 3svh, 2.2rem);
   opacity: 0;
   animation: aparecer-desde-abajo .9s 1.9s forwards;
 }
