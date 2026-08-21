@@ -218,7 +218,20 @@
   // siempre, sin esperar nada.
   boton.addEventListener('click', () => {
     if (estaAbierto) { alternarPanel(false); return; }
-    cargarConocimientoYArmar().then(() => alternarPanel(true));
+    // Abrir YA: antes se esperaba en silencio a que terminara de bajar
+    // codigo/00-conocimiento-chatbot.js, y en una red lenta el botón se
+    // sentía "trabado" durante toda esa espera.
+    alternarPanel(true);
+    if (!lista.hasChildNodes()) {
+      lista.innerHTML = '<p class="qa__cargando">Cargando preguntas…</p>';
+    }
+    cargarConocimientoYArmar().then(huboContenido => {
+      const cargando = lista.querySelector('.qa__cargando');
+      if (cargando) cargando.remove();
+      if (!huboContenido) {
+        lista.innerHTML = '<p class="qa__cargando">No se pudieron cargar las preguntas. Probá de nuevo en un momento.</p>';
+      }
+    });
   });
   if (cerrar) cerrar.addEventListener('click', () => alternarPanel(false));
   if (velo)   velo.addEventListener('click',   () => alternarPanel(false));

@@ -265,6 +265,19 @@ body.sobre-visible #boton-qa { display: none; }
 }
 .qa__item--abierto .qa__texto { padding: 0 .85rem .9rem; }
 
+/* Texto que se ve mientras codigo/00-conocimiento-chatbot.js todavía está
+   bajando (o si falló la carga) — el panel ya se abrió, esto es lo único
+   que tarda. */
+.qa__cargando {
+  margin: 0;
+  padding: 1.4rem .85rem;
+  text-align: center;
+  font-family: var(--tipo-texto);
+  font-size: .92rem;
+  font-style: italic;
+  color: var(--color-marfil-apagado);
+}
+
 .qa__texto b { color: var(--color-oro-claro); font-weight: 600; }
 
 .qa__texto a {
