@@ -785,7 +785,16 @@
        de la cenefa de arriba) a 1,30 rad (casi vertical, bajando por el
        riel del costado). Repartidos parejo y con un temblorcito al azar
        para que no se note la regla. */
-    const cuantosTallos = escalar(azar.entero(16, 20), 6, 46);
+    /* ⚡ BAJÓ (era entero(16,20), tope 46) A PEDIDO — ESTO ES LO QUE DE
+       VERDAD SE LEÍA COMO "MALEZA". Las rondas anteriores solo tocaban
+       las FLORES (cantidad y tamaño), pero el enredo de "maleza" no lo
+       daban las flores: lo daba tener hasta 46 tallos abriéndose en
+       abanico, cada uno con 62% de chance de una rama secundaria propia
+       — eso es una estructura de decenas de ramas cruzándose, antes de
+       sumar una sola flor. Menos tallos principales es lo que hace que
+       el ramillete se lea como ROSAL PODADO en vez de matorral: menos
+       líneas cruzándose, cada una con su propio protagonismo. */
+    const cuantosTallos = escalar(azar.entero(11, 14), 6, 30);
     const ANGULO_MAS_HORIZONTAL = 0.08;
     const ANGULO_MAS_VERTICAL   = 1.46;
 
@@ -1098,13 +1107,17 @@
        base es lo que de verdad baja la cantidad ahí; solo bajar la base
        sin tocar el tope no habría cambiado nada en esas pantallas.
 
-       ⚡ EL MECANISMO SE INVIRTIÓ, A PEDIDO EXPLÍCITO: la ronda anterior
-       compensaba el área agrandando cada flor cuando bajaba la cantidad.
-       Ahora es al revés — el área la tiene que cubrir la CANTIDAD de
-       flores, no el tamaño de cada una. Por eso la cantidad sube (tope
-       78, más que el 70 original) y la escala baja más abajo, en vez de
-       subir. */
-    const cuantasDeRelleno = escalar(azar.entero(64, 74), 8, 78);
+       ⚡ EL MECANISMO SE INVIRTIÓ, Y DESPUÉS SE MODERÓ (misma ronda, dos
+       pedidos seguidos): primero se probó que el área la cubriera la
+       CANTIDAD en vez del tamaño — pero llevado a 78 de tope, el
+       resultado se leía "como maleza": demasiada flor chica, sin
+       ninguna destacando, más el enredo de tallos de arriba. La cantidad
+       ahora es MODERADA (tope 34, bien por debajo de cualquier ronda
+       anterior) y la escala vuelve a abrirse en un rango ancho —no para
+       agrandar todo, sino para que HAYA VARIEDAD: unas pocas flores un
+       poco más grandes entre las chicas, que es lo que de verdad separa
+       "ramillete prolijo" de "matorral parejo". */
+    const cuantasDeRelleno = escalar(azar.entero(26, 30), 6, 34);
     for (let i = 0; i < cuantasDeRelleno; i++) {
       /* ⚠️ POR QUÉ NO ALCANZABA CON ANCLAR A "CUALQUIER" PUNTO DEL
          ABANICO (dos rondas atrás). Los ~20 tallos nacen todos del MISMO
@@ -1152,13 +1165,14 @@
       flores.push({
         x: xFlor, y: yFlor,
         tipo: azar.numero() < 0.5 ? 'rosa-tres-cuartos' : 'rosa-media',
-        // ⚡ BAJÓ (era entre(.59,.85), antes entre(.46,.66)) A PEDIDO
-        // EXPLÍCITO: el área ahora la cubre la CANTIDAD de flores (subida
-        // arriba), no el tamaño de cada una — es lo opuesto al ajuste de
-        // la ronda anterior. Cada flor queda más chica, pero proporcional
-        // (nunca un punto sin forma): el conjunto se lee más tupido y
-        // parejo en vez de unas pocas flores grandes destacando solas.
-        escala: azar.entre(0.32, 0.48),
+        // ⚡ SE ABRIÓ EL RANGO (era entre(.32,.48), angosto y parejo — el
+        // "todas iguales de chicas" que se leía como maleza junto con la
+        // cantidad de esa misma prueba). Ahora hay MÁS variedad de
+        // tamaño dentro del mismo relleno: algunas quedan chicas, otras
+        // notablemente más grandes, y esa jerarquía es lo que un ojo lee
+        // como "ramillete armado" en vez de "matorral parejo". Ver
+        // también la baja de cantidad, arriba (26-30, tope 34).
+        escala: azar.entre(0.4, 0.72),
         giro: azar.entre(-40, 40),
       });
     }
