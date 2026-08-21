@@ -300,6 +300,12 @@ body.sobre-visible #boton-qa { display: none; }
        aparece o desaparece. */
     max-height: 75vh;
     max-height: 75svh;
+    /* Con interactive-widget=overlays-content (ver index.html) la barra
+       del navegador se superpone en vez de empujar el contenido: sin este
+       respiro, el borde de abajo del panel —pegado a inset:0— quedaría
+       parcialmente tapado por la barra cuando está visible. Reserva 0px
+       en navegadores sin esta variable, cero cambio ahí. */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     border-inline: none;
     border-bottom: none;
     border-radius: 14px 14px 0 0;

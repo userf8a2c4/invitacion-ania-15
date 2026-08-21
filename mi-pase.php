@@ -152,7 +152,10 @@ $codigoDeLaUrl = htmlspecialchars(
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- interactive-widget=overlays-content: mismo motivo que index.html — que
+     la barra del navegador en celular superponga contenido en vez de
+     redimensionar el viewport. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=overlays-content">
 <title>Mi confirmación · Ania XV</title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="recursos/icono.svg" type="image/svg+xml">
