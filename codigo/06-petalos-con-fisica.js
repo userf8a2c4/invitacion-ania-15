@@ -105,9 +105,14 @@
   /** Cuánto tira la gravedad hacia abajo (píxeles por segundo, al cuadrado). */
   const GRAVEDAD = 55;
 
-  /** Cuánto frena el aire. 0.99 = pierde 1 % de velocidad por cuadro.
-   *  Es lo que evita que los pétalos aceleren para siempre. */
-  const ROZAMIENTO_DEL_AIRE = 0.99;
+  /** Cuánto frena el aire. 0.97 = pierde 3 % de velocidad por cuadro.
+   *  Es lo que evita que los pétalos aceleren para siempre.
+   *  ⚡ BAJADO DE 0.99 (2026-08-21): con 0.99, un pétalo que llegaba al
+   *  tope de empuje tardaba ~3s en volver a su velocidad de caída normal
+   *  — ese arrastre largo es lo que se seguía leyendo como "sale
+   *  disparado" aunque el empuje ya estuviera limitado. Con 0.97 el
+   *  mismo pétalo se calma en bastante menos de un segundo. */
+  const ROZAMIENTO_DEL_AIRE = 0.97;
 
   /** Fuerza del vaivén lateral (el zigzag de la caída). */
   const FUERZA_DEL_VAIVEN = 48;
@@ -134,7 +139,12 @@
      techo (ver el `limitar(...)` más abajo); a `velocidadX/Y` les
      faltaba. El número es a ojo — se puede subir o bajar según cómo se
      sienta el empujón, igual que se ajustó el tope de giro. */
-  const VELOCIDAD_MAXIMA_DEL_EMPUJE = 320;   // px/s
+  /* ⚡ BAJADO DE 320 A 150 (2026-08-21): 320 seguía siendo de 6 a 20 veces
+     la velocidad normal de caída (14-54 px/s) — un pétalo empujado al
+     tope se seguía viendo como un disparo, no como "el viento lo aparta",
+     por más que técnicamente estuviera "limitado". 150 es un empujón que
+     todavía se nota, pero no una fuga de pantalla. */
+  const VELOCIDAD_MAXIMA_DEL_EMPUJE = 150;   // px/s
 
   /** Los tres dibujos de pétalo que se van alternando. */
   const IMAGENES_DE_PETALO = [
@@ -339,7 +349,6 @@
      reportó: no era un empujón de verdad, era el salto congelado del
      comentario de arriba, con la única diferencia de que acá el reseteo
      nunca había llegado a ocurrir. */
-  document.addEventListener('pointercancel', soltarPuntero);
   document.addEventListener('pointercancel', soltarPuntero);
 
 

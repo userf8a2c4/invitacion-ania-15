@@ -241,7 +241,12 @@
      el botón de play exacto. Ahora CUALQUIER toque, en cualquier momento,
      sirve de red — sin bucles ni temporizadores, solo reacciona a un
      click real de la persona. */
-  document.addEventListener('click', () => {
+  document.addEventListener('click', evento => {
+    // Sin este guard, el click en el propio botón de pausa burbujea hasta
+    // acá, ve audioDeFondo.paused === true (recién puesto por pause()) y
+    // vuelve a reproducir en el mismo click — la música nunca se pausaba.
+    if (panel.contains(evento.target)) return;
+    if (botonMusica && botonMusica.contains(evento.target)) return;
     if (audioDeFondo.paused) reproducirLaCancion();
   });
 
