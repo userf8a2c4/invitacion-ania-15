@@ -324,17 +324,18 @@ html.calidad-baja #marco-victoriano::after { display: none; }
 .marco__ramillete {
   position: absolute;
   top: calc(var(--marco-grosor) * .35);
-  /* ⚡ SUBIÓ (era min(36vw, 620px), después min(48vw, 820px)) A PEDIDO:
-     repartir mejor las rosas puertas adentro del dibujo (ver codigo/
-     07-marco-y-enredaderas.js) no alcanzaba si el dibujo entero seguía
-     chico en pantalla — la redistribución interna solo reordena DÓNDE
-     caen las rosas DENTRO del recuadro; agrandar el recuadro es lo que
-     hace que ocupen más lugar de verdad en la página. Subió otra vez
-     porque seguía leyéndose chico y apretado en la esquina — junto con
-     el cambio de raíz de los tallos en el JS (ver la nota grande ahí),
-     esto es lo que hace que el ramillete se sienta "grande y abierto"
-     en vez de "amontonado". */
-  width: min(54vw, 920px);
+  /* ⚡ BAJÓ A LA MITAD (era min(54vw, 920px)) A PEDIDO EXPLÍCITO: las
+     subas de rondas anteriores (36vw/620px → 48vw/820px → 54vw/920px)
+     perseguían "que se sienta grande y abierto", pero terminaron
+     pasándose de largo — a 54vw, en una pantalla de escritorio típica
+     el ramillete ocupaba más de medio ancho de esquina, y el usuario lo
+     describió como "gigantesco... como jardín que descuidaste por
+     meses". El recuadro es un SVG con viewBox: reducir SOLO este ancho
+     encoge tallos, hojas y flores por igual, en la misma proporción —
+     es la palanca que de verdad controla el tamaño final en pantalla,
+     separada de cuánto follaje/flor hay DENTRO del recuadro (eso lo
+     sigue controlando 07-marco-y-enredaderas.js). */
+  width: min(27vw, 460px);
   z-index: 3;            /* por encima de la moldura, debajo del contenido */
   pointer-events: none;
 
@@ -375,7 +376,8 @@ html.calidad-baja #marco-victoriano::after { display: none; }
 /* En el celular el marco es finito y la portada ocupa casi todo: un ramo
    grande le comería el nombre de Ania. Se achica bastante. */
 @media (max-width: 720px) {
-  .marco__ramillete { width: min(50vw, 250px); }
+  /* Misma reducción del 50% que en escritorio (ver la nota de arriba). */
+  .marco__ramillete { width: min(25vw, 125px); }
 }
 
 
