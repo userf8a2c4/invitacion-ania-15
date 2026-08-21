@@ -315,6 +315,31 @@
   }
   document.addEventListener('mouseleave', soltarPuntero);
   document.addEventListener('pointerup', soltarPuntero);
+  /* ⚡ 'pointercancel' TAMBIÉN TIENE QUE SOLTAR — ESTO ES LO QUE ARREGLA EL
+     "SALE DISPARADO SIEMPRE HACIA LA IZQUIERDA" EN CELULAR.
+     En el teléfono, la manera más común de terminar un toque NO es
+     levantar el dedo quieto: es deslizarlo para hacer SCROLL. Cuando el
+     navegador reconoce ese deslizamiento como un gesto de scroll, cancela
+     la secuencia del puntero con 'pointercancel' EN VEZ DE 'pointerup' —y
+     acá solo se escuchaba 'pointerup'. El resultado: cada vez que alguien
+     scrolleaba con el dedo, mouseX/mouseXAnterior quedaban CONGELADOS en
+     el punto donde el dedo tocó por última vez, sin pasar nunca por el
+     reseteo de arriba.
+
+     Como en un celular casi cualquier gesto por la pantalla termina en
+     scroll (es la forma normal de navegar la página), esto pasaba
+     constantemente. El siguiente toque deliberado —tocar un pétalo en
+     cualquier parte— arrancaba con mouseXAnterior todavía apuntando a
+     ese punto viejo y ajeno, en vez de al punto real del toque anterior.
+     La cuenta de velocidad (`(mouseX - mouseXAnterior) / dt * 0.016`) se
+     hacía entonces entre el pétalo tocado AHORA y un punto de scroll de
+     hace rato —normalmente más a la derecha, porque así se scrollea con
+     el pulgar—, y esa resta grande y siempre con el mismo signo es
+     exactamente el "siempre hacia la izquierda, y de un tirón" que se
+     reportó: no era un empujón de verdad, era el salto congelado del
+     comentario de arriba, con la única diferencia de que acá el reseteo
+     nunca había llegado a ocurrir. */
+  document.addEventListener('pointercancel', soltarPuntero);
   document.addEventListener('pointercancel', soltarPuntero);
 
 
