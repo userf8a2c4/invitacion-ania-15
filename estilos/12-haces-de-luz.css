@@ -66,6 +66,15 @@
      Lo escribe codigo/22-luz-de-la-hora.js una vez cada diez minutos. El
      valor de reserva es transparente, así que sin ese módulo se ve como
      siempre. */
+  /* ⚡ LOS TOPES DE NEGRO PLANO (.30 Y .40) PASARON A MULTIPLICARSE POR
+     --profundidad-de-sombra (2026-08-21) — mismo motivo que el
+     --oscurecido-fijo de #capa-fondo (estilos/01-fundamentos.css): estos
+     dos degradados restan luminancia de verdad, sin blend mode, y eran
+     fijos sin importar la hora. codigo/22-luz-de-la-hora.js ahora escribe
+     --profundidad-de-sombra según la hora (~.28-.45 de día, 1.0 de
+     noche —igual que antes de este cambio— hasta ~1.05 en la madrugada
+     más profunda). El degradado de arriba (--tinte-del-velo) ya era
+     consciente de la hora y no se toca. */
   background:
     linear-gradient(var(--tinte-del-velo, transparent), var(--tinte-del-velo, transparent)),
     /* Devuelve la profundidad a los MÁRGENES y abre la columna de lectura.
@@ -76,10 +85,10 @@
        esa profundidad donde siempre estuvo, en vez de quitarla. */
     linear-gradient(
       to right,
-      rgba(4, 2, 2, .30) 0,
+      rgba(4, 2, 2, calc(.30 * var(--profundidad-de-sombra, 1))) 0,
       rgba(4, 2, 2, 0)   20%,
       rgba(4, 2, 2, 0)   80%,
-      rgba(4, 2, 2, .30) 100%),
+      rgba(4, 2, 2, calc(.30 * var(--profundidad-de-sombra, 1))) 100%),
     /* La de siempre, con el tope bajado de .62 a .40: entre esta capa y la
        horizontal de arriba, los márgenes llegan a la misma penumbra de
        antes y la columna central queda legible. */
@@ -87,9 +96,9 @@
       to bottom,
       rgba(8, 4, 4, 0)   0,
       rgba(8, 4, 4, 0)   22vh,
-      rgba(7, 4, 4, .18) 90vh,
-      rgba(5, 3, 3, .32) 170vh,
-      rgba(4, 2, 2, .40) 100%);
+      rgba(7, 4, 4, calc(.18 * var(--profundidad-de-sombra, 1))) 90vh,
+      rgba(5, 3, 3, calc(.32 * var(--profundidad-de-sombra, 1))) 170vh,
+      rgba(4, 2, 2, calc(.40 * var(--profundidad-de-sombra, 1))) 100%);
 }
 
 /* Con menos movimiento el velo se mantiene (es estático, no molesta), pero

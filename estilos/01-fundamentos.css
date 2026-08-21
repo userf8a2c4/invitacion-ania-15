@@ -325,10 +325,19 @@ h2 {
      capa en vez de una propia. Un perfil real mostró `Layerize` en 67 %
      con el sobre cerrado y nada animándose — esta era una de las capas
      que sobraban. */
+  /* ⚡ EL .2 FIJO PASÓ A --oscurecido-fijo (2026-08-21) — ESTO ES LO QUE
+     ARREGLA "EL FONDO SE VE INVISIBLE DE DÍA". Este -20% de negro plano
+     (sin blend mode: resta luminancia de verdad, no simula luz) era el
+     MISMO de día que de noche. Sobre el fondo victoriano oscuro nuevo
+     —que ya de por sí es oscuro— esa sombra fija era la que lo volvía
+     invisible en pleno día. codigo/22-luz-de-la-hora.js ahora escribe
+     --oscurecido-fijo según la hora (~.05 al mediodía, ~.20-.24 de
+     noche — igual o más oscuro que antes, nunca menos). El `.2` dentro
+     del var() es la red de seguridad si ese script no llegó a correr. */
   background-image:
     url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23r)' opacity='0.02'/%3E%3C/svg%3E"),
     var(--velo-de-la-hora, linear-gradient(transparent, transparent)),
-    linear-gradient(rgba(0, 0, 0, .2), rgba(0, 0, 0, .2)),
+    linear-gradient(rgba(0, 0, 0, var(--oscurecido-fijo, .2)), rgba(0, 0, 0, var(--oscurecido-fijo, .2))),
     url('../recursos/fondo-ornamental.svg');
   background-size: auto, cover, cover, cover;
   background-position: center, center, center, center;

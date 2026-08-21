@@ -79,6 +79,26 @@
       largoDelHaz:  1.3,
       fuerzaDeVelas: 0.95,
       deNoche: 0.15,
+      /* ⚡ NUEVO (2026-08-21) — ESTO ES LO QUE DE VERDAD ARREGLA "EL FONDO
+         SE VE INVISIBLE DE DÍA". Hasta acá, TODO lo que cambiaba con la
+         hora era luz que se SUMA (haces, ambiente, tinte — todos con
+         blend mode o alfa aditiva). Pero hay dos capas que RESTAN
+         luminancia con negro plano y sin blend mode —#capa-fondo
+         (estilos/01-fundamentos.css) y #penumbra-profunda
+         (estilos/12-haces-de-luz.css)— y esas dos eran FIJAS, la misma
+         de día que de noche. Sobre un SVG que ya de por sí es oscuro
+         (la nueva paleta victoriano-oscuro), ese oscurecido fijo es lo
+         que lo volvía invisible en pleno día — no importaba cuánta luz
+         se sumara encima si por debajo se seguía restando la misma
+         sombra de siempre.
+
+         oscurecidoFijo reemplaza el .2 fijo de #capa-fondo.
+         profundidadDeSombra multiplica el tope del degradado de
+         profundidad de #penumbra-profunda (hoy .40) y su oscurecido de
+         márgenes (hoy .30). 1.0 = el oscurecimiento de HOY, para no
+         tocar la noche sin necesidad. */
+      oscurecidoFijo: 0.09,
+      profundidadDeSombra: 0.40,
     },
     {
       hora: 13,  // MEDIODIA: el NEUTRO. Luz plana, sin caracter.
@@ -98,6 +118,10 @@
       largoDelHaz:  0.85,
       fuerzaDeVelas: 0.7,
       deNoche: 0,
+      // El más bajo de los tres: mediodía es el momento de MÁS luz real,
+      // así que es donde menos oscurecido fijo hace falta.
+      oscurecidoFijo: 0.05,
+      profundidadDeSombra: 0.28,
     },
     {
       hora: 18,  // HORA DORADA: el momento mas caracteristico
@@ -118,6 +142,8 @@
       largoDelHaz:  1.28,
       fuerzaDeVelas: 0.92,
       deNoche: 0.35,
+      oscurecidoFijo: 0.10,
+      profundidadDeSombra: 0.45,
     },
     {
       hora: 20,  // crepusculo malva: evita el gris al cruzar de calido a frio
@@ -133,6 +159,9 @@
       largoDelHaz:  1.32,
       fuerzaDeVelas: 0.98,
       deNoche: 0.85,
+      // Transición hacia la noche: ya bastante más oscuro que de día.
+      oscurecidoFijo: 0.16,
+      profundidadDeSombra: 0.70,
     },
     {
       hora: 23,  // NOCHE: oscura de verdad. La luna apenas insinua.
@@ -148,6 +177,12 @@
       largoDelHaz:  1.12,
       fuerzaDeVelas: 1.05,
       deNoche: 1,
+      // Referencia: igual al oscurecimiento fijo que ya había antes de
+      // este cambio (.2 y tope .40) — la noche queda exactamente como
+      // estaba, el usuario dio permiso para que sea así o más oscura,
+      // no para aclararla.
+      oscurecidoFijo: 0.20,
+      profundidadDeSombra: 1.00,
     },
   ];
 
@@ -167,6 +202,10 @@
     largoDelHaz:  1.05,
     fuerzaDeVelas: 1.08,
     deNoche: 1,
+    // Un poco más que la referencia de las 23h: es el punto más profundo
+    // de la noche, dentro del permiso del usuario de que se vea más oscuro.
+    oscurecidoFijo: 0.24,
+    profundidadDeSombra: 1.05,
   };
 
   /* Y el espejo del crepusculo, para el cruce frio -> calido del amanecer. */
@@ -184,6 +223,9 @@
     largoDelHaz:  1.34,
     fuerzaDeVelas: 1.00,
     deNoche: 0.6,
+    // Transición entre la madrugada profunda y el amanecer.
+    oscurecidoFijo: 0.16,
+    profundidadDeSombra: 0.75,
   };
 
 /**
@@ -286,6 +328,10 @@
     const { desde, hasta, t } = tramoDeLaHora(hora);
 
     const color = clave => mezclar(desde[clave], hasta[clave], t);
+    // Mezcla NÚMEROS simples (no colores) entre los dos momentos — se usa
+    // para anguloDelSol/largoDelHaz/etc. más abajo, y para las dos capas
+    // de sombra (oscurecidoFijo/profundidadDeSombra) acá arriba.
+    const mezclarNumero = (clave) => desde[clave] + (hasta[clave] - desde[clave]) * t;
 
     const fondoHaz = fondoDelHaz(color('hazCentro'), color('hazMedio'), color('hazBorde'));
     const fondoMota = fondoDeLaMota(color('motaCentro'), color('motaBorde'));
@@ -334,6 +380,17 @@
     const penumbra = document.getElementById('penumbra-profunda');
     if (penumbra) penumbra.style.setProperty('--tinte-del-velo', color('tinteDelVelo'));
 
+    /* ── LAS DOS CAPAS QUE RESTAN LUZ, AHORA CONSCIENTES DE LA HORA ──
+       Hasta acá, todo lo de arriba SUMA luz o tiñe (haces, ambiente, velo).
+       Pero #capa-fondo y #penumbra-profunda restan luminancia con negro
+       plano, sin blend mode, y hasta esta ronda eran fijas —la misma
+       sombra de día que de noche—. Sobre el fondo victoriano oscuro
+       nuevo, esa sombra fija era lo que lo volvía invisible en pleno día.
+       Ver la nota grande junto a `oscurecidoFijo` en el primer momento
+       del array MOMENTOS. */
+    if (fondo) fondo.style.setProperty('--oscurecido-fijo', mezclarNumero('oscurecidoFijo').toFixed(3));
+    if (penumbra) penumbra.style.setProperty('--profundidad-de-sombra', mezclarNumero('profundidadDeSombra').toFixed(3));
+
     /* ── LO QUE LEEN LOS BUCLES QUE YA EXISTEN ──
        Estos tres no son colores: son NÚMEROS que cambian el comportamiento
        de la escena, y son los que de verdad hacen que se note la hora.
@@ -354,9 +411,8 @@
                            atardecer/amanecer en vez de un apagón brusco a
                            una hora fija.
 
-       Se escriben una vez cada diez minutos: cuestan cero por cuadro. */
-    const mezclarNumero = (clave) => desde[clave] + (hasta[clave] - desde[clave]) * t;
-
+       Se escriben una vez cada diez minutos: cuestan cero por cuadro.
+       (mezclarNumero ya está definida arriba, junto a `color`.) */
     window.LuzDeLaHora = {
       anguloDelSol:  mezclarNumero('anguloDelSol'),
       largoDelHaz:   mezclarNumero('largoDelHaz'),
