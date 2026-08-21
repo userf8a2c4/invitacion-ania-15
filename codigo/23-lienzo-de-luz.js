@@ -113,21 +113,30 @@
   const dondeVa = buscar('#luz-de-velas') || document.body;
   dondeVa.appendChild(lienzo);
 
-  /* ⚡ Y EL CONTENEDOR DEJA DE CUBRIR EL DOCUMENTO ENTERO.
-     `#luz-de-velas` era `position: absolute; inset: 0`, o sea del tamaño del
-     documento: en la pantalla ultrapanorámica del equipo objetivo eso son
-     3305 × 5869 = **19,4 megapíxeles**. Tenía sentido cuando ahí vivían los
-     52 resplandores; ahora su único hijo es este lienzo, que es
-     `position: fixed` y mide lo que la ventana.
+  /* ⚡ YA NO SE TOCA LA POSICIÓN DEL CONTENEDOR (era `dondeVa.style.position
+     = 'fixed'` acá) — ESTO ROMPÍA LAS VELAS Y LAS HACÍA DESAPARECER.
 
-     Pasarlo a `fixed` lo deja en ~3,3 MP sin mover nada de sitio, porque lo
-     único que contiene ya se posiciona respecto de la ventana.
+     Antes esto asumía que solo había DOS escenarios posibles: o el lienzo
+     corre entero (velas incluidas) y entonces `#luz-de-velas` puede pasar a
+     `fixed` sin costo, porque lo único que contiene es este canvas; o el
+     lienzo no corre nada (`?luz=dom`) y el contenedor se queda `absolute`
+     para los divs. Ahora hay un tercer escenario que ese razonamiento no
+     contemplaba: las velas dejaron de entregarle sus luces al lienzo (ver
+     19-velas.js) PERO el lienzo sigue corriendo para los haces, las motas y
+     las luciérnagas — así que `#luz-de-velas` vuelve a tener a los divs de
+     las velas como hijos, además de este canvas. Pasar el contenedor a
+     `fixed` los sacaba de quicio: sus `left/top` son coordenadas del
+     DOCUMENTO (pensadas para un padre `absolute`), y dentro de un padre
+     `fixed` esas mismas coordenadas se leen relativas a la VENTANA — las
+     velas terminaban a cientos o miles de píxeles fuera de la pantalla.
 
-     Se hace desde acá y no desde el CSS a propósito: con ?luz=dom este
-     módulo no corre, los resplandores vuelven a ser divs con coordenadas del
-     DOCUMENTO, y entonces el contenedor SÍ tiene que seguir siendo
-     `absolute`. Cambiarlo en la hoja de estilos rompería ese camino. */
-  if (dondeVa.id === 'luz-de-velas') dondeVa.style.position = 'fixed';
+     La solución real: este canvas no necesita para nada que su padre sea
+     `fixed`. Su propia regla en estilos/12-haces-de-luz.css ya lo declara
+     `position: fixed; inset: 0` por sí mismo, así que se posiciona relativo
+     a la ventana sin importar qué `position` tenga `#luz-de-velas`. Forzar
+     el contenedor era un paso de más que nunca hacía falta para el canvas,
+     y ahora que #luz-de-velas puede tener hijos con las dos necesidades a
+     la vez (canvas fijo + divs de documento), sacarlo es lo correcto. */
 
   let anchoCss = 0, altoCss = 0, escalaDelLienzo = 1;
 
