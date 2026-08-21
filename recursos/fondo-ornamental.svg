@@ -23,10 +23,18 @@
          paleta dorada de siempre, sin tocar — el pedido fue "solo el
          fondo"). Los ids de los degradados se mantuvieron para no romper
          ninguna referencia; lo que cambió es el color adentro de cada uno. -->
+    <!-- ⚡ RECETA DEL BRIEF DE LUCILA, LITERAL (2026-08-21): "Belladonna
+         al centro → Black Sheep en los bordes, con TOQUES mínimos de
+         Rustic Red" — antes esta base horneaba una banda entera de
+         Rustic Red al 30% (no un toque, un tercio del degradado) y el
+         centro era Cordovan Leather, un marrón cálido que competía con
+         el oro por ser "lo más luminoso". Ahora la base es solo
+         Belladonna → Black Sheep; el Rustic Red sigue existiendo, pero
+         SOLO como acento contenido en las elipses bloodPool de más
+         abajo (ya moderadas), tal como pide el brief — nunca horneado
+         en el lienzo entero. -->
     <radialGradient id="base" cx="50%" cy="30%" r="95%">
-      <stop offset="0%"   stop-color="#59463B"/>
-      <stop offset="30%"  stop-color="#39141B"/>
-      <stop offset="62%"  stop-color="#28050B"/>
+      <stop offset="0%"   stop-color="#28050B"/>
       <stop offset="100%" stop-color="#0D0D0E"/>
     </radialGradient>
     <radialGradient id="warmPool" cx="50%" cy="50%" r="50%">
@@ -35,9 +43,17 @@
       <stop offset="55%"  stop-color="#59463B" stop-opacity=".07"/>
       <stop offset="100%" stop-color="#59463B" stop-opacity="0"/>
     </radialGradient>
+    <!-- ⚡ PICO BAJADO DE .48 A .32 (2026-08-21), A PEDIDO DE LUCILA: el
+         brief pide que el Rustic Red sea un "acento de sombra, muy
+         contenido" — nunca el protagonista. La elipse de arriba
+         (cx=700 cy=330, la más grande de las cuatro que usan este
+         degradado) cubre casi toda la zona del relicario SIN opacidad
+         reducida, así que era la que más pesaba en la primera
+         impresión al abrir la página. Bajar el pico acá se nota en las
+         cuatro elipses de una sola vez. -->
     <radialGradient id="bloodPool" cx="50%" cy="50%" r="50%">
-      <stop offset="0%"   stop-color="#39141B" stop-opacity=".48"/>
-      <stop offset="55%"  stop-color="#28050B" stop-opacity=".22"/>
+      <stop offset="0%"   stop-color="#39141B" stop-opacity=".32"/>
+      <stop offset="55%"  stop-color="#28050B" stop-opacity=".16"/>
       <stop offset="100%" stop-color="#28050B" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="vignette" cx="50%" cy="45%" r="72%">
@@ -46,11 +62,22 @@
       <stop offset="100%" stop-color="#0D0D0E" stop-opacity=".85"/>
     </radialGradient>
 
+    <!-- ⚡ RESTAURADO A ORO DE VERDAD (2026-08-21), A PEDIDO DE LUCILA.
+         Este degradado NO es para tallos —eso es `goldV`, más abajo, que
+         sigue siendo cuero envejecido— es para la VOLUTA de esquina
+         (<g id="scroll">, más abajo): un adorno METÁLICO decorativo, no
+         materia vegetal. El brief de jerarquía de color es explícito: el
+         oro del relicario y los adornos metálicos tienen que leerse como
+         "metal iluminado", nunca como "metal viejo sobre pared roja". La
+         ronda anterior lo había metido en la misma familia oscura que el
+         resto del fondo por error de alcance — acá se corrige, usando la
+         MISMA familia de oro que ya usa el resto del sitio
+         (estilos/01-fundamentos.css: --color-oro-claro/--color-oro/
+         --color-oro-apagado), no un dorado inventado nuevo. -->
     <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%"   stop-color="#86776B"/>
-      <stop offset="38%"  stop-color="#59463B"/>
-      <stop offset="74%"  stop-color="#39141B"/>
-      <stop offset="100%" stop-color="#28050B"/>
+      <stop offset="0%"   stop-color="#dcc079"/>
+      <stop offset="45%"  stop-color="#c1a049"/>
+      <stop offset="100%" stop-color="#6e5824"/>
     </linearGradient>
     <linearGradient id="goldV" x1="0" y1="0" x2="0" y2="1">
       <!-- El tallo ya no es dorado: es cuero y madera vieja, apenas tocada
@@ -193,7 +220,19 @@
     <!-- ══ FLORA ══ -->
     <!-- ROSA · el mismo dibujo que usan el relicario y las enredaderas -->
     <g id="rose">
-      <g fill="url(#petCara)" stroke="#1b0508" stroke-width=".7">
+      <!-- ⚡ BORDE DE LUZ EN GATEWAY ARCH (2026-08-21), A PEDIDO DE LUCILA:
+           esta rosa vive DENTRO del propio fondo (no es la flor de la
+           enredadera/ramillete de la página, que tiene su propia paleta
+           sin tocar). Con relleno oscuro Y contorno oscuro (antes
+           #1b0508, casi negro) se fundía con el fondo — exactamente lo
+           que el brief pide evitar ("las flores no pueden leerse como
+           parte del muro"). El brief permite highlights sutiles de luz
+           sin salirse de los 5 hex + familia de oro: este filo usa
+           Gateway Arch, el único tono claro de la paleta, solo en la
+           capa EXTERIOR del pétalo (la que define la silueta contra el
+           fondo) — las capas interiores (petMedia/petInterior) siguen
+           con su contorno oscuro de siempre, que ahí no hace falta. -->
+      <g fill="url(#petCara)" stroke="#86776B" stroke-width=".7">
         <path d="M0 -3 C -12 -6,-23 -14,-26 -24 C -28 -31,-25 -36,-20 -36 C -16 -36,-15 -32,-11 -33 C -7 -35,-6 -31,-2 -32 C 2 -33,4 -30,8 -32 C 13 -34,18 -31,20 -26 C 23 -18,13 -7,0 -3 Z"/>
         <path d="M0 -3 C -12 -6,-23 -14,-26 -24 C -28 -31,-25 -36,-20 -36 C -16 -36,-15 -32,-11 -33 C -7 -35,-6 -31,-2 -32 C 2 -33,4 -30,8 -32 C 13 -34,18 -31,20 -26 C 23 -18,13 -7,0 -3 Z" transform="rotate(73) scale(.97)"/>
         <path d="M0 -3 C -12 -6,-23 -14,-26 -24 C -28 -31,-25 -36,-20 -36 C -16 -36,-15 -32,-11 -33 C -7 -35,-6 -31,-2 -32 C 2 -33,4 -30,8 -32 C 13 -34,18 -31,20 -26 C 23 -18,13 -7,0 -3 Z" transform="rotate(147) scale(1.05)"/>
@@ -225,10 +264,12 @@
     </g>
 
     <g id="bud">
+      <!-- Mismo borde de luz Gateway Arch que en #rose, y mismo motivo:
+           este capullo es la silueta exterior contra el fondo. -->
       <path d="M0 -30 C -7 -23,-11 -12,-10 -1 C -9 8,-5 14,-1 16 C -2 8,-3 -2,-2 -10 C -1 -18,-1 -25,0 -30 Z"
-            fill="url(#petDorso)" stroke="#1b0508" stroke-width=".85"/>
+            fill="url(#petDorso)" stroke="#86776B" stroke-width=".85"/>
       <path d="M0 -30 C 7 -23,11 -12,10 -1 C 9 8,5 14,1 16 C 0 8,1 -2,0 -10 C -1 -18,-1 -25,0 -30 Z"
-            fill="url(#petCara)" stroke="#1b0508" stroke-width=".85"/>
+            fill="url(#petCara)" stroke="#86776B" stroke-width=".85"/>
       <path d="M0 -28 C 5 -21,8 -11,7 -1 C 6 6,3 11,1 13" fill="none"
             stroke="#39141B" stroke-width="1" stroke-opacity=".32" stroke-linecap="round"/>
       <g fill="url(#calizVerde)" stroke="#0D0D0E" stroke-width=".7">
