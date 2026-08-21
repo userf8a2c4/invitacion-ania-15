@@ -870,7 +870,11 @@
     clearTimeout(temporizador);
     temporizador = setTimeout(acomodarTodo, 200);
   }
-  window.addEventListener('resize', acomodarConRespiro);
+  /* alCambiarElAncho: ignora el 'resize' falso de la barra del navegador
+     en celular (ver la nota en 02-utilidades.js) — sin esto, acomodarTodo()
+     —que relee getBoundingClientRect() de cada ancla— se disparaba en cada
+     aparición/desaparición de la barra al hacer scroll. */
+  window.addEventListener('resize', alCambiarElAncho(acomodarConRespiro));
   window.addEventListener('load', acomodarConRespiro);
 
   /* ⚠️ EL CASO QUE FALLABA: el iframe del mapa carga TARDE y mueve todo lo

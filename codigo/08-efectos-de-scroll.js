@@ -171,7 +171,11 @@
   // { passive: true } le promete al navegador que no vamos a cancelar el
   // scroll, y eso le permite desplazarse sin esperar a nuestro código.
   window.addEventListener('scroll', alHacerScroll, { passive: true });
-  window.addEventListener('resize', () => { medirElSobrante(); alHacerScroll(); });
+  // alCambiarElAncho: ignora el 'resize' falso de la barra del navegador en
+  // celular (ver la nota en 02-utilidades.js) — medirElSobrante() vuelve a
+  // leer offsetHeight/innerHeight, y aparecer/desaparecer la barra al
+  // hacer scroll no es un cambio real de tamaño que haya que medir.
+  window.addEventListener('resize', alCambiarElAncho(() => { medirElSobrante(); alHacerScroll(); }));
   medirElSobrante();
   actualizarEfectos();
 

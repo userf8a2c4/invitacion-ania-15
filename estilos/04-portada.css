@@ -35,7 +35,28 @@
 /* ─── 1. SECCIÓN DE LA PORTADA ─────────────────────────────────────── */
 #portada {
   position: relative;
+  /* ⚡ `svh` Y NO `vh` A SECAS — ESTO ES LO QUE ARREGLA EL SALTO DEL
+     RELICARIO EN CELULAR. La barra de navegación de Edge/Chrome en
+     Android se esconde al bajar y vuelve al subir; cada vez que lo
+     hace, `window.innerHeight` cambia, y con él CUALQUIER medida en
+     `vh` a secas — así que el alto de esta sección (y --ancho-broche
+     más abajo, que depende de `vh`) se recalculaba en vivo, moviendo y
+     redimensionando el relicario en cada aparición/desaparición de la
+     barra durante el scroll.
+
+     `svh` ("small viewport height") es una medida FIJA: asume siempre
+     el espacio más chico disponible (como si la barra estuviera
+     siempre visible) y no se recalcula nunca, sin importar qué haga la
+     barra. El costo es mínimo: en el peor caso (barra escondida) queda
+     un pelín de aire de más abajo del "Desliza" — nada comparado con
+     el salto de tamaño que había antes.
+
+     La línea de abajo (100vh) queda como respaldo para el puñado de
+     navegadores viejos que no entienden `svh` — si no lo entienden,
+     ignoran esa declaración entera y se quedan con esta. Los que sí lo
+     entienden aplican la de abajo, que gana por venir después. */
   min-height: 100vh;
+  min-height: 100svh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -50,7 +71,11 @@
 
      Es relleno, no un margen del broche: así el centrado vertical del flex
      sigue funcionando solo en cualquier pantalla, sin números mágicos. */
+  /* Mismo motivo que el min-height de arriba: `svh` en vez de `vh` a
+     secas, para que este relleno no cambie cuando la barra del
+     navegador aparece o desaparece en celular. */
   padding: clamp(5rem, 14vh, 11rem) 1rem 3rem;
+  padding: clamp(5rem, 14svh, 11rem) 1rem 3rem;
   overflow: hidden;
 }
 
@@ -96,8 +121,15 @@
        · 78vh  → nunca tan alto que se corte la corona o el remate, ni que
                  empuje el "Desliza" fuera de la vista. Este límite es el
                  que manda en pantallas anchas y bajas; en pantallas altas
-                 (como un monitor vertical) manda el tope de 1080px. */
-  --ancho-broche: min(94vw, 1120px, 78vh);
+                 (como un monitor vertical) manda el tope de 1080px.
+
+     ⚡ `78svh` Y NO `78vh` A SECAS, por la misma razón que el `min-height`
+     de #portada de arriba: con `vh` a secas, el relicario cambiaba de
+     TAMAÑO cada vez que la barra del navegador aparecía o desaparecía en
+     celular al hacer scroll — es justo lo que se sentía como un salto.
+     `svh` es un valor fijo (el espacio más chico posible), así que este
+     tope deja de moverse solo. */
+  --ancho-broche: min(94vw, 1120px, 78svh);
 
   display: grid;
   place-items: center;

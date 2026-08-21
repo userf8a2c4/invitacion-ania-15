@@ -540,6 +540,45 @@ function rebotar(funcion, espera) {
 }
 
 /**
+ * ENVUELVE UN OYENTE DE 'resize' PARA QUE IGNORE LOS FALSOS: en celular,
+ * la barra de navegación (Edge, Chrome) se esconde al bajar y vuelve a
+ * aparecer al subir — y las dos veces disparan un 'resize' de verdad,
+ * aunque la pantalla no haya cambiado de tamaño de ningún modo real. Lo
+ * mismo pasa al abrirse el teclado. En los dos casos cambia SOLO el
+ * alto (`window.innerHeight`); el ancho (`window.innerWidth`) se queda
+ * exactamente igual, porque nada del tamaño físico de la pantalla
+ * cambió.
+ *
+ * Varios módulos escuchaban 'resize' a secas y volvían a medir o
+ * RECONSTRUIR partes enteras de la página (el relicario, los ramilletes
+ * de esquina, las velas) como si la pantalla hubiera cambiado de tamaño
+ * de verdad. Eso es lo que se sentía como un salto de tamaño y posición
+ * del relicario cada vez que la barra aparecía o desaparecía durante el
+ * scroll: código caro, disparado por un evento que no traía ningún
+ * cambio real que atender.
+ *
+ * La corrección es simple: guardar el último ancho conocido y solo
+ * dejar pasar la función si el ancho de verdad cambió. Un cambio real de
+ * pantalla (girar el celular, cambiar de ventana) siempre mueve el
+ * ancho; que la barra del navegador aparezca, o que se abra el teclado,
+ * nunca.
+ *
+ * @param {Function} funcion - Qué hacer cuando el ancho cambió de verdad.
+ * @returns {Function} La función lista para pasarle a addEventListener.
+ *
+ * @example
+ *   window.addEventListener('resize', alCambiarElAncho(reacomodar));
+ */
+function alCambiarElAncho(funcion) {
+  let anchoConocido = window.innerWidth;
+  return function (...argumentos) {
+    if (window.innerWidth === anchoConocido) return;
+    anchoConocido = window.innerWidth;
+    funcion.apply(this, argumentos);
+  };
+}
+
+/**
  * CEDER EL HILO: le devuelve el control al navegador para que pinte.
  *
  * Con la pestaña visible se usa requestAnimationFrame (queda sincronizado
@@ -743,7 +782,11 @@ function medidaDelRelicario() {
 actualizarMedidaDelRelicario();
 window.addEventListener('load', actualizarMedidaDelRelicario);
 // rebotar(): al terminar de arrastrar la ventana, no en cada píxel del camino.
-window.addEventListener('resize', rebotar(actualizarMedidaDelRelicario, 200));
+// alCambiarElAncho(): ignora el 'resize' falso de la barra del navegador en
+// celular (ver la nota grande junto a la función, más arriba) — sin esto,
+// CADA aparición/desaparición de la barra al hacer scroll forzaba releer
+// getBoundingClientRect() del SVG más grande de la página.
+window.addEventListener('resize', alCambiarElAncho(rebotar(actualizarMedidaDelRelicario, 200)));
 
 /* El sobre de entrada puede terminar de abrirse (y de correr el resto del
    contenido) después de que esta medición inicial ya se hizo. Sin este
