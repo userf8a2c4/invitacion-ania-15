@@ -752,126 +752,72 @@
    * derecha es el mismo dibujo reflejado por CSS, igual que las
    * enredaderas de los laterales.
    *
+   * ⚡ REESCRITO A PEDIDO EXPLÍCITO, DESPUÉS DE VARIAS RONDAS QUE SIEMPRE
+   * TERMINABAN MAL. La versión anterior tenía tres capas independientes
+   * —abanico de tallos y ramas, un "corazón" de rosas grandes, un
+   * "relleno" con su propio sesgo geométrico de anclaje— y CADA una con
+   * su cantidad y escala ajustadas a mano. Ronda tras ronda el resultado
+   * seguía leyéndose mal ("maleza", "matorral", "jardín descuidado"), y
+   * el pedido fue dejar de MICROGESTIONAR pieza por pieza.
+   *
+   * El enfoque nuevo: tratar la esquina como lo que en el fondo es, más
+   * marco del relicario, con más luz arriba — la MISMA idea que ya usan
+   * las enredaderas de los costados (dibujarPlanta, más arriba: cada
+   * rama lleva una sola flor en la punta, sin zonas especiales). Acá hay
+   * un solo abanico de ramas cortas, cada una con su flor, más dos rosas
+   * de acento en el origen. La cantidad de ramas tiene un LÍMITE FIJO Y
+   * CHICO (6 a 9), no una fórmula que se dispara con el ancho de
+   * pantalla — "más que el resto" ya lo da que nacen todas juntas en la
+   * esquina, no un conteo sin techo.
+   *
    * @param {number} semilla  - Define cómo será este ramillete.
-   * @param {number} densidad - Cuán tupido va, según el tamaño de
-   *        pantalla. 1 es una pantalla mediana; más grande, más flores;
-   *        más chica, menos. Ver colocarLosRamilletesDeEsquina.
+   * @param {number} densidad - Cuán ancha está la pantalla (ver
+   *        colocarLosRamilletesDeEsquina). Acá solo mueve la cantidad de
+   *        ramas dentro del límite fijo (6 a 9) y el grosor del trazo.
    * @returns {string} El SVG listo para insertar.
    */
   function dibujarRamilleteDeEsquina(semilla, densidad) {
     const azar = crearAzarConSemilla(semilla);
 
-    /* Ayuda para escalar una cantidad por la densidad sin que se
-       desmadre ni desaparezca: multiplica y después recorta a un mínimo
-       y un máximo sensatos. */
-    const escalar = (base, minimo, maximo) =>
-      Math.round(limitar(base * densidad, minimo, maximo));
-
-    /* De dónde nacen todos los tallos: casi en el vértice, apenas
+    /* De dónde nacen todas las ramas: casi en el vértice, apenas
        adentro, para que el ramillete parezca brotar de la moldura. */
     const xDeLaBase = azar.entre(10, 26);
     const yDeLaBase = azar.entre(8, 22);
 
     const piezas = [];
     const flores = [];
-    /* Puntos reales del abanico de tallos y ramas (coordenadas del
-       viewBox), para anclar ahí el relleno en vez de tirarlo al azar en
-       una caja que llega más lejos que los tallos — ver la nota del
-       relleno más abajo. */
-    const puntosDelAbanico = [];
 
-    /* ── El abanico de tallos (regla 1) ──
-       Los ángulos van de 0,16 rad (casi horizontal, corriendo por debajo
-       de la cenefa de arriba) a 1,30 rad (casi vertical, bajando por el
-       riel del costado). Repartidos parejo y con un temblorcito al azar
-       para que no se note la regla. */
-    /* ⚡ BAJÓ (era entero(16,20), tope 46) A PEDIDO — ESTO ES LO QUE DE
-       VERDAD SE LEÍA COMO "MALEZA". Las rondas anteriores solo tocaban
-       las FLORES (cantidad y tamaño), pero el enredo de "maleza" no lo
-       daban las flores: lo daba tener hasta 46 tallos abriéndose en
-       abanico, cada uno con 62% de chance de una rama secundaria propia
-       — eso es una estructura de decenas de ramas cruzándose, antes de
-       sumar una sola flor. Menos tallos principales es lo que hace que
-       el ramillete se lea como ROSAL PODADO en vez de matorral: menos
-       líneas cruzándose, cada una con su propio protagonismo. */
-    const cuantosTallos = escalar(azar.entero(11, 14), 6, 30);
-    const ANGULO_MAS_HORIZONTAL = 0.08;
-    const ANGULO_MAS_VERTICAL   = 1.46;
+    /* Límite fijo y chico — nunca un conteo que se dispara con la
+       pantalla. Densidad solo mueve un par de ramas de más en pantallas
+       anchas, siempre dentro de 6 a 9. */
+    const cuantasRamas = Math.round(limitar(6 + densidad * 2, 6, 9));
 
-    /* ⚡ POR QUÉ EL TALLO TIENE QUE ENGROSAR CON LA DENSIDAD.
-       La CANTIDAD de rosas escala con `densidad` (ver `escalar` arriba):
-       en una pantalla ancha, ~1250px de más suben la densidad hasta 1,9 y
-       aparecen ~135 rosas por ramillete. Pero el GROSOR del tallo era un
-       número fijo, pensado para el caso de densidad ~1. Con casi el doble
-       de flores encima de un tallo que no engrosó un milímetro, la punta
-       —que ya adelgaza a propósito hasta un solo píxel— quedaba tapada
-       entera: rosas que parecen flotar sin nada que las sostenga.
-
-       Math.max(densidad, 1.6) para no ADELGAZAR el tallo en pantallas
-       angostas: ahí la densidad baja de 1 y también hay menos rosas, así
-       que el grosor de siempre ya alcanza. Solo se engruesa cuando hace
-       falta, nunca se afina de más. El piso subió de 1 a 1.6 porque en
-       celular (ramillete a escala ~0.45) una punta de grosor 1 queda en
-       0.45px CSS —subpíxel, invisible—; con 1.6 la punta mínima queda
-       en ~0.7px, ya visible. */
+    /* El trazo tiene que engrosar un poco en pantallas anchas o la punta
+       queda en subpíxeles invisibles (mismo motivo que en las
+       enredaderas de los costados). */
     const grosorDelTallo = Math.max(densidad, 1.6);
+    const ANGULO_MAS_HORIZONTAL = 0.1;
+    const ANGULO_MAS_VERTICAL   = 1.45;
 
-    for (let i = 0; i < cuantosTallos; i++) {
-      const reparto = i / (cuantosTallos - 1);
+    for (let i = 0; i < cuantasRamas; i++) {
+      const reparto = i / (cuantasRamas - 1);
       const anguloDeSalida =
         ANGULO_MAS_HORIZONTAL +
         reparto * (ANGULO_MAS_VERTICAL - ANGULO_MAS_HORIZONTAL) +
         azar.entre(-0.09, 0.09);
 
-      /* Los tallos del medio del abanico son los más largos; los de los
-         extremos, más cortos. Eso redondea el contorno del ramillete en
-         lugar de dejarlo con puntas que sobresalen. */
+      // Las ramas del medio del abanico son más largas; las de los
+      // extremos, más cortas — redondea el contorno del ramo.
       const cercaniaAlCentro = 1 - Math.abs(reparto - 0.5) * 2;
-      const pasos = azar.entero(7, 10);
-      /* ⚡ EL LARGO SUBIÓ (era entre(11,16)) PORQUE EL ABANICO SE QUEDABA
-         CORTO. Con el largo viejo, un tallo típico llegaba a ~100-140
-         unidades desde la esquina — en un lienzo de 380×270 pensado a
-         propósito más grande que el racimo (ver ANCHO_DEL_RAMILLETE más
-         arriba), eso es apenas un cuarto del ancho disponible. Todo
-         —tallos, hojas y las flores de relleno que se anclan a ellos—
-         quedaba apretado junto a la esquina, dejando vacío el resto del
-         lienzo que la regla 2 ("más ancho que alto") pide usar. Con este
-         largo, un tallo central llega a ~150-210 unidades: usa bastante
-         más del ancho sin llegar a estirarse hasta el borde (ahí es donde
-         "el lienzo más grande que el racimo" deja de ser un margen y pasa
-         a ser un hueco).
+      const pasos = azar.entero(6, 9);
+      const largoDelPaso = azar.entre(20, 30) * (0.7 + cercaniaAlCentro * 0.4);
 
-         ⚡ SUBIÓ OTRA VEZ (era entre(16,23)): seguía sin abrir lo
-         suficiente. Un tallo central ahora llega a ~200-280 unidades,
-         bastante más cerca del 80% del ancho (304) al que ya apunta
-         xObjetivo más abajo.
-
-         ⚡ SUBIÓ UNA TERCERA VEZ (era entre(21,30)) A PEDIDO: seguía
-         leyéndose "amontonado y aplastado" pese a los dos aumentos
-         anteriores — el problema real no era solo el largo (ver la nota
-         de xRaiz/yRaiz más abajo), pero un empujón más de alcance ayuda a
-         que la copa del ramillete respire más lejos de la esquina. */
-      const largoDelPaso = azar.entre(26, 36) * (0.68 + cercaniaAlCentro * 0.42);
-
-      /* ⚡ LA RAÍZ DE CADA TALLO YA NO ES UN SOLO PUNTO — Y ESTO ES LO QUE
-         DE VERDAD ARREGLA "AMONTONADO EN LA ESQUINA".
-         Hasta acá, los 46 tallos nacían del MISMO (xDeLaBase, yDeLaBase):
-         un abanico entero brotando de un pinchazo. Por más largos que
-         fueran los tallos o por más ancho que se hiciera el contenedor
-         CSS, la geometría de un abanico de un solo origen concentra la
-         masa cerca de ese punto — es matemática, no un problema de
-         cantidad: alargar los tallos solo estira dos brazos flacos desde
-         el mismo pinchazo, nunca hace que el conjunto "rodee" nada.
-
-         La corrección real: cada tallo nace un poco CORRIDO a lo largo de
-         la moldura que le corresponde. Los tallos casi horizontales
-         (reparto→0) corren su raíz a lo largo del borde de ARRIBA; los
-         casi verticales (reparto→1) la corren a lo largo del borde
-         LATERAL. Así la base del ramillete pasa de ser un punto a ser un
-         TRAMO de ~70 unidades sobre cada moldura — el conjunto abraza el
-         relicario en vez de brotar de una esquina puntual. */
-      const xRaiz = xDeLaBase + (1 - reparto) * azar.entre(-4, 70);
-      const yRaiz = yDeLaBase + reparto * azar.entre(-4, 70);
+      /* La raíz de cada rama corre un poco a lo largo de la moldura que
+         le toca (arriba para las casi horizontales, al costado para las
+         casi verticales), para que el ramo abrace la esquina en vez de
+         brotar de un único pinchazo. */
+      const xRaiz = xDeLaBase + (1 - reparto) * azar.entre(-4, 50);
+      const yRaiz = yDeLaBase + reparto * azar.entre(-4, 50);
 
       const tallo = crecerTallo(azar, {
         xInicial: xRaiz,
@@ -879,36 +825,19 @@
         anguloInicial: anguloDeSalida,
         pasos,
         largoDelPaso,
-        giroMaximo: azar.entre(0.06, 0.14),
+        giroMaximo: azar.entre(0.08, 0.16),
         inercia: azar.entre(0.5, 0.75),
-        /* Tiende a abrirse hacia adentro de la página, sin volver sobre
-           sí mismo: un ramillete que se cierra parece un puño. */
-        xObjetivo: ANCHO_DEL_RAMILLETE * 0.8,
-        atraccion: azar.entre(0.0006, 0.0018),
+        xObjetivo: ANCHO_DEL_RAMILLETE * 0.72,
+        atraccion: azar.entre(0.0008, 0.002),
       });
-      /* ⚠️ SIN LOS PRIMEROS DOS PASOS: todos los tallos —hasta 46— nacen
-         del MISMO punto (xDeLaBase, yDeLaBase) y recién se separan unos
-         pasos después. Si se guardaran también esos primeros puntos, el
-         relleno de más abajo (que ancla sorteando UN punto al azar de
-         puntosDelAbanico) sortearía la zona de la esquina muchas más veces
-         que el resto del abanico —ahí caen los primeros puntos de CADA
-         tallo, todos casi superpuestos— y las rosas de relleno se
-         amontonarían justo ahí, dejando vacía el área ancha que el propio
-         abanico ya abrió (la regla 2 de más arriba: "más ancho que alto").
-         Se salta a partir de donde el abanico ya se separó de verdad. */
-      puntosDelAbanico.push(...tallo.slice(2));
 
-      /* ⚠️ RELLENO DE RESERVA: el degradado #rosa-tallo vive en un <svg> de
-         0×0 aparte (la biblioteca de rosas compartida). Ese patrón —un
-         degradado referenciado desde OTRO <svg>— a veces se lee distinto
-         entre navegadores. Por eso se dibuja el mismo contorno DOS veces:
-         primero un color sólido de reserva, y el degradado justo encima.
-         Si el degradado resuelve bien (lo normal), tapa al sólido entero y
-         no cambia nada; si no resolviera, el sólido de abajo salva la
-         rama en vez de dejarla como un hilo casi invisible. */
+      /* Mismo relleno de reserva que en las enredaderas de los costados:
+         el degradado #rosa-tallo referenciado desde otro <svg> a veces
+         se lee distinto entre navegadores, así que se dibuja un color
+         sólido debajo por si acaso. */
       const dDelTallo = siluetaDelTallo(
         tallo, azar,
-        azar.entre(3.4, 5.2) * grosorDelTallo,
+        azar.entre(3, 4.6) * grosorDelTallo,
         1 * grosorDelTallo
       );
       piezas.push(
@@ -916,27 +845,13 @@
         `<path d="${dDelTallo}" fill="url(#rosa-tallo)" stroke="#241d0d" stroke-width=".6"/>`
       );
 
-      /* Hojas repartidas por el tallo, siempre levantadas hacia afuera.
-         Son las que dan el follaje: sin suficientes hojas el ramillete
-         se ve como alambres con flores en la punta.
-
-         ⚡ BAJÓ (era entero(4,7)) A PEDIDO: con hasta 46 tallos en una
-         pantalla ancha (ver cuantosTallos, arriba), 4-7 hojas POR TALLO
-         sumaban a más de 250 hojas solo en los tallos principales —antes
-         de contar las de las ramas secundarias más abajo—. Se leía como
-         un matorral tupido, no como rosas trepando con su follaje. Con
-         menos hojas por tallo el ramillete sigue teniendo follaje real
-         (nunca se ve "puro alambre"), pero deja de competir en cantidad
-         con las propias rosas.
-
-         ⚡ BAJÓ OTRA VEZ (era entero(2,4), promedio 3) A PEDIDO EXPLÍCITO
-         de reducir las hojas un 50 % más: entero(1,2) promedia 1.5, la
-         mitad exacta de 3. */
+      // Una o dos hojas por rama — igual de discreto que en las
+      // enredaderas de los costados, nunca compite con la flor.
       const cuantasHojas = azar.entero(1, 2);
       for (let h = 0; h < cuantasHojas; h++) {
         const punto = tallo[azar.entero(1, tallo.length - 2)];
         const hacia = azar.signo();
-        const escala = azar.entre(0.38, 0.72);
+        const escala = azar.entre(0.4, 0.7);
         const giro = (punto.angulo * 180 / Math.PI) + 90 + hacia * azar.entre(30, 70);
         piezas.push(
           `<use href="#rosa-hoja" transform="translate(${punto.x.toFixed(1)} ${punto.y.toFixed(1)})
@@ -944,99 +859,23 @@
         );
       }
 
-      /* ── Ramas secundarias ──
-         De la mitad de los tallos sale una rama más corta con su propio
-         capullo. Es lo que llena los huecos que quedan ENTRE los tallos
-         del abanico: sin ellas se ve el peine, con ellas se ve un ramo.
-         Van cortas a propósito, para que no se confundan con los tallos
-         principales ni alarguen la silueta. */
-      if (azar.numero() < 0.62) {
-        const nace = tallo[azar.entero(1, Math.max(1, tallo.length - 3))];
-        const rama = crecerTallo(azar, {
-          xInicial: nace.x,
-          yInicial: nace.y,
-          anguloInicial: nace.angulo + azar.signo() * azar.entre(0.35, 0.8),
-          pasos: azar.entero(3, 5),
-          largoDelPaso: azar.entre(7, 12),
-          giroMaximo: azar.entre(0.08, 0.18),
-          inercia: azar.entre(0.4, 0.65),
-          xObjetivo: ANCHO_DEL_RAMILLETE * 0.8,
-          atraccion: 0.001,
-        });
-        puntosDelAbanico.push(...rama);
-
-        // Mismo relleno de reserva que el tallo principal (ver la nota de arriba).
-        // Y el mismo engrosamiento por densidad (ver grosorDelTallo, arriba).
-        const dDeLaRama = siluetaDelTallo(
-          rama, azar,
-          azar.entre(1.8, 2.8) * grosorDelTallo,
-          0.8 * grosorDelTallo
-        );
-        piezas.push(
-          `<path d="${dDeLaRama}" fill="#6a5322"/>` +
-          `<path d="${dDeLaRama}" fill="url(#rosa-tallo)" stroke="#241d0d" stroke-width=".5"/>`
-        );
-
-        const puntaDeLaRama = rama[rama.length - 1];
-        flores.push({
-          x: puntaDeLaRama.x, y: puntaDeLaRama.y,
-          tipo: azar.numero() < 0.6 ? 'rosa-capullo' : 'rosa-dorso',
-          escala: azar.entre(0.26, 0.38),
-          giro: (puntaDeLaRama.angulo * 180 / Math.PI) + 90 + azar.entre(-20, 20),
-        });
-
-        // Un par de hojitas también en la rama (bajó de entero(1,3), y de
-        // nuevo un 50% más: promedio 1.5 → promedio .75, con 75% de
-        // probabilidad de una sola hoja y 25% de ninguna).
-        for (let h = 0; h < (azar.numero() < 0.75 ? 1 : 0); h++) {
-          const punto = rama[azar.entero(1, rama.length - 1)];
-          const hacia = azar.signo();
-          const escala = azar.entre(0.3, 0.5);
-          const giro = (punto.angulo * 180 / Math.PI) + 90 + hacia * azar.entre(30, 70);
-          piezas.push(
-            `<use href="#rosa-hoja" transform="translate(${punto.x.toFixed(1)} ${punto.y.toFixed(1)})
-                  rotate(${giro.toFixed(1)}) scale(${(hacia * escala).toFixed(2)} ${escala.toFixed(2)})"/>`
-          );
-        }
-      }
-
-      /* ── Qué remata cada tallo (regla 3) ──
-         Nada grande. Los tallos largos terminan en capullo o en flor
-         chica de perfil, que se leen como brote y no como remate. Solo
-         los tallos cortos, los que quedan cerca de la esquina, se
-         permiten una flor algo mayor. */
+      /* UNA flor por rama, en la punta — sin distinguir tallos "cortos"
+         de "largos", sin zonas especiales. La orientación se sortea
+         entre abiertas y capullo, siempre hacia el lado abierto: acá
+         "hay más luz arriba", la misma metáfora de dibujarPlanta, fijada
+         en su valor máximo porque esta esquina siempre está en pleno
+         sol. */
       const punta = tallo[tallo.length - 1];
-      // 95 subió a 137 y a 180 en la misma proporción que largoDelPaso (ver
-      // la nota de más arriba): si no, con tallos más largos casi ninguno
-      // calificaba como "corto" y la regla 3 (flor grande solo en los
-      // tallos cortos) dejaba de aplicarse casi siempre. Subió a 220 en la
-      // misma proporción que el último aumento de largoDelPaso.
-      const esCorto = largoDelPaso * pasos < 220;
-      const sorteo = azar.numero();
+      const orientaciones = ['rosa-frente', 'rosa-tres-cuartos', 'rosa-media', 'rosa-capullo'];
+      flores.push({
+        x: punta.x, y: punta.y,
+        tipo: orientaciones[azar.entero(0, orientaciones.length - 1)],
+        escala: azar.entre(0.42, 0.6),
+        giro: (punta.angulo * 180 / Math.PI) + 90 + azar.entre(-25, 25),
+      });
 
-      if (esCorto && sorteo < 0.55) {
-        flores.push({
-          x: punta.x, y: punta.y,
-          tipo: azar.numero() < 0.5 ? 'rosa-tres-cuartos' : 'rosa-media',
-          escala: azar.entre(0.34, 0.46),
-          giro: (punta.angulo * 180 / Math.PI) + 90 + azar.entre(-25, 25),
-        });
-      } else if (sorteo < 0.72) {
-        flores.push({
-          x: punta.x, y: punta.y, tipo: 'rosa-capullo',
-          escala: azar.entre(0.34, 0.5),
-          giro: (punta.angulo * 180 / Math.PI) + 90,
-        });
-      } else {
-        flores.push({
-          x: punta.x, y: punta.y, tipo: 'rosa-perfil',
-          escala: azar.entre(0.28, 0.4),
-          giro: (punta.angulo * 180 / Math.PI) + 90 + azar.entre(-20, 20),
-        });
-      }
-
-      // Algún zarcillo suelto, que es lo que le da aire al conjunto
-      if (azar.numero() < 0.5) {
+      // Algún zarcillo suelto, que le da aire al conjunto.
+      if (azar.numero() < 0.4) {
         const donde = tallo[azar.entero(2, tallo.length - 1)];
         piezas.push(
           `<path d="${dibujarZarcillo(donde.x, donde.y, azar)}" fill="none"
@@ -1046,140 +885,27 @@
       }
     }
 
-    /* ── El corazón del ramillete, en la esquina (regla 3) ──
-       Unas pocas rosas grandes apiladas justo donde nacen los tallos.
-       Ahí es donde tiene que estar EL ACENTO, no el ramillete entero: es
-       lo que hace que la esquina se sienta ocupada y tapa el nacimiento
-       de los tallos, que si se viera parecería un manojo atado.
-
-       ⚠️ BAJÓ DE NUEVO (15-19 → 6-8 → 3-4). El comentario original de
-       este archivo siempre dijo "dos o tres rosas grandes" — se tardó
-       tres rondas en creerle. Con 3-4 el acento de la esquina sigue ahí
-       (regla 3), pero ya no compite en cantidad con el relleno, que es
-       el que de verdad tiene que leerse "alrededor" del relicario. */
-    const cuantasDelCorazon = escalar(azar.entero(3, 4), 2, 10);
-    const anchoDelCorazon = escalar(90, 90, 170);
-    const altoDelCorazon  = escalar(78, 78, 145);
-    const orientaciones = ['rosa-frente', 'rosa-tres-cuartos', 'rosa-media'];
-
-    for (let i = 0; i < cuantasDelCorazon; i++) {
-      const xFlor = xDeLaBase + azar.entre(2, anchoDelCorazon);
-      const yFlor = yDeLaBase + azar.entre(2, altoDelCorazon);
-
-      /* ⚡ EL PEDÚNCULO QUE FALTABA — ESTO ES LO QUE ARREGLA "LAS FLORES
-         VUELAN". Esta rosa se posicionaba en un punto SUELTO del recuadro
-         del corazón, sin ningún trazo que la uniera a nada: quedaba
-         flotando sobre el fondo, sin tallo visible debajo. Ahora cada una
-         lleva un tallito corto y curvo desde donde nacen los tallos de
-         verdad (xDeLaBase, yDeLaBase) hasta su propia base — la flor
-         queda anclada al mismo punto de origen que todo el ramillete, en
-         vez de suelta en el aire. */
+    /* El acento: dos rosas más grandes justo en el origen, el "moño" que
+       tapa el nacimiento del abanico. Fijo en dos —no una cantidad que
+       escala con la pantalla— porque es un detalle, no otra zona para
+       sintonizar. */
+    const orientacionesDelAcento = ['rosa-frente', 'rosa-tres-cuartos'];
+    for (let i = 0; i < 2; i++) {
+      const xFlor = xDeLaBase + azar.entre(6, 42);
+      const yFlor = yDeLaBase + azar.entre(6, 36);
       piezas.push(
         `<path d="M${xDeLaBase.toFixed(1)} ${yDeLaBase.toFixed(1)} Q ` +
-        `${(xDeLaBase + (xFlor - xDeLaBase) * 0.5 + azar.entre(-6, 6)).toFixed(1)} ` +
-        `${(yDeLaBase + (yFlor - yDeLaBase) * 0.5 + azar.entre(-6, 6)).toFixed(1)}, ` +
+        `${(xDeLaBase + (xFlor - xDeLaBase) * 0.5 + azar.entre(-5, 5)).toFixed(1)} ` +
+        `${(yDeLaBase + (yFlor - yDeLaBase) * 0.5 + azar.entre(-5, 5)).toFixed(1)}, ` +
         `${xFlor.toFixed(1)} ${yFlor.toFixed(1)}" fill="none" ` +
-        `stroke="url(#rosa-tallo)" stroke-width="${(2.2 * grosorDelTallo).toFixed(1)}" ` +
+        `stroke="url(#rosa-tallo)" stroke-width="${(2 * grosorDelTallo).toFixed(1)}" ` +
         `stroke-linecap="round" stroke-opacity=".8"/>`
       );
-
       flores.push({
         x: xFlor, y: yFlor,
-        tipo: orientaciones[azar.entero(0, orientaciones.length - 1)],
-        // ⚡ BAJÓ FUERTE (era entre(.58,.9)) A PEDIDO EXPLÍCITO: "esas
-        // flores actuales son gigantescas". La suba anterior (de .52,.8)
-        // perseguía cubrir área con tamaño en vez de cantidad, pero a
-        // .9 de escala una sola rosa del corazón ocupa una porción
-        // enorme del recuadro de 380×270 — junto con la reducción a la
-        // mitad del contenedor CSS (ver estilos/02-marco-victoriano.css),
-        // volver acá a un tamaño más contenido es lo que evita que seis
-        // rosas gigantes sigan dominando la esquina.
-        escala: azar.entre(0.4, 0.56),
-        giro: azar.entre(-30, 30),
-      });
-    }
-
-    /* Y varias flores sueltas metidas ENTRE los tallos y a lo largo de
-       ellos. Son las que de verdad "adornan alrededor" del relicario en
-       vez de amontonarse en la esquina: son más que antes, porque ahora
-       cargan casi todo el peso que el corazón dejó de cargar arriba.
-
-       ⚡ BAJÓ (era entero(56,64), tope 70) A PEDIDO: en escritorio se leían
-       excesivas. El tope de 70 era justo lo que se estaba tocando en la
-       mayoría de los anchos de escritorio reales (a partir de ~1500px de
-       ancho, densidad ya pasa 1.2, y 56-64 × 1.2 ya llegaba o superaba
-       70) — o sea que buena parte de las pantallas de escritorio veían
-       SIEMPRE el máximo, no un número al azar. Bajar el tope junto con la
-       base es lo que de verdad baja la cantidad ahí; solo bajar la base
-       sin tocar el tope no habría cambiado nada en esas pantallas.
-
-       ⚡ EL MECANISMO SE INVIRTIÓ, Y DESPUÉS SE MODERÓ (misma ronda, dos
-       pedidos seguidos): primero se probó que el área la cubriera la
-       CANTIDAD en vez del tamaño — pero llevado a 78 de tope, el
-       resultado se leía "como maleza": demasiada flor chica, sin
-       ninguna destacando, más el enredo de tallos de arriba. La cantidad
-       ahora es MODERADA (tope 34, bien por debajo de cualquier ronda
-       anterior) y la escala vuelve a abrirse en un rango ancho —no para
-       agrandar todo, sino para que HAYA VARIEDAD: unas pocas flores un
-       poco más grandes entre las chicas, que es lo que de verdad separa
-       "ramillete prolijo" de "matorral parejo". */
-    const cuantasDeRelleno = escalar(azar.entero(26, 30), 6, 34);
-    for (let i = 0; i < cuantasDeRelleno; i++) {
-      /* ⚠️ POR QUÉ NO ALCANZABA CON ANCLAR A "CUALQUIER" PUNTO DEL
-         ABANICO (dos rondas atrás). Los ~20 tallos nacen todos del MISMO
-         punto y solo se separan angularmente: es una cuña, angosta cerca
-         de la esquina y ancha lejos. Guardar puntos "parejos a lo largo
-         de cada tallo" en puntosDelAbanico y sortear uno al azar todavía
-         da MÁS densidad de puntos por área cerca de la esquina que lejos
-         —es geometría de abanico, no un error de conteo—, así que la
-         mayoría de las flores de relleno seguían cayendo cerca del
-         corazón en vez de repartirse por el ramillete.
-
-         La corrección, subida un escalón (era "el más lejano de 2",
-         ronda anterior): ahora se sortean TRES candidatos y se queda con
-         el más lejano de la base. Cuantos más candidatos entran en la
-         comparación, más fuerte el sesgo hacia afuera —con 2 ya se
-         notaba, pero no alcanzaba a vaciar del todo la esquina; con 3
-         pesa más el punto lejano de la terna—. Sigue sin cambiar QUÉ
-         puntos son válidos (siguen siendo puntos reales de un tallo, la
-         flor sigue apoyada en algo), solo cuánto pesa cada uno en el
-         sorteo. */
-      const candidatoA = puntosDelAbanico[azar.entero(0, puntosDelAbanico.length - 1)];
-      const candidatoB = puntosDelAbanico[azar.entero(0, puntosDelAbanico.length - 1)];
-      const candidatoC = puntosDelAbanico[azar.entero(0, puntosDelAbanico.length - 1)];
-      const distancia = (p) => (p.x - xDeLaBase) ** 2 + (p.y - yDeLaBase) ** 2;
-      let anclaje = candidatoA;
-      if (distancia(candidatoB) > distancia(anclaje)) anclaje = candidatoB;
-      if (distancia(candidatoC) > distancia(anclaje)) anclaje = candidatoC;
-
-      /* ⚡ EL SALTO BAJÓ (era entre(-8,8)) Y AHORA LLEVA SU PROPIO
-         PEDÚNCULO — esto es lo que arregla "las flores vuelan". Antes la
-         flor se corría hasta 8 unidades del punto real del tallo Y no
-         quedaba nada dibujado entre una cosa y la otra: para el ojo, la
-         flor flotaba sola cerca de una rama, no colgada de ella. Ahora el
-         salto es chico (nomás variedad, no separación) y un tallito corto
-         la une de verdad al punto de anclaje, que es un punto REAL de un
-         tallo (ver la nota de arriba). */
-      const xFlor = anclaje.x + azar.entre(-3, 3);
-      const yFlor = anclaje.y + azar.entre(-3, 3);
-      piezas.push(
-        `<path d="M${anclaje.x.toFixed(1)} ${anclaje.y.toFixed(1)} L${xFlor.toFixed(1)} ${yFlor.toFixed(1)}" ` +
-        `fill="none" stroke="url(#rosa-tallo)" stroke-width="${(1.6 * grosorDelTallo).toFixed(1)}" ` +
-        `stroke-linecap="round" stroke-opacity=".7"/>`
-      );
-
-      flores.push({
-        x: xFlor, y: yFlor,
-        tipo: azar.numero() < 0.5 ? 'rosa-tres-cuartos' : 'rosa-media',
-        // ⚡ BAJÓ (era entre(.4,.72)) A PEDIDO EXPLÍCITO: el rango
-        // anterior buscaba jerarquía de tamaño, pero el techo de .72
-        // volvía a leerse como "flor gigante" en varias de relleno, no
-        // solo en el corazón. Se mantiene un rango (sigue habiendo
-        // variedad, no todas iguales) pero corrido hacia abajo, en línea
-        // con la reducción a la mitad del recuadro entero (ver
-        // estilos/02-marco-victoriano.css).
-        escala: azar.entre(0.28, 0.48),
-        giro: azar.entre(-40, 40),
+        tipo: orientacionesDelAcento[i % orientacionesDelAcento.length],
+        escala: azar.entre(0.5, 0.62),
+        giro: azar.entre(-25, 25),
       });
     }
 
