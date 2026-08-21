@@ -764,16 +764,21 @@
    * marco del relicario, con más luz arriba — la MISMA idea que ya usan
    * las enredaderas de los costados (dibujarPlanta, más arriba: cada
    * rama lleva una sola flor en la punta, sin zonas especiales). Acá hay
-   * un solo abanico de ramas cortas, cada una con su flor, más dos rosas
-   * de acento en el origen. La cantidad de ramas tiene un LÍMITE FIJO Y
-   * CHICO (6 a 9), no una fórmula que se dispara con el ancho de
-   * pantalla — "más que el resto" ya lo da que nacen todas juntas en la
-   * esquina, no un conteo sin techo.
+   * un solo abanico de ramas cortas, cada una con su flor, más varias
+   * rosas de acento en el origen. La cantidad de ramas tiene un LÍMITE
+   * FIJO (no una fórmula que se dispara con el ancho de pantalla), pero
+   * bastante más alto que el primer intento: acá SÍ tienen que sentirse
+   * como un ramillete de verdad —mucho más tupidas que una rama suelta
+   * de enredadera— y no como una simple continuación del resto del
+   * marco. El límite fijo es lo que evita que eso se convierta otra vez
+   * en la maleza de antes: más cantidad, pero sin las ramas secundarias
+   * ni las zonas de relleno con sesgo geométrico que eran las que de
+   * verdad generaban el enredo.
    *
    * @param {number} semilla  - Define cómo será este ramillete.
    * @param {number} densidad - Cuán ancha está la pantalla (ver
    *        colocarLosRamilletesDeEsquina). Acá solo mueve la cantidad de
-   *        ramas dentro del límite fijo (6 a 9) y el grosor del trazo.
+   *        ramas dentro del límite fijo y el grosor del trazo.
    * @returns {string} El SVG listo para insertar.
    */
   function dibujarRamilleteDeEsquina(semilla, densidad) {
@@ -787,10 +792,16 @@
     const piezas = [];
     const flores = [];
 
-    /* Límite fijo y chico — nunca un conteo que se dispara con la
-       pantalla. Densidad solo mueve un par de ramas de más en pantallas
-       anchas, siempre dentro de 6 a 9. */
-    const cuantasRamas = Math.round(limitar(6 + densidad * 2, 6, 9));
+    /* ⚡ SUBIÓ FUERTE (era 6 a 9) A PEDIDO EXPLÍCITO: "quiero que esas de
+       las esquinas tengan mucho más... estas SÍ deben ser como
+       ramilletes". El primer intento, con la misma regla simple de una
+       rama-una flor, quedó demasiado parecido al resto del marco —una
+       continuación más de la enredadera, no un acento en la esquina.
+       Sigue siendo un LÍMITE FIJO (nunca una fórmula sin techo como los
+       46 tallos de las rondas viejas): la diferencia es que el techo
+       ahora es mucho más alto, porque acá el pedido es justamente que se
+       note la diferencia con el resto. */
+    const cuantasRamas = Math.round(limitar(14 + densidad * 6, 14, 22));
 
     /* El trazo tiene que engrosar un poco en pantallas anchas o la punta
        queda en subpíxeles invisibles (mismo motivo que en las
@@ -885,14 +896,17 @@
       }
     }
 
-    /* El acento: dos rosas más grandes justo en el origen, el "moño" que
-       tapa el nacimiento del abanico. Fijo en dos —no una cantidad que
-       escala con la pantalla— porque es un detalle, no otra zona para
-       sintonizar. */
-    const orientacionesDelAcento = ['rosa-frente', 'rosa-tres-cuartos'];
-    for (let i = 0; i < 2; i++) {
-      const xFlor = xDeLaBase + azar.entre(6, 42);
-      const yFlor = yDeLaBase + azar.entre(6, 36);
+    /* El acento: varias rosas más grandes justo en el origen, el "moño"
+       que tapa el nacimiento del abanico y hace que la esquina se sienta
+       CARGADA, como un ramillete de verdad y no solo una rama más larga.
+       Sigue siendo fijo (no escala con densidad) porque es un detalle,
+       no otra zona para sintonizar — pero subió de 2 a 4 junto con el
+       resto, a pedido de que la esquina se note bien distinta del resto
+       del marco. */
+    const orientacionesDelAcento = ['rosa-frente', 'rosa-tres-cuartos', 'rosa-media'];
+    for (let i = 0; i < 4; i++) {
+      const xFlor = xDeLaBase + azar.entre(6, 55);
+      const yFlor = yDeLaBase + azar.entre(6, 48);
       piezas.push(
         `<path d="M${xDeLaBase.toFixed(1)} ${yDeLaBase.toFixed(1)} Q ` +
         `${(xDeLaBase + (xFlor - xDeLaBase) * 0.5 + azar.entre(-5, 5)).toFixed(1)} ` +
@@ -904,7 +918,7 @@
       flores.push({
         x: xFlor, y: yFlor,
         tipo: orientacionesDelAcento[i % orientacionesDelAcento.length],
-        escala: azar.entre(0.5, 0.62),
+        escala: azar.entre(0.48, 0.64),
         giro: azar.entre(-25, 25),
       });
     }
