@@ -139,6 +139,7 @@ body.sobre-visible #boton-qa { display: none; }
      desaparezca en celular no tiene que recalcular este alto. */
   max-height: min(60vh, 480px);
   max-height: min(60svh, 480px);
+  max-height: min(calc(var(--alto-fijo, 100svh) * 0.60), 480px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -300,6 +301,7 @@ body.sobre-visible #boton-qa { display: none; }
        aparece o desaparece. */
     max-height: 75vh;
     max-height: 75svh;
+    max-height: calc(var(--alto-fijo, 100svh) * 0.75);
     /* Con interactive-widget=overlays-content (ver index.html) la barra
        del navegador se superpone en vez de empujar el contenido: sin este
        respiro, el borde de abajo del panel —pegado a inset:0— quedaría

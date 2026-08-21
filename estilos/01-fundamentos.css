@@ -281,6 +281,10 @@ h2 {
      la página. `svh` es fijo, no se recalcula nunca. */
   height: 125vh;
   height: 125svh;
+  /* Segunda capa (2026-08-21): svh no alcanzó en Edge Android (ver la
+     nota grande del <head> en index.html) — se ancla a --alto-fijo,
+     medido a mano por JS una sola vez al cargar. */
+  height: calc(var(--alto-fijo, 100svh) * 1.25);
   z-index: -1;      /* detrás de absolutamente todo */
 
   /* TRES capas superpuestas, de arriba abajo:

@@ -54,9 +54,20 @@
      La línea de abajo (100vh) queda como respaldo para el puñado de
      navegadores viejos que no entienden `svh` — si no lo entienden,
      ignoran esa declaración entera y se quedan con esta. Los que sí lo
-     entienden aplican la de abajo, que gana por venir después. */
+     entienden aplican la de abajo, que gana por venir después.
+
+     ⚡ SEGUNDA CAPA (2026-08-21): en el celular real del usuario, con
+     Edge para Android, esto SEGUÍA sin alcanzar — la barra inferior
+     propia de Edge (no la de Chrome) hace que el navegador le entregue
+     al motor de render una superficie que cambió de tamaño DE VERDAD, y
+     ahí `svh` no tiene ningún tamaño fijo al que anclarse. La línea
+     final usa `--alto-fijo`, medido a mano por JavaScript una sola vez
+     al cargar (ver el script en el <head> de index.html) — no depende
+     de que el navegador calcule bien nada. Si ese script no llegó a
+     correr, `100svh` sigue siendo el respaldo dentro del var(). */
   min-height: 100vh;
   min-height: 100svh;
+  min-height: var(--alto-fijo, 100svh);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -76,6 +87,8 @@
      navegador aparece o desaparece en celular. */
   padding: clamp(5rem, 14vh, 11rem) 1rem 3rem;
   padding: clamp(5rem, 14svh, 11rem) 1rem 3rem;
+  /* Mismo --alto-fijo que el min-height de arriba. */
+  padding: clamp(5rem, calc(var(--alto-fijo, 100svh) * 0.14), 11rem) 1rem 3rem;
   overflow: hidden;
 }
 
@@ -128,8 +141,16 @@
      TAMAÑO cada vez que la barra del navegador aparecía o desaparecía en
      celular al hacer scroll — es justo lo que se sentía como un salto.
      `svh` es un valor fijo (el espacio más chico posible), así que este
-     tope deja de moverse solo. */
-  --ancho-broche: min(94vw, 1120px, 78svh);
+     tope deja de moverse solo.
+
+     ⚡ SEGUNDA CAPA (2026-08-21): este es justo el valor que el usuario
+     confirmó que seguía cambiando de tamaño en su Edge de Android —
+     `svh` no alcanzó porque la barra inferior de Edge no le avisa al
+     motor de render que hay "dos tamaños fijos" entre los que elegir
+     (ver la nota grande del <head> en index.html). Se reemplaza el
+     `78svh` por `calc(var(--alto-fijo, 100svh) * 0.78)`, anclado al alto
+     medido a mano por JavaScript una sola vez al cargar. */
+  --ancho-broche: min(94vw, 1120px, calc(var(--alto-fijo, 100svh) * 0.78));
 
   display: grid;
   place-items: center;
@@ -510,6 +531,7 @@
      barra del navegador en celular. */
   margin-top: clamp(1rem, 3vh, 2.2rem);
   margin-top: clamp(1rem, 3svh, 2.2rem);
+  margin-top: clamp(1rem, calc(var(--alto-fijo, 100svh) * 0.03), 2.2rem);
   opacity: 0;
   animation: aparecer-desde-abajo .9s 1.9s forwards;
 }

@@ -88,7 +88,9 @@
      mostrar u ocultar la barra seguía recalculando el tamaño del
      relicario en vivo. Mismo motivo y mismo arreglo que ya se aplicó en
      04-portada.css: `svh` es fijo, no se recalcula con la barra. */
-  .portada__broche { --ancho-broche: min(92vw, 640px, 80svh); }
+  /* Segunda capa (2026-08-21): mismo motivo que 04-portada.css — svh no
+     alcanzó en Edge Android, se ancla a --alto-fijo medido por JS. */
+  .portada__broche { --ancho-broche: min(92vw, 640px, calc(var(--alto-fijo, 100svh) * 0.80)); }
   .portada__desliza { display: none; }   /* no hay lugar: se oculta */
 }
 
