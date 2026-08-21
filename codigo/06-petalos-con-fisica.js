@@ -449,19 +449,46 @@
    * entre la dirección del pétalo y la dirección del mouse, que dice
    * hacia qué lado tiene que girar.
    *
-   * @param {Object} petalo - El pétalo a empujar.
-   * @param {number} dt     - Segundos transcurridos desde el cuadro anterior.
+   * ⚡ SIN RAÍZ CUADRADA SALVO QUE HAGA FALTA (antes se pagaba siempre).
+   * Antes, `Math.hypot` —una raíz cuadrada— se calculaba para los ~36
+   * pétalos en CADA cuadro, para descartarse un renglón después en la
+   * inmensa mayoría de los casos (el mouse casi nunca está cerca de todos
+   * a la vez). Lighthouse midió esto como una de las tareas largas más
+   * caras de toda la web (hasta 491ms de un tirón). Ahora se compara
+   * primero la distancia AL CUADRADO contra el radio al cuadrado —álgebra
+   * pura, sin raíz— y solo se llama Math.hypot para los pocos pétalos que
+   * ya se sabe que están dentro del radio y necesitan la dirección
+   * normalizada. `distancia > R` y `distancia² > R²` son la misma
+   * condición (los dos lados son siempre positivos), así que el resultado
+   * visual es idéntico. También se sale de una sola vez si no hay puntero
+   * activo (mouseX en su valor inicial -9999): ningún pétalo puede estar
+   * a menos de 130px de ahí, es matemáticamente imposible que entre.
+   *
+   * @param {Object} petalo         - El pétalo a empujar.
+   * @param {number} dt             - Segundos transcurridos desde el cuadro anterior.
+   * @param {number} escalaDelCuadro - dt ya normalizado a "cuadros de 60 Hz"
+   *        (ver la nota junto a su cálculo, en dibujarCuadro) — idéntico
+   *        para todos los pétalos de este cuadro, por eso se calcula una
+   *        sola vez ahí y se pasa acá en vez de recalcularlo por pétalo.
    * @returns {void}
    */
-  function aplicarEmpujeDelMouse(petalo, dt) {
+  function aplicarEmpujeDelMouse(petalo, dt, escalaDelCuadro) {
+    // Sin puntero activo no hay nada que calcular.
+    if (mouseX === -9999) return;
+
     // Distancia entre el centro del pétalo y el mouse
     const distanciaX = (petalo.x + petalo.tamaño / 2) - mouseX;
     const distanciaY = (petalo.y + petalo.tamaño / 2) - mouseY;
-    const distancia = Math.hypot(distanciaX, distanciaY);   // teorema de Pitágoras
 
-    // Si está lejos, no pasa nada. El +0.01 evita dividir por cero
-    // cuando el mouse queda justo encima del pétalo.
-    if (distancia > RADIO_DE_INFLUENCIA_DEL_MOUSE || distancia < 0.01) return;
+    // Descarte barato, sin raíz: equivalente exacto a comparar la
+    // distancia real contra el radio (ver la nota grande de arriba).
+    const distanciaAlCuadrado = distanciaX * distanciaX + distanciaY * distanciaY;
+    const radioAlCuadrado = RADIO_DE_INFLUENCIA_DEL_MOUSE * RADIO_DE_INFLUENCIA_DEL_MOUSE;
+    // El 0.0001 (0.01²) evita dividir por cero cuando el mouse queda
+    // justo encima del pétalo — mismo umbral de siempre, al cuadrado.
+    if (distanciaAlCuadrado > radioAlCuadrado || distanciaAlCuadrado < 0.0001) return;
+
+    const distancia = Math.hypot(distanciaX, distanciaY);   // teorema de Pitágoras
 
     // influencia vale 1 pegado al mouse y 0 en el borde del radio
     const influencia = 1 - (distancia / RADIO_DE_INFLUENCIA_DEL_MOUSE);
@@ -487,7 +514,10 @@
     // arrastre pegaba más fuerte cuanto mejor la pantalla del invitado.
     // Dividiendo por esos mismos 0.016 ms de referencia, el total por
     // segundo queda igual sin importar la tasa de refresco.
-    const escalaDelCuadro = dt / 0.016;
+    //
+    // ⚡ escalaDelCuadro YA NO SE CALCULA ACÁ (era `dt / 0.016`, y era el
+    // mismo valor para los ~36 pétalos del cuadro): ahora llega calculado
+    // una sola vez desde dibujarCuadro. Ver la nota del parámetro arriba.
     petalo.velocidadX += velocidadMouseX * ARRASTRE_DEL_MOUSE * influenciaSuavizada * escalaDelCuadro;
     petalo.velocidadY += velocidadMouseY * ARRASTRE_DEL_MOUSE * influenciaSuavizada * escalaDelCuadro;
 
@@ -503,9 +533,15 @@
    * @param {number} dt       - Segundos desde el cuadro anterior.
    * @param {number} tiempo   - Segundos desde que arrancó la animación
    *                            (se usa para el vaivén).
+   * @param {number} frenadoDelCuadro - Math.pow(ROZAMIENTO_DEL_AIRE, dt*60)
+   *        ya calculado en dibujarCuadro (mismo valor para TODOS los
+   *        pétalos de este cuadro, porque dt es el mismo para todos —
+   *        antes se recalculaba ~36 veces por cuadro con el mismo `dt`).
+   * @param {number} escalaDelCuadro - dt normalizado a "cuadros de 60 Hz",
+   *        también calculado una sola vez en dibujarCuadro por el mismo motivo.
    * @returns {void}
    */
-  function moverPetalo(petalo, dt, tiempo) {
+  function moverPetalo(petalo, dt, tiempo, frenadoDelCuadro, escalaDelCuadro) {
     // FUERZA 1 · Gravedad: siempre hacia abajo
     petalo.velocidadY += GRAVEDAD * dt;
 
@@ -516,15 +552,15 @@
     petalo.velocidadX += vaiven * FUERZA_DEL_VAIVEN * dt;
 
     // FUERZA 3 · El mouse
-    aplicarEmpujeDelMouse(petalo, dt);
+    aplicarEmpujeDelMouse(petalo, dt, escalaDelCuadro);
 
     // ROZAMIENTO: frena todo un poquito cada cuadro.
     // Math.pow(0.99, dt*60) es "aplicar el 0.99 tantas veces como cuadros
-    // hayan pasado", para que frene igual en cualquier pantalla.
-    const frenado = Math.pow(ROZAMIENTO_DEL_AIRE, dt * 60);
-    petalo.velocidadX *= frenado;
-    petalo.velocidadY *= frenado;
-    petalo.velocidadAngular *= frenado;
+    // hayan pasado", para que frene igual en cualquier pantalla. Ya viene
+    // calculado desde dibujarCuadro (ver JSDoc de frenadoDelCuadro arriba).
+    petalo.velocidadX *= frenadoDelCuadro;
+    petalo.velocidadY *= frenadoDelCuadro;
+    petalo.velocidadAngular *= frenadoDelCuadro;
 
     // Tope de giro, para que nunca parezca una hélice
     petalo.velocidadAngular = limitar(petalo.velocidadAngular, -420, 420);
@@ -637,9 +673,16 @@
     // Una sola medición del relicario para todos los pétalos
     medirElRelicario();
 
+    /* ⚡ CALCULADOS ACÁ, UNA SOLA VEZ POR CUADRO — antes cada pétalo (hasta
+       36) los recalculaba con el mismo `dt` de entrada, o sea el mismo
+       resultado ~36 veces. Lighthouse midió esto entre las tareas largas
+       más caras del sitio. Ver JSDoc de moverPetalo/aplicarEmpujeDelMouse. */
+    const frenadoDelCuadro = Math.pow(ROZAMIENTO_DEL_AIRE, dt * 60);
+    const escalaDelCuadro = dt / 0.016;
+
     for (const petalo of petalos) {
       if (!petalo.activo) continue;   // desactivado por el gobernador: se saltea
-      moverPetalo(petalo, dt, tiempoTranscurrido);
+      moverPetalo(petalo, dt, tiempoTranscurrido, frenadoDelCuadro, escalaDelCuadro);
     }
 
     /* ⚡ ACÁ SE DIBUJA TAMBIÉN, EN VEZ DE QUE 24-lienzo-de-petalos.js TENGA
