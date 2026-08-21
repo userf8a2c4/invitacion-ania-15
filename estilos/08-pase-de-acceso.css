@@ -42,6 +42,7 @@
      desaparezca en celular no tiene que recalcular este alto. */
   max-height: 92vh;
   max-height: 92svh;
+  max-height: calc(var(--alto-fijo, 100svh) * 0.92);
   overflow-y: auto;
   background: var(--color-carbon);
   border: 1px solid var(--borde-oro-fuerte);
