@@ -1089,11 +1089,21 @@
        vez de amontonarse en la esquina: son más que antes, porque ahora
        cargan casi todo el peso que el corazón dejó de cargar arriba.
 
-       ⚡ SUBIÓ (era entero(40,46)) A PEDIDO: ~40% más de área cubierta.
-       Subir la CANTIDAD de flores (en vez de solo agrandarlas) multiplica
-       el área que ocupan de forma casi directa, sin agrandar cada una por
-       separado hasta un tamaño que se vea desproporcionado. */
-    const cuantasDeRelleno = escalar(azar.entero(56, 64), 8, 70);
+       ⚡ BAJÓ (era entero(56,64), tope 70) A PEDIDO: en escritorio se leían
+       excesivas. El tope de 70 era justo lo que se estaba tocando en la
+       mayoría de los anchos de escritorio reales (a partir de ~1500px de
+       ancho, densidad ya pasa 1.2, y 56-64 × 1.2 ya llegaba o superaba
+       70) — o sea que buena parte de las pantallas de escritorio veían
+       SIEMPRE el máximo, no un número al azar. Bajar el tope junto con la
+       base es lo que de verdad baja la cantidad ahí; solo bajar la base
+       sin tocar el tope no habría cambiado nada en esas pantallas.
+
+       ⚡ AJUSTADO A -30% (no -40%), A PEDIDO EXPLÍCITO: 49 es el 70% de
+       70. La escala de cada flor sube más abajo para compensar el área
+       —el pedido fue que lo que resalte sean las FLORES, no los tallos
+       ni las hojas, así que el ajuste va todo del lado de agrandar la
+       flor, nunca del lado de la rama. */
+    const cuantasDeRelleno = escalar(azar.entero(39, 45), 8, 49);
     for (let i = 0; i < cuantasDeRelleno; i++) {
       /* ⚠️ POR QUÉ NO ALCANZABA CON ANCLAR A "CUALQUIER" PUNTO DEL
          ABANICO (dos rondas atrás). Los ~20 tallos nacen todos del MISMO
@@ -1141,9 +1151,14 @@
       flores.push({
         x: xFlor, y: yFlor,
         tipo: azar.numero() < 0.5 ? 'rosa-tres-cuartos' : 'rosa-media',
-        // ⚡ SUBIÓ (era entre(.42,.6)) A PEDIDO, junto con la cantidad de
-        // arriba: entre las dos, ~40% más de área cubierta por el relleno.
-        escala: azar.entre(0.46, 0.66),
+        // ⚡ SUBIÓ (era entre(.46,.66)) A PEDIDO: la cantidad bajó un 30%
+        // (arriba), así que cada flor tiene que agrandarse para que el
+        // ÁREA total no baje con ella — el pedido fue "mismo área o
+        // hasta 20% más" con menos flores, y que lo que resalte sea LA
+        // FLOR, no la rama. Con -30% de cantidad y esta escala (×1,28 en
+        // cada lado, ×1,64 en área), el total queda ~15% arriba del área
+        // de antes: adentro del rango pedido.
+        escala: azar.entre(0.59, 0.85),
         giro: azar.entre(-40, 40),
       });
     }

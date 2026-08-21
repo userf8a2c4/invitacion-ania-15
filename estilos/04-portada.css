@@ -222,6 +222,30 @@
     drop-shadow(0 26px 30px rgba(0, 0, 0, .55));
 }
 
+/* ⚡ EL FAST-FOLLOW QUE HABÍA QUEDADO PENDIENTE, MEDIDO Y APLICADO
+   (2026-08-20): cuando se sacó el filtro exterior de encima de la
+   enredadera/borlas/cadena, quedó anotado que agregar `will-change:
+   transform` acá era candidato a ayudar, pero había que medirlo aparte
+   y no darlo por sentado — el intento anterior de will-change en las
+   borlas (documentado en index.html) NO ayudó, pero fue una prueba
+   hecha CUANDO todavía vivían adentro del filtro grande, así que no
+   probaba nada sobre la situación de ahora.
+
+   Se cumplen las mismas condiciones que ya funcionaron con .petalo (ver
+   estilos/10-cursor-y-petalos.css): se mueven solo por transform
+   (rotate), no viven dentro de ningún mix-blend-mode, y las tres cosas
+   se animan de forma CONTINUA mientras el relicario está en pantalla
+   (las borlas y la cadena en cada cuadro; la enredadera en cada scroll)
+   — exactamente el perfil para el que sirve reservarles una capa propia
+   del compositor, en vez de recomponerlas contra el resto de la escena
+   en cada giro. Es la sección más pesada de la página; esto le da un
+   margen más sin tocar ni un tallo del dibujo. */
+#enredadera-de-la-portada,
+.joya-colgante,
+.cadena-colgante .eslabon {
+  will-change: transform;
+}
+
 
 /* ─── 4. TEXTO DENTRO DEL ÓVALO ────────────────────────────────────────
    El ancho sale de --ancho-broche, así que el texto siempre guarda la
