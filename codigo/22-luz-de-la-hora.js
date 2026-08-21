@@ -46,9 +46,20 @@
   const MOMENTOS = [
     {
       hora: 7,   // amanecer: rasante, rosado, todavia tibio
-      hazCentro:  [252, 206, 168, 0.50],
-      hazMedio:   [228, 160, 118, 0.31],
-      hazBorde:   [200, 124, 88, 0.11],
+      /* ⚡ HACES REBAJADOS (2026-08-21) — LA RONDA ANTERIOR SOLO TOCÓ EL
+         AMBIENTE, Y ESTO ES LO QUE SEGUÍA "OCULTANDO" LA PALETA NUEVA A
+         PLENA LUZ DEL DÍA. Los haces (los rayos que entran por la
+         ventana) van con mix-blend-mode: screen —suman luz, no la
+         tapan— y de día siguen siendo grandes y con bastante alfa
+         (pensados para el sepia cálido original). Sumar luz de sobra
+         sobre un fondo victoriano oscuro es exactamente lo que lo
+         aclara y disimula el cambio de paleta. Se bajó el alfa de los
+         tres (centro/medio/borde) en los tres momentos de día —7h, 13h,
+         18h— a un poco más de la mitad; la noche (20h en adelante) no se
+         tocó, ya estaba bien. */
+      hazCentro:  [252, 206, 168, 0.28],
+      hazMedio:   [228, 160, 118, 0.17],
+      hazBorde:   [200, 124, 88, 0.06],
       motaCentro: [255, 238, 216, 0.90],
       motaBorde:  [246, 208, 168, 0.52],
       /* ⚡ AMBIENTE Y TINTE DE SALA, REBAJADOS (2026-08-20) — ESTO ES LO
@@ -71,9 +82,11 @@
     },
     {
       hora: 13,  // MEDIODIA: el NEUTRO. Luz plana, sin caracter.
-      hazCentro:  [252, 244, 214, 0.44],
-      hazMedio:   [232, 214, 168, 0.26],
-      hazBorde:   [210, 190, 128, 0.09],
+      // Mismo motivo que a las 7h: el mediodía es el momento de MÁS sol,
+      // así que sin bajar esto era el que más lavaba la paleta oscura.
+      hazCentro:  [252, 244, 214, 0.24],
+      hazMedio:   [232, 214, 168, 0.14],
+      hazBorde:   [210, 190, 128, 0.05],
       motaCentro: [255, 250, 236, 0.92],
       motaBorde:  [248, 238, 200, 0.54],
       // Mismo motivo que a las 7h: era un halo naranja/terroso brillante
@@ -88,9 +101,11 @@
     },
     {
       hora: 18,  // HORA DORADA: el momento mas caracteristico
-      hazCentro:  [255, 184, 88, 0.66],
-      hazMedio:   [236, 142, 62, 0.40],
-      hazBorde:   [206, 108, 44, 0.15],
+      // Mismo motivo: acá el alfa era el más alto de los tres momentos de
+      // día (.66/.40/.15), así que era el que más disimulaba la paleta.
+      hazCentro:  [255, 184, 88, 0.36],
+      hazMedio:   [236, 142, 62, 0.22],
+      hazBorde:   [206, 108, 44, 0.08],
       motaCentro: [255, 236, 196, 0.95],
       motaBorde:  [250, 206, 132, 0.58],
       // Mismo motivo: el naranja de "hora dorada" era justamente el más
