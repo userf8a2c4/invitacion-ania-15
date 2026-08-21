@@ -31,12 +31,12 @@
   text-align: center;
 }
 
-/* Variante a todo el ancho, con línea dorada arriba y abajo. Por dentro
-   el contenido igual se centra con .seccion__interior. */
+/* Variante a todo el ancho (sin las líneas doradas de borde que tenía:
+   se sacaron a pedido, se sentían como un corte duro de lado a lado entre
+   secciones). Por dentro el contenido igual se centra con
+   .seccion__interior. */
 .seccion--ancha {
   max-width: 100%;
-  border-top: 1px solid var(--borde-oro-tenue);
-  border-bottom: 1px solid var(--borde-oro-tenue);
 }
 .seccion__interior {
   max-width: var(--ancho-contenido);
