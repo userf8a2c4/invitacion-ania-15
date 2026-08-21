@@ -274,7 +274,21 @@
        para reanudar al instante, sin recargar. */
     if (!hayAlgoQueMirar()) { requestAnimationFrame(animarLosHaces); return; }
 
-    medirLosHaces();   // la primera vez lee el CSS; después no hace nada
+    /* ⚡ UN CUADRO MÁS DE MARGEN — esto es lo que arregla una tarea larga
+       de 81ms medida por Lighthouse. medirLosHaces() ya estaba diferida
+       a propósito hasta este primer cuadro real (ver su propio comentario,
+       más arriba: leer getComputedStyle durante la carga sería "el peor
+       momento posible"). El problema es que ESTE cuadro coincide con el
+       instante en que se dispara 'invitacion-visible', que también
+       dispara la construcción de otros módulos pesados (enredaderas,
+       velas) — el nuevo "peor momento", porque esas escrituras invalidan
+       estilos justo antes de que acá se lean. requestAnimationFrame le da
+       un cuadro más para que ese otro trabajo termine su propio layout
+       primero. Sigue ejecutándose una sola vez (yaSeMidieron adentro de
+       medirLosHaces), y el valor de `left` no cambia entre cuadros (es
+       una posición fija por nth-child), así que leerlo un cuadro después
+       da exactamente el mismo número. */
+    if (!yaSeMidieron) requestAnimationFrame(medirLosHaces);
 
     if (momentoActual - ultimoCalculo >= cadaCuanto) {
       ultimoCalculo = momentoActual;
