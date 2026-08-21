@@ -164,7 +164,13 @@ $codigoDeLaUrl = htmlspecialchars(
 
   body {
     margin: 0;
+    /* svh y no dvh: dvh sigue el alto EN VIVO del navegador, así que
+       cambia de valor cada vez que la barra de Edge/Chrome en celular
+       aparece o desaparece, corriendo todo el contenido de golpe. svh es
+       un valor fijo (el espacio más chico posible) que no se recalcula
+       nunca — mismo criterio que el resto del sitio. */
     min-height: 100dvh;
+    min-height: 100svh;
     background: #1a0a00;
     color: #f5e6c8;
     font-family: Georgia, "Times New Roman", serif;
