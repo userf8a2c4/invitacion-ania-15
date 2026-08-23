@@ -107,8 +107,17 @@
        El valor de reserva es el vino de las 18:00 —el de siempre— por si
        ese módulo no llegara a cargar. */
     radial-gradient(ellipse 60% 50% at 50% 0%,   var(--ambiente-alto, rgba(139, 0, 0, .25)) 0%, transparent 70%),
-    radial-gradient(ellipse 40% 60% at 80% 100%, rgba(139, 0, 0, .15) 0%, transparent 70%),
-    radial-gradient(ellipse 40% 60% at 20% 100%, rgba(201, 168, 76, .08) 0%, transparent 70%);
+    /* ⚡ CENTRO EN 130%, NO EN 100% (2026-08-23) — ESTO ES LO QUE ARREGLA
+       LA COSTURA DE TONO CONTRA "un mensaje de tus padres". Con el centro
+       clavado en el borde mismo de #portada (100%), el halo llegaba a su
+       intensidad MÁXIMA justo en el borde y ahí se cortaba en seco contra
+       el overflow:hidden — nunca alcanzaba a desvanecerse, así que se veía
+       como un salto de tono, no un degradado. Corriendo el centro a 130%
+       (30 puntos más allá del radio vertical de 60%, la mitad del camino
+       hacia el "transparent" del 70%), lo que se ve dentro de la caja ya
+       viene atenuado a la mitad — se apaga solo, sin borde. */
+    radial-gradient(ellipse 40% 60% at 80% 130%, rgba(139, 0, 0, .15) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 60% at 20% 130%, rgba(201, 168, 76, .08) 0%, transparent 70%);
 }
 
 
