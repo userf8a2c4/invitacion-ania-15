@@ -1780,14 +1780,30 @@
           tiempoTranscurrido * 0.5 + nudo.faseDeRespiracion
         ) * VAIVEN_DEL_NUDO;
 
-        nudo.velocidadDeLaFlexion += (vaivenDelNudo - nudo.flexion) * nudo.rigidez -
-                                     nudo.velocidadDeLaFlexion * nudo.amortiguacion +
-                                     torque;
+        /* ⚡ SUB-PASOS, NO UNA SOLA INTEGRACIÓN (2026-08-23) — ESTO ES LO QUE
+           ARREGLA "las flores vuelan y tardan en volver" en calidad media/baja.
+           El torque ya venía corregido por dtParaElTorque para que un
+           manotazo no se diluya al saltear cuadros, pero la amortiguación de
+           acá abajo se aplicaba UNA sola vez por lote, como si solo hubiera
+           pasado un cuadro — en calidad media/baja pasan 2 o 3. Resultado: el
+           freno actuaba con menos frecuencia real que la que calibraron las
+           constantes de amortiguación (pensadas para correr cada cuadro), y
+           el nudo se pasaba de rosca antes de asentarse. Repitiendo la MISMA
+           integración saltoDelResorte veces, con una fracción del torque en
+           cada una, el freno se aplica la misma cantidad de veces por
+           segundo real sin importar la calidad, y el impulso total del
+           empujón sigue siendo idéntico. */
+        const torquePorSubpaso = torque / saltoDelResorte;
+        for (let subpaso = 0; subpaso < saltoDelResorte; subpaso++) {
+          nudo.velocidadDeLaFlexion += (vaivenDelNudo - nudo.flexion) * nudo.rigidez -
+                                       nudo.velocidadDeLaFlexion * nudo.amortiguacion +
+                                       torquePorSubpaso;
 
-        nudo.flexion = limitar(
-          nudo.flexion + nudo.velocidadDeLaFlexion,
-          -FLEXION_MAXIMA_DEL_NUDO, FLEXION_MAXIMA_DEL_NUDO
-        );
+          nudo.flexion = limitar(
+            nudo.flexion + nudo.velocidadDeLaFlexion,
+            -FLEXION_MAXIMA_DEL_NUDO, FLEXION_MAXIMA_DEL_NUDO
+          );
+        }
 
         /* ⚡ Comparación con ENTEROS, no con cadenas (ver la nota de la
            planta): son ~120 nudos por cuadro, y hacer toFixed() en cada uno
@@ -1876,16 +1892,25 @@
         /* Resorte amortiguado sobre el ÁNGULO (no sobre la posición):
            el tallo tiende a enderezarse, y el roce del aire va frenando
            el vaivén hasta que se detiene. El reposo es cero: la flor
-           quiere volver a estar derecha sobre su pedúnculo. */
-        flor.velocidadDeLaFlexion += -flor.flexion * flor.rigidez -
-                                     flor.velocidadDeLaFlexion * flor.amortiguacion +
-                                     torque;
+           quiere volver a estar derecha sobre su pedúnculo.
 
-        // Tope: un tallo se dobla, no se parte
-        flor.flexion = limitar(
-          flor.flexion + flor.velocidadDeLaFlexion,
-          -FLEXION_MAXIMA, FLEXION_MAXIMA
-        );
+           ⚡ SUB-PASOS, mismo motivo que en el nudo de acá arriba: sin esto,
+           en calidad media/baja la amortiguación actuaba con menos
+           frecuencia real de la calibrada, y la flor se pasaba de rosca —
+           "vuela y tarda mucho en volver al tallo". */
+        const torquePorSubpasoDeFlor = torque / saltoDelResorte;
+        for (let subpaso = 0; subpaso < saltoDelResorte; subpaso++) {
+          flor.velocidadDeLaFlexion += -flor.flexion * flor.rigidez -
+                                       flor.velocidadDeLaFlexion * flor.amortiguacion +
+                                       torquePorSubpasoDeFlor;
+
+          flor.flexion = limitar(
+            flor.flexion + flor.velocidadDeLaFlexion,
+            -FLEXION_MAXIMA, FLEXION_MAXIMA
+          );
+        }
+        // (el tope -FLEXION_MAXIMA/FLEXION_MAXIMA ya se aplicó en cada
+        // subpaso del loop de arriba, no hace falta repetirlo acá afuera)
 
         /* Al terminar de acomodarse se la endereza EXACTO y se escribe una
            última vez. Sin esto quedaría temblando en la milésima de grado
