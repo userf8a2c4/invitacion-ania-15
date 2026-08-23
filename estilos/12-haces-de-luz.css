@@ -92,12 +92,19 @@
     /* La de siempre, con el tope bajado de .62 a .40: entre esta capa y la
        horizontal de arriba, los márgenes llegan a la misma penumbra de
        antes y la columna central queda legible. */
+    /* ⚡ vh → var(--alto-fijo, ...) (2026-08-23): estas 3 paradas usaban vh
+       crudo, uno de los dos huecos que quedaban del fix de la barra del
+       navegador (el otro era el resize sin guard de 06-petalos-con-fisica.js).
+       Con vh, cada vez que la barra inferior del navegador aparecía o
+       desaparecía estas bandas de sombra saltaban de golpe en toda la
+       página — mismo síntoma que --alto-fijo ya resuelve en el resto del
+       sitio, acá nomás nunca se migró. */
     linear-gradient(
       to bottom,
       rgba(8, 4, 4, 0)   0,
-      rgba(8, 4, 4, 0)   22vh,
-      rgba(7, 4, 4, calc(.18 * var(--profundidad-de-sombra, 1))) 90vh,
-      rgba(5, 3, 3, calc(.32 * var(--profundidad-de-sombra, 1))) 170vh,
+      rgba(8, 4, 4, 0)   calc(var(--alto-fijo, 100svh) * 0.22),
+      rgba(7, 4, 4, calc(.18 * var(--profundidad-de-sombra, 1))) calc(var(--alto-fijo, 100svh) * 0.90),
+      rgba(5, 3, 3, calc(.32 * var(--profundidad-de-sombra, 1))) calc(var(--alto-fijo, 100svh) * 1.70),
       rgba(4, 2, 2, calc(.40 * var(--profundidad-de-sombra, 1))) 100%);
 }
 

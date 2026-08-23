@@ -749,10 +749,17 @@
     }
   });
 
-  // Si se cambia el tamaño de la ventana, actualizamos las medidas.
-  window.addEventListener('resize', () => {
+  /* Si se cambia el tamaño de la ventana, actualizamos las medidas.
+     ⚡ CON GUARD DE ANCHO (2026-08-23) — este listener era el único de todo
+     el proyecto sin `alCambiarElAncho` (02-utilidades.js): releía altura en
+     CADA aparición/desaparición de la barra del navegador en celular,
+     moviendo en vivo los límites de la física (dónde reciclan los pétalos,
+     dónde rebotan en los bordes). Mismo criterio que ya usan
+     08-efectos-de-scroll.js, 19-velas.js, 23-lienzo-de-luz.js, etc.: si el
+     ancho no cambió, no fue un resize real. */
+  window.addEventListener('resize', alCambiarElAncho(() => {
     anchoDePantalla = window.innerWidth;
     altoDePantalla  = window.innerHeight;
-  });
+  }));
 
 })();
