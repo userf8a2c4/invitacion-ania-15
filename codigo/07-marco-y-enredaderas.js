@@ -1398,8 +1398,26 @@
            en el centro" siempre es la base de ESTA flor, sea cual sea su
            tamaño o dónde esté ubicada. */
         if (movil) {
+          /* El punto exacto: los seis símbolos de rosa están dibujados
+             CENTRADOS en su propio origen, y el <use> solo gira y escala
+             alrededor de ese origen (no traslada). Así que, adentro de este
+             <g>, el origen local (0,0) ES el centro de la cabeza de la flor,
+             y el cuello queda justo debajo, en (0, cuelloY).
+
+             Con fill-box el transform-origin se mide desde la esquina de la
+             caja del dibujo, así que se le resta el offset de esa caja para
+             caer en el punto real. Sin esto, el `50% 100%` de antes apuntaba
+             al borde de abajo de la SILUETA YA GIRADA (el <use> lleva su
+             propio rotate), que queda unos píxeles arriba del cuello y
+             corrido de costado según cuánto esté girada cada flor. */
+          const cuelloY = 6 + 34 * escala;   // el mismo largoDelPeduculo de siempre
+          let caja = null;
+          try { caja = movil.getBBox(); } catch (e) { /* todavía sin render */ }
+
           movil.style.transformBox = 'fill-box';
-          movil.style.transformOrigin = '50% 100%';
+          movil.style.transformOrigin = (caja && caja.width > 0 && caja.height > 0)
+            ? (0 - caja.x).toFixed(1) + 'px ' + (cuelloY - caja.y).toFixed(1) + 'px'
+            : '50% 100%';                    // red de seguridad
         }
 
         return {
