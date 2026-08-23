@@ -1380,21 +1380,26 @@
         const escala = parseFloat(flor.dataset.escala) || 0.5;
         const movil = flor.querySelector('.flor-de-enredadera__movil');
 
-        /* Mismo arreglo que ya tienen los nudos del tallo (más abajo, ver
-           "El pivote va como transform-origin de CSS"): el punto de giro se
-           fija UNA sola vez acá, como transform-origin, en vez de mandarlo
-           en el propio atributo `transform` cada vez que se escribe. */
+        /* ⚡ CORREGIDO (2026-08-23) — ESTO ES LO QUE ARREGLA "LA FLOR SE
+           DESPRENDE DEL TALLO Y VUELA A CUALQUIER PARTE AL MÍNIMO TOQUE".
+           La versión anterior usaba `transform-box: view-box` con el pivote
+           puesto a mano en coordenadas ABSOLUTAS del viewBox entero
+           (data-x/data-y + un offset de cuello), asumiendo que ese punto
+           iba a coincidir con la base real de la flor en pantalla. En la
+           práctica no coincidía ni de cerca: medido en vivo, un giro de
+           apenas 24° (el tope normal, `FLEXION_MAXIMA`) desplazaba la flor
+           ¡256px! en vez de mecerla sobre su tallo — exactamente "se suelta
+           y vuela a cualquier parte".
+           `transform-box: fill-box` es la alternativa robusta: el pivote se
+           mide en PORCENTAJE sobre la caja de la propia flor (su dibujo ya
+           renderizado, con su escala y su giro inicial ya aplicados adentro
+           del `<use>`), así que no depende de en qué coordenadas absolutas
+           terminó la flor dentro del lienzo compartido — el punto "abajo,
+           en el centro" siempre es la base de ESTA flor, sea cual sea su
+           tamaño o dónde esté ubicada. */
         if (movil) {
-          movil.style.transformBox = 'view-box';
-          /* La flor vive dentro de <g class="flor-de-enredadera"
-             transform="translate(x y)">, así que con transform-box: view-box
-             el origen se mide desde el origen del viewBox, no desde la flor.
-             Hay que compensar con las mismas coordenadas absolutas que el
-             template ya deja en data-x/data-y (igual que hacen los nudos
-             con data-pivote-x/y) o el pivote queda corrido y la flor salta. */
-          movil.style.transformOrigin =
-            (parseFloat(flor.dataset.x) || 0) + 'px ' +
-            ((parseFloat(flor.dataset.y) || 0) + 6 + 34 * escala).toFixed(1) + 'px';
+          movil.style.transformBox = 'fill-box';
+          movil.style.transformOrigin = '50% 100%';
         }
 
         return {

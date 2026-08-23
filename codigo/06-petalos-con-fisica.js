@@ -296,10 +296,29 @@
   let velocidadMouseX = 0;
   let velocidadMouseY = 0;
 
+  /* ⚡ UN SOLO PUNTERO A LA VEZ (2026-08-23) — ESTO ES LO QUE ARREGLA "LAS
+     FLORES/PÉTALOS SALEN VOLANDO AL MÍNIMO TOQUE, SIN QUE NADA LOS ANCLE".
+     Antes mouseX/mouseY eran un solo valor global sin distinguir DE QUÉ
+     dedo venían. En el celular es normal tocar la pantalla con un segundo
+     dedo mientras el primero sigue apoyado (el pulgar que sostiene el
+     teléfono, la palma que roza sin querer, un gesto de dos dedos): el
+     'pointerdown' de ESE segundo dedo pisaba mouseX/mouseY con su propia
+     coordenada, sin pasar por ningún reseteo (los dos dedos seguían
+     tocando, no había pointerup/pointercancel que disparara soltarPuntero).
+     El cuadro siguiente calculaba una "velocidad" enorme a partir de un
+     salto que nunca pasó de verdad, empujando cualquier pétalo cercano al
+     nuevo punto con una fuerza real que no vino de ningún gesto real —eso
+     es exactamente "vuela sin que lo haya tocado nadie, y no hay forma de
+     anclarlo". Ahora se recuerda QUÉ puntero (pointerId) es el que se está
+     siguiendo, y se ignora cualquier otro hasta que el primero se suelta. */
+  let punteroActivoId = null;
+
   /* Una sola entrada para el mouse Y el dedo: pointermove cubre los dos. Va
      passive para no bloquear el scroll en el celular —los pétalos se apartan
      del dedo mientras se desliza, sin trabar el gesto—. */
   function alMoverPuntero(evento) {
+    if (punteroActivoId === null) punteroActivoId = evento.pointerId;
+    if (evento.pointerId !== punteroActivoId) return;   // otro dedo: se ignora
     mouseX = evento.clientX;
     mouseY = evento.clientY;
   }
@@ -311,6 +330,12 @@
      apagar el empuje —el mouse sigue ahí—; por eso solo se resetea con el
      dedo (pointerType 'touch') o al salir con el mouse. */
   function soltarPuntero(evento) {
+    // Si el que se levanta/cancela es un dedo distinto al que veníamos
+    // siguiendo, no nos incumbe: el puntero activo real sigue tocando.
+    if (evento && evento.pointerId !== undefined && punteroActivoId !== null &&
+        evento.pointerId !== punteroActivoId) {
+      return;
+    }
     if (!evento || evento.type === 'mouseleave' || evento.pointerType === 'touch') {
       mouseX = -9999;
       mouseY = -9999;
@@ -321,6 +346,7 @@
       mouseYAnterior = -9999;
       velocidadMouseX = 0;
       velocidadMouseY = 0;
+      punteroActivoId = null;
     }
   }
   document.addEventListener('mouseleave', soltarPuntero);
