@@ -106,11 +106,24 @@ if (!$desdeLaConsola) {
    se perdieron para siempre porque no había ninguna copia en ningún
    lado. Este respaldo nuevo existe para que la próxima vez que algo así
    pase, haya de dónde recuperarlos. */
+/* ⚠️ Si se agrega una tabla nueva al esquema (migracion.sql) que
+   guarde información REAL del evento, tiene que sumarse acá también
+   —nada la agrega sola. Quedan afuera a propósito, además de
+   `sesiones`/`intentos_login`/`usuarios` (ver arriba): `ajustes`,
+   `bitacora`, `recuperaciones_clave`, `suscripciones_push` y
+   `eventos_uso` (técnicas/de sesión, no de contenido); `acomodo_respaldo`
+   (es un historial de deshacer del propio acomodo de mesas — la
+   información real ya vive en `asignacion_mesas`, que sí se respalda);
+   `escrituras_hechas` (bitácora de deduplicación que se autolimpia
+   sola); `comandos_usuario` y `permisos_usuario` (cuelgan de una cuenta
+   de `usuarios`, que no se respalda por seguridad — restaurarlas solas,
+   sin la cuenta, no serviría de nada). */
 $tablas = [
     'confirmaciones', 'preferencias_invitado', 'grupos_invitados',
-    'incompatibilidades', 'mesas', 'asignacion_mesas',
-    'categorias_gasto', 'gastos', 'pagos', 'padrinos', 'proveedores',
-    'cotizaciones', 'cotizacion_items',
+    'incompatibilidades', 'acompanantes', 'llegadas',
+    'mesas', 'asignacion_mesas', 'asignacion_mesas_persona', 'acompanante_reglas',
+    'presupuestos', 'categorias_gasto', 'gastos', 'pagos', 'padrinos', 'proveedores',
+    'cotizaciones', 'cotizacion_items', 'envios_proveedor',
     'tareas', 'agenda', 'cronograma', 'alarmas', 'notas',
     'corte_honor', 'ensayos', 'asistencia_ensayos',
     'ceremonia', 'requisitos_ceremonia', 'musica', 'citas_arreglo',
