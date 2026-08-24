@@ -86,6 +86,10 @@ case 'todo':
             'grupo_id' => $invitado['grupo_id'] ? (int) $invitado['grupo_id'] : null,
             'fijada'   => (int) ($invitado['fijada'] ?? 0) === 1,
             'extra'    => (int) ($invitado['sillas_extra'] ?? 0),
+            // Para poder mostrarla/editarla en "Grupo, sillas extra y
+            // reglas" (17-mesas.js) — panoramaDeMesas() ya la calculaba,
+            // solo le faltaba llegar hasta acá.
+            'mesa_preferida' => $invitado['mesa_preferida'] ? (int) $invitado['mesa_preferida'] : null,
         ];
 
         if (!empty($invitado['mesa_id']) && isset($porMesa[$invitado['mesa_id']])) {
