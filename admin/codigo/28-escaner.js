@@ -263,11 +263,37 @@ function pintarTarjetaDeLaPuerta(datos, donde) {
             (datos.llegada_en
               ? ', a las ' + seguro(String(datos.llegada_en).slice(11, 16))
               : '') + '.' +
-          '</div>'
+            (datos.marcado_por_nombre
+              ? '<br>Lo dejó pasar: ' + seguro(datos.marcado_por_nombre) + '.'
+              : '') +
+            (datos.intentos > 0
+              ? '<br>Van ' + (datos.intentos + 1) + ' lecturas de este pase.'
+              : '') +
+          '</div>' +
+          '<button type="button" class="boton boton--fantasma boton--ancho" ' +
+                  'id="escaner-continuar" style="margin-top:var(--esp-3)">' +
+            'Entendido, seguir escaneando' +
+          '</button>'
         : '<button class="boton boton--principal boton--ancho" ' +
                   'id="escaner-dejar-pasar" style="margin-top:var(--esp-3);' +
                   'min-height:56px;font-size:18px">Dejar pasar</button>') +
     '</div>';
+
+  /* La rama "ya había entrado" no tiene el botón de dejar pasar — tiene
+     este, que solo limpia la pantalla para el siguiente pase. Sin esto,
+     no había NINGÚN control en esa tarjeta: se sentía trabado, aunque
+     la cámara siguiera leyendo códigos distintos por su cuenta. */
+  const continuar = buscar('#escaner-continuar', donde);
+  if (continuar) {
+    continuar.addEventListener('click', () => {
+      donde.innerHTML =
+        '<p style="text-align:center;padding:var(--esp-4) 0;color:var(--texto-tenue)">' +
+          'Apunta la cámara al siguiente pase, o busca por nombre arriba.' +
+        '</p>';
+      const buscador = buscar('#escaner-buscar');
+      if (buscador) buscador.value = '';
+    });
+  }
 
   const boton = buscar('#escaner-dejar-pasar', donde);
   if (!boton) return;
