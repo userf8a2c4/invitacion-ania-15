@@ -282,5 +282,5 @@ function marcarSugerenciaResuelta(contenedor, sugerencias, s) {
       // Alternativa honesta cuando no hay forma real de deshacer: se
       // dice qué hacer en vez de fingir un botón que no cumpliría.
       : '<p class="vacio__texto" style="margin-top:var(--esp-1);font-style:italic">' +
-          'Si hace falta corregir esto, abrí la ficha correspondiente.</p>');
+          'Si hace falta corregir esto, abre la ficha correspondiente.</p>');
 }

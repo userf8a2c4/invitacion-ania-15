@@ -448,7 +448,7 @@ async function intentarConEntidad(texto, resultado) {
       }
 
       if (!titulo) {
-        resultado.innerHTML = '<p class="aviso-error">Decime qué tarea, además de la fecha.</p>';
+        resultado.innerHTML = '<p class="aviso-error">Dime qué tarea, además de la fecha.</p>';
         return true;
       }
 
@@ -640,8 +640,8 @@ function abrirAsistente() {
     registrarEvento('asistente', 'frase_fallida', { texto: texto.trim() });
 
     resultado.innerHTML =
-      '<p class="aviso-error">No conozco esa frase todavía. Probá con otras ' +
-      'palabras, o elegí una de arriba.</p>';
+      '<p class="aviso-error">No conozco esa frase todavía. Prueba con otras ' +
+      'palabras, o elige una de arriba.</p>';
   };
 
   buscar('#asistente-mandar', cuerpo).addEventListener('click', () => procesar(entrada.value));
@@ -669,8 +669,8 @@ function abrirComandosDelAsistente() {
 
   const cuerpo = abrirHoja('Comandos del asistente',
     '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
-      'Estas son tus frases. El asistente aprende solo cuando confirmás ' +
-      'una sugerencia, pero también podés agregarlas acá a mano.' +
+      'Estas son tus frases. El asistente aprende solo cuando confirmas ' +
+      'una sugerencia, pero también puedes agregarlas acá a mano.' +
     '</p>' +
     '<div id="comandos-lista"></div>'
   );
