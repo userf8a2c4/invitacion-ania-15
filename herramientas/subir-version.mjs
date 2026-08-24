@@ -7,7 +7,24 @@
    donde vive:
 
      · los ~40 `?v=NN` de index.html (las hojas de estilo y los scripts)
-     · la constante VERSION de sw.js (el service worker)
+     · la constante VERSION de sw.js (el service worker del sitio)
+     · la constante VERSION de admin/sw.js (el service worker del panel)
+
+   POR QUÉ TAMBIÉN TOCA admin/sw.js
+   El panel tiene su propio Service Worker, con su propia estrategia
+   (abre al instante desde una copia guardada y refresca por detrás —
+   ver la nota grande en admin/sw.js). Ese refresco por detrás ya deja
+   ver el código nuevo solo, sin este script: admin/.htaccess pone
+   "no-cache, must-revalidate" en todo su HTML/CSS/JS, así que nunca
+   queda una versión vieja atrapada para siempre.
+
+   Lo que SÍ depende de que este número suba es el cartel "hay una
+   actualización" que ofrece recargar con un toque
+   (avisarSiHayActualizacion(), admin/codigo/20-arranque.js) — ese
+   cartel solo aparece cuando el Service Worker del panel detecta que
+   su propia VERSION cambió. Antes había que acordarse de subirla a
+   mano, aparte, y era fácil de olvidar justo en el momento en que más
+   importa avisar: al promover una rama con cambios de verdad.
 
    POR QUÉ ES OBLIGATORIO Y NO OPCIONAL
    El servidor (.htaccess) le dice al navegador que guarde el CSS y el JS
@@ -39,16 +56,20 @@
    además bloquea la carpeta herramientas/ por las dudas.
    ══════════════════════════════════════════════════════════════════════ */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 const rutaIndex = join(raiz, 'index.html');
 const rutaSw = join(raiz, 'sw.js');
+const rutaSwAdmin = join(raiz, 'admin', 'sw.js');
 
 const html = readFileSync(rutaIndex, 'utf8');
 const sw = readFileSync(rutaSw, 'utf8');
+// El del panel es opcional acá: si algún día no existiera, este script
+// no tiene por qué dejar de funcionar para el sitio público.
+const swAdmin = existsSync(rutaSwAdmin) ? readFileSync(rutaSwAdmin, 'utf8') : null;
 
 /* ─── 1. Averiguar en qué versión estamos ─────────────────────────────
    Se mira el número MÁS ALTO que haya en index.html. Si alguna vez
@@ -94,15 +115,37 @@ if (!coincidenciaSw) {
 
 const swNuevo = sw.replace(patronSw, `const VERSION = '${coincidenciaSw[1]}-v${versionNueva}';`);
 
+/* ─── 3b. Lo mismo para el Service Worker del panel, si existe ────────
+   Mismo patrón exacto (`'ania-admin-v59'`), así que alcanza con la
+   misma expresión regular. Se sube al MISMO número que el sitio
+   público, no a uno propio — más fácil de leer un solo "estamos en la
+   126 en todos lados" que llevar dos contadores separados. */
+let coincidenciaSwAdmin = null;
+let swAdminNuevo = null;
+if (swAdmin !== null) {
+  coincidenciaSwAdmin = swAdmin.match(patronSw);
+  if (!coincidenciaSwAdmin) {
+    console.error("✗ No se encontró `const VERSION = '…-vNN';` en admin/sw.js. No se tocó ningún archivo.");
+    process.exit(1);
+  }
+  swAdminNuevo = swAdmin.replace(patronSw, `const VERSION = '${coincidenciaSwAdmin[1]}-v${versionNueva}';`);
+}
+
 /* ─── 4. Recién ahora se escribe, cuando ya sabemos que todo salió bien ── */
 writeFileSync(rutaIndex, htmlNuevo);
 writeFileSync(rutaSw, swNuevo);
+if (swAdmin !== null) writeFileSync(rutaSwAdmin, swAdminNuevo);
 
 const desalineados = new Set(versionesEncontradas).size > 1;
 
 console.log(`✓ Versión ${versionActual} → ${versionNueva}`);
 console.log(`  index.html: ${cuantosCambiaron} referencias actualizadas`);
 console.log(`  sw.js:      ${coincidenciaSw[1]}-v${versionNueva}`);
+if (swAdmin !== null) {
+  console.log(`  admin/sw.js: ${coincidenciaSwAdmin[1]}-v${versionNueva}`);
+} else {
+  console.log('  admin/sw.js: no se encontró, se lo saltó');
+}
 if (desalineados) {
   console.log(`  (se encontraron versiones mezcladas: ${[...new Set(versionesEncontradas)].sort((a, b) => a - b).join(', ')} — quedaron todas alineadas)`);
 }
