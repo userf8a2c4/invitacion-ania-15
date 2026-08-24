@@ -1277,7 +1277,7 @@ function abrirPreferenciasDe(quien, refrescar) {
         '</p>') +
 
     '<p class="vacio__texto" style="margin-top:var(--esp-2)">' +
-      'Tocá Guardar para que la regla quede puesta.' +
+      'Toca Guardar para que la regla quede puesta.' +
     '</p>' +
 
     pieDeFormulario('Guardar')
@@ -1543,8 +1543,8 @@ function abrirReglasDeAcomodo(refrescar) {
     crearPelea.addEventListener('click', async () => {
       const a = valorDe('pel-a', cuerpo);
       const b = valorDe('pel-b', cuerpo);
-      if (!a || !b) { avisar('Elegí a las dos personas.', true); return; }
-      if (a === b) { avisar('Elegí a dos personas distintas.', true); return; }
+      if (!a || !b) { avisar('Elige a las dos personas.', true); return; }
+      if (a === b) { avisar('Elige a dos personas distintas.', true); return; }
 
       const cuerpoPelea = { motivo: valorDe('pel-motivo', cuerpo) };
       if (a[0] === 'a' && b[0] === 'a') {
@@ -1586,7 +1586,7 @@ function abrirReglasDeAcomodo(refrescar) {
   if (elegirFamilia) {
     elegirFamilia.addEventListener('click', () => {
       const id = Number(valorDe('rp-familia', cuerpo));
-      if (!id) { avisar('Elegí una familia.', true); return; }
+      if (!id) { avisar('Elige una familia.', true); return; }
       abrirReglaDePersona(id, refrescar);
     });
   }
@@ -1663,7 +1663,7 @@ async function abrirReglaDePersona(confirmacionId, refrescar) {
 
   cuerpo.innerHTML =
     '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
-      'Elegí a quién sienta aparte de su familia.' +
+      'Elige a quién sienta aparte de su familia.' +
     '</p>' +
     personas.map(p =>
       '<button class="lista__fila" data-persona="' + seguro(p.id) + '">' +

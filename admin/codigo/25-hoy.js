@@ -157,7 +157,7 @@ async function pintarCronogramaGrande(donde) {
 
   if (!momentos.length) {
     pintarVacio(donde, 'Todavía no hay cronograma',
-      'Armalo desde Evento → El día para tenerlo aquí el 24.');
+      'Ármalo desde Evento → El día para tenerlo aquí el 24.');
     return;
   }
 

@@ -38,7 +38,7 @@ if ($accion === 'primero') {
     $cuantos = consultarUno('SELECT COUNT(*) AS n FROM usuarios');
     if ((int) ($cuantos['n'] ?? 0) > 0) {
         responderMal(
-            'Ya existe al menos una cuenta. Pedile a esa persona que te cree la tuya.',
+            'Ya existe al menos una cuenta. Pídele a esa persona que te cree la tuya.',
             403
         );
     }

@@ -58,7 +58,7 @@ if ($accion !== '') {
         );
 
         if ((int) ($fallidos['n'] ?? 0) >= INTENTOS_DE_CODIGO) {
-            responderMal('Demasiados intentos. Esperá un rato.', 429);
+            responderMal('Demasiados intentos. Espera un rato.', 429);
         }
     }
 
@@ -66,7 +66,7 @@ if ($accion !== '') {
     $codigo = strtoupper(trim((string) ($datos['codigo'] ?? $_GET['codigo'] ?? '')));
 
     if ($codigo === '' || mb_strlen($codigo) < 4) {
-        responderMal('Escribí el código de tu pase.', 400);
+        responderMal('Escribe el código de tu pase.', 400);
     }
 
     $invitado = consultarUno(
@@ -78,7 +78,7 @@ if ($accion !== '') {
         if (existeTabla('intentos_login')) {
             insertar('intentos_login', ['ip' => $ip, 'correo' => 'mi-pase']);
         }
-        responderMal('No encontramos ese código. Revisá el correo que te llegó.', 404);
+        responderMal('No encontramos ese código. Revisa el correo que te llegó.', 404);
     }
 
     /* ─── Ver ────────────────────────────────────────────────────────── */
