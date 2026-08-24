@@ -118,6 +118,7 @@ function mostrarPantallaDeEntrada(aviso) {
   // El campo de contraseña se limpia siempre: si la sesión venció con la
   // app abierta, no queda escrita de antes.
   buscar('#entrada-contrasena').value = '';
+  ocultarClaveDeEntrada();
 
   if (typeof mostrarNovedadesDePantalla === 'function') mostrarNovedadesDePantalla('login');
 }
@@ -162,6 +163,26 @@ async function haySesionValida() {
 /* ─── EL FORMULARIO DE ENTRADA ─────────────────────────────────────── */
 
 /**
+ * Vuelve el campo de contraseña del login a su estado oculto (puntos,
+ * no texto). Se usa al mostrar la pantalla de entrada y también es a
+ * dónde vuelve el botón de ojo cuando no hay nada que alternar todavía.
+ *
+ * @returns {void}
+ */
+function ocultarClaveDeEntrada() {
+  const campo = buscar('#entrada-contrasena');
+  const boton = buscar('#entrada-ver-clave');
+  if (campo) campo.type = 'password';
+  if (!boton) return;
+  boton.setAttribute('aria-label', 'Mostrar contraseña');
+  boton.setAttribute('aria-pressed', 'false');
+  const abierto  = buscar('[data-ojo="abierto"]', boton);
+  const cerrado  = buscar('[data-ojo="cerrado"]', boton);
+  if (abierto) abierto.classList.remove('oculto');
+  if (cerrado) cerrado.classList.add('oculto');
+}
+
+/**
  * Engancha el formulario de login.
  *
  * @returns {void}
@@ -181,6 +202,22 @@ function prepararEntrada() {
   if (olvide) {
     olvide.addEventListener('click', () => {
       abrirRecuperarContrasena(buscar('#entrada-correo').value.trim());
+    });
+  }
+
+  // Mostrar/ocultar la contraseña — para poder revisar que se escribió
+  // bien antes de mandar el formulario. Mismo botón opcional: si no
+  // está (copia vieja del Service Worker), simplemente no se engancha.
+  const verClave = buscar('#entrada-ver-clave');
+  if (verClave) {
+    verClave.addEventListener('click', () => {
+      const campo = buscar('#entrada-contrasena');
+      const seVaAMostrar = campo.type === 'password';
+      campo.type = seVaAMostrar ? 'text' : 'password';
+      verClave.setAttribute('aria-label', seVaAMostrar ? 'Ocultar contraseña' : 'Mostrar contraseña');
+      verClave.setAttribute('aria-pressed', String(seVaAMostrar));
+      buscar('[data-ojo="abierto"]', verClave).classList.toggle('oculto', seVaAMostrar);
+      buscar('[data-ojo="cerrado"]', verClave).classList.toggle('oculto', !seVaAMostrar);
     });
   }
 

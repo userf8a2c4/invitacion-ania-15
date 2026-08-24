@@ -32,9 +32,20 @@
      · ASSETS pesados y estables (imágenes, .svg, la canción .mp3, fuentes) →
        "primero la COPIA". Casi nunca cambian y pesan: servirlos del caché es
        instantáneo y ahorra datos. Si algún día cambian, se renueva con VERSION.
+
+   ⚠️ SE PROBÓ "primero la copia" TAMBIÉN PARA EL CÓDIGO VERSIONADO (`?v=NN`)
+   y SE REVIRTIÓ, junto con el empaquetado de JS en paquetes (ver la nota en
+   herramientas/minificar-js.mjs). La idea era ahorrar una ida y vuelta al
+   servidor en visitas repetidas, pero después de subirlo a PBE el First
+   Contentful Paint y el Largest Contentful Paint empeoraron (en vez de
+   mejorar) tanto en escritorio como en móvil. No se aisló si la causa fue
+   este cambio específico o el empaquetado, así que ante la duda se
+   revirtieron los dos juntos y se volvió a esta versión, ya probada. Si se
+   quiere retomar la idea, hay que aislarla del empaquetado y medir en PBE
+   antes de subir a producción.
    ══════════════════════════════════════════════════════════════════════ */
 
-const VERSION = 'ania-xv-v73';
+const VERSION = 'ania-xv-v123';
 
 /** Extensiones de assets pesados/estables: para esos, "primero la copia". */
 const ASSETS_ESTABLES = /\.(?:mp3|ogg|wav|png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf)$/i;

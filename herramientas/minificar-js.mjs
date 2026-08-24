@@ -19,6 +19,17 @@
    respeta esa arquitectura: sigue habiendo un archivo por módulo, en el
    mismo orden, con el mismo nombre — solo que cada uno pesa menos.
 
+   ⚠️ SE PROBÓ AGRUPAR EN 5 PAQUETES Y SE REVIRTIÓ (ronda de rendimiento
+   en escritorio, la que le siguió a esta). La hipótesis era razonable —el
+   servidor tardaba más en contestar con 27 pedidos simultáneos que con
+   pocos— pero medida en PBE real dio PEOR, no mejor: el gobernador de
+   calidad (21-monitor-de-rendimiento.js) terminaba en "baja" en vez de
+   "media", con una tarea larga de carga de ~415 ms que con 27 archivos
+   sueltos no existía. No se pudo aislar la causa exacta a tiempo, y ante
+   la duda con un dato real en contra, se volvió a esto. Si en el futuro
+   se quiere retomar la idea de agrupar, hay que MEDIR en PBE antes de
+   subir a producción, no asumir a partir del razonamiento solo.
+
    POR QUÉ NO SE TOCAN LOS ARCHIVOS ORIGINALES
    codigo/*.js tiene comentarios largos a propósito: son la documentación
    de por qué cada cosa está hecha como está (igual que GUIA.md, pero para

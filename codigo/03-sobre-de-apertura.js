@@ -152,8 +152,16 @@
        La solución es enfocar el CONTENEDOR, que no tiene aro. El teclado
        sigue funcionando igual: desde ahí, un Tab cae en la ilustración
        —y ahí sí aparece el aro, porque ahí sí lo pidió la persona—, y la
-       tecla Enter la escucha el contenedor entero. */
-    if (sobre) sobre.focus({ preventScroll: true });
+       tecla Enter la escucha el contenedor entero.
+
+       ⚡ EL .focus() SE PIDE UN CUADRO DESPUÉS — esto es lo que arregla un
+       reprocesamiento forzado de 14ms medido por Lighthouse. El
+       classList.remove() de arriba invalida estilos, y focus() necesita
+       resolver el layout para decidir si el elemento es foco-able: pedirlo
+       en el mismo instante fuerza ese cálculo de golpe. requestAnimationFrame
+       lo corre después de que el navegador ya resolvió su propio layout —
+       el foco cae en el mismo elemento, un cuadro después, imperceptible. */
+    if (sobre) requestAnimationFrame(() => sobre.focus({ preventScroll: true }));
   }
 
 

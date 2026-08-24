@@ -113,21 +113,30 @@
   const dondeVa = buscar('#luz-de-velas') || document.body;
   dondeVa.appendChild(lienzo);
 
-  /* ⚡ Y EL CONTENEDOR DEJA DE CUBRIR EL DOCUMENTO ENTERO.
-     `#luz-de-velas` era `position: absolute; inset: 0`, o sea del tamaño del
-     documento: en la pantalla ultrapanorámica del equipo objetivo eso son
-     3305 × 5869 = **19,4 megapíxeles**. Tenía sentido cuando ahí vivían los
-     52 resplandores; ahora su único hijo es este lienzo, que es
-     `position: fixed` y mide lo que la ventana.
+  /* ⚡ YA NO SE TOCA LA POSICIÓN DEL CONTENEDOR (era `dondeVa.style.position
+     = 'fixed'` acá) — ESTO ROMPÍA LAS VELAS Y LAS HACÍA DESAPARECER.
 
-     Pasarlo a `fixed` lo deja en ~3,3 MP sin mover nada de sitio, porque lo
-     único que contiene ya se posiciona respecto de la ventana.
+     Antes esto asumía que solo había DOS escenarios posibles: o el lienzo
+     corre entero (velas incluidas) y entonces `#luz-de-velas` puede pasar a
+     `fixed` sin costo, porque lo único que contiene es este canvas; o el
+     lienzo no corre nada (`?luz=dom`) y el contenedor se queda `absolute`
+     para los divs. Ahora hay un tercer escenario que ese razonamiento no
+     contemplaba: las velas dejaron de entregarle sus luces al lienzo (ver
+     19-velas.js) PERO el lienzo sigue corriendo para los haces, las motas y
+     las luciérnagas — así que `#luz-de-velas` vuelve a tener a los divs de
+     las velas como hijos, además de este canvas. Pasar el contenedor a
+     `fixed` los sacaba de quicio: sus `left/top` son coordenadas del
+     DOCUMENTO (pensadas para un padre `absolute`), y dentro de un padre
+     `fixed` esas mismas coordenadas se leen relativas a la VENTANA — las
+     velas terminaban a cientos o miles de píxeles fuera de la pantalla.
 
-     Se hace desde acá y no desde el CSS a propósito: con ?luz=dom este
-     módulo no corre, los resplandores vuelven a ser divs con coordenadas del
-     DOCUMENTO, y entonces el contenedor SÍ tiene que seguir siendo
-     `absolute`. Cambiarlo en la hoja de estilos rompería ese camino. */
-  if (dondeVa.id === 'luz-de-velas') dondeVa.style.position = 'fixed';
+     La solución real: este canvas no necesita para nada que su padre sea
+     `fixed`. Su propia regla en estilos/12-haces-de-luz.css ya lo declara
+     `position: fixed; inset: 0` por sí mismo, así que se posiciona relativo
+     a la ventana sin importar qué `position` tenga `#luz-de-velas`. Forzar
+     el contenedor era un paso de más que nunca hacía falta para el canvas,
+     y ahora que #luz-de-velas puede tener hijos con las dos necesidades a
+     la vez (canvas fijo + divs de documento), sacarlo es lo correcto. */
 
   let anchoCss = 0, altoCss = 0, escalaDelLienzo = 1;
 
@@ -149,7 +158,17 @@
   }
 
   ajustarElLienzo();
-  window.addEventListener('resize', rebotar(ajustarElLienzo, 200));
+  /* ⚡ alCambiarElAncho: ignora el 'resize' falso de la barra del navegador
+     en celular (ver la nota grande junto a la función, en 02-utilidades.js).
+     Sin esto, cada aparición/desaparición de la barra al hacer scroll
+     reasignaba lienzo.width/height —una operación cara: limpia y reserva
+     de nuevo toda la textura del canvas— exactamente el "tirón" que se
+     reportó. El canvas es position:fixed cubriendo toda la ventana; si la
+     barra se esconde y el canvas queda un poco más bajo que el alto real
+     hasta el próximo cambio de ancho de verdad, la franja de más abajo
+     queda sin haces/motas por un instante — muchísimo menos notorio que
+     el tirón que causaba reasignar el canvas en pleno scroll. */
+  window.addEventListener('resize', alCambiarElAncho(rebotar(ajustarElLienzo, 200)));
   document.addEventListener('calidad-cambio', () => setTimeout(ajustarElLienzo, 50));
 
 
@@ -289,8 +308,33 @@
      mostrar una imagen que cambia veinte veces por segundo.
 
      A 45 ms se ve idéntico —el titileo se GENERA a 20 fps, dibujarlo a 60
-     es enseñar la misma imagen tres veces— y cuesta un tercio. */
-  const CADA_CUANTO_REPINTAR = 45;
+     es enseñar la misma imagen tres veces— y cuesta un tercio.
+
+     ⚡ Y AHORA SIGUE A LA CALIDAD, NO UN NÚMERO FIJO — ESTO ES LO QUE
+     ARREGLA LA FALTA DE FLUIDEZ. codigo/19-velas.js recalcula el titileo
+     a un ritmo DISTINTO según la calidad (30 ms en ALTA, 50 en MEDIA, 90
+     en BAJA — ver CADA_CUANTO_POR_CALIDAD ahí), pero este lienzo repintaba
+     siempre a 45 ms fijos, sin importar cuál de los tres estuviera activo.
+     Eso eran dos problemas a la vez, en direcciones opuestas:
+
+       · En calidad ALTA (equipo con margen), el titileo SÍ tiene un dato
+         nuevo cada 30 ms, pero el lienzo lo hacía esperar hasta 45 ms para
+         mostrarlo — la luz se veía menos viva de lo que el propio equipo
+         podía sostener, un freno artificial que no hacía falta.
+       · En calidad BAJA (equipo justo), el dato cambia recién cada 90 ms,
+         pero el lienzo lo seguía repintando cada 45 — el doble de seguido
+         de lo necesario, exactamente el desperdicio que este mismo bloque
+         de comentarios dice evitar.
+
+     Con el número atado a la calidad, cada equipo repinta EXACTAMENTE
+     tan seguido como cambian sus propios datos: ni de más (BAJA) ni de
+     menos (ALTA). */
+  const CADA_CUANTO_REPINTAR_POR_CALIDAD = { 0: 30, 1: 50, 2: 90 };
+  let cadaCuantoRepintar = CADA_CUANTO_REPINTAR_POR_CALIDAD[nivelDeCalidad()] ?? 45;
+  document.addEventListener('calidad-cambio', evento => {
+    const calidad = (evento.detail && evento.detail.calidad) ?? 0;
+    cadaCuantoRepintar = CADA_CUANTO_REPINTAR_POR_CALIDAD[calidad] ?? 45;
+  });
   let ultimoRepintado = 0;
 
   /* ⚡ EL BRILLO DE LAS VELAS "A TIRONES" — Y POR QUÉ NO ES EL THROTTLE.
@@ -543,7 +587,7 @@
     const desplazamientoActual = window.scrollY;
     const seMovioElScroll = desplazamientoActual !== ultimoDesplazamientoDibujado;
 
-    if (!seMovioElScroll && ahora - ultimoRepintado < CADA_CUANTO_REPINTAR) {
+    if (!seMovioElScroll && ahora - ultimoRepintado < cadaCuantoRepintar) {
       requestAnimationFrame(pintarLaLuz);
       return;
     }
@@ -552,7 +596,7 @@
     // Se acota por las dudas (pestaña recién vuelta a primer plano, etc.).
     const dtDesdeElUltimoRepintado = ultimoRepintado
       ? Math.min(ahora - ultimoRepintado, 250)
-      : CADA_CUANTO_REPINTAR;
+      : cadaCuantoRepintar;
     ultimoRepintado = ahora;
     ultimoDesplazamientoDibujado = desplazamientoActual;
     dibujarUnCuadro(true, dtDesdeElUltimoRepintado);

@@ -102,6 +102,13 @@ case 'marcar':
         }
     }
 
+    // $fila se leyó ANTES del INSERT/UPDATE de arriba, así que todavía no
+    // tiene el llegada_en recién puesto (marcar una llegada nueva
+    // respondía ya_llego:false, y la tarjeta volvía a mostrar el botón
+    // "Dejar pasar" en vez del estado confirmado — un doble toque de
+    // ahí adentro sí contaba como "reintento" de verdad, ensuciando el
+    // contador). Se vuelve a leer para responder con el estado real.
+    $fila = buscarConfirmacionPorCodigo($codigo);
     responderBien(datosParaLaPuerta($fila));
     break;
 
@@ -194,10 +201,16 @@ default:
 function buscarConfirmacionPorCodigo($codigo) {
     if (!in_array('codigo', columnasDe('confirmaciones'), true)) return null;
 
+    // El JOIN a usuarios es para poder decir QUIÉN dejó pasar este pase
+    // la primera vez, si se vuelve a leer después de ya haber entrado
+    // (ver datosParaLaPuerta) — mismo patrón que _lib/sesion.php y
+    // api/metricas.php.
     return consultarUno(
-        'SELECT c.*, l.llegada_en
+        'SELECT c.*, l.llegada_en, l.marcado_por, l.intentos,
+                u.nombre AS marcado_por_nombre
          FROM confirmaciones c
          LEFT JOIN llegadas l ON l.confirmacion_id = c.id
+         LEFT JOIN usuarios u ON u.id = l.marcado_por
          WHERE c.codigo = :codigo',
         [':codigo' => $codigo]
     );
@@ -221,5 +234,10 @@ function datosParaLaPuerta($fila) {
         'alergias'        => $fila['alergias'] ?? '',
         'ya_llego'        => !empty($fila['llegada_en']),
         'llegada_en'      => $fila['llegada_en'] ?? null,
+        // Quién lo dejó pasar la primera vez, y cuántas veces se volvió
+        // a leer el mismo pase después de eso — para que la tarjeta de
+        // "ya había entrado" diga algo más que solo la hora.
+        'marcado_por_nombre' => $fila['marcado_por_nombre'] ?? null,
+        'intentos'           => (int) ($fila['intentos'] ?? 0),
     ];
 }

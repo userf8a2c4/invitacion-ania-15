@@ -229,8 +229,30 @@
     }
   }
 
-  ajustarLosLienzos();
-  window.addEventListener('resize', rebotar(ajustarLosLienzos, 200));
+  /* ⚡ requestAnimationFrame EN VEZ DE LLAMAR DIRECTO — esto es lo que
+     arregla un reprocesamiento forzado de 65ms medido por Lighthouse.
+     Este script se evalúa justo después de que 03-sobre-de-apertura.js y
+     05-cursor-personalizado.js ya escribieron clases en <body>/<html>,
+     invalidando estilos. Leer window.innerWidth/innerHeight ACÁ ABAJO, en
+     medio del parseo, obligaba al navegador a resolver el layout completo
+     de una página con mucho CSS en el peor momento posible — mismo
+     patrón que ya se había corregido para el scroll en 02-utilidades.js,
+     pero no acá. Los tres canvas ya arrancan en 0×0 hasta el primer
+     ajuste (así es hoy); con esto ese ajuste llega un cuadro después
+     (~16ms), después de que el navegador ya resolvió su propio layout
+     por su cuenta — imperceptible, y no hay un solo pétalo para dibujar
+     todavía a esa altura. */
+  requestAnimationFrame(ajustarLosLienzos);
+  /* ⚡ alCambiarElAncho: ignora el 'resize' falso de la barra del navegador
+     en celular (ver la nota grande junto a la función, en 02-utilidades.js).
+     Sin esto, cada aparición/desaparición de la barra al hacer scroll
+     reasignaba el width/height de los TRES canvas —limpia y reserva de
+     nuevo toda su textura, una operación cara— exactamente el "tirón"
+     reportado. Si la barra se esconde, los canvas quedan un poco más
+     bajos que el alto real hasta el próximo cambio de ancho de verdad;
+     la franja de más abajo queda sin pétalos por un instante, muchísimo
+     menos notorio que el tirón que causaba reasignarlos en pleno scroll. */
+  window.addEventListener('resize', alCambiarElAncho(rebotar(ajustarLosLienzos, 200)));
   document.addEventListener('calidad-cambio', () => setTimeout(ajustarLosLienzos, 50));
 
   /**

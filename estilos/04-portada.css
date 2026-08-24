@@ -35,7 +35,39 @@
 /* ─── 1. SECCIÓN DE LA PORTADA ─────────────────────────────────────── */
 #portada {
   position: relative;
+  /* ⚡ `svh` Y NO `vh` A SECAS — ESTO ES LO QUE ARREGLA EL SALTO DEL
+     RELICARIO EN CELULAR. La barra de navegación de Edge/Chrome en
+     Android se esconde al bajar y vuelve al subir; cada vez que lo
+     hace, `window.innerHeight` cambia, y con él CUALQUIER medida en
+     `vh` a secas — así que el alto de esta sección (y --ancho-broche
+     más abajo, que depende de `vh`) se recalculaba en vivo, moviendo y
+     redimensionando el relicario en cada aparición/desaparición de la
+     barra durante el scroll.
+
+     `svh` ("small viewport height") es una medida FIJA: asume siempre
+     el espacio más chico disponible (como si la barra estuviera
+     siempre visible) y no se recalcula nunca, sin importar qué haga la
+     barra. El costo es mínimo: en el peor caso (barra escondida) queda
+     un pelín de aire de más abajo del "Desliza" — nada comparado con
+     el salto de tamaño que había antes.
+
+     La línea de abajo (100vh) queda como respaldo para el puñado de
+     navegadores viejos que no entienden `svh` — si no lo entienden,
+     ignoran esa declaración entera y se quedan con esta. Los que sí lo
+     entienden aplican la de abajo, que gana por venir después.
+
+     ⚡ SEGUNDA CAPA (2026-08-21): en el celular real del usuario, con
+     Edge para Android, esto SEGUÍA sin alcanzar — la barra inferior
+     propia de Edge (no la de Chrome) hace que el navegador le entregue
+     al motor de render una superficie que cambió de tamaño DE VERDAD, y
+     ahí `svh` no tiene ningún tamaño fijo al que anclarse. La línea
+     final usa `--alto-fijo`, medido a mano por JavaScript una sola vez
+     al cargar (ver el script en el <head> de index.html) — no depende
+     de que el navegador calcule bien nada. Si ese script no llegó a
+     correr, `100svh` sigue siendo el respaldo dentro del var(). */
   min-height: 100vh;
+  min-height: 100svh;
+  min-height: var(--alto-fijo, 100svh);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -50,7 +82,13 @@
 
      Es relleno, no un margen del broche: así el centrado vertical del flex
      sigue funcionando solo en cualquier pantalla, sin números mágicos. */
+  /* Mismo motivo que el min-height de arriba: `svh` en vez de `vh` a
+     secas, para que este relleno no cambie cuando la barra del
+     navegador aparece o desaparece en celular. */
   padding: clamp(5rem, 14vh, 11rem) 1rem 3rem;
+  padding: clamp(5rem, 14svh, 11rem) 1rem 3rem;
+  /* Mismo --alto-fijo que el min-height de arriba. */
+  padding: clamp(5rem, calc(var(--alto-fijo, 100svh) * 0.14), 11rem) 1rem 3rem;
   overflow: hidden;
 }
 
@@ -69,8 +107,17 @@
        El valor de reserva es el vino de las 18:00 —el de siempre— por si
        ese módulo no llegara a cargar. */
     radial-gradient(ellipse 60% 50% at 50% 0%,   var(--ambiente-alto, rgba(139, 0, 0, .25)) 0%, transparent 70%),
-    radial-gradient(ellipse 40% 60% at 80% 100%, rgba(139, 0, 0, .15) 0%, transparent 70%),
-    radial-gradient(ellipse 40% 60% at 20% 100%, rgba(201, 168, 76, .08) 0%, transparent 70%);
+    /* ⚡ CENTRO EN 130%, NO EN 100% (2026-08-23) — ESTO ES LO QUE ARREGLA
+       LA COSTURA DE TONO CONTRA "un mensaje de tus padres". Con el centro
+       clavado en el borde mismo de #portada (100%), el halo llegaba a su
+       intensidad MÁXIMA justo en el borde y ahí se cortaba en seco contra
+       el overflow:hidden — nunca alcanzaba a desvanecerse, así que se veía
+       como un salto de tono, no un degradado. Corriendo el centro a 130%
+       (30 puntos más allá del radio vertical de 60%, la mitad del camino
+       hacia el "transparent" del 70%), lo que se ve dentro de la caja ya
+       viene atenuado a la mitad — se apaga solo, sin borde. */
+    radial-gradient(ellipse 40% 60% at 80% 130%, rgba(139, 0, 0, .15) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 60% at 20% 130%, rgba(201, 168, 76, .08) 0%, transparent 70%);
 }
 
 
@@ -96,8 +143,23 @@
        · 78vh  → nunca tan alto que se corte la corona o el remate, ni que
                  empuje el "Desliza" fuera de la vista. Este límite es el
                  que manda en pantallas anchas y bajas; en pantallas altas
-                 (como un monitor vertical) manda el tope de 1080px. */
-  --ancho-broche: min(94vw, 1120px, 78vh);
+                 (como un monitor vertical) manda el tope de 1080px.
+
+     ⚡ `78svh` Y NO `78vh` A SECAS, por la misma razón que el `min-height`
+     de #portada de arriba: con `vh` a secas, el relicario cambiaba de
+     TAMAÑO cada vez que la barra del navegador aparecía o desaparecía en
+     celular al hacer scroll — es justo lo que se sentía como un salto.
+     `svh` es un valor fijo (el espacio más chico posible), así que este
+     tope deja de moverse solo.
+
+     ⚡ SEGUNDA CAPA (2026-08-21): este es justo el valor que el usuario
+     confirmó que seguía cambiando de tamaño en su Edge de Android —
+     `svh` no alcanzó porque la barra inferior de Edge no le avisa al
+     motor de render que hay "dos tamaños fijos" entre los que elegir
+     (ver la nota grande del <head> en index.html). Se reemplaza el
+     `78svh` por `calc(var(--alto-fijo, 100svh) * 0.78)`, anclado al alto
+     medido a mano por JavaScript una sola vez al cargar. */
+  --ancho-broche: min(94vw, 1120px, calc(var(--alto-fijo, 100svh) * 0.78));
 
   display: grid;
   place-items: center;
@@ -183,24 +245,17 @@
      (La otra mitad del arreglo está en el filtro #mo-resplandor de
      index.html, cuya región era demasiado chica y producía un cuadrado.) */
   overflow: visible;
-  /* Dos sombras: el halo dorado que ya tenía (aura de la luz) y una
-     sombra oscura y BAJA que le da PESO —el relicario deja de flotar y se
-     siente un objeto pesado apoyado sobre terciopelo, no un dibujo plano—.
-     Es parte de la presencia del centro: arriba reina la luz y el objeto
-     que la recibe tiene cuerpo. */
-  /* ⚡ EL FILTRO QUEDA FIJO, Y LA ANIMACIÓN SOLO TOCA LA OPACIDAD.
-     Antes el filtro (las dos sombras) también animaba, de invisible a su
-     valor final, en paralelo con la opacidad. Pero a opacidad 0 CUALQUIER
-     sombra ya es invisible —animarla en simultáneo no sumaba nada que la
-     opacidad sola no hiciera—, y en cambio `filter` es una propiedad que
-     Lighthouse marca como "no compuesta": cada cuadro de esa animación
-     obligaba al navegador a recalcular estilos en el hilo principal en
-     vez de dejárselo a la GPU. Con el filtro fijo, la sombra "aparece"
-     exactamente igual, como efecto colateral de que el elemento entero
-     aparece, pero ahora la animación es 100% compositable. */
-  filter:
-    drop-shadow(0 0 45px rgba(201, 168, 76, .16))
-    drop-shadow(0 26px 30px rgba(0, 0, 0, .55));
+  /* ⚡ EL FILTRO YA NO VIVE ACÁ — se mudó a .marco__sombra-exterior, más
+     abajo. Antes envolvía TODO este SVG (~216 nodos): la enredadera, las
+     borlas y la cadena giran todo el tiempo (scroll o un rAF continuo,
+     ver codigo/08-efectos-de-scroll.js y codigo/17-joyas-colgantes.js), y
+     un filtro CSS obliga a repintar el subárbol ENTERO como una sola
+     unidad ante cualquier cambio de un descendiente — así que cada giro
+     de una borla repintaba el relicario completo. Ver la nota grande en
+     index.html, justo antes de envolver el núcleo/filigrana/gemas/Corona/
+     Alas y la Base: esas partes SÍ quedan bajo el nuevo filtro porque no
+     se mueven solas; la enredadera, las borlas y la cadena quedan afuera
+     de cualquier filtro. */
   will-change: opacity;
 
   /* La entrada anima SOLO la opacidad, nunca el tamaño: así el broche
@@ -211,6 +266,46 @@
 @keyframes aparecer-marco {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+
+/* La sombra exterior del relicario, mudada acá desde .portada__marco (ver
+   la nota de arriba). Dos sombras: el halo dorado (aura de la luz) y una
+   sombra oscura y BAJA que le da PESO —el relicario deja de flotar y se
+   siente un objeto pesado apoyado sobre terciopelo, no un dibujo plano—.
+
+   Se aplica a 3 envoltorios puestos en index.html alrededor de lo que NO
+   se mueve solo (el arco de fondo; núcleo+filigrana+gemas+Corona+Alas; la
+   Base), nunca sobre la enredadera/borlas/cadena. Ni un valor cambió, solo
+   el alcance: misma sombra, mismo aspecto, ahora sin forzar el repintado
+   de todo el relicario en cada giro de una borla. */
+.marco__sombra-exterior {
+  filter:
+    drop-shadow(0 0 45px rgba(201, 168, 76, .16))
+    drop-shadow(0 26px 30px rgba(0, 0, 0, .55));
+}
+
+/* ⚡ EL FAST-FOLLOW QUE HABÍA QUEDADO PENDIENTE, MEDIDO Y APLICADO
+   (2026-08-20): cuando se sacó el filtro exterior de encima de la
+   enredadera/borlas/cadena, quedó anotado que agregar `will-change:
+   transform` acá era candidato a ayudar, pero había que medirlo aparte
+   y no darlo por sentado — el intento anterior de will-change en las
+   borlas (documentado en index.html) NO ayudó, pero fue una prueba
+   hecha CUANDO todavía vivían adentro del filtro grande, así que no
+   probaba nada sobre la situación de ahora.
+
+   Se cumplen las mismas condiciones que ya funcionaron con .petalo (ver
+   estilos/10-cursor-y-petalos.css): se mueven solo por transform
+   (rotate), no viven dentro de ningún mix-blend-mode, y las tres cosas
+   se animan de forma CONTINUA mientras el relicario está en pantalla
+   (las borlas y la cadena en cada cuadro; la enredadera en cada scroll)
+   — exactamente el perfil para el que sirve reservarles una capa propia
+   del compositor, en vez de recomponerlas contra el resto de la escena
+   en cada giro. Es la sección más pesada de la página; esto le da un
+   margen más sin tocar ni un tallo del dibujo. */
+#enredadera-de-la-portada,
+.joya-colgante,
+.cadena-colgante .eslabon {
+  will-change: transform;
 }
 
 
@@ -440,7 +535,12 @@
    alineados por construcción: ya no hay forma de que se desalineen.
    ---------------------------------------------------------------------- */
 .portada__desliza {
+  /* svh y no vh a secas: mismo motivo que el resto de esta sección (ver
+     la nota grande junto a #portada, arriba) — que no se corra con la
+     barra del navegador en celular. */
   margin-top: clamp(1rem, 3vh, 2.2rem);
+  margin-top: clamp(1rem, 3svh, 2.2rem);
+  margin-top: clamp(1rem, calc(var(--alto-fijo, 100svh) * 0.03), 2.2rem);
   opacity: 0;
   animation: aparecer-desde-abajo .9s 1.9s forwards;
 }

@@ -185,6 +185,33 @@
 
 .campo__control::placeholder { color: var(--texto-tenue); }
 
+/* Un input con un botón encimado adentro — hoy solo lo usa el ojo de
+   mostrar/ocultar contraseña del login, pero el patrón sirve para
+   cualquier campo que necesite una acción a la derecha. El input le
+   hace lugar con padding-right; el botón se ancla encima. */
+.campo__con-boton { position: relative; display: block; }
+.campo__con-boton .campo__control { padding-right: 42px; }
+.campo__boton-ojo {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--texto-suave);
+  border-radius: 50%;
+  transition: background var(--transicion);
+}
+.campo__boton-ojo:active {
+  background: color-mix(in srgb, var(--oro) 12%, transparent);
+}
+.campo__boton-ojo-icono { width: 20px; height: 20px; }
+
 textarea.campo__control {
   min-height: 96px;
   resize: vertical;

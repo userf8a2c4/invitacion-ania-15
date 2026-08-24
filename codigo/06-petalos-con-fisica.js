@@ -105,9 +105,14 @@
   /** Cuánto tira la gravedad hacia abajo (píxeles por segundo, al cuadrado). */
   const GRAVEDAD = 55;
 
-  /** Cuánto frena el aire. 0.99 = pierde 1 % de velocidad por cuadro.
-   *  Es lo que evita que los pétalos aceleren para siempre. */
-  const ROZAMIENTO_DEL_AIRE = 0.99;
+  /** Cuánto frena el aire. 0.97 = pierde 3 % de velocidad por cuadro.
+   *  Es lo que evita que los pétalos aceleren para siempre.
+   *  ⚡ BAJADO DE 0.99 (2026-08-21): con 0.99, un pétalo que llegaba al
+   *  tope de empuje tardaba ~3s en volver a su velocidad de caída normal
+   *  — ese arrastre largo es lo que se seguía leyendo como "sale
+   *  disparado" aunque el empuje ya estuviera limitado. Con 0.97 el
+   *  mismo pétalo se calma en bastante menos de un segundo. */
+  const ROZAMIENTO_DEL_AIRE = 0.97;
 
   /** Fuerza del vaivén lateral (el zigzag de la caída). */
   const FUERZA_DEL_VAIVEN = 48;
@@ -134,7 +139,12 @@
      techo (ver el `limitar(...)` más abajo); a `velocidadX/Y` les
      faltaba. El número es a ojo — se puede subir o bajar según cómo se
      sienta el empujón, igual que se ajustó el tope de giro. */
-  const VELOCIDAD_MAXIMA_DEL_EMPUJE = 320;   // px/s
+  /* ⚡ BAJADO DE 320 A 150 (2026-08-21): 320 seguía siendo de 6 a 20 veces
+     la velocidad normal de caída (14-54 px/s) — un pétalo empujado al
+     tope se seguía viendo como un disparo, no como "el viento lo aparta",
+     por más que técnicamente estuviera "limitado". 150 es un empujón que
+     todavía se nota, pero no una fuga de pantalla. */
+  const VELOCIDAD_MAXIMA_DEL_EMPUJE = 150;   // px/s
 
   /** Los tres dibujos de pétalo que se van alternando. */
   const IMAGENES_DE_PETALO = [
@@ -286,10 +296,29 @@
   let velocidadMouseX = 0;
   let velocidadMouseY = 0;
 
+  /* ⚡ UN SOLO PUNTERO A LA VEZ (2026-08-23) — ESTO ES LO QUE ARREGLA "LAS
+     FLORES/PÉTALOS SALEN VOLANDO AL MÍNIMO TOQUE, SIN QUE NADA LOS ANCLE".
+     Antes mouseX/mouseY eran un solo valor global sin distinguir DE QUÉ
+     dedo venían. En el celular es normal tocar la pantalla con un segundo
+     dedo mientras el primero sigue apoyado (el pulgar que sostiene el
+     teléfono, la palma que roza sin querer, un gesto de dos dedos): el
+     'pointerdown' de ESE segundo dedo pisaba mouseX/mouseY con su propia
+     coordenada, sin pasar por ningún reseteo (los dos dedos seguían
+     tocando, no había pointerup/pointercancel que disparara soltarPuntero).
+     El cuadro siguiente calculaba una "velocidad" enorme a partir de un
+     salto que nunca pasó de verdad, empujando cualquier pétalo cercano al
+     nuevo punto con una fuerza real que no vino de ningún gesto real —eso
+     es exactamente "vuela sin que lo haya tocado nadie, y no hay forma de
+     anclarlo". Ahora se recuerda QUÉ puntero (pointerId) es el que se está
+     siguiendo, y se ignora cualquier otro hasta que el primero se suelta. */
+  let punteroActivoId = null;
+
   /* Una sola entrada para el mouse Y el dedo: pointermove cubre los dos. Va
      passive para no bloquear el scroll en el celular —los pétalos se apartan
      del dedo mientras se desliza, sin trabar el gesto—. */
   function alMoverPuntero(evento) {
+    if (punteroActivoId === null) punteroActivoId = evento.pointerId;
+    if (evento.pointerId !== punteroActivoId) return;   // otro dedo: se ignora
     mouseX = evento.clientX;
     mouseY = evento.clientY;
   }
@@ -301,6 +330,12 @@
      apagar el empuje —el mouse sigue ahí—; por eso solo se resetea con el
      dedo (pointerType 'touch') o al salir con el mouse. */
   function soltarPuntero(evento) {
+    // Si el que se levanta/cancela es un dedo distinto al que veníamos
+    // siguiendo, no nos incumbe: el puntero activo real sigue tocando.
+    if (evento && evento.pointerId !== undefined && punteroActivoId !== null &&
+        evento.pointerId !== punteroActivoId) {
+      return;
+    }
     if (!evento || evento.type === 'mouseleave' || evento.pointerType === 'touch') {
       mouseX = -9999;
       mouseY = -9999;
@@ -311,10 +346,35 @@
       mouseYAnterior = -9999;
       velocidadMouseX = 0;
       velocidadMouseY = 0;
+      punteroActivoId = null;
     }
   }
   document.addEventListener('mouseleave', soltarPuntero);
   document.addEventListener('pointerup', soltarPuntero);
+  /* ⚡ 'pointercancel' TAMBIÉN TIENE QUE SOLTAR — ESTO ES LO QUE ARREGLA EL
+     "SALE DISPARADO SIEMPRE HACIA LA IZQUIERDA" EN CELULAR.
+     En el teléfono, la manera más común de terminar un toque NO es
+     levantar el dedo quieto: es deslizarlo para hacer SCROLL. Cuando el
+     navegador reconoce ese deslizamiento como un gesto de scroll, cancela
+     la secuencia del puntero con 'pointercancel' EN VEZ DE 'pointerup' —y
+     acá solo se escuchaba 'pointerup'. El resultado: cada vez que alguien
+     scrolleaba con el dedo, mouseX/mouseXAnterior quedaban CONGELADOS en
+     el punto donde el dedo tocó por última vez, sin pasar nunca por el
+     reseteo de arriba.
+
+     Como en un celular casi cualquier gesto por la pantalla termina en
+     scroll (es la forma normal de navegar la página), esto pasaba
+     constantemente. El siguiente toque deliberado —tocar un pétalo en
+     cualquier parte— arrancaba con mouseXAnterior todavía apuntando a
+     ese punto viejo y ajeno, en vez de al punto real del toque anterior.
+     La cuenta de velocidad (`(mouseX - mouseXAnterior) / dt * 0.016`) se
+     hacía entonces entre el pétalo tocado AHORA y un punto de scroll de
+     hace rato —normalmente más a la derecha, porque así se scrollea con
+     el pulgar—, y esa resta grande y siempre con el mismo signo es
+     exactamente el "siempre hacia la izquierda, y de un tirón" que se
+     reportó: no era un empujón de verdad, era el salto congelado del
+     comentario de arriba, con la única diferencia de que acá el reseteo
+     nunca había llegado a ocurrir. */
   document.addEventListener('pointercancel', soltarPuntero);
 
 
@@ -449,19 +509,46 @@
    * entre la dirección del pétalo y la dirección del mouse, que dice
    * hacia qué lado tiene que girar.
    *
-   * @param {Object} petalo - El pétalo a empujar.
-   * @param {number} dt     - Segundos transcurridos desde el cuadro anterior.
+   * ⚡ SIN RAÍZ CUADRADA SALVO QUE HAGA FALTA (antes se pagaba siempre).
+   * Antes, `Math.hypot` —una raíz cuadrada— se calculaba para los ~36
+   * pétalos en CADA cuadro, para descartarse un renglón después en la
+   * inmensa mayoría de los casos (el mouse casi nunca está cerca de todos
+   * a la vez). Lighthouse midió esto como una de las tareas largas más
+   * caras de toda la web (hasta 491ms de un tirón). Ahora se compara
+   * primero la distancia AL CUADRADO contra el radio al cuadrado —álgebra
+   * pura, sin raíz— y solo se llama Math.hypot para los pocos pétalos que
+   * ya se sabe que están dentro del radio y necesitan la dirección
+   * normalizada. `distancia > R` y `distancia² > R²` son la misma
+   * condición (los dos lados son siempre positivos), así que el resultado
+   * visual es idéntico. También se sale de una sola vez si no hay puntero
+   * activo (mouseX en su valor inicial -9999): ningún pétalo puede estar
+   * a menos de 130px de ahí, es matemáticamente imposible que entre.
+   *
+   * @param {Object} petalo         - El pétalo a empujar.
+   * @param {number} dt             - Segundos transcurridos desde el cuadro anterior.
+   * @param {number} escalaDelCuadro - dt ya normalizado a "cuadros de 60 Hz"
+   *        (ver la nota junto a su cálculo, en dibujarCuadro) — idéntico
+   *        para todos los pétalos de este cuadro, por eso se calcula una
+   *        sola vez ahí y se pasa acá en vez de recalcularlo por pétalo.
    * @returns {void}
    */
-  function aplicarEmpujeDelMouse(petalo, dt) {
+  function aplicarEmpujeDelMouse(petalo, dt, escalaDelCuadro) {
+    // Sin puntero activo no hay nada que calcular.
+    if (mouseX === -9999) return;
+
     // Distancia entre el centro del pétalo y el mouse
     const distanciaX = (petalo.x + petalo.tamaño / 2) - mouseX;
     const distanciaY = (petalo.y + petalo.tamaño / 2) - mouseY;
-    const distancia = Math.hypot(distanciaX, distanciaY);   // teorema de Pitágoras
 
-    // Si está lejos, no pasa nada. El +0.01 evita dividir por cero
-    // cuando el mouse queda justo encima del pétalo.
-    if (distancia > RADIO_DE_INFLUENCIA_DEL_MOUSE || distancia < 0.01) return;
+    // Descarte barato, sin raíz: equivalente exacto a comparar la
+    // distancia real contra el radio (ver la nota grande de arriba).
+    const distanciaAlCuadrado = distanciaX * distanciaX + distanciaY * distanciaY;
+    const radioAlCuadrado = RADIO_DE_INFLUENCIA_DEL_MOUSE * RADIO_DE_INFLUENCIA_DEL_MOUSE;
+    // El 0.0001 (0.01²) evita dividir por cero cuando el mouse queda
+    // justo encima del pétalo — mismo umbral de siempre, al cuadrado.
+    if (distanciaAlCuadrado > radioAlCuadrado || distanciaAlCuadrado < 0.0001) return;
+
+    const distancia = Math.hypot(distanciaX, distanciaY);   // teorema de Pitágoras
 
     // influencia vale 1 pegado al mouse y 0 en el borde del radio
     const influencia = 1 - (distancia / RADIO_DE_INFLUENCIA_DEL_MOUSE);
@@ -487,7 +574,10 @@
     // arrastre pegaba más fuerte cuanto mejor la pantalla del invitado.
     // Dividiendo por esos mismos 0.016 ms de referencia, el total por
     // segundo queda igual sin importar la tasa de refresco.
-    const escalaDelCuadro = dt / 0.016;
+    //
+    // ⚡ escalaDelCuadro YA NO SE CALCULA ACÁ (era `dt / 0.016`, y era el
+    // mismo valor para los ~36 pétalos del cuadro): ahora llega calculado
+    // una sola vez desde dibujarCuadro. Ver la nota del parámetro arriba.
     petalo.velocidadX += velocidadMouseX * ARRASTRE_DEL_MOUSE * influenciaSuavizada * escalaDelCuadro;
     petalo.velocidadY += velocidadMouseY * ARRASTRE_DEL_MOUSE * influenciaSuavizada * escalaDelCuadro;
 
@@ -503,9 +593,15 @@
    * @param {number} dt       - Segundos desde el cuadro anterior.
    * @param {number} tiempo   - Segundos desde que arrancó la animación
    *                            (se usa para el vaivén).
+   * @param {number} frenadoDelCuadro - Math.pow(ROZAMIENTO_DEL_AIRE, dt*60)
+   *        ya calculado en dibujarCuadro (mismo valor para TODOS los
+   *        pétalos de este cuadro, porque dt es el mismo para todos —
+   *        antes se recalculaba ~36 veces por cuadro con el mismo `dt`).
+   * @param {number} escalaDelCuadro - dt normalizado a "cuadros de 60 Hz",
+   *        también calculado una sola vez en dibujarCuadro por el mismo motivo.
    * @returns {void}
    */
-  function moverPetalo(petalo, dt, tiempo) {
+  function moverPetalo(petalo, dt, tiempo, frenadoDelCuadro, escalaDelCuadro) {
     // FUERZA 1 · Gravedad: siempre hacia abajo
     petalo.velocidadY += GRAVEDAD * dt;
 
@@ -516,15 +612,15 @@
     petalo.velocidadX += vaiven * FUERZA_DEL_VAIVEN * dt;
 
     // FUERZA 3 · El mouse
-    aplicarEmpujeDelMouse(petalo, dt);
+    aplicarEmpujeDelMouse(petalo, dt, escalaDelCuadro);
 
     // ROZAMIENTO: frena todo un poquito cada cuadro.
     // Math.pow(0.99, dt*60) es "aplicar el 0.99 tantas veces como cuadros
-    // hayan pasado", para que frene igual en cualquier pantalla.
-    const frenado = Math.pow(ROZAMIENTO_DEL_AIRE, dt * 60);
-    petalo.velocidadX *= frenado;
-    petalo.velocidadY *= frenado;
-    petalo.velocidadAngular *= frenado;
+    // hayan pasado", para que frene igual en cualquier pantalla. Ya viene
+    // calculado desde dibujarCuadro (ver JSDoc de frenadoDelCuadro arriba).
+    petalo.velocidadX *= frenadoDelCuadro;
+    petalo.velocidadY *= frenadoDelCuadro;
+    petalo.velocidadAngular *= frenadoDelCuadro;
 
     // Tope de giro, para que nunca parezca una hélice
     petalo.velocidadAngular = limitar(petalo.velocidadAngular, -420, 420);
@@ -637,9 +733,16 @@
     // Una sola medición del relicario para todos los pétalos
     medirElRelicario();
 
+    /* ⚡ CALCULADOS ACÁ, UNA SOLA VEZ POR CUADRO — antes cada pétalo (hasta
+       36) los recalculaba con el mismo `dt` de entrada, o sea el mismo
+       resultado ~36 veces. Lighthouse midió esto entre las tareas largas
+       más caras del sitio. Ver JSDoc de moverPetalo/aplicarEmpujeDelMouse. */
+    const frenadoDelCuadro = Math.pow(ROZAMIENTO_DEL_AIRE, dt * 60);
+    const escalaDelCuadro = dt / 0.016;
+
     for (const petalo of petalos) {
       if (!petalo.activo) continue;   // desactivado por el gobernador: se saltea
-      moverPetalo(petalo, dt, tiempoTranscurrido);
+      moverPetalo(petalo, dt, tiempoTranscurrido, frenadoDelCuadro, escalaDelCuadro);
     }
 
     /* ⚡ ACÁ SE DIBUJA TAMBIÉN, EN VEZ DE QUE 24-lienzo-de-petalos.js TENGA
@@ -672,10 +775,17 @@
     }
   });
 
-  // Si se cambia el tamaño de la ventana, actualizamos las medidas.
-  window.addEventListener('resize', () => {
+  /* Si se cambia el tamaño de la ventana, actualizamos las medidas.
+     ⚡ CON GUARD DE ANCHO (2026-08-23) — este listener era el único de todo
+     el proyecto sin `alCambiarElAncho` (02-utilidades.js): releía altura en
+     CADA aparición/desaparición de la barra del navegador en celular,
+     moviendo en vivo los límites de la física (dónde reciclan los pétalos,
+     dónde rebotan en los bordes). Mismo criterio que ya usan
+     08-efectos-de-scroll.js, 19-velas.js, 23-lienzo-de-luz.js, etc.: si el
+     ancho no cambió, no fue un resize real. */
+  window.addEventListener('resize', alCambiarElAncho(() => {
     anchoDePantalla = window.innerWidth;
     altoDePantalla  = window.innerHeight;
-  });
+  }));
 
 })();

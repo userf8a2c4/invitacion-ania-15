@@ -194,6 +194,18 @@ function mostrarSecuenciaDeNovedades(lista) {
     objetivoActual = el;
     el.classList.add('novedad__resaltado');
 
+    /* Lo esperable es que quien vea el elemento brillando lo TOQUE, no
+     * que busque el botón "Entendido" del globito. Sin este listener,
+     * tocar el elemento disparaba su propia acción (abrir tal pantalla,
+     * etc.) pero dejaba `novedad__resaltado` pegado para siempre — con
+     * su z-index alto, eso lo dejaba flotando por encima del resto de
+     * la app indefinidamente. Un solo toque tiene que bastar para
+     * apagar el brillo, igual que tocar "Entendido". */
+    el.addEventListener('click', () => {
+      marcarNovedadComoVista(n.id);
+      avanzar();
+    }, { once: true });
+
     contador.textContent = (indice + 1) + '/' + lista.length;
     texto.textContent = n.texto;
     boton.textContent = (indice === lista.length - 1) ? 'Entendido' : 'Siguiente';
@@ -233,6 +245,49 @@ function mostrarSecuenciaDeNovedades(lista) {
  * @returns {void}
  */
 function posicionarNovedad(objetivo, contenedor, tarjeta, flecha) {
+  /* Antes acá se calculaban las coordenadas y RECIÉN DESPUÉS se pedía
+   * el scroll suave al objetivo — con lo cual la tarjeta y la flecha
+   * quedaban ancladas a dónde estaba el elemento antes de moverse, no
+   * a dónde termina. Si el objetivo ya estaba a la vista no se notaba
+   * (no había nada que recalcular), pero para cualquiera más abajo en
+   * la pantalla (como la fila de "Estado de respaldo") el globo
+   * terminaba apuntando al aire. Ahora, si hace falta scroll, se pide
+   * primero y se ubica DESPUÉS de que termine — sobre la posición
+   * final, no la de partida. */
+  const yaVisible = objetivo.getBoundingClientRect().top >= 0 &&
+    objetivo.getBoundingClientRect().bottom <= window.innerHeight;
+
+  if (yaVisible) {
+    ubicarNovedad(objetivo, tarjeta, flecha);
+    return;
+  }
+
+  let yaUbicado = false;
+  const ubicarUnaVez = () => {
+    if (yaUbicado) return;
+    yaUbicado = true;
+    window.removeEventListener('scrollend', ubicarUnaVez);
+    clearTimeout(tope);
+    ubicarNovedad(objetivo, tarjeta, flecha);
+  };
+  // 'scrollend' no existe en todos los navegadores todavía — el tope
+  // de tiempo es la red de seguridad para esos casos (dura un poco más
+  // que cualquier scroll suave típico).
+  const tope = setTimeout(ubicarUnaVez, 450);
+  window.addEventListener('scrollend', ubicarUnaVez, { once: true });
+  objetivo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+/**
+ * La matemática pura de ubicación — sin scroll de por medio. Asume que
+ * `objetivo` ya está en su posición final en pantalla.
+ *
+ * @param {Element} objetivo
+ * @param {Element} tarjeta
+ * @param {Element} flecha
+ * @returns {void}
+ */
+function ubicarNovedad(objetivo, tarjeta, flecha) {
   const rect = objetivo.getBoundingClientRect();
   const anchoTarjeta = tarjeta.offsetWidth || 260;
   const altoTarjeta   = tarjeta.offsetHeight || 90;
@@ -263,7 +318,4 @@ function posicionarNovedad(objetivo, contenedor, tarjeta, flecha) {
     : (arribaPx - 7) + 'px';
   flecha.classList.toggle('novedad__flecha--abajo', arriba);
   flecha.classList.toggle('novedad__flecha--arriba', !arriba);
-
-  // Que el objetivo quede a la vista, si estaba scrolleado fuera.
-  objetivo.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }

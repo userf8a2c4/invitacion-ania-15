@@ -104,9 +104,21 @@
   const RIGIDEZ_DE_LA_PLANTA = 0.05;
   const AMORTIGUACION_DE_LA_PLANTA = 0.13;
 
-  /** Lo mismo para cada flor por separado (más suelto, más vivo). */
+  /** Lo mismo para cada flor por separado (más suelto, más vivo).
+   *
+   *  ⚡ LA AMORTIGUACIÓN SUBIÓ (era 0.16) — ESTO ES LO QUE ARREGLA "LAS
+   *  FLORES VOLADORAS". Con 0.16, el resorte de la flor está MUY por
+   *  debajo del amortiguamiento crítico (ζ ≈ 0,27): un toque del mouse no
+   *  la hacía inclinarse y volver una vez, la hacía pasarse de largo del
+   *  reposo y OSCILAR varias veces de un lado al otro antes de quedarse
+   *  quieta, cada vez más cerca del tope de 24° (FLEXION_MAXIMA). Esa
+   *  oscilación —la flor pasando de lado a lado, no un solo cabeceo— es
+   *  lo que se lee como "vuela" o "flota", no como una flor real
+   *  doblándose sobre su tallo. Con 0.5 el resorte queda cerca del
+   *  amortiguamiento crítico (ζ ≈ 0,8-0,9): se inclina, frena suave y
+   *  vuelve, sin pasarse de largo ni rebotar. */
   const RIGIDEZ_DE_LA_FLOR = 0.09;
-  const AMORTIGUACION_DE_LA_FLOR = 0.16;
+  const AMORTIGUACION_DE_LA_FLOR = 0.5;
 
   /** Grados de inclinación por cada píxel de scroll por cuadro. */
   const GRADOS_POR_VELOCIDAD = 0.4;
@@ -139,7 +151,12 @@
      Los valores son más chicos que los de la flor porque el doblado se
      ACUMULA: si los seis nudos se inclinan 5°, la punta termina a 30°. */
   const RIGIDEZ_DEL_NUDO      = 0.055;
-  const AMORTIGUACION_DEL_NUDO = 0.14;
+  /* ⚡ SUBIÓ (era 0.14) por el mismo motivo que AMORTIGUACION_DE_LA_FLOR:
+     estaba lejos del amortiguamiento crítico y el nudo se pasaba de largo
+     y oscilaba en vez de doblarse y volver una sola vez. Como el doblado
+     de los nudos se ACUMULA hacia la punta (ver la nota de arriba), una
+     oscilación acá se notaba más todavía que en una flor sola. */
+  const AMORTIGUACION_DEL_NUDO = 0.42;
 
   /** Cuánto dobla el mouse a cada nudo (torque, igual que en la flor). */
   const FUERZA_DEL_MOUSE_EN_EL_TALLO = 26;
@@ -464,12 +481,17 @@
       const nacimiento = recorrido[indice];
       const hacia = azar.signo();
 
+      /* ⚡ SE ACORTÓ UN POCO (pasos era 5-11, largoDelPaso era 9-17).
+         Los rosales de los costados no son el foco de este ajuste —los
+         ramilletes de las esquinas superiores sí— así que los brotes se
+         recortan apenas, lo justo para que no compitan en volumen con
+         la esquina que ahora se abrió más. */
       const brote = crecerTallo(azar, {
         xInicial: nacimiento.x,
         yInicial: nacimiento.y,
         anguloInicial: nacimiento.angulo + hacia * azar.entre(0.5, 1.05),
-        pasos: azar.entero(5, 11),
-        largoDelPaso: azar.entre(9, 17),
+        pasos: azar.entero(4, 9),
+        largoDelPaso: azar.entre(7, 13),
         giroMaximo: azar.entre(0.10, 0.24),
         inercia: azar.entre(0.4, 0.7),
         xObjetivo: columnaDeApoyo,
@@ -730,101 +752,103 @@
    * derecha es el mismo dibujo reflejado por CSS, igual que las
    * enredaderas de los laterales.
    *
+   * ⚡ REESCRITO A PEDIDO EXPLÍCITO, DESPUÉS DE VARIAS RONDAS QUE SIEMPRE
+   * TERMINABAN MAL. La versión anterior tenía tres capas independientes
+   * —abanico de tallos y ramas, un "corazón" de rosas grandes, un
+   * "relleno" con su propio sesgo geométrico de anclaje— y CADA una con
+   * su cantidad y escala ajustadas a mano. Ronda tras ronda el resultado
+   * seguía leyéndose mal ("maleza", "matorral", "jardín descuidado"), y
+   * el pedido fue dejar de MICROGESTIONAR pieza por pieza.
+   *
+   * El enfoque nuevo: tratar la esquina como lo que en el fondo es, más
+   * marco del relicario, con más luz arriba — la MISMA idea que ya usan
+   * las enredaderas de los costados (dibujarPlanta, más arriba: cada
+   * rama lleva una sola flor en la punta, sin zonas especiales). Acá hay
+   * un solo abanico de ramas cortas, cada una con su flor, más varias
+   * rosas de acento en el origen. La cantidad de ramas tiene un LÍMITE
+   * FIJO (no una fórmula que se dispara con el ancho de pantalla), pero
+   * bastante más alto que el primer intento: acá SÍ tienen que sentirse
+   * como un ramillete de verdad —mucho más tupidas que una rama suelta
+   * de enredadera— y no como una simple continuación del resto del
+   * marco. El límite fijo es lo que evita que eso se convierta otra vez
+   * en la maleza de antes: más cantidad, pero sin las ramas secundarias
+   * ni las zonas de relleno con sesgo geométrico que eran las que de
+   * verdad generaban el enredo.
+   *
    * @param {number} semilla  - Define cómo será este ramillete.
-   * @param {number} densidad - Cuán tupido va, según el tamaño de
-   *        pantalla. 1 es una pantalla mediana; más grande, más flores;
-   *        más chica, menos. Ver colocarLosRamilletesDeEsquina.
+   * @param {number} densidad - Cuán ancha está la pantalla (ver
+   *        colocarLosRamilletesDeEsquina). Acá solo mueve la cantidad de
+   *        ramas dentro del límite fijo y el grosor del trazo.
    * @returns {string} El SVG listo para insertar.
    */
   function dibujarRamilleteDeEsquina(semilla, densidad) {
     const azar = crearAzarConSemilla(semilla);
 
-    /* Ayuda para escalar una cantidad por la densidad sin que se
-       desmadre ni desaparezca: multiplica y después recorta a un mínimo
-       y un máximo sensatos. */
-    const escalar = (base, minimo, maximo) =>
-      Math.round(limitar(base * densidad, minimo, maximo));
-
-    /* De dónde nacen todos los tallos: casi en el vértice, apenas
+    /* De dónde nacen todas las ramas: casi en el vértice, apenas
        adentro, para que el ramillete parezca brotar de la moldura. */
     const xDeLaBase = azar.entre(10, 26);
     const yDeLaBase = azar.entre(8, 22);
 
     const piezas = [];
     const flores = [];
-    /* Puntos reales del abanico de tallos y ramas (coordenadas del
-       viewBox), para anclar ahí el relleno en vez de tirarlo al azar en
-       una caja que llega más lejos que los tallos — ver la nota del
-       relleno más abajo. */
-    const puntosDelAbanico = [];
 
-    /* ── El abanico de tallos (regla 1) ──
-       Los ángulos van de 0,16 rad (casi horizontal, corriendo por debajo
-       de la cenefa de arriba) a 1,30 rad (casi vertical, bajando por el
-       riel del costado). Repartidos parejo y con un temblorcito al azar
-       para que no se note la regla. */
-    const cuantosTallos = escalar(azar.entero(16, 20), 6, 46);
-    const ANGULO_MAS_HORIZONTAL = 0.08;
-    const ANGULO_MAS_VERTICAL   = 1.46;
+    /* ⚡ SUBIÓ FUERTE (era 6 a 9) A PEDIDO EXPLÍCITO: "quiero que esas de
+       las esquinas tengan mucho más... estas SÍ deben ser como
+       ramilletes". El primer intento, con la misma regla simple de una
+       rama-una flor, quedó demasiado parecido al resto del marco —una
+       continuación más de la enredadera, no un acento en la esquina.
+       Sigue siendo un LÍMITE FIJO (nunca una fórmula sin techo como los
+       46 tallos de las rondas viejas): la diferencia es que el techo
+       ahora es mucho más alto, porque acá el pedido es justamente que se
+       note la diferencia con el resto. */
+    const cuantasRamas = Math.round(limitar(14 + densidad * 6, 14, 22));
 
-    /* ⚡ POR QUÉ EL TALLO TIENE QUE ENGROSAR CON LA DENSIDAD.
-       La CANTIDAD de rosas escala con `densidad` (ver `escalar` arriba):
-       en una pantalla ancha, ~1250px de más suben la densidad hasta 1,9 y
-       aparecen ~135 rosas por ramillete. Pero el GROSOR del tallo era un
-       número fijo, pensado para el caso de densidad ~1. Con casi el doble
-       de flores encima de un tallo que no engrosó un milímetro, la punta
-       —que ya adelgaza a propósito hasta un solo píxel— quedaba tapada
-       entera: rosas que parecen flotar sin nada que las sostenga.
-
-       Math.max(densidad, 1.6) para no ADELGAZAR el tallo en pantallas
-       angostas: ahí la densidad baja de 1 y también hay menos rosas, así
-       que el grosor de siempre ya alcanza. Solo se engruesa cuando hace
-       falta, nunca se afina de más. El piso subió de 1 a 1.6 porque en
-       celular (ramillete a escala ~0.45) una punta de grosor 1 queda en
-       0.45px CSS —subpíxel, invisible—; con 1.6 la punta mínima queda
-       en ~0.7px, ya visible. */
+    /* El trazo tiene que engrosar un poco en pantallas anchas o la punta
+       queda en subpíxeles invisibles (mismo motivo que en las
+       enredaderas de los costados). */
     const grosorDelTallo = Math.max(densidad, 1.6);
+    const ANGULO_MAS_HORIZONTAL = 0.1;
+    const ANGULO_MAS_VERTICAL   = 1.45;
 
-    for (let i = 0; i < cuantosTallos; i++) {
-      const reparto = i / (cuantosTallos - 1);
+    for (let i = 0; i < cuantasRamas; i++) {
+      const reparto = i / (cuantasRamas - 1);
       const anguloDeSalida =
         ANGULO_MAS_HORIZONTAL +
         reparto * (ANGULO_MAS_VERTICAL - ANGULO_MAS_HORIZONTAL) +
         azar.entre(-0.09, 0.09);
 
-      /* Los tallos del medio del abanico son los más largos; los de los
-         extremos, más cortos. Eso redondea el contorno del ramillete en
-         lugar de dejarlo con puntas que sobresalen. */
+      // Las ramas del medio del abanico son más largas; las de los
+      // extremos, más cortas — redondea el contorno del ramo.
       const cercaniaAlCentro = 1 - Math.abs(reparto - 0.5) * 2;
-      const pasos = azar.entero(7, 10);
-      const largoDelPaso = azar.entre(11, 16) * (0.68 + cercaniaAlCentro * 0.42);
+      const pasos = azar.entero(6, 9);
+      const largoDelPaso = azar.entre(20, 30) * (0.7 + cercaniaAlCentro * 0.4);
+
+      /* La raíz de cada rama corre un poco a lo largo de la moldura que
+         le toca (arriba para las casi horizontales, al costado para las
+         casi verticales), para que el ramo abrace la esquina en vez de
+         brotar de un único pinchazo. */
+      const xRaiz = xDeLaBase + (1 - reparto) * azar.entre(-4, 50);
+      const yRaiz = yDeLaBase + reparto * azar.entre(-4, 50);
 
       const tallo = crecerTallo(azar, {
-        xInicial: xDeLaBase,
-        yInicial: yDeLaBase,
+        xInicial: xRaiz,
+        yInicial: yRaiz,
         anguloInicial: anguloDeSalida,
         pasos,
         largoDelPaso,
-        giroMaximo: azar.entre(0.06, 0.14),
+        giroMaximo: azar.entre(0.08, 0.16),
         inercia: azar.entre(0.5, 0.75),
-        /* Tiende a abrirse hacia adentro de la página, sin volver sobre
-           sí mismo: un ramillete que se cierra parece un puño. */
-        xObjetivo: ANCHO_DEL_RAMILLETE * 0.8,
-        atraccion: azar.entre(0.0006, 0.0018),
+        xObjetivo: ANCHO_DEL_RAMILLETE * 0.72,
+        atraccion: azar.entre(0.0008, 0.002),
       });
-      puntosDelAbanico.push(...tallo);
 
-      /* ⚠️ RELLENO DE RESERVA: el degradado #rosa-tallo vive en un <svg> de
-         0×0 aparte (la biblioteca de rosas compartida). Ese patrón —un
-         degradado referenciado desde OTRO <svg>— a veces se lee distinto
-         entre navegadores. Por eso se dibuja el mismo contorno DOS veces:
-         primero un color sólido de reserva, y el degradado justo encima.
-         Si el degradado resuelve bien (lo normal), tapa al sólido entero y
-         no cambia nada; si no resolviera, el sólido de abajo salva la
-         rama en vez de dejarla como un hilo casi invisible. */
+      /* Mismo relleno de reserva que en las enredaderas de los costados:
+         el degradado #rosa-tallo referenciado desde otro <svg> a veces
+         se lee distinto entre navegadores, así que se dibuja un color
+         sólido debajo por si acaso. */
       const dDelTallo = siluetaDelTallo(
         tallo, azar,
-        azar.entre(3.4, 5.2) * grosorDelTallo,
+        azar.entre(3, 4.6) * grosorDelTallo,
         1 * grosorDelTallo
       );
       piezas.push(
@@ -832,14 +856,13 @@
         `<path d="${dDelTallo}" fill="url(#rosa-tallo)" stroke="#241d0d" stroke-width=".6"/>`
       );
 
-      /* Hojas repartidas por el tallo, siempre levantadas hacia afuera.
-         Son las que dan el follaje: sin suficientes hojas el ramillete
-         se ve como alambres con flores en la punta. */
-      const cuantasHojas = azar.entero(4, 7);
+      // Una o dos hojas por rama — igual de discreto que en las
+      // enredaderas de los costados, nunca compite con la flor.
+      const cuantasHojas = azar.entero(1, 2);
       for (let h = 0; h < cuantasHojas; h++) {
         const punto = tallo[azar.entero(1, tallo.length - 2)];
         const hacia = azar.signo();
-        const escala = azar.entre(0.38, 0.72);
+        const escala = azar.entre(0.4, 0.7);
         const giro = (punto.angulo * 180 / Math.PI) + 90 + hacia * azar.entre(30, 70);
         piezas.push(
           `<use href="#rosa-hoja" transform="translate(${punto.x.toFixed(1)} ${punto.y.toFixed(1)})
@@ -847,92 +870,23 @@
         );
       }
 
-      /* ── Ramas secundarias ──
-         De la mitad de los tallos sale una rama más corta con su propio
-         capullo. Es lo que llena los huecos que quedan ENTRE los tallos
-         del abanico: sin ellas se ve el peine, con ellas se ve un ramo.
-         Van cortas a propósito, para que no se confundan con los tallos
-         principales ni alarguen la silueta. */
-      if (azar.numero() < 0.62) {
-        const nace = tallo[azar.entero(1, Math.max(1, tallo.length - 3))];
-        const rama = crecerTallo(azar, {
-          xInicial: nace.x,
-          yInicial: nace.y,
-          anguloInicial: nace.angulo + azar.signo() * azar.entre(0.35, 0.8),
-          pasos: azar.entero(3, 5),
-          largoDelPaso: azar.entre(7, 12),
-          giroMaximo: azar.entre(0.08, 0.18),
-          inercia: azar.entre(0.4, 0.65),
-          xObjetivo: ANCHO_DEL_RAMILLETE * 0.8,
-          atraccion: 0.001,
-        });
-        puntosDelAbanico.push(...rama);
-
-        // Mismo relleno de reserva que el tallo principal (ver la nota de arriba).
-        // Y el mismo engrosamiento por densidad (ver grosorDelTallo, arriba).
-        const dDeLaRama = siluetaDelTallo(
-          rama, azar,
-          azar.entre(1.8, 2.8) * grosorDelTallo,
-          0.8 * grosorDelTallo
-        );
-        piezas.push(
-          `<path d="${dDeLaRama}" fill="#6a5322"/>` +
-          `<path d="${dDeLaRama}" fill="url(#rosa-tallo)" stroke="#241d0d" stroke-width=".5"/>`
-        );
-
-        const puntaDeLaRama = rama[rama.length - 1];
-        flores.push({
-          x: puntaDeLaRama.x, y: puntaDeLaRama.y,
-          tipo: azar.numero() < 0.6 ? 'rosa-capullo' : 'rosa-dorso',
-          escala: azar.entre(0.26, 0.38),
-          giro: (puntaDeLaRama.angulo * 180 / Math.PI) + 90 + azar.entre(-20, 20),
-        });
-
-        // Un par de hojitas también en la rama
-        for (let h = 0; h < azar.entero(1, 3); h++) {
-          const punto = rama[azar.entero(1, rama.length - 1)];
-          const hacia = azar.signo();
-          const escala = azar.entre(0.3, 0.5);
-          const giro = (punto.angulo * 180 / Math.PI) + 90 + hacia * azar.entre(30, 70);
-          piezas.push(
-            `<use href="#rosa-hoja" transform="translate(${punto.x.toFixed(1)} ${punto.y.toFixed(1)})
-                  rotate(${giro.toFixed(1)}) scale(${(hacia * escala).toFixed(2)} ${escala.toFixed(2)})"/>`
-          );
-        }
-      }
-
-      /* ── Qué remata cada tallo (regla 3) ──
-         Nada grande. Los tallos largos terminan en capullo o en flor
-         chica de perfil, que se leen como brote y no como remate. Solo
-         los tallos cortos, los que quedan cerca de la esquina, se
-         permiten una flor algo mayor. */
+      /* UNA flor por rama, en la punta — sin distinguir tallos "cortos"
+         de "largos", sin zonas especiales. La orientación se sortea
+         entre abiertas y capullo, siempre hacia el lado abierto: acá
+         "hay más luz arriba", la misma metáfora de dibujarPlanta, fijada
+         en su valor máximo porque esta esquina siempre está en pleno
+         sol. */
       const punta = tallo[tallo.length - 1];
-      const esCorto = largoDelPaso * pasos < 95;
-      const sorteo = azar.numero();
+      const orientaciones = ['rosa-frente', 'rosa-tres-cuartos', 'rosa-media', 'rosa-capullo'];
+      flores.push({
+        x: punta.x, y: punta.y,
+        tipo: orientaciones[azar.entero(0, orientaciones.length - 1)],
+        escala: azar.entre(0.42, 0.6),
+        giro: (punta.angulo * 180 / Math.PI) + 90 + azar.entre(-25, 25),
+      });
 
-      if (esCorto && sorteo < 0.55) {
-        flores.push({
-          x: punta.x, y: punta.y,
-          tipo: azar.numero() < 0.5 ? 'rosa-tres-cuartos' : 'rosa-media',
-          escala: azar.entre(0.34, 0.46),
-          giro: (punta.angulo * 180 / Math.PI) + 90 + azar.entre(-25, 25),
-        });
-      } else if (sorteo < 0.72) {
-        flores.push({
-          x: punta.x, y: punta.y, tipo: 'rosa-capullo',
-          escala: azar.entre(0.34, 0.5),
-          giro: (punta.angulo * 180 / Math.PI) + 90,
-        });
-      } else {
-        flores.push({
-          x: punta.x, y: punta.y, tipo: 'rosa-perfil',
-          escala: azar.entre(0.28, 0.4),
-          giro: (punta.angulo * 180 / Math.PI) + 90 + azar.entre(-20, 20),
-        });
-      }
-
-      // Algún zarcillo suelto, que es lo que le da aire al conjunto
-      if (azar.numero() < 0.5) {
+      // Algún zarcillo suelto, que le da aire al conjunto.
+      if (azar.numero() < 0.4) {
         const donde = tallo[azar.entero(2, tallo.length - 1)];
         piezas.push(
           `<path d="${dibujarZarcillo(donde.x, donde.y, azar)}" fill="none"
@@ -942,48 +896,30 @@
       }
     }
 
-    /* ── El corazón del ramillete, en la esquina (regla 3) ──
-       Dos o tres rosas grandes apiladas justo donde nacen los tallos.
-       Ahí es donde tiene que estar el peso: es lo que hace que la
-       esquina se sienta ocupada, y de paso tapa el nacimiento de todos
-       los tallos, que si se viera parecería un manojo atado. */
-    const cuantasDelCorazon = escalar(azar.entero(15, 19), 4, 40);
-    const orientaciones = ['rosa-frente', 'rosa-tres-cuartos', 'rosa-media'];
-
-    for (let i = 0; i < cuantasDelCorazon; i++) {
+    /* El acento: varias rosas más grandes justo en el origen, el "moño"
+       que tapa el nacimiento del abanico y hace que la esquina se sienta
+       CARGADA, como un ramillete de verdad y no solo una rama más larga.
+       Sigue siendo fijo (no escala con densidad) porque es un detalle,
+       no otra zona para sintonizar — pero subió de 2 a 4 junto con el
+       resto, a pedido de que la esquina se note bien distinta del resto
+       del marco. */
+    const orientacionesDelAcento = ['rosa-frente', 'rosa-tres-cuartos', 'rosa-media'];
+    for (let i = 0; i < 4; i++) {
+      const xFlor = xDeLaBase + azar.entre(6, 55);
+      const yFlor = yDeLaBase + azar.entre(6, 48);
+      piezas.push(
+        `<path d="M${xDeLaBase.toFixed(1)} ${yDeLaBase.toFixed(1)} Q ` +
+        `${(xDeLaBase + (xFlor - xDeLaBase) * 0.5 + azar.entre(-5, 5)).toFixed(1)} ` +
+        `${(yDeLaBase + (yFlor - yDeLaBase) * 0.5 + azar.entre(-5, 5)).toFixed(1)}, ` +
+        `${xFlor.toFixed(1)} ${yFlor.toFixed(1)}" fill="none" ` +
+        `stroke="url(#rosa-tallo)" stroke-width="${(2 * grosorDelTallo).toFixed(1)}" ` +
+        `stroke-linecap="round" stroke-opacity=".8"/>`
+      );
       flores.push({
-        x: xDeLaBase + azar.entre(2, 64),
-        y: yDeLaBase + azar.entre(2, 56),
-        tipo: orientaciones[azar.entero(0, orientaciones.length - 1)],
-        escala: azar.entre(0.52, 0.8),
-        giro: azar.entre(-30, 30),
-      });
-    }
-
-    /* Y unas cuantas flores sueltas metidas ENTRE los tallos, a media
-       distancia. Son las que terminan de cerrar el ramo: sin ellas
-       queda un corazón denso y después aire hasta las puntas, que es
-       justamente el vacío que había que llenar. */
-    /* Un poco menos que antes y algo más grandes: apretujar muchas
-       flores diminutas las convertía en un borrón oscuro donde no se
-       distinguía ninguna rosa. Con menos y un pelín más grandes, cada una
-       tiene lugar para leerse. */
-    const cuantasDeRelleno = escalar(azar.entero(18, 23), 3, 46);
-    for (let i = 0; i < cuantasDeRelleno; i++) {
-      /* Antes esto tiraba las flores de relleno en una caja fija
-         (x: 30-210, y: 25-180) que llega ~277 unidades desde la base,
-         mientras el abanico de tallos alcanza apenas ~95-115: una de
-         cada tres o cuatro quedaba flotando sin tallo debajo. Ahora se
-         ancla a un punto real del abanico —tallo o rama— con un jitter
-         chico, igual que ya hace la enredadera lateral con la punta de
-         cada brote. */
-      const anclaje = puntosDelAbanico[azar.entero(0, puntosDelAbanico.length - 1)];
-      flores.push({
-        x: anclaje.x + azar.entre(-8, 8),
-        y: anclaje.y + azar.entre(-8, 8),
-        tipo: azar.numero() < 0.5 ? 'rosa-tres-cuartos' : 'rosa-media',
-        escala: azar.entre(0.42, 0.6),
-        giro: azar.entre(-40, 40),
+        x: xFlor, y: yFlor,
+        tipo: orientacionesDelAcento[i % orientacionesDelAcento.length],
+        escala: azar.entre(0.48, 0.64),
+        giro: azar.entre(-25, 25),
       });
     }
 
@@ -1444,21 +1380,44 @@
         const escala = parseFloat(flor.dataset.escala) || 0.5;
         const movil = flor.querySelector('.flor-de-enredadera__movil');
 
-        /* Mismo arreglo que ya tienen los nudos del tallo (más abajo, ver
-           "El pivote va como transform-origin de CSS"): el punto de giro se
-           fija UNA sola vez acá, como transform-origin, en vez de mandarlo
-           en el propio atributo `transform` cada vez que se escribe. */
+        /* ⚡ CORREGIDO (2026-08-23) — ESTO ES LO QUE ARREGLA "LA FLOR SE
+           DESPRENDE DEL TALLO Y VUELA A CUALQUIER PARTE AL MÍNIMO TOQUE".
+           La versión anterior usaba `transform-box: view-box` con el pivote
+           puesto a mano en coordenadas ABSOLUTAS del viewBox entero
+           (data-x/data-y + un offset de cuello), asumiendo que ese punto
+           iba a coincidir con la base real de la flor en pantalla. En la
+           práctica no coincidía ni de cerca: medido en vivo, un giro de
+           apenas 24° (el tope normal, `FLEXION_MAXIMA`) desplazaba la flor
+           ¡256px! en vez de mecerla sobre su tallo — exactamente "se suelta
+           y vuela a cualquier parte".
+           `transform-box: fill-box` es la alternativa robusta: el pivote se
+           mide en PORCENTAJE sobre la caja de la propia flor (su dibujo ya
+           renderizado, con su escala y su giro inicial ya aplicados adentro
+           del `<use>`), así que no depende de en qué coordenadas absolutas
+           terminó la flor dentro del lienzo compartido — el punto "abajo,
+           en el centro" siempre es la base de ESTA flor, sea cual sea su
+           tamaño o dónde esté ubicada. */
         if (movil) {
-          movil.style.transformBox = 'view-box';
-          /* La flor vive dentro de <g class="flor-de-enredadera"
-             transform="translate(x y)">, así que con transform-box: view-box
-             el origen se mide desde el origen del viewBox, no desde la flor.
-             Hay que compensar con las mismas coordenadas absolutas que el
-             template ya deja en data-x/data-y (igual que hacen los nudos
-             con data-pivote-x/y) o el pivote queda corrido y la flor salta. */
-          movil.style.transformOrigin =
-            (parseFloat(flor.dataset.x) || 0) + 'px ' +
-            ((parseFloat(flor.dataset.y) || 0) + 6 + 34 * escala).toFixed(1) + 'px';
+          /* El punto exacto: los seis símbolos de rosa están dibujados
+             CENTRADOS en su propio origen, y el <use> solo gira y escala
+             alrededor de ese origen (no traslada). Así que, adentro de este
+             <g>, el origen local (0,0) ES el centro de la cabeza de la flor,
+             y el cuello queda justo debajo, en (0, cuelloY).
+
+             Con fill-box el transform-origin se mide desde la esquina de la
+             caja del dibujo, así que se le resta el offset de esa caja para
+             caer en el punto real. Sin esto, el `50% 100%` de antes apuntaba
+             al borde de abajo de la SILUETA YA GIRADA (el <use> lleva su
+             propio rotate), que queda unos píxeles arriba del cuello y
+             corrido de costado según cuánto esté girada cada flor. */
+          const cuelloY = 6 + 34 * escala;   // el mismo largoDelPeduculo de siempre
+          let caja = null;
+          try { caja = movil.getBBox(); } catch (e) { /* todavía sin render */ }
+
+          movil.style.transformBox = 'fill-box';
+          movil.style.transformOrigin = (caja && caja.width > 0 && caja.height > 0)
+            ? (0 - caja.x).toFixed(1) + 'px ' + (cuelloY - caja.y).toFixed(1) + 'px'
+            : '50% 100%';                    // red de seguridad
         }
 
         return {
@@ -1844,14 +1803,30 @@
           tiempoTranscurrido * 0.5 + nudo.faseDeRespiracion
         ) * VAIVEN_DEL_NUDO;
 
-        nudo.velocidadDeLaFlexion += (vaivenDelNudo - nudo.flexion) * nudo.rigidez -
-                                     nudo.velocidadDeLaFlexion * nudo.amortiguacion +
-                                     torque;
+        /* ⚡ SUB-PASOS, NO UNA SOLA INTEGRACIÓN (2026-08-23) — ESTO ES LO QUE
+           ARREGLA "las flores vuelan y tardan en volver" en calidad media/baja.
+           El torque ya venía corregido por dtParaElTorque para que un
+           manotazo no se diluya al saltear cuadros, pero la amortiguación de
+           acá abajo se aplicaba UNA sola vez por lote, como si solo hubiera
+           pasado un cuadro — en calidad media/baja pasan 2 o 3. Resultado: el
+           freno actuaba con menos frecuencia real que la que calibraron las
+           constantes de amortiguación (pensadas para correr cada cuadro), y
+           el nudo se pasaba de rosca antes de asentarse. Repitiendo la MISMA
+           integración saltoDelResorte veces, con una fracción del torque en
+           cada una, el freno se aplica la misma cantidad de veces por
+           segundo real sin importar la calidad, y el impulso total del
+           empujón sigue siendo idéntico. */
+        const torquePorSubpaso = torque / saltoDelResorte;
+        for (let subpaso = 0; subpaso < saltoDelResorte; subpaso++) {
+          nudo.velocidadDeLaFlexion += (vaivenDelNudo - nudo.flexion) * nudo.rigidez -
+                                       nudo.velocidadDeLaFlexion * nudo.amortiguacion +
+                                       torquePorSubpaso;
 
-        nudo.flexion = limitar(
-          nudo.flexion + nudo.velocidadDeLaFlexion,
-          -FLEXION_MAXIMA_DEL_NUDO, FLEXION_MAXIMA_DEL_NUDO
-        );
+          nudo.flexion = limitar(
+            nudo.flexion + nudo.velocidadDeLaFlexion,
+            -FLEXION_MAXIMA_DEL_NUDO, FLEXION_MAXIMA_DEL_NUDO
+          );
+        }
 
         /* ⚡ Comparación con ENTEROS, no con cadenas (ver la nota de la
            planta): son ~120 nudos por cuadro, y hacer toFixed() en cada uno
@@ -1940,16 +1915,25 @@
         /* Resorte amortiguado sobre el ÁNGULO (no sobre la posición):
            el tallo tiende a enderezarse, y el roce del aire va frenando
            el vaivén hasta que se detiene. El reposo es cero: la flor
-           quiere volver a estar derecha sobre su pedúnculo. */
-        flor.velocidadDeLaFlexion += -flor.flexion * flor.rigidez -
-                                     flor.velocidadDeLaFlexion * flor.amortiguacion +
-                                     torque;
+           quiere volver a estar derecha sobre su pedúnculo.
 
-        // Tope: un tallo se dobla, no se parte
-        flor.flexion = limitar(
-          flor.flexion + flor.velocidadDeLaFlexion,
-          -FLEXION_MAXIMA, FLEXION_MAXIMA
-        );
+           ⚡ SUB-PASOS, mismo motivo que en el nudo de acá arriba: sin esto,
+           en calidad media/baja la amortiguación actuaba con menos
+           frecuencia real de la calibrada, y la flor se pasaba de rosca —
+           "vuela y tarda mucho en volver al tallo". */
+        const torquePorSubpasoDeFlor = torque / saltoDelResorte;
+        for (let subpaso = 0; subpaso < saltoDelResorte; subpaso++) {
+          flor.velocidadDeLaFlexion += -flor.flexion * flor.rigidez -
+                                       flor.velocidadDeLaFlexion * flor.amortiguacion +
+                                       torquePorSubpasoDeFlor;
+
+          flor.flexion = limitar(
+            flor.flexion + flor.velocidadDeLaFlexion,
+            -FLEXION_MAXIMA, FLEXION_MAXIMA
+          );
+        }
+        // (el tope -FLEXION_MAXIMA/FLEXION_MAXIMA ya se aplicó en cada
+        // subpaso del loop de arriba, no hace falta repetirlo acá afuera)
 
         /* Al terminar de acomodarse se la endereza EXACTO y se escribe una
            última vez. Sin esto quedaría temblando en la milésima de grado
@@ -1997,10 +1981,19 @@
      ratito después del último cambio para no recalcular cien veces
      mientras se arrastra el borde (a eso se le dice "debounce"). */
   let temporizadorDeRedimension = null;
-  window.addEventListener('resize', () => {
+  /* ⚡ SOLO SI EL ANCHO CAMBIÓ DE VERDAD (ver alCambiarElAncho en
+     02-utilidades.js). Esto es LO MÁS CARO de todo lo que escucha
+     'resize' en el proyecto: repartirPlantas() tira TODO —enredaderas,
+     ramilletes de esquina— y lo vuelve a dibujar de cero. En celular,
+     la barra de navegación (Edge, Chrome) dispara 'resize' cada vez que
+     aparece o desaparece al hacer scroll, aunque el ancho real de la
+     pantalla no cambió nada — sin este filtro, cada aparición de la
+     barra reconstruía el ramillete entero, y ESE redibujado de golpe es
+     lo que se sentía como el salto de tamaño y posición del relicario. */
+  window.addEventListener('resize', alCambiarElAncho(() => {
     clearTimeout(temporizadorDeRedimension);
     temporizadorDeRedimension = setTimeout(repartirPlantas, 350);
-  });
+  }));
 
   /* ⛔ ACÁ NO VA UN LISTENER DE 'calidad-cambio' QUE RECONSTRUYA.
      Se probó y fue el bug que hizo desaparecer el ramillete de la esquina

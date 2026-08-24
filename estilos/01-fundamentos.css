@@ -271,8 +271,20 @@ h2 {
 
      El parallax sigue funcionando: 08-efectos-de-scroll.js calcula el
      recorrido como `offsetHeight - innerHeight`, así que se adapta solo.
-     Solo se acorta el desplazamiento, que era muy generoso. */
+     Solo se acorta el desplazamiento, que era muy generoso.
+
+     ⚡ `125svh` Y NO `125vh` A SECAS: esta capa tiene will-change:transform
+     (textura propia en GPU) y con `vh` a secas se recalculaba —y se
+     recomponía entera— cada vez que la barra del navegador aparecía o
+     desaparecía en celular al hacer scroll, exactamente el momento más
+     caro para pedirle una recomposición de la capa más pesada de toda
+     la página. `svh` es fijo, no se recalcula nunca. */
   height: 125vh;
+  height: 125svh;
+  /* Segunda capa (2026-08-21): svh no alcanzó en Edge Android (ver la
+     nota grande del <head> en index.html) — se ancla a --alto-fijo,
+     medido a mano por JS una sola vez al cargar. */
+  height: calc(var(--alto-fijo, 100svh) * 1.25);
   z-index: -1;      /* detrás de absolutamente todo */
 
   /* TRES capas superpuestas, de arriba abajo:
@@ -313,11 +325,29 @@ h2 {
      capa en vez de una propia. Un perfil real mostró `Layerize` en 67 %
      con el sobre cerrado y nada animándose — esta era una de las capas
      que sobraban. */
+  /* ⚡ EL .2 FIJO PASÓ A --oscurecido-fijo (2026-08-21) — ESTO ES LO QUE
+     ARREGLA "EL FONDO SE VE INVISIBLE DE DÍA". Este -20% de negro plano
+     (sin blend mode: resta luminancia de verdad, no simula luz) era el
+     MISMO de día que de noche. Sobre el fondo victoriano oscuro nuevo
+     —que ya de por sí es oscuro— esa sombra fija era la que lo volvía
+     invisible en pleno día. codigo/22-luz-de-la-hora.js ahora escribe
+     --oscurecido-fijo según la hora (~.05 al mediodía, ~.20-.24 de
+     noche — igual o más oscuro que antes, nunca menos). El `.2` dentro
+     del var() es la red de seguridad si ese script no llegó a correr. */
+  /* ⚡ ?v=1 AGREGADO (2026-08-21): fondo-ornamental.svg tiene en .htaccess
+     "Cache-Control: max-age=31536000, immutable" — un año, sin revalidar
+     nunca. Sin este ?v=, editar el SVG no servía de nada para nadie que ya
+     lo hubiera visitado: ni subir VERSION en sw.js lo arreglaba, porque el
+     propio navegador respondía desde su caché HTTP antes de que el Service
+     Worker llegara a pedirlo a la red. Ahora este ?v= lo agarra el mismo
+     herramientas/subir-version.mjs que ya sube los demás (busca CUALQUIER
+     ?v=NN en index.html), así que a partir de ahora un cambio en este SVG
+     sí llega con la próxima subida de versión. */
   background-image:
     url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23r)' opacity='0.02'/%3E%3C/svg%3E"),
     var(--velo-de-la-hora, linear-gradient(transparent, transparent)),
-    linear-gradient(rgba(0, 0, 0, .2), rgba(0, 0, 0, .2)),
-    url('../recursos/fondo-ornamental.svg');
+    linear-gradient(rgba(0, 0, 0, var(--oscurecido-fijo, .2)), rgba(0, 0, 0, var(--oscurecido-fijo, .2))),
+    url('../recursos/fondo-ornamental.svg?v=1');
   background-size: auto, cover, cover, cover;
   background-position: center, center, center, center;
   background-repeat: repeat, no-repeat, no-repeat, no-repeat;

@@ -135,7 +135,11 @@ body.sobre-visible #boton-qa { display: none; }
   z-index: 2;        /* por encima del velo y del reproductor */
 
   width: min(360px, calc(100vw - var(--marco-grosor) * 2 - 2rem));
+  /* svh y no vh a secas: que la barra del navegador aparezca u
+     desaparezca en celular no tiene que recalcular este alto. */
   max-height: min(60vh, 480px);
+  max-height: min(60svh, 480px);
+  max-height: min(calc(var(--alto-fijo, 100svh) * 0.60), 480px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -261,6 +265,19 @@ body.sobre-visible #boton-qa { display: none; }
 }
 .qa__item--abierto .qa__texto { padding: 0 .85rem .9rem; }
 
+/* Texto que se ve mientras codigo/00-conocimiento-chatbot.js todavía está
+   bajando (o si falló la carga) — el panel ya se abrió, esto es lo único
+   que tarda. */
+.qa__cargando {
+  margin: 0;
+  padding: 1.4rem .85rem;
+  text-align: center;
+  font-family: var(--tipo-texto);
+  font-size: .92rem;
+  font-style: italic;
+  color: var(--color-marfil-apagado);
+}
+
 .qa__texto b { color: var(--color-oro-claro); font-weight: 600; }
 
 .qa__texto a {
@@ -291,7 +308,19 @@ body.sobre-visible #boton-qa { display: none; }
     position: fixed;
     inset: auto 0 0 0;
     width: auto;
+    /* svh y no vh a secas: mismo motivo que el resto — este panel es
+       fixed y queda visible mientras se scrollea, así que si usara vh a
+       secas cambiaría de alto cada vez que la barra del navegador
+       aparece o desaparece. */
     max-height: 75vh;
+    max-height: 75svh;
+    max-height: calc(var(--alto-fijo, 100svh) * 0.75);
+    /* Con interactive-widget=overlays-content (ver index.html) la barra
+       del navegador se superpone en vez de empujar el contenido: sin este
+       respiro, el borde de abajo del panel —pegado a inset:0— quedaría
+       parcialmente tapado por la barra cuando está visible. Reserva 0px
+       en navegadores sin esta variable, cero cambio ahí. */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     border-inline: none;
     border-bottom: none;
     border-radius: 14px 14px 0 0;
