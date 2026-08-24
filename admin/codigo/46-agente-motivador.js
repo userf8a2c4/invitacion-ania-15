@@ -124,10 +124,10 @@ async function guardarDiccionarioCarinoso() {
  * Cortas, tranquilas, sin exclamaciones en cadena — a propósito.
  */
 const RESPUESTAS_CARINOSAS_DE_FABRICA = [
-  'Acá ando, con vos.',
-  'Un ratito de aire no le hace mal a nadie — segui cuando quieras.',
+  'Acá ando, contigo.',
+  'Un ratito de aire no le hace mal a nadie — sigue cuando quieras.',
   'Se está armando lindo, aunque no lo parezca en medio del lío.',
-  'Andá tranquila, esto no se va a ningún lado.',
+  'Anda tranquila, esto no se va a ningún lado.',
 ];
 
 /**
@@ -230,12 +230,12 @@ function pintarSeccionCarinosa(cuerpo) {
     donde.innerHTML =
       '<div class="tarjeta__titulo" style="margin-top:var(--esp-4)">Palabras cariñosas</div>' +
       '<p class="vacio__texto">' +
-        'Enseñale tu propia jerga (ej. "abacho" quiere decir "abrazo") y las frases ' +
+        'Enséñale tu propia jerga (ej. "abacho" quiere decir "abrazo") y las frases ' +
         'que te gusta que te digan (ej. "te amodoro"). Cuando escribas algo así en el ' +
         'asistente, te va a responder con una de ellas en vez de decir que no entendió.' +
       '</p>' +
 
-      '<div class="lista__titulo" style="margin-top:var(--esp-2)">Cuando decís…</div>' +
+      '<div class="lista__titulo" style="margin-top:var(--esp-2)">Cuando dices…</div>' +
       DICCIONARIO_CARINOSO.palabras.map((p, i) =>
         '<div class="lista__fila">' +
           '<span class="lista__cuerpo">' +

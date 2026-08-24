@@ -56,7 +56,7 @@ const NOVEDADES = [
     id: 'v56-olvide-contrasena',
     pantalla: 'login',
     selector: '#entrada-olvide',
-    texto: 'Nuevo: si se te olvida la contraseña, ahora la podés recuperar vos misma desde acá, sin depender de nadie más.',
+    texto: 'Nuevo: si se te olvida la contraseña, ahora la puedes recuperar tú misma desde acá, sin depender de nadie más.',
   },
   {
     id: 'v56-estado-respaldo',
@@ -64,19 +64,19 @@ const NOVEDADES = [
     // El mismo atributo que ya usa pintarIndice() (06-piezas.js) para
     // cada fila del menú — no hizo falta agregar ninguno nuevo.
     selector: '[data-indice="respaldo"]',
-    texto: 'Nuevo: acá ves cuándo se guardó la última copia de seguridad de todo (con los archivos adjuntos incluidos) y podés mandar una nueva cuando quieras, con un toque.',
+    texto: 'Nuevo: acá ves cuándo se guardó la última copia de seguridad de todo (con los archivos adjuntos incluidos) y puedes mandar una nueva cuando quieras, con un toque.',
   },
   {
     id: 'v58-comandos-asistente',
     pantalla: 'mas',
     selector: '[data-indice="comandos-asistente"]',
-    texto: 'Nuevo: acá abajo podés enseñarle al asistente tu propia jerga cariñosa (como "abacho") y las frases que te gusta que te digan — las va a usar cuando se las escribas en el chat.',
+    texto: 'Nuevo: acá abajo puedes enseñarle al asistente tu propia jerga cariñosa (como "abacho") y las frases que te gusta que te digan — las va a usar cuando se las escribas en el chat.',
   },
   {
     id: 'v59-reglas-de-acomodo',
     pantalla: 'mesas',
     selector: '#mesa-reglas',
-    texto: 'Este botón cambió de nombre: ahora se llama "Reglas de acomodo" y junta todo lo que le podés enseñar al acomodo automático — quién va junto, quién no, y ahora también quién se sienta aparte de su familia.',
+    texto: 'Este botón cambió de nombre: ahora se llama "Reglas de acomodo" y junta todo lo que le puedes enseñar al acomodo automático — quién va junto, quién no, y ahora también quién se sienta aparte de su familia.',
   },
 ];
 

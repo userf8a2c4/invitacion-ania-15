@@ -97,7 +97,7 @@ case 'analizar':
 
     if ($mejorPuntaje < 2) {
         responderMal(
-            'No reconocí los encabezados. Asegurate de copiar también la ' .
+            'No reconocí los encabezados. Asegúrate de copiar también la ' .
             'fila con los títulos de las columnas.',
             422
         );

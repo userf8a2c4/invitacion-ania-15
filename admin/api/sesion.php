@@ -286,8 +286,8 @@ switch ($accion) {
                     '<p style="font-size:32px;font-weight:700;letter-spacing:6px;margin:16px 0">' .
                         htmlspecialchars($codigo, ENT_QUOTES, 'UTF-8') .
                     '</p>' .
-                    '<p>Vale por ' . MINUTOS_DE_CODIGO_RECUPERACION . ' minutos. Si no lo pediste ' .
-                    'vos, ignora este correo: con solo el código no alcanza para entrar, así que ' .
+                    '<p>Vale por ' . MINUTOS_DE_CODIGO_RECUPERACION . ' minutos. Si tú no lo pediste, ' .
+                    'ignora este correo: con solo el código no alcanza para entrar, así que ' .
                     'tu cuenta sigue segura.</p>';
 
                 try {
