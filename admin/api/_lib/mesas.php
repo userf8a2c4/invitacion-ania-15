@@ -320,6 +320,48 @@ function seLlevaBienCon($clave, $yaSentados, $peleas) {
 }
 
 
+/**
+ * Ids de `incompatibilidades` cuyas dos personas están sentadas HOY en
+ * la misma mesa. Mismo cruce (peleas × quién está sentado dónde) que
+ * hace 42-agente-mesas.js del lado del cliente con lo que ya trae
+ * mesas.php?accion=todo — acá vive compartida entre quien la necesite
+ * del lado del servidor (cron_alarmas.php, para el aviso proactivo de
+ * la Parte 5) en vez de repetirla.
+ *
+ * @return int[]
+ */
+function peleasSentadasJuntas() {
+    $panorama = panoramaDeMesas();
+
+    $mesaDeCadaUnidad = [];
+    foreach ($panorama['invitados'] as $u) {
+        if (empty($u['mesa_id'])) continue;
+        $mesaDeCadaUnidad[claveDeUnidad($u['tipo'], $u['id'])] = (int) $u['mesa_id'];
+    }
+
+    $encontradas = [];
+    foreach ($panorama['peleas'] as $pelea) {
+        $acompA = (int) ($pelea['acompanante_a'] ?? 0);
+        $acompB = (int) ($pelea['acompanante_b'] ?? 0);
+
+        if ($acompA > 0 && $acompB > 0) {
+            $claveA = claveDeUnidad('acompanante', $acompA);
+            $claveB = claveDeUnidad('acompanante', $acompB);
+        } else {
+            $claveA = claveDeUnidad('confirmacion', (int) $pelea['invitado_a']);
+            $claveB = claveDeUnidad('confirmacion', (int) $pelea['invitado_b']);
+        }
+
+        if (isset($mesaDeCadaUnidad[$claveA], $mesaDeCadaUnidad[$claveB])
+            && $mesaDeCadaUnidad[$claveA] === $mesaDeCadaUnidad[$claveB]) {
+            $encontradas[] = (int) $pelea['id'];
+        }
+    }
+
+    return $encontradas;
+}
+
+
 /* ─── 3. REPARTIR ─────────────────────────────────────────────────────── */
 
 /**

@@ -24,6 +24,7 @@ require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
 require_once __DIR__ . '/_lib/push.php';
+require_once __DIR__ . '/_lib/mesas.php';
 
 $accion = (string) ($_GET['accion'] ?? '');
 
@@ -152,6 +153,32 @@ case 'pendientes':
             $avisos[] = $cuantos === 1
                 ? 'Se acerca una fecha de la agenda'
                 : 'Se acercan ' . $cuantos . ' fechas';
+        }
+    }
+
+    /* Las dos condiciones "urgentes" de los agentes (ver
+       cron_alarmas.php, sección AGENTES) — acá SOLO el número, sin
+       nombres de invitados ni montos: este endpoint no exige sesión a
+       propósito (lo llama el Service Worker recién despertado, sin
+       token a mano), así que nada privado puede viajar por acá. */
+    if (existeTabla('pagos')) {
+        $fila = consultarUno(
+            "SELECT COUNT(*) AS n FROM pagos WHERE estado = 'pendiente' AND fecha_limite = CURDATE()"
+        );
+        $cuantos = (int) ($fila['n'] ?? 0);
+        if ($cuantos > 0) {
+            $avisos[] = $cuantos === 1
+                ? 'Un pago vence hoy'
+                : $cuantos . ' pagos vencen hoy';
+        }
+    }
+
+    if (existeTabla('incompatibilidades') && existeTabla('mesas')) {
+        $cuantos = count(peleasSentadasJuntas());
+        if ($cuantos > 0) {
+            $avisos[] = $cuantos === 1
+                ? 'Hay dos personas sentadas juntas que no deberían'
+                : 'Hay ' . $cuantos . ' incompatibilidades sentadas juntas';
         }
     }
 

@@ -222,8 +222,19 @@ function armarPdf(titulo, bloques) {
       // La lectura del asesor: párrafo corrido, no fila de tabla.
       '.lectura{line-height:1.5;margin:0 0 10px;padding-left:12px;' +
         'border-left:3px solid #d4a843;}' +
-      '@media print{ body{padding:0;} }' +
+      /* Esta ventana la abre window.open() con el historial vacío: no
+         hay ninguna página "de antes" a la que volver con el botón
+         atrás del navegador — quedaba como un callejón sin salida,
+         sobre todo en el celular, donde no siempre es obvio que esto
+         es una pestaña nueva que se puede cerrar. window.close()
+         funciona acá porque la ventana la abrió el propio script (los
+         navegadores lo bloquean si no fue así). */
+      '.volver{position:fixed;top:16px;right:16px;background:#8a6a2c;' +
+        'color:#fff;border:0;border-radius:6px;padding:10px 18px;' +
+        'font-family:Georgia,serif;font-size:14px;cursor:pointer;}' +
+      '@media print{ body{padding:0;} .volver{display:none;} }' +
     '</style></head><body>' +
+    '<button type="button" class="volver" onclick="window.close()">← Volver</button>' +
     '<h1>' + seguro(titulo) + '</h1>' +
     '<p style="font-size:12px;color:#888">Generado el ' +
       seguro(new Date().toLocaleString(CONFIGURACION.dinero.region)) + '</p>' +
@@ -562,10 +573,9 @@ async function exportarResumenEjecutivoDinero() {
       .filter(g => Number(g.categoria_id) === Number(c.id))
       .reduce((s, g) => s + (pagadoPorGasto[Number(g.id)] || 0), 0);
     const comprometido = Math.max(0, gastado - pagadoCategoria);
-    const semaforo = techo <= 0 ? 'sin_techo'
-      : gastado > techo ? 'rojo'
-      : gastado / techo >= CONFIGURACION.dinero.avisarDesde ? 'amarillo'
-      : 'verde';
+    // Mismo umbral que toda la pantalla de dinero — ver semaforoDeCategoria()
+    // en 02-utilidades.js, compartida con el agente de dinero.
+    const semaforo = semaforoDeCategoria(c);
     return { nombre: c.nombre, techo: techo, planeado: Number(c.planeado) || 0,
       gastado: gastado, comprometido: comprometido, semaforo: semaforo };
   });
