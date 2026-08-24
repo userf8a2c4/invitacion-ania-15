@@ -26,6 +26,59 @@
 /** Qué hacer cuando la hoja se cierre. Se usa para refrescar la vista. */
 let AL_CERRAR_HOJA = null;
 
+/* ─── COMPENSAR EL TECLADO DEL CELULAR ──────────────────────────────
+   QUÉ PROBLEMA RESUELVE
+   Ni `vh` ni `dvh` ni `svh` reaccionan a que aparezca el teclado virtual
+   —por especificación, esa distinción queda afuera de lo que esas
+   unidades cubren—, así que `.hoja__panel` (con `max-height` fijo) podía
+   terminar más alto que lo que de verdad se ve en pantalla, tapando un
+   campo de texto o el botón de abajo detrás del teclado (el caso real: el
+   Asistente, admin/codigo/32-asistente.js). `visualViewport` sí sabe
+   cuánto se ve de verdad.
+
+   Se engancha en abrirHoja() y se desengancha en cerrarHoja(): un
+   listener global permanente no tiene sentido si la hoja no está en
+   pantalla, y así cualquier formulario futuro con un campo de texto
+   queda cubierto gratis, no solo el Asistente. */
+let quitarCompensacionDeTeclado = null;
+
+/**
+ * Engancha el ajuste de `--alto-hoja` a `visualViewport` mientras la hoja
+ * esté abierta. Sin soporte de `visualViewport`, no hace nada: el CSS ya
+ * tiene `88dvh` como valor de respaldo, igual que antes de este cambio.
+ * @returns {void}
+ */
+function activarCompensacionDeTeclado() {
+  if (!window.visualViewport) return;
+
+  function ajustar() {
+    document.documentElement.style.setProperty(
+      '--alto-hoja', Math.round(window.visualViewport.height * 0.88) + 'px'
+    );
+  }
+
+  ajustar();
+  window.visualViewport.addEventListener('resize', ajustar);
+  // Safari a veces avisa el cambio de alto por acá y no por 'resize'.
+  window.visualViewport.addEventListener('scroll', ajustar);
+
+  quitarCompensacionDeTeclado = () => {
+    window.visualViewport.removeEventListener('resize', ajustar);
+    window.visualViewport.removeEventListener('scroll', ajustar);
+    document.documentElement.style.removeProperty('--alto-hoja');
+  };
+}
+
+/**
+ * Desengancha lo que haya activado activarCompensacionDeTeclado().
+ * @returns {void}
+ */
+function desactivarCompensacionDeTeclado() {
+  if (!quitarCompensacionDeTeclado) return;
+  quitarCompensacionDeTeclado();
+  quitarCompensacionDeTeclado = null;
+}
+
 /** Cómo estaban los campos al abrir, para detectar lo escrito sin guardar. */
 let LO_QUE_HABIA_AL_ABRIR = '';
 
@@ -61,6 +114,7 @@ function abrirHoja(titulo, contenido, alCerrar) {
 
   AL_CERRAR_HOJA = alCerrar || null;
   hoja.classList.remove('oculto');
+  activarCompensacionDeTeclado();
 
   /* Se guarda cómo quedó la hoja recién abierta. Al cerrarla se compara
      contra esto para saber si se escribió algo que se perdería. */
@@ -109,6 +163,7 @@ function cerrarHoja(forzar) {
   }
 
   hoja.classList.add('oculto');
+  desactivarCompensacionDeTeclado();
   buscar('#hoja-cuerpo').innerHTML = '';
   document.body.style.overflow = '';
 
