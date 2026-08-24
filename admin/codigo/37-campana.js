@@ -33,8 +33,41 @@
 let ULTIMO_HOY = null;
 
 /**
- * Cuántos avisos hay ahora mismo: los pendientes reales de hoy.php más
- * los cambios que quedaron apartados por rechazo del servidor.
+ * Cuántas sugerencias de los agentes (40-agentes.js) había la última
+ * vez que se corrieron — arrancarLaApp() (20-arranque.js) las corre UNA
+ * vez al entrar y guarda acá el número, así la campana las cuenta sin
+ * tener que abrir la pestaña del asistente. Se cachea la CANTIDAD, no
+ * se vuelven a correr los agentes en cada cambio de pantalla: algunos
+ * (ver 42-agente-mesas.js, la regla del acomodo completo) hacen un
+ * viaje al servidor propio, y repetirlo en cada irA() sería pedirle de
+ * más al servidor solo para refrescar un numerito.
+ */
+let CANTIDAD_SUGERENCIAS_DE_AGENTES = 0;
+
+/**
+ * Corre todos los agentes una vez y guarda cuántas sugerencias dieron,
+ * para que la campana las refleje sin abrir el asistente. Pensada para
+ * llamarse una sola vez por sesión, desde arrancarLaApp().
+ *
+ * @returns {Promise<void>}
+ */
+async function refrescarSugerenciasDeAgentesParaLaCampana() {
+  if (typeof recogerSugerencias !== 'function') return;
+  try {
+    const sugerencias = await recogerSugerencias();
+    CANTIDAD_SUGERENCIAS_DE_AGENTES = sugerencias.length;
+  } catch (error) {
+    // Sin señal, o algún agente falló: no hay nada nuevo que contar,
+    // pero tampoco se rompe la campana por esto.
+    CANTIDAD_SUGERENCIAS_DE_AGENTES = 0;
+  }
+  actualizarBurbujaCampana();
+}
+
+/**
+ * Cuántos avisos hay ahora mismo: los pendientes reales de hoy.php, más
+ * los cambios que quedaron apartados por rechazo del servidor, más las
+ * sugerencias de los agentes (ver CANTIDAD_SUGERENCIAS_DE_AGENTES).
  *
  * @returns {Promise<number>}
  */
@@ -43,7 +76,7 @@ async function contarAvisosPendientes() {
   const rechazados = typeof listarRechazados === 'function'
     ? await listarRechazados()
     : [];
-  return pendientes.length + rechazados.length;
+  return pendientes.length + rechazados.length + CANTIDAD_SUGERENCIAS_DE_AGENTES;
 }
 
 /**
@@ -72,7 +105,7 @@ async function abrirBandejaDeAvisos() {
     ? await listarRechazados()
     : [];
 
-  if (!pendientes.length && !rechazados.length) {
+  if (!pendientes.length && !rechazados.length && !CANTIDAD_SUGERENCIAS_DE_AGENTES) {
     pintarVacio(donde, 'No hay nada pendiente',
       'Cuando haya un pago por vencer, una tarea atrasada o un cambio que el servidor rechace, va a aparecer acá.');
     return;
@@ -87,6 +120,23 @@ async function abrirBandejaDeAvisos() {
       ? '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">' +
         'Cambios que el servidor rechazó</div>' +
         rechazados.map(filaDeRechazado).join('')
+      : '') +
+    /* No se repintan las sugerencias acá adentro (serían las de la
+     * última corrida, potencialmente viejas) — un solo renglón que
+     * lleva al asistente, donde cargarSugerenciasDelAsistente() las
+     * vuelve a pedir frescas y ya tiene todo el mecanismo de
+     * confirmar/deshacer (40-agentes.js). Esta bandeja no duplica eso. */
+    (CANTIDAD_SUGERENCIAS_DE_AGENTES
+      ? '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">Sugerencias de los agentes</div>' +
+        '<button class="lista__fila" id="aviso-ir-a-sugerencias">' +
+          '<span class="lista__cuerpo">' +
+            '<span class="lista__titulo">' +
+              seguro(pluralizar(CANTIDAD_SUGERENCIAS_DE_AGENTES, 'sugerencia', 'sugerencias')) +
+              ' por revisar' +
+            '</span>' +
+            '<span class="lista__pie">Pagos, mesas, tareas — el asistente tiene el detalle de cada una</span>' +
+          '</span>' +
+        '</button>'
       : '');
 
   buscarTodos('[data-aviso]', donde).forEach(fila => {
@@ -110,6 +160,14 @@ async function abrirBandejaDeAvisos() {
       abrirBandejaDeAvisos();
     });
   });
+
+  const irASugerencias = buscar('#aviso-ir-a-sugerencias', donde);
+  if (irASugerencias) {
+    irASugerencias.addEventListener('click', () => {
+      cerrarHoja(true);
+      abrirAsistente();
+    });
+  }
 }
 
 /**

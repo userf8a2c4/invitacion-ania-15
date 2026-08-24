@@ -129,6 +129,16 @@ function arrancarLaApp() {
   // duplicar el temporizador si arrancarLaApp() corriera de nuevo.
   if (typeof arrancarRefrescoPeriodico === 'function') arrancarRefrescoPeriodico();
 
+  // Paso 5, nivel A: corre los agentes UNA vez al entrar, sin que haga
+  // falta abrir la pestaña del asistente — así la campana ya sabe si
+  // hay algo que revisar (ver 37-campana.js). No se espera (no debe
+  // atrasar el resto del arranque): si tarda o falla, la campana
+  // simplemente se actualiza un instante después, o se queda en lo que
+  // ya tenía.
+  if (typeof refrescarSugerenciasDeAgentesParaLaCampana === 'function') {
+    refrescarSugerenciasDeAgentesParaLaCampana();
+  }
+
   // Si se entró desde un atajo del icono ("Invitados", "Dinero"…), se
   // abre esa vista en lugar del Resumen.
   const parametros = new URLSearchParams(location.search);

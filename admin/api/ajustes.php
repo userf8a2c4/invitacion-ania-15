@@ -12,15 +12,17 @@
      GET  ?accion=obtener&clave=paleta   el valor guardado, o null
      POST ?accion=guardar                {clave, valor}, solo admin
 
-   LAS EXCEPCIONES: 'fab_<id>' Y 'carino_<id>'
+   LAS EXCEPCIONES: 'fab_<id>', 'carino_<id>' Y 'avisos_agentes_<id>'
    El sandwich de herramientas rápidas del botón flotante (Fase 1 del
-   rediseño, ver codigo/29-fab.js) y el diccionario cariñoso del Agente
-   Motivador (ver codigo/46-agente-motivador.js) son de CADA PERSONA,
-   no del evento: lo que Carlos elige o le enseña no tiene por qué ser
-   lo que Lucila elige o le enseña. Por eso una cuenta sin rol admin
-   puede guardar esas dos claves puntuales, pero solo las que llevan su
-   propio id — nunca la de otra cuenta ni cualquier otra clave del
-   evento. */
+   rediseño, ver codigo/29-fab.js), el diccionario cariñoso del Agente
+   Motivador (ver codigo/46-agente-motivador.js) y a qué avisos push
+   proactivos de los agentes se suscribió cada quien (Paso 5, ver
+   codigo/15-instalar-y-avisos.js y api/cron_alarmas.php) son de CADA
+   PERSONA, no del evento: lo que Carlos elige o autoriza no tiene por
+   qué ser lo que Lucila elige o autoriza. Por eso una cuenta sin rol
+   admin puede guardar esas tres claves puntuales, pero solo las que
+   llevan su propio id — nunca la de otra cuenta ni cualquier otra
+   clave del evento. */
 
 require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
@@ -63,11 +65,14 @@ case 'guardar':
 
     if ($clave === '') responderMal('Falta decir qué ajuste.', 400);
 
-    // Las únicas dos claves que una cuenta sin rol admin puede tocar son
-    // las suyas propias (FAB y diccionario cariñoso). Cualquier otra
-    // sigue siendo del evento, y del evento decide quien administra.
+    // Las únicas tres claves que una cuenta sin rol admin puede tocar son
+    // las suyas propias (FAB, diccionario cariñoso y a qué avisos push
+    // proactivos se suscribió). Cualquier otra sigue siendo del evento,
+    // y del evento decide quien administra.
     $suPropioId = (int) ($yo['id'] ?? 0);
-    $esSuyaPropia = $clave === 'fab_' . $suPropioId || $clave === 'carino_' . $suPropioId;
+    $esSuyaPropia = $clave === 'fab_' . $suPropioId
+                 || $clave === 'carino_' . $suPropioId
+                 || $clave === 'avisos_agentes_' . $suPropioId;
     if (!$esSuyaPropia) exigirAdministrador();
 
     $existe = consultarUno('SELECT clave FROM ajustes WHERE clave = :c', [':c' => $clave]);

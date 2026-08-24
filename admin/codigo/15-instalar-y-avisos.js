@@ -334,9 +334,24 @@ async function abrirHojaDeAvisos() {
       : '') +
 
     (permiso === 'granted'
-      ? '<button type="button" class="boton boton--ancho" id="av-probar">' +
+      ? '<button type="button" class="boton boton--ancho" id="av-probar" ' +
+                'style="margin-bottom:var(--esp-3)">' +
           'Mandarme un aviso de prueba' +
         '</button>'
+      : '') +
+
+    /* Paso 5 · avisos proactivos de los agentes — SOLO tiene sentido
+     * ofrecerlos con el push ya activado en este teléfono; por eso van
+     * adentro del mismo `if`, no en una hoja aparte. Apagados los dos
+     * por defecto (opt-in, nunca opt-out) — se leen y guardan recién
+     * al abrir esta sección, ver más abajo. */
+    (permiso === 'granted'
+      ? '<div class="tarjeta__titulo">Avisos al instante de los agentes</div>' +
+        '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+          'Además del resumen de la mañana, avisar apenas pase algo puntual — ' +
+          'aunque el panel esté cerrado.' +
+        '</p>' +
+        '<div id="av-agentes"><p class="vacio__texto">Cargando…</p></div>'
       : '')
   );
 
@@ -358,6 +373,56 @@ async function abrirHojaDeAvisos() {
       probar.textContent = 'Mandarme un aviso de prueba';
     });
   }
+
+  const donde = buscar('#av-agentes', cuerpo);
+  if (donde) pintarAvisosDeAgentes(donde);
+}
+
+/**
+ * Los dos interruptores de aviso proactivo por categoría (Paso 5) —
+ * clave 'avisos_agentes_<id>' en ajustes, propia de cada cuenta (ver
+ * la excepción en api/ajustes.php). Por defecto los dos apagados.
+ *
+ * @param {Element} donde
+ * @returns {Promise<void>}
+ */
+async function pintarAvisosDeAgentes(donde) {
+  const clave = 'avisos_agentes_' + (USUARIO && USUARIO.id ? USUARIO.id : '0');
+
+  let prefs = {};
+  try {
+    const r = await traer('ajustes.php?accion=obtener&clave=' + clave);
+    if (r && r.valor) prefs = JSON.parse(r.valor) || {};
+  } catch (error) {
+    prefs = {};
+  }
+
+  donde.innerHTML =
+    campoCasilla({
+      id: 'av-dinero-urgente',
+      rotulo: 'Un pago vence hoy',
+      marcado: !!prefs.dinero_urgente,
+    }) +
+    campoCasilla({
+      id: 'av-mesas-urgente',
+      rotulo: 'Sentaron juntas a dos personas que no deberían',
+      marcado: !!prefs.mesas_urgente,
+    });
+
+  const guardar = async () => {
+    prefs = {
+      dinero_urgente: buscar('#av-dinero-urgente', donde).checked,
+      mesas_urgente: buscar('#av-mesas-urgente', donde).checked,
+    };
+    try {
+      await mandar('ajustes.php?accion=guardar', { clave: clave, valor: JSON.stringify(prefs) });
+    } catch (error) {
+      avisar(error.message, true);
+    }
+  };
+
+  buscar('#av-dinero-urgente', donde).addEventListener('change', guardar);
+  buscar('#av-mesas-urgente', donde).addEventListener('change', guardar);
 }
 
 /**
