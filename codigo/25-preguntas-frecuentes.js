@@ -229,7 +229,7 @@
       const cargando = lista.querySelector('.qa__cargando');
       if (cargando) cargando.remove();
       if (!huboContenido) {
-        lista.innerHTML = '<p class="qa__cargando">No se pudieron cargar las preguntas. Probá de nuevo en un momento.</p>';
+        lista.innerHTML = '<p class="qa__cargando">No se pudieron cargar las preguntas. Prueba de nuevo en un momento.</p>';
       }
     });
   });

@@ -697,7 +697,7 @@ case 'pelea':
         } catch (PDOException $e) {
             responderMal(
                 'No se pudo guardar esta regla puntual — probablemente porque ya hay ' .
-                'otra pelea entre estas mismas dos familias. Avisale a quien mantiene el ' .
+                'otra pelea entre estas mismas dos familias. Avísale a quien mantiene el ' .
                 'panel si esto se repite seguido.',
                 409, $e->getMessage()
             );

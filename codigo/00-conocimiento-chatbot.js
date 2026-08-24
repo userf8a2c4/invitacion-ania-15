@@ -141,7 +141,7 @@ const CONOCIMIENTO_CHATBOT = {
      Modificá el texto, no las claves.                                     */
   mensajes: {
     noSabe:     'Esa información no la tengo disponible. Te recomiendo escribirle directamente a los organizadores.', // ✏️
-    pie:        '¿Te quedó otra duda? Escribinos a los organizadores.', // ✏️
+    pie:        '¿Te quedó otra duda? Escríbenos a los organizadores.', // ✏️
   },
 
 };
