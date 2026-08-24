@@ -194,11 +194,19 @@
   window.addEventListener('blur',  ocultarCursor);
   window.addEventListener('focus', mostrarCursor);
 
-  /* Si el gobernador de rendimiento degrada a calidad BAJA a mitad de
-     sesión (equipo que empezó bien y se puso a sufrir), se apaga el
-     cursor propio y vuelve el del sistema. No hace falta lo contrario
-     —si mejora, no vale la pena reactivarlo recién ahí—: es un ajuste
-     menor y así se evita complejidad de más. */
+  /* ⚡ VUELVE A APAGARSE EN CALIDAD BAJA (se había sacado, y se revirtió).
+     El argumento de "el cursor es barato, un solo transform" seguía
+     siendo cierto para ESTE archivo solo — pero un downgrade de calidad
+     es la señal de que el EQUIPO, en conjunto, ya está exigido, y ahí
+     cualquier margen que se pueda ceder importa, así sea chico. En un
+     equipo justo, un `transform` de más por cuadro sí puede ser la
+     diferencia entre sostener el nivel bajo o seguir bajando. La
+     prioridad, dicho explícitamente, es no perder fps — no la
+     consistencia visual del cursor. Si el "anillo que se mueve solo"
+     preocupaba porque parecía parte de la decoración del relicario, la
+     causa real de esa confusión no era esto: era que el anillo gira
+     solo, siempre, aunque el mouse esté quieto (ver girar-anillo en
+     estilos/10-cursor-y-petalos.css) — y ESO se corrigió aparte. */
   document.addEventListener('calidad-cambio', evento => {
     if ((evento.detail && evento.detail.calidad) === CALIDAD_GRAFICA.BAJA) {
       document.documentElement.classList.remove('con-cursor-propio');

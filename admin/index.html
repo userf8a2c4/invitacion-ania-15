@@ -72,8 +72,26 @@
 
     <label class="campo">
       <span class="campo__rotulo">Contraseña</span>
-      <input type="password" id="entrada-contrasena" class="campo__control"
-             autocomplete="current-password" required>
+      <span class="campo__con-boton">
+        <input type="password" id="entrada-contrasena" class="campo__control"
+               autocomplete="current-password" required>
+        <!-- Para poder revisar que se escribió bien antes de mandar el
+             formulario. Los dos íconos (ojo abierto / ojo tachado) ya
+             están los dos en el HTML; 04-sesion.js solo alterna cuál
+             se ve, junto con el type del input. -->
+        <button type="button" id="entrada-ver-clave" class="campo__boton-ojo"
+                aria-label="Mostrar contraseña" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="icono campo__boton-ojo-icono" data-ojo="abierto">
+            <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="icono campo__boton-ojo-icono oculto" data-ojo="cerrado">
+            <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M3 3l18 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </span>
     </label>
 
     <p id="entrada-error" class="aviso-error oculto" role="alert"></p>

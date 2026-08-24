@@ -152,7 +152,31 @@ $codigoDeLaUrl = htmlspecialchars(
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- interactive-widget=overlays-content: mismo motivo que index.html — que
+     la barra del navegador en celular superponga contenido en vez de
+     redimensionar el viewport. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=overlays-content">
+<!-- Mismo arreglo que index.html: svh no alcanza en Edge Android (su
+     barra inferior no le avisa al motor de render que hay un tamaño
+     fijo al que anclarse), así que se mide el alto a mano una sola vez
+     al cargar. Tiene que ir ANTES del <style>, para que el primer
+     pintado ya use el valor correcto. -->
+<script>
+  (function altoDePantallaFijo() {
+    try {
+      var fijarAlto = function () {
+        document.documentElement.style.setProperty('--alto-fijo', window.innerHeight + 'px');
+      };
+      fijarAlto();
+      var anchoConocido = window.innerWidth;
+      window.addEventListener('resize', function () {
+        if (window.innerWidth === anchoConocido) return;
+        anchoConocido = window.innerWidth;
+        fijarAlto();
+      });
+    } catch (e) {}
+  })();
+</script>
 <title>Mi confirmación · Ania XV</title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="recursos/icono.svg" type="image/svg+xml">
@@ -164,7 +188,14 @@ $codigoDeLaUrl = htmlspecialchars(
 
   body {
     margin: 0;
+    /* svh y no dvh: dvh sigue el alto EN VIVO del navegador, así que
+       cambia de valor cada vez que la barra de Edge/Chrome en celular
+       aparece o desaparece, corriendo todo el contenido de golpe. svh es
+       un valor fijo (el espacio más chico posible) que no se recalcula
+       nunca — mismo criterio que el resto del sitio. */
     min-height: 100dvh;
+    min-height: 100svh;
+    min-height: var(--alto-fijo, 100svh);
     background: #1a0a00;
     color: #f5e6c8;
     font-family: Georgia, "Times New Roman", serif;

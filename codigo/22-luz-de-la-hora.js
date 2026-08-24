@@ -46,48 +46,104 @@
   const MOMENTOS = [
     {
       hora: 7,   // amanecer: rasante, rosado, todavia tibio
-      hazCentro:  [252, 206, 168, 0.50],
-      hazMedio:   [228, 160, 118, 0.31],
-      hazBorde:   [200, 124, 88, 0.11],
+      /* ⚡ HACES REBAJADOS (2026-08-21) — LA RONDA ANTERIOR SOLO TOCÓ EL
+         AMBIENTE, Y ESTO ES LO QUE SEGUÍA "OCULTANDO" LA PALETA NUEVA A
+         PLENA LUZ DEL DÍA. Los haces (los rayos que entran por la
+         ventana) van con mix-blend-mode: screen —suman luz, no la
+         tapan— y de día siguen siendo grandes y con bastante alfa
+         (pensados para el sepia cálido original). Sumar luz de sobra
+         sobre un fondo victoriano oscuro es exactamente lo que lo
+         aclara y disimula el cambio de paleta. Se bajó el alfa de los
+         tres (centro/medio/borde) en los tres momentos de día —7h, 13h,
+         18h— a un poco más de la mitad; la noche (20h en adelante) no se
+         tocó, ya estaba bien. */
+      hazCentro:  [252, 206, 168, 0.28],
+      hazMedio:   [228, 160, 118, 0.17],
+      hazBorde:   [200, 124, 88, 0.06],
       motaCentro: [255, 238, 216, 0.90],
       motaBorde:  [246, 208, 168, 0.52],
-      ambienteAlto: [148, 66, 60, 0.28],
-      tinteDeSala:  [126, 86, 92, 0.13],
+      /* ⚡ AMBIENTE Y TINTE DE SALA, REBAJADOS (2026-08-20) — ESTO ES LO
+         QUE ARREGLABA "EL FONDO SE VE NARANJA Y ALEGRE". Estos dos
+         valores tiñen el fondo entero (ver veloDeLaSala y --ambiente-alto
+         más abajo), y estaban calibrados para el fondo SEPIA CÁLIDO
+         original — el propio comentario de este archivo lo decía. Con el
+         fondo nuevo (victoriano oscuro, recursos/fondo-ornamental.svg)
+         ese naranja de mediodía/atardecer quedaba encima como un filtro
+         alegre sobre un cuadro que tiene que sentirse una cripta. Los
+         valores de noche (20h en adelante) NO se tocaron: ya eran oscuros
+         y encajan sin ajustar. */
+      ambienteAlto: [80, 26, 30, 0.22],
+      tinteDeSala:  [64, 28, 30, 0.09],
       tinteDelVelo: [96, 58, 58, 0.14],
       anguloDelSol: 34,
       largoDelHaz:  1.3,
       fuerzaDeVelas: 0.95,
       deNoche: 0.15,
+      /* ⚡ NUEVO (2026-08-21) — ESTO ES LO QUE DE VERDAD ARREGLA "EL FONDO
+         SE VE INVISIBLE DE DÍA". Hasta acá, TODO lo que cambiaba con la
+         hora era luz que se SUMA (haces, ambiente, tinte — todos con
+         blend mode o alfa aditiva). Pero hay dos capas que RESTAN
+         luminancia con negro plano y sin blend mode —#capa-fondo
+         (estilos/01-fundamentos.css) y #penumbra-profunda
+         (estilos/12-haces-de-luz.css)— y esas dos eran FIJAS, la misma
+         de día que de noche. Sobre un SVG que ya de por sí es oscuro
+         (la nueva paleta victoriano-oscuro), ese oscurecido fijo es lo
+         que lo volvía invisible en pleno día — no importaba cuánta luz
+         se sumara encima si por debajo se seguía restando la misma
+         sombra de siempre.
+
+         oscurecidoFijo reemplaza el .2 fijo de #capa-fondo.
+         profundidadDeSombra multiplica el tope del degradado de
+         profundidad de #penumbra-profunda (hoy .40) y su oscurecido de
+         márgenes (hoy .30). 1.0 = el oscurecimiento de HOY, para no
+         tocar la noche sin necesidad. */
+      oscurecidoFijo: 0.09,
+      profundidadDeSombra: 0.40,
     },
     {
       hora: 13,  // MEDIODIA: el NEUTRO. Luz plana, sin caracter.
-      hazCentro:  [252, 244, 214, 0.44],
-      hazMedio:   [232, 214, 168, 0.26],
-      hazBorde:   [210, 190, 128, 0.09],
+      // Mismo motivo que a las 7h: el mediodía es el momento de MÁS sol,
+      // así que sin bajar esto era el que más lavaba la paleta oscura.
+      hazCentro:  [252, 244, 214, 0.24],
+      hazMedio:   [232, 214, 168, 0.14],
+      hazBorde:   [210, 190, 128, 0.05],
       motaCentro: [255, 250, 236, 0.92],
       motaBorde:  [248, 238, 200, 0.54],
-      ambienteAlto: [146, 74, 44, 0.16],
+      // Mismo motivo que a las 7h: era un halo naranja/terroso brillante
+      // sobre un fondo que ahora es piedra vieja y sangre seca, no sepia.
+      ambienteAlto: [72, 30, 24, 0.13],
       tinteDeSala:  [255, 238, 206, 0.00],
       tinteDelVelo: [64, 46, 28, 0.06],
       anguloDelSol: 10,
       largoDelHaz:  0.85,
       fuerzaDeVelas: 0.7,
       deNoche: 0,
+      // El más bajo de los tres: mediodía es el momento de MÁS luz real,
+      // así que es donde menos oscurecido fijo hace falta.
+      oscurecidoFijo: 0.05,
+      profundidadDeSombra: 0.28,
     },
     {
       hora: 18,  // HORA DORADA: el momento mas caracteristico
-      hazCentro:  [255, 184, 88, 0.66],
-      hazMedio:   [236, 142, 62, 0.40],
-      hazBorde:   [206, 108, 44, 0.15],
+      // Mismo motivo: acá el alfa era el más alto de los tres momentos de
+      // día (.66/.40/.15), así que era el que más disimulaba la paleta.
+      hazCentro:  [255, 184, 88, 0.36],
+      hazMedio:   [236, 142, 62, 0.22],
+      hazBorde:   [206, 108, 44, 0.08],
       motaCentro: [255, 236, 196, 0.95],
       motaBorde:  [250, 206, 132, 0.58],
-      ambienteAlto: [168, 52, 18, 0.30],
-      tinteDeSala:  [198, 116, 48, 0.14],
+      // Mismo motivo: el naranja de "hora dorada" era justamente el más
+      // fuerte de los tres (alfa .30/.14) — el que más se notaba mal.
+      // Ahora es un rojo oscuro profundo, no un atardecer de postal.
+      ambienteAlto: [92, 24, 18, 0.24],
+      tinteDeSala:  [80, 26, 18, 0.11],
       tinteDelVelo: [104, 48, 16, 0.16],
       anguloDelSol: -26,
       largoDelHaz:  1.28,
       fuerzaDeVelas: 0.92,
       deNoche: 0.35,
+      oscurecidoFijo: 0.10,
+      profundidadDeSombra: 0.45,
     },
     {
       hora: 20,  // crepusculo malva: evita el gris al cruzar de calido a frio
@@ -103,6 +159,9 @@
       largoDelHaz:  1.32,
       fuerzaDeVelas: 0.98,
       deNoche: 0.85,
+      // Transición hacia la noche: ya bastante más oscuro que de día.
+      oscurecidoFijo: 0.16,
+      profundidadDeSombra: 0.70,
     },
     {
       hora: 23,  // NOCHE: oscura de verdad. La luna apenas insinua.
@@ -118,6 +177,12 @@
       largoDelHaz:  1.12,
       fuerzaDeVelas: 1.05,
       deNoche: 1,
+      // Referencia: igual al oscurecimiento fijo que ya había antes de
+      // este cambio (.2 y tope .40) — la noche queda exactamente como
+      // estaba, el usuario dio permiso para que sea así o más oscura,
+      // no para aclararla.
+      oscurecidoFijo: 0.20,
+      profundidadDeSombra: 1.00,
     },
   ];
 
@@ -137,6 +202,10 @@
     largoDelHaz:  1.05,
     fuerzaDeVelas: 1.08,
     deNoche: 1,
+    // Un poco más que la referencia de las 23h: es el punto más profundo
+    // de la noche, dentro del permiso del usuario de que se vea más oscuro.
+    oscurecidoFijo: 0.24,
+    profundidadDeSombra: 1.05,
   };
 
   /* Y el espejo del crepusculo, para el cruce frio -> calido del amanecer. */
@@ -154,6 +223,9 @@
     largoDelHaz:  1.34,
     fuerzaDeVelas: 1.00,
     deNoche: 0.6,
+    // Transición entre la madrugada profunda y el amanecer.
+    oscurecidoFijo: 0.16,
+    profundidadDeSombra: 0.75,
   };
 
 /**
@@ -256,6 +328,10 @@
     const { desde, hasta, t } = tramoDeLaHora(hora);
 
     const color = clave => mezclar(desde[clave], hasta[clave], t);
+    // Mezcla NÚMEROS simples (no colores) entre los dos momentos — se usa
+    // para anguloDelSol/largoDelHaz/etc. más abajo, y para las dos capas
+    // de sombra (oscurecidoFijo/profundidadDeSombra) acá arriba.
+    const mezclarNumero = (clave) => desde[clave] + (hasta[clave] - desde[clave]) * t;
 
     const fondoHaz = fondoDelHaz(color('hazCentro'), color('hazMedio'), color('hazBorde'));
     const fondoMota = fondoDeLaMota(color('motaCentro'), color('motaBorde'));
@@ -304,6 +380,17 @@
     const penumbra = document.getElementById('penumbra-profunda');
     if (penumbra) penumbra.style.setProperty('--tinte-del-velo', color('tinteDelVelo'));
 
+    /* ── LAS DOS CAPAS QUE RESTAN LUZ, AHORA CONSCIENTES DE LA HORA ──
+       Hasta acá, todo lo de arriba SUMA luz o tiñe (haces, ambiente, velo).
+       Pero #capa-fondo y #penumbra-profunda restan luminancia con negro
+       plano, sin blend mode, y hasta esta ronda eran fijas —la misma
+       sombra de día que de noche—. Sobre el fondo victoriano oscuro
+       nuevo, esa sombra fija era lo que lo volvía invisible en pleno día.
+       Ver la nota grande junto a `oscurecidoFijo` en el primer momento
+       del array MOMENTOS. */
+    if (fondo) fondo.style.setProperty('--oscurecido-fijo', mezclarNumero('oscurecidoFijo').toFixed(3));
+    if (penumbra) penumbra.style.setProperty('--profundidad-de-sombra', mezclarNumero('profundidadDeSombra').toFixed(3));
+
     /* ── LO QUE LEEN LOS BUCLES QUE YA EXISTEN ──
        Estos tres no son colores: son NÚMEROS que cambian el comportamiento
        de la escena, y son los que de verdad hacen que se note la hora.
@@ -324,9 +411,8 @@
                            atardecer/amanecer en vez de un apagón brusco a
                            una hora fija.
 
-       Se escriben una vez cada diez minutos: cuestan cero por cuadro. */
-    const mezclarNumero = (clave) => desde[clave] + (hasta[clave] - desde[clave]) * t;
-
+       Se escriben una vez cada diez minutos: cuestan cero por cuadro.
+       (mezclarNumero ya está definida arriba, junto a `color`.) */
     window.LuzDeLaHora = {
       anguloDelSol:  mezclarNumero('anguloDelSol'),
       largoDelHaz:   mezclarNumero('largoDelHaz'),

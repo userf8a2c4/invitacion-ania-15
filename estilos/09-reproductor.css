@@ -51,7 +51,13 @@
    ---------------------------------------------------------------------- */
 #controles-flotantes {
   position: fixed;
-  bottom: calc(var(--marco-grosor) + 1rem);
+  /* + env(safe-area-inset-bottom, 0px): con interactive-widget=overlays-content
+     (ver index.html) la barra del navegador en celular se SUPERPONE en vez
+     de empujar el contenido — sin este margen extra, estos controles
+     quedarían parcialmente tapados por la barra cuando está visible. El
+     valor de reserva 0px hace que en desktop y en navegadores sin esta
+     variable no cambie nada de lo de siempre. */
+  bottom: calc(var(--marco-grosor) + 1rem + env(safe-area-inset-bottom, 0px));
   right:  calc(var(--marco-grosor) + 1rem);
   z-index: 500;
 

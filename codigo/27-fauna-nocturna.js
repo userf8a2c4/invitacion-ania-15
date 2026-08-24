@@ -92,7 +92,10 @@
       zonasDeApliques[i].y = r.top + r.height / 2 + scrollActualY() - 45;
     }
   }
-  window.addEventListener('resize', rebotar(recalcularZonas, 250));
+  // alCambiarElAncho: ignora el 'resize' falso de la barra del navegador
+  // en celular (ver la nota en 02-utilidades.js) — recalcularZonas() relee
+  // getBoundingClientRect() del relicario y de cada aplique.
+  window.addEventListener('resize', alCambiarElAncho(rebotar(recalcularZonas, 250)));
 
 
   /* ─── 2. CREAR LOS BICHOS ─────────────────────────────────────────── */
