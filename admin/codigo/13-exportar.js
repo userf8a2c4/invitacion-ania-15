@@ -369,9 +369,25 @@ function exportarPresupuesto(formato) {
  * Reusa armarPdf() con bloques armados a mano en vez de volcar tablas
  * completas — mismo motor de impresión, contenido curado.
  *
- * @returns {void}
+ * ⚡ AMPLIADO (2026-08-24), A PEDIDO DE UN BRIEF PUNTUAL: el informe
+ * dejó de ser solo un estado de cuenta y pasó a ser herramienta de
+ * decisión — desglose COMPLETO por categoría (antes solo mostraba las
+ * cerca del techo), exposición restante real (aclara la confusión de
+ * "por pagar $0"), 3 escenarios de padrinos, invitados + costo por
+ * persona, flujo de caja de 90 días, semáforo por categoría, más
+ * recomendaciones y un checklist de decisiones pendientes. Todo lo que
+ * ya funcionaba (panorama, compromiso de padrinos, padrino por padrino,
+ * categorías cerca del techo, próximos pagos, lectura) se dejó tal cual
+ * y se agregó al lado — no se reescribió nada de eso.
+ *
+ * TODO SALE DE `DINERO`, YA CARGADO — nada de esto pide datos nuevos al
+ * servidor, salvo la meta de invitados (ajustes.php, ver más abajo),
+ * porque ese dato no existía en ningún lado todavía. Por eso la función
+ * pasó a ser async: es la única espera real.
+ *
+ * @returns {Promise<void>}
  */
-function exportarResumenEjecutivoDinero() {
+async function exportarResumenEjecutivoDinero() {
   if (!DINERO) { avisar('Todavía no cargaron los datos.', true); return; }
 
   const t = DINERO.totales;
@@ -504,28 +520,241 @@ function exportarResumenEjecutivoDinero() {
     lectura.push('No hay pagos pendientes cargados en este momento.');
   }
 
+  /* EXPOSICIÓN RESTANTE REAL — aclara la confusión de "por pagar $0".
+   *
+   * `t.por_pagar` (arriba, en "Panorama general") solo suma pagos
+   * PENDIENTES CON FECHA DE VENCIMIENTO CARGADA — si nadie anotó cuotas
+   * todavía, da $0, y $0 ahí NO quiere decir "el evento ya está cubierto".
+   * La exposición real es costo total menos lo que consta como pagado,
+   * sin importar si hay una cuota anotada o no. Las dos cifras se
+   * muestran juntas, a propósito, para que esa diferencia sea visible. */
+  const exposicionRestante = Math.max(0, t.costo - t.pagado);
+
+  /* Gastos con monto real cargado pero sin NINGÚN pago registrado — ni
+   * pendiente ni pagado. Es una zona gris real (¿ya se pagó en efectivo
+   * y no se anotó, o falta pagarlo?), así que se cuenta y se declara,
+   * no se asume ninguna de las dos cosas. */
+  const idsGastoConPago = new Set(
+    (DINERO.pagos || []).filter(p => p.gasto_id).map(p => Number(p.gasto_id))
+  );
+  const gastosSinPago = (DINERO.gastos || [])
+    .filter(g => Number(g.monto_real) > 0 && !idsGastoConPago.has(Number(g.id)));
+  const montoGastosSinPago = gastosSinPago.reduce((s, g) => s + Number(g.monto_real), 0);
+
+  /* DESGLOSE COMPLETO POR CATEGORÍA — todas, no solo las cerca del techo.
+   * `comprometido` = lo gastado que todavía no tiene un pago 'pagado' en
+   * contra (aproximación real dada la base: un pago no distingue a qué
+   * PARTE del gasto cubre, así que se resta el total pagado del gasto
+   * completo — con un solo pago total por gasto, que es el caso normal,
+   * da exacto). Semáforo con el mismo umbral que ya usa toda la pantalla
+   * (`CONFIGURACION.dinero.avisarDesde`), no uno inventado para el PDF. */
+  const pagadoPorGasto = {};
+  (DINERO.pagos || []).forEach(p => {
+    if (!p.gasto_id || p.estado !== 'pagado') return;
+    const id = Number(p.gasto_id);
+    pagadoPorGasto[id] = (pagadoPorGasto[id] || 0) + Number(p.monto);
+  });
+  const SEMAFORO_TEXTO = { rojo: '🔴 Rojo', amarillo: '🟡 Cerca', verde: '🟢 Bien', sin_techo: '⚪ Sin techo' };
+  const categoriasCompletas = (DINERO.categorias || []).map(c => {
+    const techo = Number(c.techo) || 0;
+    const gastado = Number(c.gastado) || 0;
+    const pagadoCategoria = (DINERO.gastos || [])
+      .filter(g => Number(g.categoria_id) === Number(c.id))
+      .reduce((s, g) => s + (pagadoPorGasto[Number(g.id)] || 0), 0);
+    const comprometido = Math.max(0, gastado - pagadoCategoria);
+    const semaforo = techo <= 0 ? 'sin_techo'
+      : gastado > techo ? 'rojo'
+      : gastado / techo >= CONFIGURACION.dinero.avisarDesde ? 'amarillo'
+      : 'verde';
+    return { nombre: c.nombre, techo: techo, planeado: Number(c.planeado) || 0,
+      gastado: gastado, comprometido: comprometido, semaforo: semaforo };
+  });
+  const desgloseCategorias = categoriasCompletas.length ? categoriasCompletas.map(c => [
+    c.nombre, monto(c.planeado), monto(c.gastado), monto(c.comprometido),
+    c.techo > 0 ? monto(Math.max(0, c.techo - c.gastado)) : 'sin techo',
+    c.techo > 0 ? porcentaje(c.gastado, c.techo) + '%' : '—',
+    SEMAFORO_TEXTO[c.semaforo],
+  ]) : [['(sin categorías cargadas todavía)', '', '', '', '', '', '']];
+
+  /* ESCENARIOS DE PADRINOS — optimista/base/pesimista.
+   *
+   * "Solo hablado" (dijo que sí, nada firme) cuenta $0 para liquidez en
+   * los escenarios base y pesimista, a propósito: es la regla del brief
+   * y la misma que ya rige "de tu bolsillo si nadie más entrega" arriba
+   * (que usa solo `entregado`). `optimista` es lo mismo que ya se
+   * calculó como `prometidoTotal`, y `pesimista` lo mismo que
+   * `entregadoTotal` — no se duplican, se reusan tal cual. */
+  const baseTotal = padrinosDinero
+    .filter(p => p.estado === 'confirmado' || p.estado === 'entregado')
+    .reduce((s, p) => s + (Number(p.monto) || 0), 0);
+  const escenariosPadrinos = padrinosDinero.length ? [
+    ['Optimista — todo lo prometido se entrega', monto(prometidoTotal), monto(Math.max(0, t.costo - prometidoTotal))],
+    ['Base — solo lo confirmado en firme o ya entregado', monto(baseTotal), monto(Math.max(0, t.costo - baseTotal))],
+    ['Pesimista — no entra nada más de lo ya entregado', monto(entregadoTotal), monto(Math.max(0, t.costo - entregadoTotal))],
+  ] : [];
+  const padrinosSoloHablados = padrinosDinero.filter(p => p.estado === 'hablado' && Number(p.monto) > 0);
+
+  /* INVITADOS Y COSTO POR PERSONA — la meta vive en ajustes.php (clave
+   * 'invitados_meta'), la única pieza de este bloque que no estaba ya
+   * cargada en DINERO. Es la única espera real de toda la función; si
+   * falla o no está cargada, se declara el hueco, no se inventa un
+   * número. Rotulado como promedio simple porque el esquema no separa
+   * costo fijo de variable — no existe un "costo marginal" real para
+   * calcular sin eso. */
+  let invitadosMeta = null;
+  try {
+    const r = await traer('ajustes.php?accion=obtener&clave=invitados_meta');
+    const n = r && r.valor !== null ? parseInt(r.valor, 10) : NaN;
+    invitadosMeta = Number.isFinite(n) && n > 0 ? n : null;
+  } catch (error) { invitadosMeta = null; }
+
+  const filasInvitados = [
+    ['Confirmados hasta hoy', String(t.confirmados || 0)],
+    ['Meta de invitados', invitadosMeta ? String(invitadosMeta) : 'sin meta cargada'],
+  ];
+  if (invitadosMeta) {
+    const escenariosInvitados = [
+      Math.round(invitadosMeta * 0.8), invitadosMeta, Math.round(invitadosMeta * 1.2),
+    ];
+    escenariosInvitados.forEach(cantidad => {
+      filasInvitados.push([
+        'Costo por persona con ' + cantidad + ' invitados (promedio simple, no marginal)',
+        monto(t.costo / cantidad),
+      ]);
+    });
+  }
+
+  /* FLUJO DE CAJA — próximos 90 días. Mismo criterio de scoping que ya
+   * usa "Por pagar" arriba (pagos del presupuesto activo, o sin gasto
+   * asociado); se arma acá y no reusando calendario.php porque ese
+   * endpoint no filtra por presupuesto activo y mezclaría pagos de un
+   * plan que no es el que se está viendo. */
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const limiteFlujo = new Date(hoy); limiteFlujo.setDate(limiteFlujo.getDate() + 90);
+  const flujoDeCaja = (DINERO.pagos || [])
+    .filter(p => {
+      if (!p.fecha_limite) return false;
+      const f = new Date(p.fecha_limite + 'T00:00:00');
+      return f >= hoy && f <= limiteFlujo;
+    })
+    .sort((a, b) => (a.fecha_limite < b.fecha_limite ? -1 : 1))
+    .map(p => [
+      comoFecha(p.fecha_limite),
+      p.concepto || p.gasto_concepto || 'Pago',
+      monto(p.monto),
+      p.estado === 'pagado' ? 'Pagado' : (diasHasta(p.fecha_limite) < 0 ? 'Atrasado' : 'Pendiente'),
+    ]);
+
+  /* RECOMENDACIONES AMPLIADAS — se agregan a `lectura`, no la reemplazan:
+   * las 2-3 líneas que ya arma el reporte siguen ahí, esto solo suma lo
+   * que el brief pide como lectura accionable de un asesor de verdad. */
+  categoriasCompletas.filter(c => c.semaforo === 'rojo').forEach(c => {
+    lectura.push('Congela nuevos gastos en «' + c.nombre + '»: ya superó su techo por ' +
+      monto(c.gastado - c.techo) + '.');
+  });
+  categoriasCompletas.filter(c => c.semaforo === 'amarillo').forEach(c => {
+    lectura.push('«' + c.nombre + '» está al ' + porcentaje(c.gastado, c.techo) +
+      '% de su techo — conviene revisar antes de aprobar más gasto ahí.');
+  });
+  padrinosSoloHablados.forEach(p => {
+    lectura.push('«' + p.nombre + '» prometió ' + monto(p.monto) +
+      ' pero sigue solo hablado — conviene pedirle que lo confirme por escrito, o bajarlo de lo comprometido.');
+  });
+  if (exposicionRestante > 0) {
+    lectura.push('Exposición real todavía por cubrir: ' + monto(exposicionRestante) +
+      ' (costo total menos lo pagado hasta hoy, exista o no una cuota anotada con vencimiento).');
+  }
+  if (montoGastosSinPago > 0) {
+    lectura.push(pluralizar(gastosSinPago.length, 'gasto tiene', 'gastos tienen') + ' ' + monto(montoGastosSinPago) +
+      ' cargados sin ningún pago registrado — confirma si ya se pagaron en efectivo o si siguen pendientes.');
+  }
+  if (!invitadosMeta) {
+    lectura.push('No hay una meta de invitados definida todavía — sin ella, el costo por invitado confirmado es la única referencia posible.');
+  }
+
+  /* DECISIONES PENDIENTES — el mismo payload, en forma de checklist para
+   * la reunión, no una fuente de datos aparte. */
+  const decisiones = [];
+  categoriasCompletas.filter(c => c.semaforo === 'rojo').forEach(c => {
+    decisiones.push('«' + c.nombre + '» superó su techo — ¿se acepta el nuevo total o se recorta el gasto?');
+  });
+  padrinosSoloHablados.forEach(p => {
+    decisiones.push('«' + p.nombre + '»: ¿se confirma por escrito, o se retira de lo comprometido?');
+  });
+  if (montoGastosSinPago > 0) {
+    decisiones.push('Confirmar el estado real de ' + pluralizar(gastosSinPago.length, 'gasto', 'gastos') +
+      ' sin pago registrado (' + monto(montoGastosSinPago) + ').');
+  }
+  categoriasCompletas.filter(c => c.semaforo === 'sin_techo').forEach(c => {
+    decisiones.push('Definir un techo para «' + c.nombre + '» — sin techo no hay semáforo posible.');
+  });
+  if (!invitadosMeta) decisiones.push('Definir la meta de invitados de esta semana.');
+
+  /* SALUD DEL PRESUPUESTO — una sola línea, arriba de todo. Mismos
+   * umbrales de siempre, ningún número nuevo: rojo si alguna categoría
+   * está pasada de su techo; si no, amarillo si alguna está cerca (85%+)
+   * o si la exposición restante es una porción material del costo total
+   * (15% o más); si no, verde. */
+  const hayRoja = categoriasCompletas.some(c => c.semaforo === 'rojo');
+  const hayAmarilla = categoriasCompletas.some(c => c.semaforo === 'amarillo');
+  const exposicionMaterial = t.costo > 0 && (exposicionRestante / t.costo) >= 0.15;
+  const salud = hayRoja ? '🔴 ROJO' : (hayAmarilla || exposicionMaterial) ? '🟡 AMARILLO' : '🟢 VERDE';
+  const saludDetalle = 'Exposición restante: ' + monto(exposicionRestante) +
+    (padrinosDinero.length ? ' · Padrinos, escenario base: ' + monto(baseTotal) + ' de ' + monto(t.costo) : '') +
+    ' · ' + (hayRoja ? categoriasCompletas.filter(c => c.semaforo === 'rojo').length : 0) + ' categoría(s) al rojo' +
+    (t.por_pagar > 0 ? ' · ' + t.por_pagar_cuantos + ' pago(s) pendiente(s) con vencimiento' : ' · sin pagos vencidos cargados') +
+    (invitadosMeta ? '' : ' · falta definir meta de invitados');
+
   const bloques = [
+    { titulo: 'Salud del presupuesto',
+      encabezados: ['Estado', 'Detalle'],
+      filas: [[salud, saludDetalle]] },
     { titulo: 'Panorama general', encabezados: ['Concepto', 'Monto'], filas: panorama },
+    { titulo: 'Exposición restante real',
+      encabezados: ['Concepto', 'Monto'],
+      filas: [
+        ['Costo total', monto(t.costo)],
+        ['Pagado hasta hoy', monto(t.pagado)],
+        ['Exposición restante (costo − pagado)', monto(exposicionRestante)],
+        ['"Por pagar" con vencimiento anotado — no es lo mismo', monto(t.por_pagar) +
+          '. Un "$0 por pagar" solo dice que no hay cuotas con fecha cargada — no dice que el evento esté cubierto.'],
+        ['Gastos cargados sin ningún pago registrado', gastosSinPago.length + ' (' + monto(montoGastosSinPago) + ')'],
+      ] },
   ];
 
   if (padrinos.length) {
     bloques.push({ titulo: 'Compromiso de los padrinos',
       encabezados: ['Concepto', 'Monto'], filas: padrinos });
+    bloques.push({ titulo: 'Escenarios de padrinos',
+      encabezados: ['Escenario', 'Aportan los padrinos', 'Sale de tu bolsillo'],
+      filas: escenariosPadrinos });
     bloques.push({ titulo: 'Padrino por padrino',
       encabezados: ['Padrino', 'Apadrina', 'Monto', 'Estado'],
       filas: detallePadrinos });
   }
 
   bloques.push(
+    { titulo: 'Desglose por categoría',
+      encabezados: ['Categoría', 'Presupuestado', 'Gastado', 'Comprometido', 'Disponible', '% usado', 'Semáforo'],
+      filas: desgloseCategorias },
     { titulo: 'Categorías cerca o pasadas de su techo',
       encabezados: ['Categoría', 'Situación', 'Gastado / Techo'],
-      filas: alertasTecho },
+      filas: alertasTecho.length ? alertasTecho : [['(ninguna categoría cerca de su techo)', '', '']] },
+    { titulo: 'Invitados y costo por persona',
+      encabezados: ['Concepto', 'Valor'],
+      filas: filasInvitados },
+    { titulo: 'Flujo de caja — próximos 90 días',
+      encabezados: ['Vence', 'Concepto', 'Monto', 'Estado'],
+      filas: flujoDeCaja.length ? flujoDeCaja : [['(sin pagos con vencimiento cargado en los próximos 90 días)', '', '', '']] },
     { titulo: 'Próximos pagos',
       encabezados: ['Concepto', 'Vence', 'Estado', 'Monto'],
       filas: proximosPagos },
     { titulo: 'Lectura del asesor',
       encabezados: ['Diagnóstico'],
       filas: lectura.map(l => [l]) },
+    { titulo: 'Decisiones pendientes para la reunión',
+      encabezados: ['☐', 'Decisión'],
+      filas: decisiones.length ? decisiones.map(d => ['☐', d]) : [['—', 'Sin decisiones puntuales detectadas por ahora.']] },
   );
 
   armarPdf('Resumen ejecutivo · Presupuesto XV de Ania', bloques);
