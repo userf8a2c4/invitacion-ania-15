@@ -72,6 +72,12 @@ const NOVEDADES = [
     selector: '[data-indice="comandos-asistente"]',
     texto: 'Nuevo: acá abajo podés enseñarle al asistente tu propia jerga cariñosa (como "abacho") y las frases que te gusta que te digan — las va a usar cuando se las escribas en el chat.',
   },
+  {
+    id: 'v59-reglas-de-acomodo',
+    pantalla: 'mesas',
+    selector: '#mesa-reglas',
+    texto: 'Este botón cambió de nombre: ahora se llama "Reglas de acomodo" y junta todo lo que le podés enseñar al acomodo automático — quién va junto, quién no, y ahora también quién se sienta aparte de su familia.',
+  },
 ];
 
 

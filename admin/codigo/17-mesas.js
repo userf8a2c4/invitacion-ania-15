@@ -386,7 +386,7 @@ function bloqueBotonesDeMesas() {
       '</button>' +
       '<span style="display:flex;align-items:center">' +
         ayuda('mesas.acomodar') + '</span>' +
-      '<button class="boton" style="flex:1" id="mesa-opciones">Opciones</button>' +
+      '<button class="boton" style="flex:1" id="mesa-reglas">Reglas de acomodo</button>' +
     '</div>';
 }
 
@@ -606,7 +606,7 @@ function engancharMesas(cuerpo) {
   const refrescar = () => pintarMesas(cuerpo);
 
   buscar('#mesa-auto', cuerpo).addEventListener('click', () => acomodarSolo(refrescar));
-  buscar('#mesa-opciones', cuerpo).addEventListener('click', () => abrirOpcionesDeMesas(refrescar));
+  buscar('#mesa-reglas', cuerpo).addEventListener('click', () => abrirReglasDeAcomodo(refrescar));
 
   /* Estos tres pueden no estar según qué vista se esté mirando. */
   const nueva = buscar('#mesa-nueva', cuerpo);
@@ -1229,6 +1229,13 @@ function abrirPreferenciasDe(quien, refrescar) {
                  ayuda: 'Para la silla alta de un bebé, un andador, o alguien ' +
                         'que viene sin confirmar.' }) +
 
+    campoLista({
+      id: 'pref-mesa-preferida', rotulo: 'Mesa preferida',
+      valor: quien.mesa_preferida ? String(quien.mesa_preferida) : '',
+      opciones: [{ valor: '', texto: 'Sin preferencia' }].concat(
+        (MESAS.mesas || []).map(m => ({ valor: String(m.id), texto: m.nombre }))),
+    }) +
+
     '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">' +
       'No sentarlo con' +
     '</div>' +
@@ -1282,6 +1289,7 @@ function abrirPreferenciasDe(quien, refrescar) {
         confirmacion_id: quien.id,
         grupo_id: valorDe('pref-grupo', cuerpo),
         sillas_extra: valorDe('pref-extra', cuerpo),
+        mesa_preferida: valorDe('pref-mesa-preferida', cuerpo),
       });
 
       const conQuien = valorDe('pref-pelea', cuerpo);
@@ -1322,15 +1330,77 @@ function abrirPreferenciasDe(quien, refrescar) {
 }
 
 /**
- * Las opciones del acomodo: grupos, vaciar y el automático.
+ * Todas las "unidades" que se pueden sentar (familias enteras y
+ * personas que ya se sacaron de la suya), en un solo arreglo — mismo
+ * criterio que arma MESAS del lado del servidor. Se usa acá para
+ * buscar a cualquiera por nombre sin tener que abrirlo primero.
+ *
+ * @returns {Array}
+ */
+function todasLasUnidadesDeMesas() {
+  return (MESAS.sin_sentar || []).concat(...(MESAS.mesas || []).map(m => m.invitados));
+}
+
+/**
+ * El nombre de una unidad puntual, buscándola por tipo + id.
+ *
+ * @param {string} tipo 'confirmacion' | 'acompanante'
+ * @param {number} id
+ * @returns {string}
+ */
+function nombreDeUnidadDeMesas(tipo, id) {
+  const u = todasLasUnidadesDeMesas().find(x => x.tipo === tipo && x.id === Number(id));
+  return u ? u.nombre : 'alguien';
+}
+
+/**
+ * Los dos nombres de una fila de `peleas` — familia con familia, o
+ * persona puntual con persona puntual (Fase 9). Mismo criterio que
+ * indiceDePeleas() en _lib/mesas.php.
+ *
+ * @param {Object} pelea
+ * @returns {[string, string]}
+ */
+function nombresDePelea(pelea) {
+  const acompA = Number(pelea.acompanante_a) || 0;
+  const acompB = Number(pelea.acompanante_b) || 0;
+
+  if (acompA > 0 && acompB > 0) {
+    return [nombreDeUnidadDeMesas('acompanante', acompA), nombreDeUnidadDeMesas('acompanante', acompB)];
+  }
+  return [nombreDeUnidadDeMesas('confirmacion', pelea.invitado_a),
+          nombreDeUnidadDeMesas('confirmacion', pelea.invitado_b)];
+}
+
+/**
+ * Todo lo que le enseña al acomodo automático cómo sentar a la gente,
+ * en un solo lugar con nombres en criollo — antes repartido entre un
+ * botón genérico ("Opciones") y un botón de texto escondido al pie de
+ * la ficha de cada persona.
+ *
+ * Las acciones destructivas (deshacer, vaciar) quedan abajo de todo,
+ * separadas con una línea, como "Zona de riesgo": no son reglas, son
+ * emergencias, y mezclarlas con la configuración era parte de por qué
+ * esto no se encontraba fácil.
  *
  * @param {Function} refrescar
  * @returns {void}
  */
-function abrirOpcionesDeMesas(refrescar) {
-  const cuerpo = abrirHoja('Opciones del acomodo',
+function abrirReglasDeAcomodo(refrescar) {
+  const svgX =
+    '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
+      '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" ' +
+            'stroke-width="1.5" stroke-linecap="round"/></svg>';
 
-    '<div class="tarjeta__titulo">Grupos</div>' +
+  const unidades = todasLasUnidadesDeMesas();
+  const familias = unidades.filter(u => u.tipo === 'confirmacion');
+  const opcionesDePersonas = unidades.map(u =>
+    ({ valor: (u.tipo === 'acompanante' ? 'a' : 'c') + u.id, texto: u.nombre }));
+
+  const cuerpo = abrirHoja('Reglas de acomodo',
+
+    /* ── 1. Quién va junto ─────────────────────────────────────────── */
+    '<div class="tarjeta__titulo">Quién va junto</div>' +
     '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
       'La gente del mismo grupo se sienta junta. Los de orden más bajo ' +
       'eligen mesa primero.' +
@@ -1344,11 +1414,7 @@ function abrirOpcionesDeMesas(refrescar) {
               '<span class="lista__pie">Orden ' + seguro(g.orden) + '</span>' +
             '</span>' +
             '<button class="boton-icono" data-borrar-grupo="' + seguro(g.id) + '" ' +
-                    'aria-label="Borrar grupo">' +
-              '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
-                '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" ' +
-                      'stroke-width="1.5" stroke-linecap="round"/></svg>' +
-            '</button>' +
+                    'aria-label="Borrar grupo">' + svgX + '</button>' +
           '</div>'
         ).join('')
       : '<p class="vacio__texto">Todavía no hay grupos.</p>') +
@@ -1359,9 +1425,61 @@ function abrirOpcionesDeMesas(refrescar) {
       campoTexto({ id: 'gr-orden', rotulo: 'Orden', tipo: 'number', valor: 50 }) +
     '</div>' +
     '<button class="boton boton--ancho" id="gr-crear">Crear el grupo</button>' +
+    '<p class="vacio__texto" style="margin-top:4px">' +
+      'Para poner a alguien DENTRO de un grupo: tocalo en "Sin mesa" o en el ' +
+      'plano → "Grupo, sillas extra y reglas".' +
+    '</p>' +
 
+    /* ── 2. Quién no va junto ──────────────────────────────────────── */
+    '<div class="tarjeta__titulo" style="margin-top:var(--esp-4)">Quién no va junto</div>' +
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+      'El acomodo automático nunca los sienta en la misma mesa.' +
+    '</p>' +
+
+    ((MESAS.peleas || []).length
+      ? (MESAS.peleas || []).map(p => {
+          const [nombreA, nombreB] = nombresDePelea(p);
+          return '<div class="lista__fila">' +
+            '<span class="lista__cuerpo">' +
+              '<span class="lista__titulo">' + seguro(nombreA + ' — ' + nombreB) + '</span>' +
+              (p.motivo ? '<span class="lista__pie">' + seguro(p.motivo) + '</span>' : '') +
+            '</span>' +
+            '<button class="boton-icono" data-quitar-pelea-hub="' + seguro(p.id) + '" ' +
+                    'aria-label="Quitar regla">' + svgX + '</button>' +
+          '</div>';
+        }).join('')
+      : '<p class="vacio__texto" style="font-style:italic">Por ahora, ninguna regla puesta.</p>') +
+
+    (opcionesDePersonas.length >= 2
+      ? '<div class="campo-par" style="margin-top:var(--esp-2)">' +
+          campoLista({ id: 'pel-a', rotulo: 'Esta persona',
+            opciones: [{ valor: '', texto: 'Elegir…' }].concat(opcionesDePersonas) }) +
+          campoLista({ id: 'pel-b', rotulo: 'No se sienta con',
+            opciones: [{ valor: '', texto: 'Elegir…' }].concat(opcionesDePersonas) }) +
+        '</div>' +
+        campoTexto({ id: 'pel-motivo', rotulo: 'Motivo (opcional)',
+                     pista: 'Ej. "no se hablan", "pelea de terrenos"…' }) +
+        '<button class="boton boton--ancho" id="pel-crear">Agregar la regla</button>'
+      : '<p class="vacio__texto">Hace falta que confirmen al menos dos para poder elegir.</p>') +
+
+    /* ── 3. Se sienta aparte de su familia ─────────────────────────── */
     '<div class="tarjeta__titulo" style="margin-top:var(--esp-4)">' +
-      'Al recibir una confirmación' +
+      'Se sienta aparte de su familia' +
+    '</div>' +
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+      'Para cuando una persona de una familia necesita su propio grupo o ' +
+      'mesa, sin que el resto se mueva con ella.' +
+    '</p>' +
+    (familias.length
+      ? campoLista({ id: 'rp-familia', rotulo: 'De qué familia',
+          opciones: [{ valor: '', texto: 'Elegir…' }].concat(
+            familias.map(f => ({ valor: String(f.id), texto: f.nombre }))) }) +
+        '<button class="boton boton--ancho" id="rp-elegir-familia">Elegir a la persona</button>'
+      : '<p class="vacio__texto">Todavía no hay confirmaciones para elegir.</p>') +
+
+    /* ── 4. Al confirmar alguien nuevo ─────────────────────────────── */
+    '<div class="tarjeta__titulo" style="margin-top:var(--esp-4)">' +
+      'Al confirmar alguien nuevo' +
     '</div>' +
     campoCasilla({ id: 'auto-confirmar',
                    rotulo: 'Sentarlo solo apenas confirma',
@@ -1369,20 +1487,21 @@ function abrirOpcionesDeMesas(refrescar) {
     '<p class="vacio__texto">Busca la mejor mesa respetando su grupo y las ' +
       'reglas. Si no hay lugar, queda sin mesa y te avisa aquí.</p>' +
 
-    '<div class="tarjeta__titulo" style="margin-top:var(--esp-4)">' +
-      'Si algo salió mal' +
-    '</div>' +
+    /* ── Zona de riesgo ─────────────────────────────────────────────
+     * Deshacer y vaciar no son reglas: son emergencias. Separadas con
+     * una línea a propósito, para que no compitan visualmente con la
+     * configuración de arriba. */
+    '<div style="border-top:1px solid var(--borde);margin:var(--esp-4) 0 var(--esp-3)"></div>' +
+    '<div class="tarjeta__titulo" style="color:var(--alerta)">Zona de riesgo</div>' +
+
     '<button class="boton boton--ancho" id="mesa-deshacer" ' +
-            'style="margin-bottom:var(--esp-1)">' +
+            'style="margin-top:var(--esp-2);margin-bottom:var(--esp-1)">' +
       'Volver al acomodo anterior' +
     '</button>' +
     '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
       'Antes de cada acomodo automático se guarda cómo estaba. Esto ' +
       'devuelve todo a la última foto.</p>' +
 
-    '<div class="tarjeta__titulo" style="margin-top:var(--esp-4)">' +
-      'Empezar de nuevo' +
-    '</div>' +
     '<button class="boton boton--ancho boton--peligro" id="mesa-vaciar" ' +
             'style="margin-bottom:var(--esp-1)">' +
       'Vaciar las mesas (respeta lo fijado)' +
@@ -1418,6 +1537,59 @@ function abrirOpcionesDeMesas(refrescar) {
       } catch (error) { avisar(error.message, true); }
     });
   });
+
+  const crearPelea = buscar('#pel-crear', cuerpo);
+  if (crearPelea) {
+    crearPelea.addEventListener('click', async () => {
+      const a = valorDe('pel-a', cuerpo);
+      const b = valorDe('pel-b', cuerpo);
+      if (!a || !b) { avisar('Elegí a las dos personas.', true); return; }
+      if (a === b) { avisar('Elegí a dos personas distintas.', true); return; }
+
+      const cuerpoPelea = { motivo: valorDe('pel-motivo', cuerpo) };
+      if (a[0] === 'a' && b[0] === 'a') {
+        cuerpoPelea.acompanante_a = Number(a.slice(1));
+        cuerpoPelea.acompanante_b = Number(b.slice(1));
+      } else if (a[0] === 'c' && b[0] === 'c') {
+        cuerpoPelea.invitado_a = Number(a.slice(1));
+        cuerpoPelea.invitado_b = Number(b.slice(1));
+      } else {
+        avisar('Por ahora, la regla tiene que ser entre dos familias, o entre ' +
+               'dos personas que ya se sientan aparte de la suya — no se puede ' +
+               'mezclar una cosa con la otra.', true);
+        return;
+      }
+
+      try {
+        await mandar('mesas.php?accion=pelea', cuerpoPelea);
+        cerrarHoja(true);
+        avisar('Regla agregada.');
+        refrescar();
+      } catch (error) { avisar(error.message, true); }
+    });
+  }
+
+  buscarTodos('[data-quitar-pelea-hub]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', async () => {
+      if (!confirmarAccion('¿Quitar esta regla?\n\n' +
+                           'Estas dos personas van a poder quedar en la misma mesa.')) return;
+      try {
+        await mandar('mesas.php?accion=borrar_pelea', { id: boton.dataset.quitarPeleaHub });
+        cerrarHoja(true);
+        avisar('Regla eliminada.');
+        refrescar();
+      } catch (error) { avisar(error.message, true); }
+    });
+  });
+
+  const elegirFamilia = buscar('#rp-elegir-familia', cuerpo);
+  if (elegirFamilia) {
+    elegirFamilia.addEventListener('click', () => {
+      const id = Number(valorDe('rp-familia', cuerpo));
+      if (!id) { avisar('Elegí una familia.', true); return; }
+      abrirReglaDePersona(id, refrescar);
+    });
+  }
 
   buscar('#auto-confirmar', cuerpo).addEventListener('change', async evento => {
     try {
@@ -1460,4 +1632,127 @@ function abrirOpcionesDeMesas(refrescar) {
       refrescar();
     } catch (error) { avisar(error.message, true); }
   });
+}
+
+/**
+ * A quién, de una familia puntual, se puede sacar para que se siente
+ * aparte — Fase 9 del motor (mesas.php?accion=regla_persona), que hasta
+ * esta ronda no tenía ningún botón en toda la aplicación.
+ *
+ * @param {number} confirmacionId
+ * @param {Function} refrescar
+ * @returns {Promise<void>}
+ */
+async function abrirReglaDePersona(confirmacionId, refrescar) {
+  const cuerpo = abrirHoja('Se sienta aparte', '<p class="vacio__texto">Cargando…</p>');
+
+  let personas;
+  try {
+    personas = await traer('mesas.php?accion=personas_de&confirmacion_id=' + confirmacionId);
+  } catch (error) {
+    cuerpo.innerHTML = '<p class="aviso-error">' + seguro(error.message) + '</p>';
+    return;
+  }
+
+  if (!personas.length) {
+    cuerpo.innerHTML = '<p class="vacio__texto">' +
+      'Esta familia todavía no tiene a sus integrantes nombrados uno por ' +
+      'uno — se cargan desde su ficha, en Invitados.</p>';
+    return;
+  }
+
+  cuerpo.innerHTML =
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+      'Elegí a quién sienta aparte de su familia.' +
+    '</p>' +
+    personas.map(p =>
+      '<button class="lista__fila" data-persona="' + seguro(p.id) + '">' +
+        '<span class="lista__cuerpo">' +
+          '<span class="lista__titulo">' + seguro(p.nombre) + '</span>' +
+          (p.tiene_regla
+            ? '<span class="lista__pie">Ya se sienta aparte' +
+              (p.grupo_nombre ? ' · ' + seguro(p.grupo_nombre) : '') + '</span>'
+            : '') +
+        '</span>' +
+      '</button>'
+    ).join('');
+
+  buscarTodos('[data-persona]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', () => {
+      const persona = personas.find(p => p.id === Number(boton.dataset.persona));
+      if (persona) pintarFormularioDeReglaDePersona(cuerpo, persona, refrescar);
+    });
+  });
+}
+
+/**
+ * El formulario para una persona puntual: su propio grupo, mesa
+ * preferida y una nota — o devolverla a su familia si ya tenía regla.
+ *
+ * @param {Element} cuerpo - El de abrirReglaDePersona().
+ * @param {Object} persona - Fila de mesas.php?accion=personas_de.
+ * @param {Function} refrescar
+ * @returns {void}
+ */
+function pintarFormularioDeReglaDePersona(cuerpo, persona, refrescar) {
+  cuerpo.innerHTML =
+    '<div class="tarjeta__titulo">' + seguro(persona.nombre) + '</div>' +
+
+    campoLista({
+      id: 'rp-grupo', rotulo: 'Grupo',
+      valor: persona.grupo_id ? String(persona.grupo_id) : '',
+      opciones: [{ valor: '', texto: 'Sin grupo' }].concat(
+        (MESAS.grupos || []).map(g => ({ valor: String(g.id), texto: g.nombre }))),
+    }) +
+
+    campoLista({
+      id: 'rp-mesa', rotulo: 'Mesa preferida',
+      valor: persona.mesa_preferida ? String(persona.mesa_preferida) : '',
+      opciones: [{ valor: '', texto: 'Sin preferencia' }].concat(
+        (MESAS.mesas || []).map(m => ({ valor: String(m.id), texto: m.nombre }))),
+    }) +
+
+    campoTexto({ id: 'rp-notas', rotulo: 'Nota (opcional)', valor: persona.notas || '' }) +
+
+    '<p class="vacio__texto" style="margin:var(--esp-2) 0">' +
+      'El acomodo automático la va a tratar como su propia unidad — no ' +
+      'como parte del bloque familiar.' +
+    '</p>' +
+
+    pieDeFormulario('Guardar') +
+
+    (persona.tiene_regla
+      ? '<button class="boton boton--ancho" id="rp-devolver" style="margin-top:var(--esp-1)">' +
+          'Devolver a su familia' +
+        '</button>'
+      : '');
+
+  buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
+    try {
+      await mandar('mesas.php?accion=regla_persona', {
+        acompanante_id: persona.id,
+        grupo_id: valorDe('rp-grupo', cuerpo),
+        mesa_preferida: valorDe('rp-mesa', cuerpo),
+        notas: valorDe('rp-notas', cuerpo),
+      });
+      cerrarHoja(true);
+      avisar(persona.nombre + ' ahora se sienta aparte de su familia.');
+      refrescar();
+    } catch (error) { avisar(error.message, true); }
+  });
+
+  const devolver = buscar('#rp-devolver', cuerpo);
+  if (devolver) {
+    devolver.addEventListener('click', async () => {
+      if (!confirmarAccion(persona.nombre + ' vuelve a viajar con su familia. ¿Seguro?')) return;
+      try {
+        await mandar('mesas.php?accion=regla_persona', {
+          acompanante_id: persona.id, grupo_id: 0, mesa_preferida: 0, notas: '',
+        });
+        cerrarHoja(true);
+        avisar('Listo.');
+        refrescar();
+      } catch (error) { avisar(error.message, true); }
+    });
+  }
 }
