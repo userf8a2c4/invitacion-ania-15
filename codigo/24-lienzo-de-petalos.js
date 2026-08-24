@@ -227,6 +227,23 @@
       plano.lienzo.style.width  = ancho + 'px';
       plano.lienzo.style.height = alto  + 'px';
     }
+
+    /* ⚡ REPINTAR ACÁ MISMO, NO ESPERAR AL PRÓXIMO CUADRO.
+     * Asignar .width/.height es lo que redimensiona el lienzo — y de
+     * paso, como efecto de lado del propio navegador, lo BORRA entero
+     * al instante (ningún pétalo hasta el próximo repintado). En un
+     * equipo fluido eso pasa en menos de un cuadro y no se nota; pero
+     * `calidad-cambio` (la razón más común para llegar hasta acá,
+     * junto con el resize) se dispara justo cuando el equipo va
+     * atrasado — el mismo caso en el que el próximo requestAnimationFrame
+     * puede tardar bastante más que un cuadro normal en llegar. Ese hueco
+     * es lo que se venía leyendo como "los pétalos desaparecen todos y
+     * arrancan de nuevo": no era un reinicio de la simulación (las
+     * posiciones de 06-petalos-con-fisica.js nunca se tocan acá), era el
+     * lienzo en blanco esperando su turno. Repintar ya mismo, con las
+     * posiciones que ya están calculadas, cierra ese hueco sin importar
+     * cuánto tarde el próximo cuadro. */
+    if (window.LienzoDePetalos.pintarUnCuadro) window.LienzoDePetalos.pintarUnCuadro();
   }
 
   /* ⚡ requestAnimationFrame EN VEZ DE LLAMAR DIRECTO — esto es lo que
