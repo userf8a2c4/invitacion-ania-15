@@ -33,12 +33,75 @@ require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/responder.php';
 require_once __DIR__ . '/_lib/correo.php';
 require_once __DIR__ . '/_lib/push.php';
+require_once __DIR__ . '/_lib/mesas.php';
 
 $desdeLaConsola = (php_sapi_name() === 'cli');
 
 if (!$desdeLaConsola && !llaveDeArranqueCorrecta($_GET['llave'] ?? '')) {
     responderMal('Llave incorrecta.', 403);
 }
+
+
+/* ─── AGENTES: LAS DOS CONDICIONES QUE JUSTIFICAN INTERRUMPIR ────────────
+   Ver 41-agente-dinero.js / 42-agente-mesas.js: son las MISMAS dos reglas
+   ahí (pago vencido, incompatibilidad sentada junta), reimplementadas
+   acá a propósito — un cron PHP no puede llamar código JS del navegador,
+   y estas dos son las únicas lo bastante urgentes como para justificar
+   una notificación con el panel cerrado (el resto de lo que sugieren los
+   agentes espera a que alguien abra la pestaña del asistente).
+
+   ⚠️ SI EL UMBRAL DE UNA REGLA CAMBIA DE UN LADO, TIENE QUE CAMBIAR DEL
+   OTRO A MANO. No hay forma de compartir código entre el navegador y un
+   cron PHP sin un runtime común — la duplicación es a propósito y chica,
+   no un descuido.
+
+   SOLO SE AVISA A QUIEN LO PIDIÓ, POR CATEGORÍA (ajustes, clave
+   'avisos_agentes_<id_de_usuario>', ver 15-instalar-y-avisos.js) — por
+   defecto nadie tiene nada prendido acá: es opt-in, nunca opt-out.
+
+   PARA NO REPETIR EL MISMO AVISO CADA 10 MINUTOS PARA SIEMPRE, se guarda
+   qué ids ya avisaron en ajustes ('agentes_ultimo_aviso') — una vez que
+   un pago o una pelea avisó, no vuelve a avisar aunque siga sin
+   resolverse. Es una simplificación a propósito: el objetivo es cortar
+   el spam, no armar una máquina de estados perfecta.
+
+   ⚠️ VA ACÁ ARRIBA, ANTES DE CUALQUIER `terminarAlarmas()` (que corta la
+   ejecución con exit/responderBien) — si esto viviera después del
+   procesamiento de alarmas, en la inmensa mayoría de las corridas (sin
+   ninguna alarma pendiente) nunca llegaría a correr. */
+if (existeTabla('ajustes')) {
+    $estadoAgentes = estadoDeAvisosDeAgentes();
+    $huboAlgoNuevo = false;
+
+    if (existeTabla('pagos')) {
+        $vencenHoy = consultarTodo(
+            "SELECT id FROM pagos WHERE estado = 'pendiente' AND fecha_limite = CURDATE()"
+        );
+        $nuevos = [];
+        foreach ($vencenHoy as $p) {
+            $id = (int) $p['id'];
+            if (!in_array($id, $estadoAgentes['pagos'], true)) $nuevos[] = $id;
+        }
+        if ($nuevos) {
+            avisarASuscripcionesDe('dinero_urgente');
+            $estadoAgentes['pagos'] = array_merge($estadoAgentes['pagos'], $nuevos);
+            $huboAlgoNuevo = true;
+        }
+    }
+
+    if (existeTabla('incompatibilidades') && existeTabla('mesas')) {
+        $peleasJuntas = peleasSentadasJuntas();
+        $nuevasPeleas = array_values(array_diff($peleasJuntas, $estadoAgentes['peleas']));
+        if ($nuevasPeleas) {
+            avisarASuscripcionesDe('mesas_urgente');
+            $estadoAgentes['peleas'] = array_merge($estadoAgentes['peleas'], $nuevasPeleas);
+            $huboAlgoNuevo = true;
+        }
+    }
+
+    if ($huboAlgoNuevo) guardarEstadoDeAvisosDeAgentes($estadoAgentes);
+}
+
 
 if (!existeTabla('alarmas')) {
     terminarAlarmas(['aviso' => 'Todavía no existe la tabla de alarmas.']);
@@ -118,6 +181,7 @@ foreach ($pendientes as $alarma) {
 $push = ['enviados' => 0];
 if ($hayQueAvisarPorPush) $push = avisarATodos();
 
+
 terminarAlarmas([
     'sonaron' => $sonaron,
     'push'    => $push,
@@ -192,6 +256,68 @@ function plantillaDeAlarma($alarma) {
     </p>
   </td></tr>
 </table></body></html>";
+}
+
+/**
+ * Los pagos/peleas que ya avisaron por push, para no repetir el mismo
+ * aviso en cada corrida del cron. Ver la nota grande de más arriba.
+ *
+ * @return array {pagos:int[], peleas:int[]}
+ */
+function estadoDeAvisosDeAgentes() {
+    $fila = consultarUno("SELECT valor FROM ajustes WHERE clave = 'agentes_ultimo_aviso'");
+    $datos = $fila ? json_decode($fila['valor'], true) : null;
+    return [
+        'pagos'  => is_array($datos['pagos'] ?? null) ? array_map('intval', $datos['pagos']) : [],
+        'peleas' => is_array($datos['peleas'] ?? null) ? array_map('intval', $datos['peleas']) : [],
+    ];
+}
+
+/**
+ * @param array $estado {pagos:int[], peleas:int[]}
+ * @return void
+ */
+function guardarEstadoDeAvisosDeAgentes($estado) {
+    $v = json_encode($estado, JSON_UNESCAPED_UNICODE);
+    ejecutar(
+        "INSERT INTO ajustes (clave, valor) VALUES ('agentes_ultimo_aviso', :v)
+         ON DUPLICATE KEY UPDATE valor = :v2",
+        [':v' => $v, ':v2' => $v]
+    );
+}
+
+/**
+ * Manda el push (vacío, como siempre — ver _lib/push.php) solo a las
+ * suscripciones de cuentas que prendieron ESTA categoría en Ajustes →
+ * Avisos (ajustes, clave 'avisos_agentes_<id>'). Por defecto nadie la
+ * tiene prendida: sin eso, nadie recibe nada nuevo.
+ *
+ * @param string $categoria 'dinero_urgente' | 'mesas_urgente'
+ * @return void
+ */
+function avisarASuscripcionesDe($categoria) {
+    if (!existeTabla('usuarios') || !existeTabla('suscripciones_push')) return;
+
+    $usuarios = consultarTodo('SELECT id FROM usuarios');
+    foreach ($usuarios as $u) {
+        $uid = (int) $u['id'];
+        $fila = consultarUno('SELECT valor FROM ajustes WHERE clave = :c',
+                             [':c' => 'avisos_agentes_' . $uid]);
+        if (!$fila) continue;
+
+        $prefs = json_decode($fila['valor'], true);
+        if (empty($prefs[$categoria])) continue;
+
+        $suscripciones = consultarTodo(
+            'SELECT * FROM suscripciones_push WHERE usuario_id = :u', [':u' => $uid]
+        );
+        foreach ($suscripciones as $suscripcion) {
+            $r = mandarAviso($suscripcion);
+            if (!$r['ok'] && !empty($r['caduca'])) {
+                borrar('suscripciones_push', (int) $suscripcion['id']);
+            }
+        }
+    }
 }
 
 /**

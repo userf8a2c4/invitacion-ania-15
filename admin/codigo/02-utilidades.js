@@ -194,6 +194,26 @@ function porcentaje(parte, total) {
   return Math.round((Number(parte) || 0) / t * 100);
 }
 
+/**
+ * El semáforo de una categoría de gasto, con el mismo umbral que ya usa
+ * toda la pantalla de dinero (CONFIGURACION.dinero.avisarDesde) — acá
+ * y no repetido en cada lugar que lo necesita, para que el resumen
+ * ejecutivo (13-exportar.js), la pantalla de categorías
+ * (09-vista-dinero.js) y el agente de dinero (41-agente-dinero.js)
+ * nunca puedan decir cosas distintas sobre la misma categoría.
+ *
+ * @param {{techo:number, gastado:number}} categoria
+ * @returns {'rojo'|'amarillo'|'verde'|'sin_techo'}
+ */
+function semaforoDeCategoria(categoria) {
+  const techo = Number(categoria.techo) || 0;
+  const gastado = Number(categoria.gastado) || 0;
+  if (techo <= 0) return 'sin_techo';
+  if (gastado > techo) return 'rojo';
+  if (gastado / techo >= CONFIGURACION.dinero.avisarDesde) return 'amarillo';
+  return 'verde';
+}
+
 
 /* ─── 4. FECHAS ────────────────────────────────────────────────────── */
 
