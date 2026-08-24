@@ -651,7 +651,13 @@ select.campo__control {
 .hoja__panel {
   position: relative;
   width: 100%;
-  max-height: 88vh;
+  /* El teclado del celular no achica ni `vh` ni `dvh` ni `svh` — esa
+     distinción queda fuera de lo que esas unidades cubren, por
+     especificación. `--alto-hoja` la escribe abrirHoja()/cerrarHoja() en
+     06-piezas.js a partir de `visualViewport`, que sí lo sabe; sin JS o en
+     un navegador sin esa API, `88dvh` se comporta exactamente igual que
+     antes (era `88vh` a secas). */
+  max-height: var(--alto-hoja, 88dvh);
   display: flex;
   flex-direction: column;
   background: var(--fondo-elevado);
