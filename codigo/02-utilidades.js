@@ -404,6 +404,54 @@ function scrollActualX() {
   return _scrollGuardadoX;
 }
 
+
+/* ─── SCROLL "DE ESTE CUADRO" — fresco en cada cuadro, sin forzar nada ──
+   POR QUÉ scrollActualY() NO ALCANZA ACÁ (2026-08-24)
+   scrollActualY() se actualiza con el evento 'scroll', que en un gesto
+   rápido o con inercia puede llegar con MENOS frecuencia que el repintado
+   visual real (sobre todo en Safari/iOS) — codigo/23-lienzo-de-luz.js
+   documenta por qué necesita, para UNA lectura puntual, el valor de
+   verdad más reciente y no esa copia. Pero leer window.scrollY ahí mismo,
+   en medio de su propio bucle de animación, forzaba exactamente el
+   reprocesamiento que este archivo lleva evitando desde arriba: un perfil
+   real en pbe.aniaxv.com lo mostró colgado de esa línea.
+
+   La salida no es "cachear peor", es "leer más temprano". Este archivo
+   (02-utilidades.js) es el SEGUNDO script que carga —antes que cualquier
+   enredadera, joya o luz— así que si acá se pide un requestAnimationFrame,
+   su callback es el PRIMERO en la fila de todos los que se registran
+   después, cuadro tras cuadro. Leer window.scrollY como lo primero que
+   pasa en el cuadro no cuesta nada (todavía nadie escribió un estilo ese
+   cuadro); leerlo más tarde, después de que las enredaderas y las joyas ya
+   escribieron sus transforms, es lo que sale caro. Mismo valor, mismo
+   momento del cuadro real, distinto lugar en la fila. */
+let _scrollDeEsteCuadroY = window.scrollY;
+
+function actualizarScrollDeEsteCuadro() {
+  _scrollDeEsteCuadroY = window.scrollY;
+  requestAnimationFrame(actualizarScrollDeEsteCuadro);
+}
+requestAnimationFrame(actualizarScrollDeEsteCuadro);
+
+/**
+ * Cuánto se bajó la página, tan fresco como window.scrollY pero leído al
+ * principio del cuadro —antes de que cualquier otro módulo escriba un
+ * estilo—, así que nunca fuerza un reprocesamiento. A diferencia de
+ * scrollActualY() (que espera al evento 'scroll'), este valor se
+ * actualiza SIEMPRE, una vez por cuadro de animación, incluso durante un
+ * scroll con inercia donde el evento 'scroll' tarda en llegar.
+ *
+ * Para el bucle de animación de las enredaderas, las joyas o el marco,
+ * scrollActualY() sigue siendo la opción correcta —barata y de sobra—.
+ * Esta función es solo para el caso puntual que la necesita de verdad
+ * (ver la nota grande de acá arriba).
+ *
+ * @returns {number}
+ */
+function scrollDeEsteCuadro() {
+  return _scrollDeEsteCuadroY;
+}
+
 /**
  * LOS TRES NIVELES DE CALIDAD GRÁFICA.
  *

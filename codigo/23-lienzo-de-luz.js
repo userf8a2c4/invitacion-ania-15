@@ -583,8 +583,22 @@
        que la llama—, y el throttle vuelve a mandar apenas el scroll se
        queda quieto. Estampar el canvas es barato (ver el resto de este
        archivo): la ventana en la que esto corre a más fps es la del
-       gesto de scroll, que dura instantes. */
-    const desplazamientoActual = window.scrollY;
+       gesto de scroll, que dura instantes.
+
+       ⚡ scrollDeEsteCuadro() Y NO window.scrollY DIRECTO (2026-08-24):
+       un perfil real en pbe.aniaxv.com mostró "Layout"/"Recalculate style"
+       colgados de ESTA línea — para cuando este bucle corre, las
+       enredaderas y las joyas ya escribieron sus transforms de este mismo
+       cuadro, así que preguntarle al navegador acá fuerza a recalcular
+       todo lo pendiente. scrollDeEsteCuadro() (02-utilidades.js) da el
+       mismo valor —se lee en el mismísimo cuadro, no una copia vieja del
+       último evento 'scroll'— pero LEÍDO ANTES, en el primer cuadro de la
+       fila, cuando todavía no hay nada que recalcular. No es el mismo
+       caso que motivó scrollActualY() en su momento (esa sí puede quedar
+       un cuadro atrás en Safari/iOS con inercia); acá se necesitaba
+       "fresco de verdad" y "barato" al mismo tiempo, y por eso existe
+       esta segunda copia en vez de reusar la primera. */
+    const desplazamientoActual = scrollDeEsteCuadro();
     const seMovioElScroll = desplazamientoActual !== ultimoDesplazamientoDibujado;
 
     if (!seMovioElScroll && ahora - ultimoRepintado < cadaCuantoRepintar) {
