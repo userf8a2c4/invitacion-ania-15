@@ -424,11 +424,23 @@ function scrollActualX() {
    pasa en el cuadro no cuesta nada (todavía nadie escribió un estilo ese
    cuadro); leerlo más tarde, después de que las enredaderas y las joyas ya
    escribieron sus transforms, es lo que sale caro. Mismo valor, mismo
-   momento del cuadro real, distinto lugar en la fila. */
+   momento del cuadro real, distinto lugar en la fila.
+
+   ⚡ CON EL MISMO GUARDIA QUE TODO EL RESTO DEL PROYECTO (2026-08-24) — ESTO
+   SE ME HABÍA PASADO. Un perfil real en PBE mostró este bucle atribuido de
+   nuevo a "reprocesamiento forzado" (121 ms en celular): estaba leyendo
+   window.scrollY en CADA cuadro, para siempre, incluso con el sobre
+   todavía cerrado — cuando el único que consume este valor
+   (23-lienzo-de-luz.js) ni siquiera arrancó, porque él mismo se apaga con
+   hayAlgoQueMirar(). Sin nadie mirando, esta lectura no evitaba ningún
+   costo real: solo lo agregaba. Con el mismo `if` que ya usan las
+   enredaderas, las joyas y la luz, el valor se congela en lo último que
+   valió la pena leer, y la lectura de verdad vuelve sola en cuanto se
+   abre el sobre. */
 let _scrollDeEsteCuadroY = window.scrollY;
 
 function actualizarScrollDeEsteCuadro() {
-  _scrollDeEsteCuadroY = window.scrollY;
+  if (hayAlgoQueMirar()) _scrollDeEsteCuadroY = window.scrollY;
   requestAnimationFrame(actualizarScrollDeEsteCuadro);
 }
 requestAnimationFrame(actualizarScrollDeEsteCuadro);
