@@ -295,14 +295,19 @@
 
    Se cumplen las mismas condiciones que ya funcionaron con .petalo (ver
    estilos/10-cursor-y-petalos.css): se mueven solo por transform
-   (rotate), no viven dentro de ningún mix-blend-mode, y las tres cosas
-   se animan de forma CONTINUA mientras el relicario está en pantalla
-   (las borlas y la cadena en cada cuadro; la enredadera en cada scroll)
+   (rotate), no viven dentro de ningún mix-blend-mode, y se animan de
+   forma CONTINUA mientras el relicario está en pantalla (en cada cuadro)
    — exactamente el perfil para el que sirve reservarles una capa propia
    del compositor, en vez de recomponerlas contra el resto de la escena
    en cada giro. Es la sección más pesada de la página; esto le da un
-   margen más sin tocar ni un tallo del dibujo. */
-#enredadera-de-la-portada,
+   margen más sin tocar ni un tallo del dibujo.
+
+   ⚡ #enredadera-de-la-portada SALIÓ DE ACÁ (2026-08-24): ya no gira con
+   el scroll —a pedido explícito, se veía como si una parte del relicario
+   se despegara y se moviera sola (ver la nota grande en
+   codigo/08-efectos-de-scroll.js)—, así que reservarle una capa propia
+   del compositor ya no tiene ningún efecto que pagar: es exactamente el
+   "will-change puesto de más" que este proyecto evita en todos lados. */
 .joya-colgante,
 .cadena-colgante .eslabon {
   will-change: transform;
