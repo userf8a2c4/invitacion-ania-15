@@ -177,11 +177,17 @@
 
   /* ─── 3. ENTRADAS: SCROLL Y MOUSE ──────────────────────────────────── */
 
-  let scrollAnterior = window.scrollY;
+  /* scrollActualY() y no window.scrollY: esta línea corre apenas carga el
+     script (reflow forzado real, medido por PageSpeed) y el listener de
+     'scroll' de acá abajo repetía la misma lectura cruda en cada evento.
+     scrollActualY() es la copia cacheada del proyecto para esto
+     (02-utilidades.js) — se actualiza sola con cada evento de scroll real,
+     así que leerla acá es gratis. */
+  let scrollAnterior = scrollActualY();
   let velocidadDeScroll = 0;
   window.addEventListener('scroll', () => {
-    velocidadDeScroll = window.scrollY - scrollAnterior;
-    scrollAnterior = window.scrollY;
+    velocidadDeScroll = scrollActualY() - scrollAnterior;
+    scrollAnterior = scrollActualY();
   }, { passive: true });
 
   let mouseX = -9999;

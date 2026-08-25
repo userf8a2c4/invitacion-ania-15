@@ -1314,7 +1314,15 @@
       function seguirConElSiguiente() {
         if (indiceDeAnclaje < anclajes.length) { cederYSeguir(armarLosRamilletes); return; }
 
-        revisarQueEstenTodos();
+        /* ⚡ cederYSeguir, no una llamada directa (2026-08-24): el último
+           ramillete acaba de escribir su `innerHTML` dos líneas atrás (ver
+           crearRamillete). revisarQueEstenTodos() lee getBoundingClientRect()
+           de cada anclaje para el diagnóstico — leer esa geometría en el
+           MISMO turno en que se acaba de escribir fuerza un reflow completo
+           (el mismo patrón de "reprocesamiento forzado" que ya se corrigió
+           en otros archivos de esta ronda). Cediendo un cuadro, el navegador
+           ya resolvió el layout solo y la lectura sale gratis. */
+        cederYSeguir(revisarQueEstenTodos);
       }
 
       if (anclaje.elemento) {
@@ -1971,7 +1979,15 @@
 
   /* ─── 6. MOVIMIENTO ────────────────────────────────────────────── */
 
-  let posicionDeScrollAnterior = window.scrollY;
+  /* ⚡ scrollActualY() Y NO window.scrollY (2026-08-24): esta línea corre
+     apenas carga el script, justo después de que 03/04/05/24/06 ya
+     escribieron clases y crearon nodos — el momento exacto en que una
+     lectura cruda de scroll fuerza el reflow completo que después paga
+     ESTA línea (PageSpeed lo midió: "reprocesamiento forzado" atribuido acá).
+     scrollActualY() ya es la fuente de verdad cacheada del proyecto para
+     esto (02-utilidades.js) — el propio bucle de cuadro de este archivo, un
+     poco más abajo, ya la usa por el mismo motivo. */
+  let posicionDeScrollAnterior = scrollActualY();
   let mouseX = -9999;
   let mouseY = -9999;
 
