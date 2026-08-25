@@ -284,6 +284,22 @@
     drop-shadow(0 26px 30px rgba(0, 0, 0, .55));
 }
 
+/* ⚡ SIN FILTRO MIENTRAS EL SOBRE TAPA TODO (2026-08-24). El sobre de
+   apertura es fixed/inset:0/z-index:2000: mientras está puesto, NADIE
+   puede ver esta sombra —son tres `drop-shadow` sobre ~150 nodos de SVG,
+   pagados igual aunque estén cien por ciento tapados—. `html.sobre-visible`
+   ya existe (03-sobre-de-apertura.js la pone y la saca), así que apagar
+   el filtro mientras esa clase está puesta no le cuesta nada nuevo al
+   proyecto: en cuanto se abre el sobre, la clase se saca y el filtro
+   vuelve solo, en el mismo instante, sin ningún salto que notar —nunca
+   hubo nada que ver hasta ese momento. Si el navegador ya lo estaba
+   salteando solo por estar tapado, esto no cambia nada; si no lo estaba
+   salteando (que es lo que sugirió un perfil real), esto es pintura
+   pura que se dejaba de pagar por algo invisible. */
+html.sobre-visible .marco__sombra-exterior {
+  filter: none;
+}
+
 /* ⚡ EL FAST-FOLLOW QUE HABÍA QUEDADO PENDIENTE, MEDIDO Y APLICADO
    (2026-08-20): cuando se sacó el filtro exterior de encima de la
    enredadera/borlas/cadena, quedó anotado que agregar `will-change:
