@@ -1701,7 +1701,14 @@ function abrirDetalleDeProveedor(proveedor) {
     '<div class="detalle">' + detalle + '</div>' +
     vinetasDeQueIncluye(proveedor.detalle_items) +
     botonesDeContacto(proveedor) +
+    /* Generar recibo SIEMPRE está acá, disponible, sin importar si este
+       proveedor tiene o no un contrato adjunto abajo. Nunca se deshabilita
+       ni se le pide nada antes: ver la nota grande de recibos.php sobre
+       por qué el recibo no depende del contrato. */
     '<div class="acciones" style="margin-top:var(--esp-3)">' +
+      '<button class="boton" id="detalle-recibo">Generar recibo</button>' +
+    '</div>' +
+    '<div class="acciones" style="margin-top:var(--esp-2)">' +
       '<button class="boton boton--peligro" id="detalle-borrar">Borrar</button>' +
       '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
     '</div>'
@@ -1710,11 +1717,71 @@ function abrirDetalleDeProveedor(proveedor) {
   engancharBotonesDeContacto(cuerpo, proveedor);
   insertarAdjuntosDeSoloLectura(cuerpo, 'proveedor', proveedor.id, 'Contrato y documentos');
 
+  buscar('#detalle-recibo', cuerpo).addEventListener('click', () => abrirGeneradorDeRecibo(proveedor));
+
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioProveedor(proveedor));
 
   buscar('#detalle-borrar', cuerpo).addEventListener('click', () => {
     if (!confirmarAccion('¿Borrar esto? No se puede deshacer.')) return;
     guardarDinero('borrar_proveedor', { id: proveedor.id }, 'Eliminado.');
+  });
+}
+
+/**
+ * Formulario chico para generar un recibo de pago de este proveedor.
+ * No pregunta nada de contratos: un recibo se genera solo, en cualquier
+ * momento (ver la nota grande en admin/api/recibos.php).
+ *
+ * @param {Object} proveedor
+ * @returns {void}
+ */
+function abrirGeneradorDeRecibo(proveedor) {
+  const falta = (Number(proveedor.monto_total) || 0) - (Number(proveedor.anticipo) || 0);
+  const hoy   = new Date().toISOString().slice(0, 10);
+
+  const cuerpo = abrirHoja('Recibo · ' + proveedor.nombre,
+    campoTexto({ id: 'rec-monto', rotulo: 'Monto', tipo: 'number', paso: '0.01',
+                 valor: falta > 0 ? desdePesos(falta) : '',
+                 pista: 'Lo que se está pagando ahora' }) +
+    campoLargo({ id: 'rec-concepto', rotulo: 'Concepto',
+                 valor: falta > 0 ? 'Saldo' : 'Anticipo' }) +
+    campoLista({ id: 'rec-forma', rotulo: 'Forma de pago', valor: 'Transferencia',
+                 opciones: [
+                   { valor: 'Efectivo',      texto: 'Efectivo' },
+                   { valor: 'Transferencia', texto: 'Transferencia' },
+                   { valor: 'Tarjeta',       texto: 'Tarjeta' },
+                   { valor: 'Otro',          texto: 'Otro' },
+                 ] }) +
+    campoTexto({ id: 'rec-fecha', rotulo: 'Fecha', tipo: 'date', valor: hoy }) +
+    '<div class="acciones">' +
+      '<button type="button" class="boton boton--principal" id="rec-generar">' +
+        'Generar PDF' +
+      '</button>' +
+    '</div>'
+  );
+
+  buscar('#rec-generar', cuerpo).addEventListener('click', async () => {
+    const monto = aPesos(valorDe('rec-monto', cuerpo));
+    if (!monto || monto <= 0) {
+      avisar('Poné un monto mayor a cero.', true);
+      return;
+    }
+
+    try {
+      const resultado = await mandar('recibos.php?accion=generar', {
+        proveedor_id: proveedor.id,
+        monto:        monto,
+        concepto:     valorDe('rec-concepto', cuerpo),
+        forma_pago:   valorDe('rec-forma', cuerpo),
+        fecha:        valorDe('rec-fecha', cuerpo),
+      });
+      cerrarHoja(true);
+      avisar('Recibo ' + resultado.numero + ' generado.');
+      // Vuelve a abrir la ficha para que el PDF ya aparezca en la lista.
+      abrirDetalleDeProveedor(proveedor);
+    } catch (error) {
+      avisar(error.message, true);
+    }
   });
 }
 

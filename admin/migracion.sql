@@ -330,6 +330,35 @@ CREATE TABLE IF NOT EXISTS cotizacion_items (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+-- Recibos de pago a proveedores. Existen SOLOS: un recibo no necesita
+-- ningún contrato para existir. contrato_id queda para cuando se quiera
+-- vincular uno a mano (Fase C), nunca como requisito.
+--
+-- POR QUÉ EL NÚMERO SE GUARDA ACÁ Y NO SE CALCULA AL VUELO
+-- Si el número de recibo se calculara como "el más alto + 1" en el
+-- momento de generar, dos clics casi al mismo tiempo (o un doble toque
+-- por mala señal) podrían leer el mismo máximo y repetir el número. Acá
+-- se guarda la fila completa dentro de la misma transacción que la
+-- calcula (ver admin/api/recibos.php), así que el UNIQUE de abajo es la
+-- red de seguridad real: si algo se repite, MySQL lo rechaza en vez de
+-- guardar dos recibos con el mismo número.
+CREATE TABLE IF NOT EXISTS recibos (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  numero        VARCHAR(30) NOT NULL,
+  proveedor_id  INT NOT NULL,
+  contrato_id   INT DEFAULT NULL,
+  fecha         DATE NOT NULL,
+  concepto      VARCHAR(300) NOT NULL DEFAULT '',
+  monto         DECIMAL(12,2) NOT NULL DEFAULT 0,
+  forma_pago    VARCHAR(60) NOT NULL DEFAULT '',
+  archivo_id    INT DEFAULT NULL,
+  creado_por    INT DEFAULT NULL,
+  creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY numero_unico (numero),
+  KEY por_proveedor (proveedor_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 -- Gastos. padrino_id es lo que separa "lo que cuesta" de "lo que pago".
 CREATE TABLE IF NOT EXISTS gastos (
   id             INT AUTO_INCREMENT PRIMARY KEY,
