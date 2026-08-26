@@ -107,7 +107,7 @@
             || (typeof mem === 'number' && mem <= 2)
             || (typeof nucleos === 'number' && nucleos <= 2)) {
           calidad = 2;   // señales claras de equipo débil o red limitada
-        } else if (typeof nucleos === 'number' && nucleos >= 6
+        } else if (typeof nucleos === 'number' && nucleos >= 4
                    && (typeof mem !== 'number' || mem >= 8)) {
           calidad = 0;   // bastantes núcleos y memoria de sobra: se anima entero
         } else {
