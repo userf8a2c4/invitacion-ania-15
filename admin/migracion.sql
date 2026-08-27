@@ -342,10 +342,20 @@ CREATE TABLE IF NOT EXISTS cotizacion_items (
 -- calcula (ver admin/api/recibos.php), así que el UNIQUE de abajo es la
 -- red de seguridad real: si algo se repite, MySQL lo rechaza en vez de
 -- guardar dos recibos con el mismo número.
+-- POR QUÉ proveedor_id ES OPCIONAL
+-- Un recibo es un comprobante de pago a un BENEFICIARIO — que puede ser
+-- un proveedor ya cargado, un padrino (por ejemplo, para reembolsarle
+-- algo que adelantó), o alguien sin ficha propia. Exigir proveedor_id
+-- obligaba a inventar un proveedor falso para poder darle un recibo a
+-- cualquier otra persona. `beneficiario` es el nombre de verdad que
+-- va impreso en el PDF; se autocompleta al elegir un proveedor o un
+-- padrino, o se escribe a mano si no hay ficha.
 CREATE TABLE IF NOT EXISTS recibos (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   numero        VARCHAR(30) NOT NULL,
-  proveedor_id  INT NOT NULL,
+  proveedor_id  INT DEFAULT NULL,
+  padrino_id    INT DEFAULT NULL,
+  beneficiario  VARCHAR(200) NOT NULL DEFAULT '',
   contrato_id   INT DEFAULT NULL,
   -- Opcional, igual que contrato_id: si Lucila elige "también registrar
   -- como pago" al generar el recibo, acá queda el pago real de

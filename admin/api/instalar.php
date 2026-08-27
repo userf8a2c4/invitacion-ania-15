@@ -202,6 +202,43 @@ $agregarColumna('recibos', 'pago_id', 'INT DEFAULT NULL');
 $agregarColumna('tareas', 'atada_a_tipo', "VARCHAR(30) NOT NULL DEFAULT ''");
 $agregarColumna('tareas', 'atada_a_id',   'INT NOT NULL DEFAULT 0');
 
+/* Un recibo ya no es exclusivo de un proveedor — puede ir a nombre de
+   un padrino o de alguien sin ficha propia (ver la nota grande en
+   migracion.sql, justo arriba de CREATE TABLE recibos). */
+$agregarColumna('recibos', 'padrino_id',   'INT DEFAULT NULL');
+$agregarColumna('recibos', 'beneficiario', "VARCHAR(200) NOT NULL DEFAULT ''");
+
+/* Esto no es agregar una columna, es AFLOJAR una que ya exigía
+   NOT NULL — por eso no usa $agregarColumna(). Se comprueba antes de
+   tocar nada, tanto para no fallar si ya se corrió como para no
+   arriesgarse en una tabla que todavía no existe. */
+if (existeTabla('recibos')) {
+    $columna = consultarUno(
+        "SELECT IS_NULLABLE FROM information_schema.columns
+         WHERE table_schema = DATABASE() AND table_name = 'recibos'
+           AND column_name = 'proveedor_id'"
+    );
+    if ($columna && $columna['IS_NULLABLE'] === 'NO') {
+        try {
+            bd()->exec('ALTER TABLE `recibos` MODIFY `proveedor_id` INT DEFAULT NULL');
+        } catch (PDOException $e) {
+            error_log('[Ania XV · instalar] No se pudo aflojar recibos.proveedor_id: '
+                . $e->getMessage());
+        }
+    }
+
+    /* Los recibos que ya existían tienen proveedor_id pero
+       `beneficiario` vacío (la columna recién se creó) — se completa
+       una sola vez con el nombre del proveedor de esa fila, para que
+       no aparezcan en blanco en los recibos ya generados. */
+    ejecutar(
+        "UPDATE recibos r
+         JOIN proveedores p ON p.id = r.proveedor_id
+         SET r.beneficiario = p.nombre
+         WHERE r.beneficiario = ''"
+    );
+}
+
 
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 
