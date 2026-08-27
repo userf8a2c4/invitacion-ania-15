@@ -582,11 +582,15 @@ case 'generar':
     anotarEnBitacora($yo, 'generó un recibo', 'recibos', $reciboId, $recibo['numero']);
 
     responderBien([
-        'id'         => $reciboId,
-        'numero'     => $recibo['numero'],
-        'archivo_id' => $archivoId,
-        'nombre'     => $nombreLegible,
-        'pago_id'    => $recibo['pago_id'],
+        'id'           => $reciboId,
+        'numero'       => $recibo['numero'],
+        'archivo_id'   => $archivoId,
+        'nombre'       => $nombreLegible,
+        'pago_id'      => $recibo['pago_id'],
+        // Para que quien generó el recibo desde un pago (sin tener el
+        // proveedor a mano de antemano, ver 09-vista-dinero.js) pueda
+        // mostrar a nombre de quién quedó, sin una segunda consulta.
+        'proveedor_id' => $recibo['proveedor_id'],
     ], 201);
     break;
 

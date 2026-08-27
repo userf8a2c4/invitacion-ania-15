@@ -97,22 +97,26 @@ const CATALOGO_FAB = [
      BORRAR uno por chat: lleva directo a la lista protegida
      (abrirListaDeDocumentos, en 09-vista-dinero.js), donde tocar una
      fila abre el detalle de solo lectura y ahí —recién ahí— aparecen
-     Editar y Borrar, cada uno detrás de su propia confirmación. El
-     asistente no necesita "entender" cuál documento se quiere tocar:
-     alcanza con acertar la INTENCIÓN (ver, en general) y dejar que la
-     persona elija con el dedo, que es más rápido y más seguro que
-     cualquier intento de adivinar por texto libre. */
+     Editar y Borrar, cada uno detrás de su propia confirmación.
+
+     ⚡ YA NO PIDEN ELEGIR PROVEEDOR PRIMERO (2026-08-27). Antes exigían
+     `abrirElegirProveedorPara(...)` como paso obligatorio, a pesar de
+     que recibos.php/contratos.php ya soportan listar TODO sin filtro —
+     la restricción era puramente del frontend. Ahora abren la lista
+     completa de una vez (con un desplegable adentro para acotar a un
+     proveedor si hace falta), igual que ya hacía "Nuevo recibo". Los
+     contratos sí siguen exigiendo proveedor para GENERARLOS (abajo,
+     contrato-rapido) porque `contratos.proveedor_id` es obligatorio en
+     la base — pero para solo VERLOS no hace falta pedirlo de entrada. */
   { clave: 'ver-recibos', nombre: 'Ver recibos',
-    descripcion: 'Elegir un proveedor y ver, editar o borrar sus recibos',
+    descripcion: 'Ver, editar o borrar los recibos ya generados (con filtro opcional por proveedor)',
     soloAdmin: true,
-    ejecutar: () => abrirElegirProveedorPara('¿De qué proveedor?',
-                                             p => abrirListaDeDocumentos('recibo', p)) },
+    ejecutar: () => abrirListaDeDocumentos('recibo', null) },
 
   { clave: 'ver-contratos', nombre: 'Ver contratos',
-    descripcion: 'Elegir un proveedor y ver, editar o borrar sus contratos',
+    descripcion: 'Ver, editar o borrar los contratos ya generados (con filtro opcional por proveedor)',
     soloAdmin: true,
-    ejecutar: () => abrirElegirProveedorPara('¿De qué proveedor?',
-                                             p => abrirListaDeDocumentos('contrato', p)) },
+    ejecutar: () => abrirListaDeDocumentos('contrato', null) },
 ];
 
 /**
