@@ -845,11 +845,24 @@ function pintarPagos(cuerpo) {
 
   buscarTodos('[data-pagar]', cuerpo).forEach(casilla => {
     casilla.addEventListener('change', async () => {
+      const seMarcoComoPagado = casilla.checked;
       try {
         await mandar('presupuesto.php?accion=marcar_pagado', { id: casilla.dataset.pagar });
         registrarEvento('accion', 'marcar_pago');
         ensuciarVistas('resumen');
         dibujarDinero();
+
+        // Mismo ofrecimiento que al dar de alta un pago ya pagado (ver
+        // ofrecerGenerarReciboDeEstePago) — acá el pago YA existía, así
+        // que se busca en DINERO.pagos en vez de usar la respuesta del
+        // servidor. Nunca al DESmarcar: eso no es un pago nuevo.
+        if (seMarcoComoPagado) {
+          const pago = DINERO.pagos.find(p => String(p.id) === casilla.dataset.pagar);
+          // DINERO.pagos todavía tiene el estado VIEJO acá (dibujarDinero()
+          // recién disparó el pedido, no esperó la respuesta) — se fuerza
+          // 'pagado' a mano en vez de confiar en lo que diga esa copia.
+          if (pago) ofrecerGenerarReciboDeEstePago({ ...pago, estado: 'pagado' }, { id: pago.id });
+        }
       } catch (error) {
         casilla.checked = !casilla.checked;   // deshacer si falló
         avisar(error.message, true);
@@ -1365,14 +1378,50 @@ function abrirVistaPreviaDeCotizacion(cotizacion) {
  * @param {string} mensaje
  * @returns {Promise<void>}
  */
-async function guardarDinero(accion, carga, mensaje) {
+async function guardarDinero(accion, carga, mensaje, despues) {
   try {
-    await mandar('presupuesto.php?accion=' + accion, carga);
+    const resultado = await mandar('presupuesto.php?accion=' + accion, carga);
     cerrarHoja(true);
     avisar(mensaje);
     // El Resumen muestra totales de dinero: hay que refrescarlo también.
     ensuciarVistas('resumen');
     dibujarDinero();
+    // Para acciones que quieran hacer algo más con lo recién guardado
+    // (ver ofrecerGenerarReciboDeEstePago, más abajo) — opcional,
+    // ninguna otra pantalla lo necesita todavía.
+    if (despues) despues(resultado);
+  } catch (error) {
+    avisar(error.message, true);
+  }
+}
+
+/**
+ * Al dar de alta un pago YA marcado "pagado", ofrece generar su recibo
+ * ahí mismo — sin esto, Lucila tendría que ir a buscar al proveedor y
+ * tocar "Generar recibo" por separado para algo que ya sabe que pasó.
+ * Nunca se genera solo: siempre pregunta primero.
+ *
+ * Solo tiene sentido si el pago quedó atado a un gasto con proveedor
+ * —recibos.php necesita saber a quién va el recibo—; un pago suelto o
+ * de un gasto sin proveedor simplemente no ofrece nada.
+ *
+ * @param {Object} carga     Lo que se mandó a guardar (tiene gasto_id).
+ * @param {Object} resultado La respuesta del servidor (tiene id).
+ * @returns {Promise<void>}
+ */
+async function ofrecerGenerarReciboDeEstePago(carga, resultado) {
+  if (carga.estado !== 'pagado' || !carga.gasto_id || !resultado || !resultado.id) return;
+
+  const gasto = (DINERO.gastos || []).find(g => Number(g.id) === Number(carga.gasto_id));
+  const proveedor = gasto ? (DINERO.proveedores || []).find(p => p.id === gasto.proveedor_id) : null;
+  if (!proveedor) return;   // sin proveedor no hay a quién nombrar en el recibo
+
+  if (!confirmarAccion('Este pago quedó marcado como pagado. ¿Generar su recibo ahora?')) return;
+
+  try {
+    const doc = await mandar('recibos.php?accion=generar', { pago_id: resultado.id });
+    abrirResultadoDeDocumento('Recibo ' + doc.numero + ' generado.',
+      doc.archivo_id, doc.nombre, proveedor);
   } catch (error) {
     avisar(error.message, true);
   }
@@ -1459,7 +1508,8 @@ function engancharFormularioDinero(cuerpo, armarCarga, nombreAccion, existente) 
        todavía, así que sigue esperando la respuesta del servidor. */
     const coleccion = existente && COLECCIONES_DINERO[nombreAccion];
     if (!coleccion) {
-      guardarDinero('guardar_' + nombreAccion, carga, 'Guardado.');
+      guardarDinero('guardar_' + nombreAccion, carga, 'Guardado.',
+        nombreAccion === 'pago' ? r => ofrecerGenerarReciboDeEstePago(carga, r) : null);
       return;
     }
 
