@@ -28,6 +28,15 @@
      POST ?accion=generar                    { proveedor_id, monto,
                                                 concepto, forma_pago,
                                                 fecha? }
+     POST ?accion=editar                     { id, monto?, concepto?,
+                                                forma_pago?, fecha? }
+                                              (el PDF NO se rehace: ver
+                                              la nota de "editar" abajo)
+     POST ?accion=marcar_estado              { id, estado: pendiente|
+                                                enviado|firmado }
+     POST ?accion=borrar                     { id } — borra la fila,
+                                              el adjunto y el PDF del
+                                              disco, los tres juntos
    ══════════════════════════════════════════════════════════════════════ */
 
 require_once __DIR__ . '/_lib/bd.php';
@@ -39,7 +48,7 @@ $yo     = exigirAdministrador();
 $accion = (string) ($_GET['accion'] ?? 'listar');
 
 /** Quién paga siempre, salvo que se configure otra cosa en Ajustes. */
-const PAGADORA_POR_DEFECTO = 'Lucila Montserrat García Medina';
+const PAGADORA_POR_DEFECTO = 'Lucila García';
 
 /**
  * El nombre de la pagadora, tomado de `ajustes` si existe esa clave, o
@@ -58,6 +67,120 @@ function nombreDeLaPagadora() {
 }
 
 /**
+ * Lee un ajuste de `ajustes` con un respaldo si no está configurado
+ * todavía. Usado para el prefijo y el número inicial de la numeración
+ * —ver admin/codigo/47-config-documentos.js, que es la pantalla donde
+ * Lucila los cambia—.
+ *
+ * @param string $clave
+ * @param string $respaldo
+ * @return string
+ */
+function ajusteConRespaldo($clave, $respaldo) {
+    if (!existeTabla('ajustes')) return $respaldo;
+    $fila = consultarUno('SELECT valor FROM ajustes WHERE clave = :c LIMIT 1', [':c' => $clave]);
+    $valor = trim((string) ($fila['valor'] ?? ''));
+    return $valor !== '' ? $valor : $respaldo;
+}
+
+/**
+ * Un código corto para que el recibo se pueda verificar a simple vista
+ * si alguien duda de que sea genuino: sale de los datos del recibo más
+ * una clave que ya vive en el .env del servidor (la misma que cifra el
+ * respaldo diario), así que nadie puede armar uno a mano sin tener
+ * acceso al servidor.
+ *
+ * OJO: esto NO es una firma electrónica legal (el proyecto no integra
+ * ninguna, a propósito — ver la nota del prompt original). Es una marca
+ * de autenticidad casera: si dos dígitos del recibo cambiaran, el
+ * código ya no coincidiría con lo que devuelve esta misma función.
+ *
+ * @param array $recibo
+ * @return string 10 caracteres hexadecimales.
+ */
+function codigoDeVerificacion($recibo) {
+    $llave = env('RESPALDO_CLAVE', 'ania-xv-recibos');
+    $huella = $recibo['numero'] . '|' . $recibo['proveedor_id'] . '|'
+            . $recibo['monto'] . '|' . $recibo['fecha'];
+    return strtoupper(substr(hash_hmac('sha256', $huella, $llave), 0, 10));
+}
+
+/**
+ * Los datos de quien paga, más allá del nombre — todos opcionales,
+ * todos configurables desde admin/codigo/47-config-documentos.js. En
+ * México un recibo simple gana mucha más formalidad con esto, aunque
+ * (como aclara el propio documento) esto sigue sin ser un CFDI.
+ *
+ * @return array {domicilio, telefono, correo, rfc}
+ */
+function datosDeLaPagadora() {
+    return [
+        'domicilio' => ajusteConRespaldo('pagadora_domicilio', ''),
+        'telefono'  => ajusteConRespaldo('pagadora_telefono', ''),
+        'correo'    => ajusteConRespaldo('pagadora_correo', ''),
+        'rfc'       => ajusteConRespaldo('pagadora_rfc', ''),
+    ];
+}
+
+/**
+ * Convierte un monto a su cantidad en letra, como se acostumbra en un
+ * recibo mexicano: "Un mil quinientos pesos 00/100 M.N.". Cubre de $0
+ * a $999,999.99, que es de sobra para lo que se paga a un proveedor de
+ * una fiesta — un monto mayor es un caso tan raro que no vale la pena
+ * la complejidad de nombrar millones acá.
+ *
+ * @param float $monto
+ * @return string
+ */
+function cantidadEnLetra($monto) {
+    $unidades = ['', 'un', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete',
+                 'ocho', 'nueve', 'diez', 'once', 'doce', 'trece', 'catorce',
+                 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve'];
+    $decenas  = ['', '', 'veinte', 'treinta', 'cuarenta', 'cincuenta',
+                 'sesenta', 'setenta', 'ochenta', 'noventa'];
+    $centenas = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos',
+                 'quinientos', 'seiscientos', 'setecientos', 'ochocientos',
+                 'novecientos'];
+
+    /**
+     * Convierte un número de 0 a 999 a letra.
+     * @param int $n
+     * @return string
+     */
+    $trescientos = function ($n) use ($unidades, $decenas, $centenas, &$trescientos) {
+        if ($n === 0) return '';
+        if ($n === 100) return 'cien';
+        if ($n < 20) return $unidades[$n];
+        if ($n < 100) {
+            $resto = $n % 10;
+            return $decenas[intdiv($n, 10)] . ($resto ? ' y ' . $unidades[$resto] : '');
+        }
+        $resto = $n % 100;
+        return $centenas[intdiv($n, 100)] . ($resto ? ' ' . $trescientos($resto) : '');
+    };
+
+    $entero   = (int) floor($monto);
+    $centavos = (int) round(($monto - $entero) * 100);
+
+    if ($entero === 0) {
+        $letraEntero = 'cero';
+    } else {
+        $miles  = intdiv($entero, 1000);
+        $resto  = $entero % 1000;
+        $letraEntero = '';
+        if ($miles > 0) {
+            $letraEntero .= ($miles === 1 ? 'un mil' : $trescientos($miles) . ' mil');
+        }
+        if ($resto > 0) {
+            $letraEntero .= ($letraEntero !== '' ? ' ' : '') . $trescientos($resto);
+        }
+    }
+
+    $letraEntero = ucfirst($letraEntero);
+    return sprintf('%s pesos %02d/100 M.N.', $letraEntero, $centavos);
+}
+
+/**
  * Arma el PDF del recibo y devuelve sus bytes.
  *
  * @param array  $recibo    numero, fecha, concepto, monto, forma_pago
@@ -67,15 +190,26 @@ function nombreDeLaPagadora() {
  */
 function armarPdfDelRecibo($recibo, $proveedor, $pagadora) {
     $pdf = new PdfSimple();
+    $datosPagadora = datosDeLaPagadora();
 
-    $pdf->titulo('RECIBO DE PAGO');
+    $pdf->titulo('ANIA · XV AÑOS');
+    $pdf->parrafo('RECIBO DE PAGO — Comprobante simple, no es un CFDI', true, 10);
     $pdf->parrafo('Número ' . $recibo['numero']);
+    if ($recibo['lugar_expedicion'] !== '') {
+        $pdf->parrafo('Expedido en ' . $recibo['lugar_expedicion'] . ', a '
+            . formatearFechaLarga($recibo['fecha']) . '.', false, 9);
+    }
     $pdf->espacio(10);
     $pdf->linea();
     $pdf->espacio(6);
 
     $pdf->filaDeDatos('Fecha', formatearFechaLarga($recibo['fecha']));
     $pdf->filaDeDatos('Paga', $pagadora);
+    if ($datosPagadora['domicilio'] !== '') $pdf->filaDeDatos('Domicilio', $datosPagadora['domicilio'], 9);
+    if ($datosPagadora['telefono'] !== '')  $pdf->filaDeDatos('Teléfono', $datosPagadora['telefono'], 9);
+    if ($datosPagadora['correo'] !== '')    $pdf->filaDeDatos('Correo', $datosPagadora['correo'], 9);
+    if ($datosPagadora['rfc'] !== '')       $pdf->filaDeDatos('RFC', $datosPagadora['rfc'], 9);
+    $pdf->espacio(4);
     $pdf->filaDeDatos('Recibe', $proveedor['nombre']);
     if (!empty($proveedor['servicio'])) {
         $pdf->filaDeDatos('Servicio', $proveedor['servicio']);
@@ -89,6 +223,8 @@ function armarPdfDelRecibo($recibo, $proveedor, $pagadora) {
     $pdf->espacio(10);
 
     $pdf->filaDeDatos('Monto', '$' . number_format((float) $recibo['monto'], 2));
+    $pdf->parrafo('(' . cantidadEnLetra((float) $recibo['monto']) . ')', false, 9);
+    $pdf->espacio(4);
     $pdf->filaDeDatos('Forma de pago', $recibo['forma_pago'] !== ''
         ? $recibo['forma_pago'] : '—');
 
@@ -98,6 +234,13 @@ function armarPdfDelRecibo($recibo, $proveedor, $pagadora) {
     $pdf->parrafo('Firma de quien recibe', false, 9);
 
     $pdf->espacio(24);
+    /* ⚠️ NUNCA "firma digital": en México ese término tiene un
+       significado legal específico (FIEL / e.firma del SAT), y esto no
+       lo es — es una marca de autoría casera, no una firma electrónica
+       avanzada. "Generado y autorizado por…" dice exactamente lo que
+       es, sin insinuar una validez fiscal que no tiene. */
+    $pdf->parrafo('Generado y autorizado por ' . $pagadora, false, 9);
+    $pdf->parrafo('Código de verificación: ' . codigoDeVerificacion($recibo), false, 8);
     $pdf->parrafo('Generado para uso personal · XV Años de Ania', false, 8);
 
     return $pdf->bytes();
@@ -175,26 +318,38 @@ case 'generar':
         'concepto'     => campoTexto($datos, 'concepto', 300),
         'monto'        => $monto,
         'forma_pago'   => campoTexto($datos, 'forma_pago', 60),
+        'estado'       => 'pendiente',
     ];
 
     /* ─── EL NÚMERO, BAJO LLAVE ──────────────────────────────────────
-       FOR UPDATE bloquea la fila más nueva de este año hasta el commit:
-       si otra pestaña pide un recibo en el medio, espera acá en vez de
-       leer el mismo número. Ver la nota grande del encabezado. */
+       Prefijo y "número desde el cual arrancar" son configurables
+       (admin/codigo/47-config-documentos.js): así Lucila puede seguir
+       una numeración que ya traía en papel, o cambiar la nomenclatura
+       cuando quiera sin chocar con lo ya emitido — cambiar el prefijo
+       abre una serie nueva por completo.
+
+       FOR UPDATE bloquea la fila más nueva de este año y este prefijo
+       hasta el commit: si otra pestaña pide un recibo en el medio,
+       espera acá en vez de leer el mismo número. Ver la nota grande
+       del encabezado. */
+    $prefijo       = ajusteConRespaldo('recibo_prefijo', 'REC');
+    $numeroInicial = max(1, (int) ajusteConRespaldo('recibo_numero_inicial', '1'));
+
     bd()->beginTransaction();
 
     $ultimo = consultarUno(
         "SELECT numero FROM recibos WHERE numero LIKE :prefijo
          ORDER BY id DESC LIMIT 1 FOR UPDATE",
-        [':prefijo' => "REC-$anio-%"]
+        [':prefijo' => "$prefijo-$anio-%"]
     );
 
-    $siguiente = 1;
+    $siguiente = $numeroInicial;
     if ($ultimo) {
         $partes = explode('-', $ultimo['numero']);
-        $siguiente = ((int) end($partes)) + 1;
+        $siguiente = max($numeroInicial, ((int) end($partes)) + 1);
     }
-    $recibo['numero'] = sprintf('REC-%s-%04d', $anio, $siguiente);
+    $recibo['numero'] = sprintf('%s-%s-%04d', $prefijo, $anio, $siguiente);
+    $recibo['lugar_expedicion'] = ajusteConRespaldo('lugar_expedicion', '');
 
     $pagadora  = nombreDeLaPagadora();
     $bytesPdf  = armarPdfDelRecibo($recibo, $proveedor, $pagadora);
@@ -238,7 +393,12 @@ case 'generar':
     $recibo['archivo_id'] = $archivoId;
     $recibo['creado_por'] = (int) $yo['id'];
 
-    $reciboId = insertar('recibos', $recibo);
+    // lugar_expedicion es un ajuste del evento, no una columna de esta
+    // tabla — se usó arriba solo para escribirlo en el PDF.
+    $filaParaGuardar = $recibo;
+    unset($filaParaGuardar['lugar_expedicion']);
+
+    $reciboId = insertar('recibos', $filaParaGuardar);
 
     bd()->commit();
 
@@ -250,6 +410,92 @@ case 'generar':
         'archivo_id' => $archivoId,
         'nombre'     => $nombreLegible,
     ], 201);
+    break;
+
+
+/* ─── EDITAR LOS DATOS (NO EL PDF) ─────────────────────────────────────
+   POR QUÉ NO SE REHACE EL PDF ACÁ
+   El PDF ya se entregó o se guardó como comprobante: reescribirlo por
+   detrás, con la misma fecha y número, sería alterar en silencio un
+   documento que ya se considera firme. Si el monto estaba mal de
+   verdad, lo correcto es borrar este recibo (?accion=borrar) y generar
+   uno nuevo, con su propio número — igual que en papel, donde un recibo
+   mal hecho se anula y se hace otro, nunca se tacha y se reescribe. Esta
+   acción solo corrige los DATOS de la fila (para que las listas y
+   reportes queden bien), no el archivo ya generado. */
+
+case 'editar':
+    exigirMetodo('POST');
+    if (!existeTabla('recibos')) responderMal('Falta la tabla recibos.', 409);
+
+    $datos = cuerpoJson();
+    $id    = campoEntero($datos, 'id', 1);
+
+    $existente = consultarUno('SELECT id FROM recibos WHERE id = :i', [':i' => $id]);
+    if (!$existente) responderMal('Ese recibo no existe.', 404);
+
+    $cambios = [];
+    if (isset($datos['monto']))      $cambios['monto']      = campoMonto($datos, 'monto');
+    if (isset($datos['concepto']))   $cambios['concepto']   = campoTexto($datos, 'concepto', 300);
+    if (isset($datos['forma_pago'])) $cambios['forma_pago'] = campoTexto($datos, 'forma_pago', 60);
+    if (isset($datos['fecha']))      $cambios['fecha']      = campoFecha($datos, 'fecha') ?? date('Y-m-d');
+
+    if ($cambios) actualizar('recibos', $id, $cambios);
+
+    anotarEnBitacora($yo, 'editó un recibo', 'recibos', $id, '');
+    responderBien(['id' => $id]);
+    break;
+
+
+/* ─── MARCAR ESTADO (solo seguimiento propio, no toca el PDF) ────────── */
+
+case 'marcar_estado':
+    exigirMetodo('POST');
+    if (!existeTabla('recibos')) responderMal('Falta la tabla recibos.', 409);
+
+    $datos  = cuerpoJson();
+    $id     = campoEntero($datos, 'id', 1);
+    $estado = campoOpcion($datos, 'estado', ['pendiente', 'enviado', 'firmado'], 'pendiente');
+
+    $existente = consultarUno('SELECT id FROM recibos WHERE id = :i', [':i' => $id]);
+    if (!$existente) responderMal('Ese recibo no existe.', 404);
+
+    actualizar('recibos', $id, ['estado' => $estado]);
+    responderBien(['id' => $id, 'estado' => $estado]);
+    break;
+
+
+/* ─── BORRAR (LA FILA, EL ADJUNTO Y EL PDF, LOS TRES JUNTOS) ─────────── */
+
+case 'borrar':
+    exigirMetodo('POST');
+    if (!existeTabla('recibos')) responderMal('Falta la tabla recibos.', 409);
+
+    $datos = cuerpoJson();
+    $id    = campoEntero($datos, 'id', 1);
+
+    $recibo = consultarUno('SELECT * FROM recibos WHERE id = :i', [':i' => $id]);
+    if (!$recibo) responderMal('Ese recibo no existe.', 404);
+
+    /* Se borra primero el archivo físico y su fila en `archivos` —igual
+       que haría un borrado manual desde "Contrato y documentos"—, y
+       recién después la fila de `recibos`. Si algo del archivo falla no
+       importa: mejor un adjunto huérfano que un recibo fantasma que
+       siga contando en los totales sin tener PDF que lo respalde. */
+    if (!empty($recibo['archivo_id'])) {
+        $archivo = consultarUno('SELECT * FROM archivos WHERE id = :i',
+                                [':i' => (int) $recibo['archivo_id']]);
+        if ($archivo) {
+            $ruta = dirname(__DIR__) . '/archivos/' . basename($archivo['nombre_disco']);
+            if (is_file($ruta)) @unlink($ruta);
+            borrar('archivos', (int) $archivo['id']);
+        }
+    }
+
+    borrar('recibos', $id);
+
+    anotarEnBitacora($yo, 'borró un recibo', 'recibos', $id, $recibo['numero']);
+    responderBien(['mensaje' => 'Recibo eliminado.']);
     break;
 
 

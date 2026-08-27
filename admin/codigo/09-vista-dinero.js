@@ -1705,8 +1705,17 @@ function abrirDetalleDeProveedor(proveedor) {
        proveedor tiene o no un contrato adjunto abajo. Nunca se deshabilita
        ni se le pide nada antes: ver la nota grande de recibos.php sobre
        por qué el recibo no depende del contrato. */
+    /* Los dos botones van juntos y con el mismo peso visual: ninguno es
+       "el paso 1 del otro". Generar un contrato es enteramente opcional
+       —ver la nota grande en contratos.php—, así que no se ordenan como
+       un asistente de pasos ni uno se deshabilita esperando al otro. */
     '<div class="acciones" style="margin-top:var(--esp-3)">' +
       '<button class="boton" id="detalle-recibo">Generar recibo</button>' +
+      '<button class="boton" id="detalle-contrato">Generar contrato</button>' +
+    '</div>' +
+    '<div class="acciones" style="margin-top:var(--esp-2)">' +
+      '<button class="boton" id="detalle-ver-recibos">Ver recibos</button>' +
+      '<button class="boton" id="detalle-ver-contratos">Ver contratos</button>' +
     '</div>' +
     '<div class="acciones" style="margin-top:var(--esp-2)">' +
       '<button class="boton boton--peligro" id="detalle-borrar">Borrar</button>' +
@@ -1717,7 +1726,13 @@ function abrirDetalleDeProveedor(proveedor) {
   engancharBotonesDeContacto(cuerpo, proveedor);
   insertarAdjuntosDeSoloLectura(cuerpo, 'proveedor', proveedor.id, 'Contrato y documentos');
 
+  buscar('#detalle-ver-recibos', cuerpo).addEventListener('click',
+    () => abrirListaDeDocumentos('recibo', proveedor));
+  buscar('#detalle-ver-contratos', cuerpo).addEventListener('click',
+    () => abrirListaDeDocumentos('contrato', proveedor));
+
   buscar('#detalle-recibo', cuerpo).addEventListener('click', () => abrirGeneradorDeRecibo(proveedor));
+  buscar('#detalle-contrato', cuerpo).addEventListener('click', () => abrirGeneradorDeContrato(proveedor));
 
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioProveedor(proveedor));
 
@@ -1740,6 +1755,12 @@ function abrirGeneradorDeRecibo(proveedor) {
   const hoy   = new Date().toISOString().slice(0, 10);
 
   const cuerpo = abrirHoja('Recibo · ' + proveedor.nombre,
+    '<button type="button" class="lista__fila" id="rec-configurar" ' +
+            'style="margin-bottom:var(--esp-2)">' +
+      '<span class="lista__cuerpo">' +
+        '<span class="lista__titulo">⚙️ Numeración y datos de quien paga</span>' +
+      '</span>' +
+    '</button>' +
     campoTexto({ id: 'rec-monto', rotulo: 'Monto', tipo: 'number', paso: '0.01',
                  valor: falta > 0 ? desdePesos(falta) : '',
                  pista: 'Lo que se está pagando ahora' }) +
@@ -1760,6 +1781,8 @@ function abrirGeneradorDeRecibo(proveedor) {
     '</div>'
   );
 
+  buscar('#rec-configurar', cuerpo).addEventListener('click', () => abrirConfiguracionDeDocumentos());
+
   buscar('#rec-generar', cuerpo).addEventListener('click', async () => {
     const monto = aPesos(valorDe('rec-monto', cuerpo));
     if (!monto || monto <= 0) {
@@ -1776,9 +1799,378 @@ function abrirGeneradorDeRecibo(proveedor) {
         fecha:        valorDe('rec-fecha', cuerpo),
       });
       cerrarHoja(true);
-      avisar('Recibo ' + resultado.numero + ' generado.');
-      // Vuelve a abrir la ficha para que el PDF ya aparezca en la lista.
+      abrirResultadoDeDocumento('Recibo ' + resultado.numero + ' generado.',
+        resultado.archivo_id, resultado.nombre, proveedor);
+    } catch (error) {
+      avisar(error.message, true);
+    }
+  });
+}
+
+/**
+ * Pantallita corta que aparece justo después de generar un recibo o un
+ * contrato: confirma el número, ofrece mandarlo por WhatsApp ahí mismo
+ * (ver compartirArchivoPorWhatsApp en 06-piezas.js) y, al cerrarla,
+ * vuelve a la ficha del proveedor para que el PDF ya se vea en la lista
+ * de "Contrato y documentos".
+ *
+ * @param {string} mensaje
+ * @param {number} archivoId
+ * @param {string} nombreArchivo
+ * @param {Object} proveedor
+ * @returns {void}
+ */
+function abrirResultadoDeDocumento(mensaje, archivoId, nombreArchivo, proveedor) {
+  const cuerpo = abrirHoja('Listo', '' +
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' + seguro(mensaje) + '</p>' +
+    '<div class="acciones">' +
+      '<button type="button" class="boton boton--principal" id="doc-whatsapp">' +
+        'Enviar por WhatsApp' +
+      '</button>' +
+    '</div>',
+    () => abrirDetalleDeProveedor(proveedor)
+  );
+
+  buscar('#doc-whatsapp', cuerpo).addEventListener('click', () => {
+    compartirArchivoPorWhatsApp(archivoId, nombreArchivo, proveedor.telefono);
+  });
+}
+
+/**
+ * Configuración de cada tipo de documento guardado: dónde pedirlos,
+ * cómo mostrarlos en la lista y en el detalle. Un solo lugar para las
+ * diferencias entre "recibo" y "contrato", en vez de tener dos pares de
+ * funciones casi idénticas.
+ */
+const TIPOS_DE_DOCUMENTO = {
+  recibo: {
+    endpoint: 'recibos.php',
+    titulo: 'Recibos',
+    tituloSingular: 'Recibo',
+    filaLista: r => [seguro(r.numero), comoDinero(r.monto, false) + ' · ' + seguro(r.concepto || '—')],
+    campos: r => [
+      ['Fecha', comoFecha(r.fecha)],
+      ['Concepto', r.concepto || '—'],
+      ['Monto', comoDinero(r.monto, false)],
+      ['Forma de pago', r.forma_pago || '—'],
+      ['Estado', { pendiente: 'Pendiente', enviado: 'Enviado', firmado: 'Firmado' }[r.estado] || r.estado],
+    ],
+    tieneEstado: true,
+  },
+  contrato: {
+    endpoint: 'contratos.php',
+    titulo: 'Contratos',
+    tituloSingular: 'Contrato',
+    filaLista: c => [seguro(c.numero || ('Contrato #' + c.id)), comoDinero(c.monto_total, false)],
+    campos: c => [
+      ['Fecha de firma', comoFecha(c.fecha_firma)],
+      ['Servicio', c.descripcion_servicio || '—'],
+      ['Monto total', comoDinero(c.monto_total, false)],
+      ['Lugar', c.lugar || '—'],
+    ],
+    tieneEstado: false,
+  },
+};
+
+/**
+ * La lista de recibos o contratos ya generados para este proveedor —
+ * solo para CONSULTAR. Tocar una fila abre el detalle de solo lectura
+ * (abrirDetalleDeDocumentoGuardado); ahí, y solo ahí, aparecen Editar y
+ * Borrar, cada uno detrás de una confirmación explícita.
+ *
+ * POR QUÉ HAY FRICCIÓN A PROPÓSITO
+ * Un recibo o un contrato ya generado es, en la práctica, un documento
+ * legal/contable entregado: no debería poder tocarse con el mismo toque
+ * despreocupado con el que se edita una nota. Ver la nota grande en
+ * recibos.php y contratos.php sobre por qué "editar" ni siquiera
+ * rehace el PDF — esto es la misma idea, del lado de la interfaz.
+ *
+ * @param {'recibo'|'contrato'} tipo
+ * @param {Object} proveedor
+ * @returns {Promise<void>}
+ */
+async function abrirListaDeDocumentos(tipo, proveedor) {
+  const config = TIPOS_DE_DOCUMENTO[tipo];
+  const cuerpo = abrirHoja(config.titulo + ' · ' + proveedor.nombre,
+    '<div class="esqueleto"></div>'.repeat(3));
+
+  let filas;
+  try {
+    filas = await traer(config.endpoint + '?accion=listar&proveedor_id=' + proveedor.id);
+  } catch (error) {
+    cuerpo.innerHTML = '';
+    pintarError(cuerpo, error.message, () => abrirListaDeDocumentos(tipo, proveedor));
+    return;
+  }
+
+  if (!filas.length) {
+    cuerpo.innerHTML = '';
+    pintarVacio(cuerpo, 'Todavía no hay ' + config.titulo.toLowerCase(),
+      'Los que generes van a aparecer acá, solo para consultar.');
+    return;
+  }
+
+  cuerpo.innerHTML = filas.map(fila => {
+    const [titulo, pie] = config.filaLista(fila);
+    return '<button class="lista__fila" data-doc-id="' + seguro(fila.id) + '">' +
+      '<span class="lista__cuerpo">' +
+        '<span class="lista__titulo">' + titulo + '</span>' +
+        '<span class="lista__pie">' + pie + '</span>' +
+      '</span>' +
+    '</button>';
+  }).join('');
+
+  buscarTodos('[data-doc-id]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', () => {
+      const fila = filas.find(f => String(f.id) === boton.dataset.docId);
+      if (fila) abrirDetalleDeDocumentoGuardado(tipo, fila, proveedor);
+    });
+  });
+}
+
+/**
+ * El detalle de solo lectura de UN recibo o contrato ya generado.
+ * Editar y Borrar están acá, nunca en la lista, y cada uno pide
+ * confirmación explícita antes de hacer nada — ver la nota grande de
+ * abrirListaDeDocumentos() sobre por qué.
+ *
+ * @param {'recibo'|'contrato'} tipo
+ * @param {Object} documento
+ * @param {Object} proveedor
+ * @returns {void}
+ */
+function abrirDetalleDeDocumentoGuardado(tipo, documento, proveedor) {
+  const config = TIPOS_DE_DOCUMENTO[tipo];
+  const detalle = config.campos(documento).map(r =>
+    '<span class="detalle__rotulo">' + seguro(r[0]) + '</span>' +
+    '<span class="detalle__valor">' + seguro(r[1]) + '</span>'
+  ).join('');
+
+  const botonesDeEstado = config.tieneEstado
+    ? '<div class="acciones" style="margin-top:var(--esp-2)">' +
+        '<button class="boton" data-marcar="enviado">Marcar enviado</button>' +
+        '<button class="boton" data-marcar="firmado">Marcar firmado</button>' +
+      '</div>'
+    : '';
+
+  const cuerpo = abrirHoja(
+    config.tituloSingular + ' ' + (documento.numero || '#' + documento.id),
+    '<div class="detalle">' + detalle + '</div>' +
+    botonesDeEstado +
+    (documento.archivo_id
+      ? '<div class="acciones" style="margin-top:var(--esp-2)">' +
+          '<button class="boton boton--principal" id="doc-ver-whatsapp">Enviar por WhatsApp</button>' +
+        '</div>'
+      : '') +
+    '<p class="vacio__texto" style="margin-top:var(--esp-3)">' +
+      'Ya se generó y se guardó: el PDF no cambia aunque edites estos datos. ' +
+      'Si el monto o la fecha estaban mal de verdad, lo correcto es borrar ' +
+      'este ' + config.tituloSingular.toLowerCase() + ' y generar uno nuevo.' +
+    '</p>' +
+    '<div class="acciones" style="margin-top:var(--esp-2)">' +
+      '<button class="boton boton--peligro" id="doc-borrar">Borrar</button>' +
+      '<button class="boton" id="doc-editar">Editar datos</button>' +
+    '</div>',
+    () => abrirListaDeDocumentos(tipo, proveedor)
+  );
+
+  if (documento.archivo_id) {
+    buscar('#doc-ver-whatsapp', cuerpo).addEventListener('click', () => {
+      compartirArchivoPorWhatsApp(documento.archivo_id,
+        config.tituloSingular + ' ' + (documento.numero || documento.id) + '.pdf',
+        proveedor.telefono);
+    });
+  }
+
+  buscarTodos('[data-marcar]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', async () => {
+      try {
+        await mandar('recibos.php?accion=marcar_estado',
+          { id: documento.id, estado: boton.dataset.marcar });
+        avisar('Marcado como ' + boton.dataset.marcar + '.');
+        documento.estado = boton.dataset.marcar;
+        abrirDetalleDeDocumentoGuardado(tipo, documento, proveedor);
+      } catch (error) {
+        avisar(error.message, true);
+      }
+    });
+  });
+
+  // ⚡ FRICCIÓN INTENCIONAL: ni Editar ni Borrar hacen nada al primer
+  // toque. Los dos piden confirmación explícita antes de seguir —un
+  // documento ya generado no se toca con el mismo descuido que una nota.
+  buscar('#doc-editar', cuerpo).addEventListener('click', () => {
+    if (!confirmarAccion(
+      'Esto corrige solo los datos guardados; el PDF ya generado no cambia. ¿Seguro que quieres editar?'
+    )) return;
+    abrirEdicionDeDocumento(tipo, documento, proveedor);
+  });
+
+  buscar('#doc-borrar', cuerpo).addEventListener('click', () => {
+    if (!confirmarAccion(
+      '¿Borrar este ' + config.tituloSingular.toLowerCase() + ' y su PDF? No se puede deshacer.'
+    )) return;
+
+    mandar(config.endpoint + '?accion=borrar', { id: documento.id })
+      .then(() => {
+        cerrarHoja(true);
+        avisar(config.tituloSingular + ' eliminado.');
+        abrirDetalleDeProveedor(proveedor);
+      })
+      .catch(error => avisar(error.message, true));
+  });
+}
+
+/**
+ * El formulario de edición de un documento ya guardado — solo se llega
+ * acá DESPUÉS de confirmar en abrirDetalleDeDocumentoGuardado(). Reusa
+ * los mismos campos según el tipo; guarda con ?accion=editar.
+ *
+ * @param {'recibo'|'contrato'} tipo
+ * @param {Object} documento
+ * @param {Object} proveedor
+ * @returns {void}
+ */
+function abrirEdicionDeDocumento(tipo, documento, proveedor) {
+  const config = TIPOS_DE_DOCUMENTO[tipo];
+  const esRecibo = tipo === 'recibo';
+
+  const cuerpo = abrirHoja('Editar ' + config.tituloSingular.toLowerCase(),
+    esRecibo
+      ? campoTexto({ id: 'ed-monto', rotulo: 'Monto', tipo: 'number', paso: '0.01',
+                     valor: desdePesos(documento.monto) }) +
+        campoLargo({ id: 'ed-concepto', rotulo: 'Concepto', valor: documento.concepto }) +
+        campoTexto({ id: 'ed-forma', rotulo: 'Forma de pago', valor: documento.forma_pago }) +
+        campoTexto({ id: 'ed-fecha', rotulo: 'Fecha', tipo: 'date', valor: documento.fecha })
+      : campoTexto({ id: 'ed-monto', rotulo: 'Monto total', tipo: 'number', paso: '0.01',
+                     valor: desdePesos(documento.monto_total) }) +
+        campoLargo({ id: 'ed-descripcion', rotulo: 'Descripción del servicio',
+                     valor: documento.descripcion_servicio }) +
+        campoTexto({ id: 'ed-lugar', rotulo: 'Lugar', valor: documento.lugar }) +
+    pieDeFormulario('Guardar')
+  );
+
+  buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
+    const cambios = esRecibo
+      ? {
+          monto:      aPesos(valorDe('ed-monto', cuerpo)),
+          concepto:   valorDe('ed-concepto', cuerpo),
+          forma_pago: valorDe('ed-forma', cuerpo),
+          fecha:      valorDe('ed-fecha', cuerpo),
+        }
+      : {
+          monto_total:          aPesos(valorDe('ed-monto', cuerpo)),
+          descripcion_servicio: valorDe('ed-descripcion', cuerpo),
+          lugar:                valorDe('ed-lugar', cuerpo),
+        };
+
+    try {
+      await mandar(config.endpoint + '?accion=editar',
+        Object.assign({ id: documento.id }, cambios));
+      cerrarHoja(true);
+      avisar('Guardado.');
       abrirDetalleDeProveedor(proveedor);
+    } catch (error) {
+      avisar(error.message, true);
+    }
+  });
+}
+
+/**
+ * Formulario de contrato de este proveedor. Casi todo viene pre-lleno
+ * con lo que la ficha ya sabe: la idea es que aceptar los valores tal
+ * cual, sin tocar nada, sea una opción real y rápida (ver la nota
+ * grande en contratos.php sobre por qué). Es igual de opcional que
+ * siempre — no bloquea ni pide nada para poder generar un recibo.
+ *
+ * @param {Object} proveedor
+ * @returns {void}
+ */
+function abrirGeneradorDeContrato(proveedor) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const fechaDelEvento = (CONFIGURACION.fiesta.fechaYHora || '').slice(0, 10);
+
+  const descripcionSugerida = (proveedor.detalle_items && proveedor.detalle_items.length)
+    ? 'Servicio de ' + proveedor.servicio + ', que incluye: '
+      + proveedor.detalle_items.map(it => it.texto).join(', ') + '.'
+    : 'Servicio de ' + proveedor.servicio + '.';
+
+  const formaDePagoSugerida = (Number(proveedor.anticipo) || 0) > 0
+    ? 'Anticipo de ' + comoDinero(proveedor.anticipo, false)
+      + ' y el saldo restante contra entrega del servicio.'
+    : 'A convenir entre las partes.';
+
+  const cuerpo = abrirHoja('Contrato · ' + proveedor.nombre,
+    '<button type="button" class="lista__fila" id="con-configurar" ' +
+            'style="margin-bottom:var(--esp-2)">' +
+      '<span class="lista__cuerpo">' +
+        '<span class="lista__titulo">⚙️ Numeración y datos de quien paga</span>' +
+      '</span>' +
+    '</button>' +
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+      'Ya viene lleno con lo que sabemos de este proveedor — revisa y ' +
+      'ajusta lo que haga falta.' +
+    '</p>' +
+    campoLargo({ id: 'con-descripcion', rotulo: 'Descripción del servicio',
+                 valor: descripcionSugerida }) +
+    '<div class="campo-par">' +
+      campoTexto({ id: 'con-fecha-evento', rotulo: 'Fecha del servicio', tipo: 'date',
+                   valor: fechaDelEvento }) +
+      campoTexto({ id: 'con-fecha-firma', rotulo: 'Fecha de firma', tipo: 'date',
+                   valor: hoy }) +
+    '</div>' +
+    campoTexto({ id: 'con-monto', rotulo: 'Monto total', tipo: 'number', paso: '0.01',
+                 valor: proveedor.monto_total ? desdePesos(proveedor.monto_total) : '' }) +
+    campoLargo({ id: 'con-forma-pago', rotulo: 'Forma de pago', valor: formaDePagoSugerida }) +
+    '<div class="campo-par">' +
+      campoTexto({ id: 'con-lugar', rotulo: 'Lugar',
+                   valor: CONFIGURACION.fiesta.lugar || '' }) +
+      campoTexto({ id: 'con-horario', rotulo: 'Horario', pista: 'Opcional' }) +
+    '</div>' +
+    campoTexto({ id: 'con-identificacion', rotulo: 'RFC o identificación del proveedor',
+                 pista: 'Opcional — si lo dejas vacío, no aparece en el contrato' }) +
+    campoLargo({ id: 'con-clausulas', rotulo: 'Cláusulas adicionales (opcional)' }) +
+    campoLargo({ id: 'con-penalizaciones', rotulo: 'Penalizaciones (opcional)',
+                 valor: '' }) +
+    campoLargo({ id: 'con-cancelacion', rotulo: 'Política de cancelación (opcional)',
+                 valor: '' }) +
+    campoTexto({ id: 'con-jurisdiccion', rotulo: 'Jurisdicción', valor: 'México' }) +
+    '<div class="acciones">' +
+      '<button type="button" class="boton boton--principal" id="con-generar">' +
+        'Generar PDF' +
+      '</button>' +
+    '</div>'
+  );
+
+  buscar('#con-configurar', cuerpo).addEventListener('click', () => abrirConfiguracionDeDocumentos());
+
+  buscar('#con-generar', cuerpo).addEventListener('click', async () => {
+    const monto = aPesos(valorDe('con-monto', cuerpo));
+    if (!monto || monto <= 0) {
+      avisar('Poné un monto total mayor a cero.', true);
+      return;
+    }
+
+    try {
+      const resultado = await mandar('contratos.php?accion=generar', {
+        proveedor_id:          proveedor.id,
+        descripcion_servicio:  valorDe('con-descripcion', cuerpo),
+        fecha_inicio:          valorDe('con-fecha-evento', cuerpo),
+        fecha_firma:           valorDe('con-fecha-firma', cuerpo),
+        monto_total:           monto,
+        forma_pago:            valorDe('con-forma-pago', cuerpo),
+        lugar:                 valorDe('con-lugar', cuerpo),
+        horario:               valorDe('con-horario', cuerpo),
+        proveedor_identificacion: valorDe('con-identificacion', cuerpo),
+        clausulas_adicionales: valorDe('con-clausulas', cuerpo),
+        penalizaciones:        valorDe('con-penalizaciones', cuerpo),
+        cancelacion:           valorDe('con-cancelacion', cuerpo),
+        jurisdiccion:          valorDe('con-jurisdiccion', cuerpo),
+      });
+      cerrarHoja(true);
+      abrirResultadoDeDocumento(
+        'Contrato ' + (resultado.numero ? resultado.numero + ' ' : '') + 'generado.',
+        resultado.archivo_id, resultado.nombre, proveedor);
     } catch (error) {
       avisar(error.message, true);
     }

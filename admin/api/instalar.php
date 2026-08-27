@@ -199,7 +199,7 @@ $tablasEsperadas = [
     'usuarios', 'sesiones', 'recuperaciones_clave', 'intentos_login', 'bitacora', 'notas', 'archivos',
     'ajustes', 'alarmas', 'suscripciones_push', 'categorias_gasto', 'padrinos',
     'proveedores',
-    'cotizaciones', 'cotizacion_items', 'recibos', 'gastos', 'pagos', 'tareas', 'agenda',
+    'cotizaciones', 'cotizacion_items', 'recibos', 'contratos', 'gastos', 'pagos', 'tareas', 'agenda',
     'cronograma',
     'mesas', 'asignacion_mesas', 'grupos_invitados', 'preferencias_invitado',
     'incompatibilidades', 'corte_honor', 'ensayos', 'asistencia_ensayos',
