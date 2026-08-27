@@ -2050,19 +2050,27 @@ function abrirGeneradorDeRecibo(proveedor) {
       });
       cerrarHoja(true);
 
-      // Si quedó vinculado a un pago, Presupuesto tiene datos nuevos:
-      // mismo refresco que ya usa guardarDinero() al guardar cualquier
-      // otra cosa, para que "Pagos registrados" y las pestañas de
-      // Gastos/Pagos lo vean sin tener que salir y volver a entrar.
-      if (resultado.pago_id) {
-        ensuciarVistas('resumen');
-        await dibujarDinero();
-      }
+      // Generar un recibo SIEMPRE mueve el anticipo del proveedor en el
+      // servidor (ver la nota grande en recibos.php), quedó vinculado a
+      // un pago o no — así que siempre hay que refrescar, mismo patrón
+      // que ya usa guardarDinero() al guardar cualquier otra cosa. Sin
+      // esto, "Falta" seguía mostrando el número viejo y el próximo
+      // recibo sugería el mismo monto, como si nada se hubiera guardado.
+      ensuciarVistas('resumen');
+      await dibujarDinero();
+
+      // El `proveedor` de acá arriba quedó con el anticipo VIEJO —se
+      // armó antes de este guardado—; dibujarDinero() ya trajo una copia
+      // nueva. Sin este re-lookup, cerrar esta pantalla reabriría la
+      // ficha con el mismo "Falta" de siempre, aunque el número ya
+      // había cambiado en el servidor.
+      const proveedorActualizado =
+        DINERO.proveedores.find(p => p.id === proveedor.id) || proveedor;
 
       abrirResultadoDeDocumento(
         'Recibo ' + resultado.numero + ' generado.'
           + (resultado.pago_id ? ' Registrado también como pago.' : ''),
-        resultado.archivo_id, resultado.nombre, proveedor);
+        resultado.archivo_id, resultado.nombre, proveedorActualizado);
     } catch (error) {
       avisar(error.message, true);
     }

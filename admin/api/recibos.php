@@ -514,6 +514,20 @@ case 'generar':
 
     $reciboId = insertar('recibos', $filaParaGuardar);
 
+    /* ⚡ SUMAR AL ANTICIPO DEL PROVEEDOR, Y ES A PROPÓSITO (2026-08-27).
+       Sin esto, `proveedores.anticipo` nunca se movía al generar un
+       recibo: "Falta" seguía mostrando el mismo número de siempre, así
+       que el siguiente "Generar recibo" volvía a sugerir el mismo
+       monto — y a simple vista parecía "el mismo recibo de antes"
+       reapareciendo, aunque el formulario era uno nuevo en blanco.
+       Se tapa en monto_total: un recibo no puede dejar el anticipo por
+       encima de lo pactado. */
+    $nuevoAnticipo = min(
+        (float) $proveedor['monto_total'],
+        (float) $proveedor['anticipo'] + $monto
+    );
+    actualizar('proveedores', $proveedorId, ['anticipo' => $nuevoAnticipo]);
+
     bd()->commit();
 
     anotarEnBitacora($yo, 'generó un recibo', 'recibos', $reciboId, $recibo['numero']);

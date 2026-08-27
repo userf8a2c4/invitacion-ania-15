@@ -245,7 +245,7 @@ responderBien([
     'cuentas_existentes'=> $cuentas,
     'siguiente_paso'    => $listo
         ? ($cuentas > 0
-            ? 'Todo listo. Entra a https://aniaxv.com/admin/'
+            ? 'Todo listo. Entra a https://' . ($_SERVER['HTTP_HOST'] ?? 'aniaxv.com') . '/admin/'
             : 'Las tablas están creadas. Falta crear la primera cuenta.')
         : 'Faltan tablas. Revisa la lista de fallidas.',
 ]);
