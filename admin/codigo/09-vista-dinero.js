@@ -689,6 +689,66 @@ function pintarGastos(cuerpo) {
 }
 
 /**
+ * PLAN.tareas ya cargado, pidiéndolo si hace falta — mismo criterio que
+ * datosDePlanParaElAsistente() en 34-asistente-datos.js, pero sin pasar
+ * por el asistente: cualquier ficha de Dinero puede necesitarlo.
+ *
+ * @returns {Promise<Array>}
+ */
+async function tareasParaLaFicha() {
+  if (PLAN.tareas && PLAN.tareas.length) return PLAN.tareas;
+  try { await traerPlanificador(); } catch (error) { /* sin señal: sigue vacío */ }
+  return PLAN.tareas || [];
+}
+
+/**
+ * Engancha "Nueva tarea" y pinta las tareas ya atadas a esta ficha —
+ * mismo patrón en las tres fichas que lo usan (proveedor, gasto,
+ * padrino). Fuera de un `await` a propósito, igual que ya hace
+ * insertarAdjuntosDeSoloLectura(): la ficha se ve completa al toque,
+ * y esto se rellena solo apenas responde.
+ *
+ * @param {Element} cuerpo
+ * @param {'proveedor'|'gasto'|'padrino'} tipo
+ * @param {number} id
+ * @param {string} tituloParaLaTarea
+ * @returns {void}
+ */
+function engancharTareasDeLaFicha(cuerpo, tipo, id, tituloParaLaTarea) {
+  const boton = buscar('#detalle-nueva-tarea', cuerpo);
+  if (boton) {
+    boton.addEventListener('click', () =>
+      formularioTarea({ atada_a_tipo: tipo, atada_a_id: id, titulo: tituloParaLaTarea }));
+  }
+
+  tareasParaLaFicha().then(tareas => {
+    const relacionadas = tareas.filter(t => t.atada_a_tipo === tipo && t.atada_a_id === id);
+    const contenedor = buscar('#tareas-de-la-ficha', cuerpo);
+    if (!contenedor || !relacionadas.length) return;
+
+    contenedor.innerHTML =
+      '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">Tareas</div>' +
+      relacionadas.map(t =>
+        '<button class="lista__fila" data-tarea-de-la-ficha="' + seguro(t.id) + '">' +
+          '<span class="lista__cuerpo">' +
+            '<span class="lista__titulo">' + seguro(t.titulo) + '</span>' +
+            '<span class="lista__pie">' +
+              seguro({ pendiente: 'Pendiente', haciendo: 'En eso', hecha: 'Hecha' }[t.estado] || t.estado) +
+            '</span>' +
+          '</span>' +
+        '</button>'
+      ).join('');
+
+    buscarTodos('[data-tarea-de-la-ficha]', contenedor).forEach(fila => {
+      fila.addEventListener('click', () => {
+        const tarea = relacionadas.find(t => String(t.id) === fila.dataset.tareaDeLaFicha);
+        if (tarea) formularioTarea(tarea);
+      });
+    });
+  });
+}
+
+/**
  * Ficha de solo lectura de un gasto, antes de editar.
  *
  * @param {Object} gasto
@@ -711,7 +771,9 @@ function abrirDetalleDeGasto(gasto) {
 
   const cuerpo = abrirHoja(gasto.concepto,
     '<div class="detalle">' + detalle + '</div>' +
+    '<div id="tareas-de-la-ficha"></div>' +
     '<div class="acciones" style="margin-top:var(--esp-3)">' +
+      '<button class="boton" id="detalle-nueva-tarea">Nueva tarea</button>' +
       '<button class="boton" id="detalle-alarma">Ponerle alarma</button>' +
     '</div>' +
     '<div class="acciones" style="margin-top:var(--esp-2)">' +
@@ -720,6 +782,7 @@ function abrirDetalleDeGasto(gasto) {
   );
 
   insertarAdjuntosDeSoloLectura(cuerpo, 'gasto', gasto.id, 'Facturas y comprobantes');
+  engancharTareasDeLaFicha(cuerpo, 'gasto', gasto.id, 'Sobre ' + gasto.concepto);
 
   buscar('#detalle-alarma', cuerpo).addEventListener('click', () =>
     ponerleAlarmaA({ titulo: gasto.concepto, tipo: 'gasto', id: gasto.id }));
@@ -1035,7 +1098,9 @@ function abrirDetalleDePadrino(padrino) {
   const cuerpo = abrirHoja(padrino.nombre,
     '<div class="detalle">' + detalle + '</div>' +
     seccionGastos +
+    '<div id="tareas-de-la-ficha"></div>' +
     '<div class="acciones" style="margin-top:var(--esp-3)">' +
+      '<button class="boton" id="detalle-nueva-tarea">Nueva tarea</button>' +
       '<button class="boton" id="detalle-alarma">Ponerle alarma</button>' +
     '</div>' +
     '<div class="acciones" style="margin-top:var(--esp-2)">' +
@@ -1045,6 +1110,7 @@ function abrirDetalleDePadrino(padrino) {
   );
 
   insertarAdjuntosDeSoloLectura(cuerpo, 'padrino', padrino.id, 'Comprobante de lo entregado');
+  engancharTareasDeLaFicha(cuerpo, 'padrino', padrino.id, 'Sobre ' + padrino.nombre);
 
   buscarTodos('[data-gasto-que-cubre]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
@@ -1828,7 +1894,9 @@ function abrirDetalleDeProveedor(proveedor) {
       '<button class="boton" id="detalle-ver-recibos">Ver recibos</button>' +
       '<button class="boton" id="detalle-ver-contratos">Ver contratos</button>' +
     '</div>' +
+    '<div id="tareas-de-la-ficha"></div>' +
     '<div class="acciones" style="margin-top:var(--esp-2)">' +
+      '<button class="boton" id="detalle-nueva-tarea">Nueva tarea</button>' +
       '<button class="boton" id="detalle-alarma">Ponerle alarma</button>' +
     '</div>' +
     '<div class="acciones" style="margin-top:var(--esp-2)">' +
@@ -1839,6 +1907,7 @@ function abrirDetalleDeProveedor(proveedor) {
 
   engancharBotonesDeContacto(cuerpo, proveedor);
   insertarAdjuntosDeSoloLectura(cuerpo, 'proveedor', proveedor.id, 'Contrato y documentos');
+  engancharTareasDeLaFicha(cuerpo, 'proveedor', proveedor.id, 'Sobre ' + proveedor.nombre);
 
   buscar('#detalle-ver-recibos', cuerpo).addEventListener('click',
     () => abrirListaDeDocumentos('recibo', proveedor));
@@ -1882,7 +1951,7 @@ function abrirGeneradorDeRecibo(proveedor) {
         '<span class="lista__titulo">⚙️ Numeración y datos de quien paga</span>' +
       '</span>' +
     '</button>' +
-    campoTexto({ id: 'rec-monto', rotulo: 'Monto', tipo: 'number', paso: '0.01',
+    campoDinero({ id: 'rec-monto', rotulo: 'Monto',
                  valor: falta > 0 ? desdePesos(falta) : '',
                  pista: 'Lo que se está pagando ahora' }) +
     campoLargo({ id: 'rec-concepto', rotulo: 'Concepto',
@@ -1908,6 +1977,8 @@ function abrirGeneradorDeRecibo(proveedor) {
       '</button>' +
     '</div>'
   );
+
+  activarFormatoDeMiles('rec-monto', cuerpo);
 
   buscar('#rec-configurar', cuerpo).addEventListener('click', () => abrirConfiguracionDeDocumentos());
 
@@ -2227,9 +2298,34 @@ function abrirEdicionDeDocumento(tipo, documento, proveedor) {
  * @param {Object} proveedor
  * @returns {void}
  */
+/** Cláusulas adicionales típicas de un contrato de servicio para una fiesta. */
+const CLAUSULAS_SUGERIDAS = [
+  'Confidencialidad: ninguna de las partes divulgará información privada de la otra conocida por este contrato.',
+  'EL PRESTADOR podrá usar fotografías o video del evento con fines de promoción, salvo que LA CONTRATANTE lo prohíba expresamente por escrito.',
+  'Ninguna de las partes será responsable por incumplimientos causados por caso fortuito o fuerza mayor.',
+  'Cualquier modificación a este contrato deberá constar por escrito y estar firmada por ambas partes.',
+  'EL PRESTADOR entregará el material adicional pactado (fotografías, video, recuerdos) en un plazo máximo de 30 días naturales tras el evento.',
+];
+
+/** Penalizaciones típicas por incumplimiento. */
+const PENALIZACIONES_SUGERIDAS = [
+  'Si EL PRESTADOR incumple sin causa justificada, reembolsará a LA CONTRATANTE la totalidad de lo ya entregado como anticipo.',
+  'Por cada día de atraso injustificado en la entrega del servicio, EL PRESTADOR bonificará el 5% del monto total pactado.',
+  'Si el servicio se entrega incompleto o de calidad menor a la pactada, LA CONTRATANTE podrá exigir un descuento proporcional.',
+];
+
+/** Políticas de cancelación típicas. */
+const CANCELACION_SUGERIDA = [
+  'Si LA CONTRATANTE cancela con 15 días naturales o menos de anticipación, el anticipo entregado no será reembolsable.',
+  'Si LA CONTRATANTE cancela con 30 días naturales o más de anticipación, se reembolsará el 50% del anticipo entregado.',
+  'La fecha del servicio podrá reprogramarse sin costo adicional si se avisa con al menos 30 días de anticipación y EL PRESTADOR tiene disponibilidad.',
+  'Si es EL PRESTADOR quien cancela por cualquier motivo, reembolsará a LA CONTRATANTE la totalidad del anticipo entregado.',
+];
+
 function abrirGeneradorDeContrato(proveedor) {
   const hoy = new Date().toISOString().slice(0, 10);
   const fechaDelEvento = (CONFIGURACION.fiesta.fechaYHora || '').slice(0, 10);
+  const horaDelEvento = (CONFIGURACION.fiesta.fechaYHora || '').slice(11, 16);
 
   const descripcionSugerida = (proveedor.detalle_items && proveedor.detalle_items.length)
     ? 'Servicio de ' + proveedor.servicio + ', que incluye: '
@@ -2250,31 +2346,34 @@ function abrirGeneradorDeContrato(proveedor) {
     '</button>' +
     '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
       'Ya viene lleno con lo que sabemos de este proveedor — revisa y ' +
-      'ajusta lo que haga falta.' +
+      'ajusta lo que haga falta. Las cláusulas de abajo son sugerencias ' +
+      'legales típicas: tilda las que quieras incluir, o escribe las tuyas.' +
     '</p>' +
     campoLargo({ id: 'con-descripcion', rotulo: 'Descripción del servicio',
                  valor: descripcionSugerida }) +
-    '<div class="campo-par">' +
-      campoTexto({ id: 'con-fecha-evento', rotulo: 'Fecha del servicio', tipo: 'date',
-                   valor: fechaDelEvento }) +
-      campoTexto({ id: 'con-fecha-firma', rotulo: 'Fecha de firma', tipo: 'date',
-                   valor: hoy }) +
-    '</div>' +
-    campoTexto({ id: 'con-monto', rotulo: 'Monto total', tipo: 'number', paso: '0.01',
+    /* Antes iban lado a lado en .campo-par: un input type="date" a media
+       columna queda apretado (el navegador dibuja día/mes/año más el
+       ícono del calendario, y a 50% de ancho en un teléfono se corta).
+       Una fecha por renglón completo se ve entera siempre. */
+    campoTexto({ id: 'con-fecha-evento', rotulo: 'Fecha del servicio', tipo: 'date',
+                 valor: fechaDelEvento }) +
+    campoTexto({ id: 'con-fecha-firma', rotulo: 'Fecha de firma', tipo: 'date',
+                 valor: hoy }) +
+    campoDinero({ id: 'con-monto', rotulo: 'Monto total',
                  valor: proveedor.monto_total ? desdePesos(proveedor.monto_total) : '' }) +
     campoLargo({ id: 'con-forma-pago', rotulo: 'Forma de pago', valor: formaDePagoSugerida }) +
-    '<div class="campo-par">' +
-      campoTexto({ id: 'con-lugar', rotulo: 'Lugar',
-                   valor: CONFIGURACION.fiesta.lugar || '' }) +
-      campoTexto({ id: 'con-horario', rotulo: 'Horario', pista: 'Opcional' }) +
-    '</div>' +
+    campoTexto({ id: 'con-lugar', rotulo: 'Lugar',
+                 valor: CONFIGURACION.fiesta.lugar || '' }) +
+    campoTexto({ id: 'con-horario', rotulo: 'Horario', tipo: 'time',
+                 valor: horaDelEvento, pista: 'Opcional' }) +
     campoTexto({ id: 'con-identificacion', rotulo: 'RFC o identificación del proveedor',
                  pista: 'Opcional — si lo dejas vacío, no aparece en el contrato' }) +
-    campoLargo({ id: 'con-clausulas', rotulo: 'Cláusulas adicionales (opcional)' }) +
-    campoLargo({ id: 'con-penalizaciones', rotulo: 'Penalizaciones (opcional)',
-                 valor: '' }) +
-    campoLargo({ id: 'con-cancelacion', rotulo: 'Política de cancelación (opcional)',
-                 valor: '' }) +
+    campoDeClausulas({ id: 'con-clausulas', rotulo: 'Cláusulas adicionales (opcional)',
+                       opciones: CLAUSULAS_SUGERIDAS }) +
+    campoDeClausulas({ id: 'con-penalizaciones', rotulo: 'Penalizaciones',
+                       opciones: PENALIZACIONES_SUGERIDAS }) +
+    campoDeClausulas({ id: 'con-cancelacion', rotulo: 'Política de cancelación',
+                       opciones: CANCELACION_SUGERIDA }) +
     campoTexto({ id: 'con-jurisdiccion', rotulo: 'Jurisdicción', valor: 'México' }) +
     '<div class="acciones">' +
       '<button type="button" class="boton boton--principal" id="con-generar">' +
@@ -2282,6 +2381,8 @@ function abrirGeneradorDeContrato(proveedor) {
       '</button>' +
     '</div>'
   );
+
+  activarFormatoDeMiles('con-monto', cuerpo);
 
   buscar('#con-configurar', cuerpo).addEventListener('click', () => abrirConfiguracionDeDocumentos());
 
@@ -2303,9 +2404,9 @@ function abrirGeneradorDeContrato(proveedor) {
         lugar:                 valorDe('con-lugar', cuerpo),
         horario:               valorDe('con-horario', cuerpo),
         proveedor_identificacion: valorDe('con-identificacion', cuerpo),
-        clausulas_adicionales: valorDe('con-clausulas', cuerpo),
-        penalizaciones:        valorDe('con-penalizaciones', cuerpo),
-        cancelacion:           valorDe('con-cancelacion', cuerpo),
+        clausulas_adicionales: valorDeClausulasDe('con-clausulas', cuerpo),
+        penalizaciones:        valorDeClausulasDe('con-penalizaciones', cuerpo),
+        cancelacion:           valorDeClausulasDe('con-cancelacion', cuerpo),
         jurisdiccion:          valorDe('con-jurisdiccion', cuerpo),
       });
       cerrarHoja(true);

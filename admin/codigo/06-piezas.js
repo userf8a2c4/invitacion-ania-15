@@ -711,6 +711,119 @@ function campoTexto(opciones) {
 }
 
 /**
+ * "150000.5" → "150,000.5". Sin librería: separa la parte entera cada
+ * tres dígitos, deja los decimales tal cual venían.
+ *
+ * @param {string} texto
+ * @returns {string}
+ */
+function formatoDeMiles(texto) {
+  const limpio = String(texto || '').replace(/[^\d.]/g, '');
+  const punto = limpio.indexOf('.');
+  const entero = punto === -1 ? limpio : limpio.slice(0, punto);
+  const decimales = punto === -1 ? '' : limpio.slice(punto);
+  return entero.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + decimales;
+}
+
+/**
+ * Un campo de dinero con separador de miles NATIVO: "1000" se ve
+ * "1,000" apenas se tipea el cuarto dígito, como cualquier app de
+ * plata de verdad. Por dentro sigue siendo texto —los `type="number"`
+ * del navegador no aceptan comas—, pero aPesos() ya limpia cualquier
+ * caracter que no sea dígito o punto al leerlo, así que nada más
+ * cambia con este campo.
+ *
+ * ⚠️ Requiere llamar a activarFormatoDeMiles(id, cuerpo) después de
+ * abrirHoja(), para que el formato se actualice mientras se escribe.
+ *
+ * @param {Object} opciones - id, rotulo, valor (en pesos), pista.
+ * @returns {string}
+ */
+function campoDinero(opciones) {
+  const valor = (opciones.valor !== undefined && opciones.valor !== '' && opciones.valor !== null)
+    ? formatoDeMiles(String(opciones.valor))
+    : '';
+  return '' +
+    '<label class="campo">' +
+      '<span class="campo__rotulo">' + seguro(opciones.rotulo) + '</span>' +
+      '<input type="text" inputmode="decimal" id="' + seguro(opciones.id) + '" ' +
+             'class="campo__control" value="' + seguro(valor) + '"' +
+             (opciones.pista ? ' placeholder="' + seguro(opciones.pista) + '"' : '') +
+      '>' +
+    '</label>';
+}
+
+/**
+ * Engancha el separador de miles en vivo sobre un campoDinero() ya
+ * insertado en el DOM. El cursor se mantiene al final salvo que se
+ * estuviera editando en medio del número —caso raro en un monto—, para
+ * no complicar el cálculo exacto de dónde reinsertarlo.
+ *
+ * @param {string} id
+ * @param {Element} cuerpo
+ * @returns {void}
+ */
+function activarFormatoDeMiles(id, cuerpo) {
+  const campo = buscar('#' + id, cuerpo);
+  if (!campo) return;
+  campo.addEventListener('input', () => {
+    const estabaAlFinal = campo.selectionStart === campo.value.length;
+    campo.value = formatoDeMiles(campo.value);
+    if (estabaAlFinal) {
+      campo.selectionStart = campo.value.length;
+      campo.selectionEnd = campo.value.length;
+    }
+  });
+}
+
+/**
+ * Una lista de cláusulas típicas para elegir con casillas, más un
+ * texto libre para agregar cualquier otra cosa a mano. Pensado para
+ * que un contrato quede con base legal razonable sin que Lucila tenga
+ * que redactar cláusulas ella misma: puede aceptar las sugeridas tal
+ * cual, tildar solo las que quiera, y sumar lo demás con sus palabras.
+ *
+ * @param {Object} opciones - id, rotulo, opciones (string[]), valorLibre.
+ * @returns {string}
+ */
+function campoDeClausulas(opciones) {
+  const casillas = opciones.opciones.map(texto =>
+    '<label class="casilla" style="align-items:flex-start;margin-bottom:6px">' +
+      '<input type="checkbox" data-clausula-de="' + seguro(opciones.id) + '" ' +
+             'value="' + seguro(texto) + '">' +
+      '<span>' + seguro(texto) + '</span>' +
+    '</label>'
+  ).join('');
+
+  return '' +
+    '<div class="campo">' +
+      '<span class="campo__rotulo">' + seguro(opciones.rotulo) + '</span>' +
+      '<div style="margin:6px 0">' + casillas + '</div>' +
+      '<textarea id="' + seguro(opciones.id) + '-libre" class="campo__control" ' +
+                'placeholder="Agrega cualquier otra, con tus palabras (opcional)">' +
+        seguro(opciones.valorLibre || '') +
+      '</textarea>' +
+    '</div>';
+}
+
+/**
+ * Junta lo tildado en campoDeClausulas() más el texto libre en un solo
+ * bloque de texto, separado por renglones en blanco — el servidor
+ * sigue recibiendo texto plano, como siempre.
+ *
+ * @param {string} id
+ * @param {Element} cuerpo
+ * @returns {string}
+ */
+function valorDeClausulasDe(id, cuerpo) {
+  const tildadas = buscarTodos('[data-clausula-de="' + id + '"]', cuerpo)
+    .filter(casilla => casilla.checked)
+    .map(casilla => casilla.value);
+  const libre = valorDe(id + '-libre', cuerpo);
+  return tildadas.concat(libre ? [libre] : []).join('\n\n');
+}
+
+/**
  * Devuelve el HTML de un área de texto largo.
  *
  * @param {Object} opciones - id, rotulo, valor.

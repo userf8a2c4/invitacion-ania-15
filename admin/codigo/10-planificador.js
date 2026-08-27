@@ -360,6 +360,14 @@ function formularioTarea(tarea) {
       prioridad:    valorDe('tar-prioridad', cuerpo),
       estado:       valorDe('tar-estado', cuerpo),
       detalle:      valorDe('tar-detalle', cuerpo),
+      /* No hay campo en el formulario para esto — se conserva tal cual
+         venía (de una edición real, o de una precarga como la que arma
+         abrirDetalleDeProveedor() con "Nueva tarea"). Sin esto, guardar
+         cualquier edición borraría en silencio el vínculo con su
+         proveedor/gasto/padrino: guardarOEditar() manda TODAS las
+         columnas en cada UPDATE, no solo las que cambiaron. */
+      atada_a_tipo: d.atada_a_tipo || '',
+      atada_a_id:   d.atada_a_id || 0,
     };
     if (esEdicion) carga.id = tarea.id;
     else registrarEvento('accion', 'crear_tarea');
