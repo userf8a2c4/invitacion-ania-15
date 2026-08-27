@@ -712,11 +712,17 @@ function abrirDetalleDeGasto(gasto) {
   const cuerpo = abrirHoja(gasto.concepto,
     '<div class="detalle">' + detalle + '</div>' +
     '<div class="acciones" style="margin-top:var(--esp-3)">' +
+      '<button class="boton" id="detalle-alarma">Ponerle alarma</button>' +
+    '</div>' +
+    '<div class="acciones" style="margin-top:var(--esp-2)">' +
       '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
     '</div>'
   );
 
   insertarAdjuntosDeSoloLectura(cuerpo, 'gasto', gasto.id, 'Facturas y comprobantes');
+
+  buscar('#detalle-alarma', cuerpo).addEventListener('click', () =>
+    ponerleAlarmaA({ titulo: gasto.concepto, tipo: 'gasto', id: gasto.id }));
 
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioGasto(gasto));
 }
@@ -806,7 +812,7 @@ function pintarPagos(cuerpo) {
  * @param {Object} pago
  * @returns {void}
  */
-function abrirDetalleDePago(pago) {
+async function abrirDetalleDePago(pago) {
   const pagado = pago.estado === 'pagado';
 
   const detalle = [
@@ -823,9 +829,19 @@ function abrirDetalleDePago(pago) {
     '<span class="detalle__valor">' + seguro(r[1]) + '</span>'
   ).join('');
 
+  // El proveedor de este pago, buscado vía su gasto — DINERO.gastos ya
+  // trae proveedor_id (no hace falta pedirle nada nuevo al servidor).
+  const gasto = (DINERO.gastos || []).find(g => g.id === pago.gasto_id);
+  const proveedor = gasto ? (DINERO.proveedores || []).find(p => p.id === gasto.proveedor_id) : null;
+
   const cuerpo = abrirHoja(pago.concepto || pago.gasto_concepto || 'Pago',
     '<div class="detalle">' + detalle + '</div>' +
-    '<div class="acciones" style="margin-top:var(--esp-3)">' +
+    (proveedor
+      ? '<div class="acciones" style="margin-top:var(--esp-3)">' +
+          '<button class="boton" id="detalle-generar-recibo">Generar recibo</button>' +
+        '</div>'
+      : '') +
+    '<div class="acciones" style="margin-top:var(--esp-2)">' +
       '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
     '</div>'
   );
@@ -833,6 +849,42 @@ function abrirDetalleDePago(pago) {
   insertarAdjuntosDeSoloLectura(cuerpo, 'pago', pago.id, 'Comprobante del pago');
 
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioPago(pago));
+
+  /* ─── CAMINO SIMÉTRICO AL DE LA FICHA DE PROVEEDOR ───────────────────
+     Si Lucila ya cargó el pago a mano en Presupuesto (el flujo de
+     siempre) y después quiere el PDF, no hace falta repetir monto,
+     fecha ni forma de pago: recibos.php ya los saca directo del pago
+     cuando le llega pago_id (ver la nota grande en ese archivo). Antes
+     de ofrecer el botón, se chequea que este pago no tenga ya un
+     recibo — nunca dos recibos del mismo pago por error. */
+  const botonRecibo = buscar('#detalle-generar-recibo', cuerpo);
+  if (botonRecibo && proveedor) {
+    let yaTieneRecibo = false;
+    try {
+      const existentes = await traer('recibos.php?accion=listar&pago_id=' + pago.id);
+      yaTieneRecibo = Array.isArray(existentes) && existentes.length > 0;
+    } catch (error) {
+      // Sin señal: se deja el botón, en el peor caso generaría uno de más.
+    }
+
+    if (yaTieneRecibo) {
+      botonRecibo.textContent = 'Ya tiene recibo — verlo';
+      botonRecibo.addEventListener('click', () => abrirListaDeDocumentos('recibo', proveedor));
+    } else {
+      botonRecibo.addEventListener('click', async () => {
+        botonRecibo.disabled = true;
+        try {
+          const resultado = await mandar('recibos.php?accion=generar', { pago_id: pago.id });
+          cerrarHoja(true);
+          abrirResultadoDeDocumento('Recibo ' + resultado.numero + ' generado.',
+            resultado.archivo_id, resultado.nombre, proveedor);
+        } catch (error) {
+          avisar(error.message, true);
+          botonRecibo.disabled = false;
+        }
+      });
+    }
+  }
 }
 
 /**
@@ -962,15 +1014,47 @@ function abrirDetalleDePadrino(padrino) {
     '<span class="detalle__valor">' + seguro(r[1]) + '</span>'
   ).join('');
 
+  /* ─── GASTOS QUE CUBRE (el sentido que faltaba) ──────────────────────
+     gastos.padrino_id ya conecta gasto→padrino, y abrirDetalleDeGasto
+     ya muestra "Lo cubre" con el nombre del padrino. Acá faltaba el
+     sentido inverso: antes había que ir a la pestaña Gastos y buscar a
+     mano cuáles tenían este nombre. DINERO.gastos ya está cargado. */
+  const gastosQueCubre = (DINERO.gastos || []).filter(g => g.padrino_id === padrino.id);
+  const seccionGastos = gastosQueCubre.length
+    ? '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">Gastos que cubre</div>' +
+      gastosQueCubre.map(g =>
+        '<button class="lista__fila" data-gasto-que-cubre="' + seguro(g.id) + '">' +
+          '<span class="lista__cuerpo">' +
+            '<span class="lista__titulo">' + seguro(g.concepto) + '</span>' +
+          '</span>' +
+          '<span class="lista__lado cifra">' + seguro(comoDinero(g.monto_real || g.presupuestado, false)) + '</span>' +
+        '</button>'
+      ).join('')
+    : '';
+
   const cuerpo = abrirHoja(padrino.nombre,
     '<div class="detalle">' + detalle + '</div>' +
+    seccionGastos +
     '<div class="acciones" style="margin-top:var(--esp-3)">' +
+      '<button class="boton" id="detalle-alarma">Ponerle alarma</button>' +
+    '</div>' +
+    '<div class="acciones" style="margin-top:var(--esp-2)">' +
       '<button class="boton boton--peligro" id="detalle-borrar">Borrar</button>' +
       '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
     '</div>'
   );
 
   insertarAdjuntosDeSoloLectura(cuerpo, 'padrino', padrino.id, 'Comprobante de lo entregado');
+
+  buscarTodos('[data-gasto-que-cubre]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', () => {
+      const gasto = gastosQueCubre.find(g => String(g.id) === boton.dataset.gastoQueCubre);
+      if (gasto) abrirDetalleDeGasto(gasto);
+    });
+  });
+
+  buscar('#detalle-alarma', cuerpo).addEventListener('click', () =>
+    ponerleAlarmaA({ titulo: 'Sobre ' + padrino.nombre, tipo: 'padrino', id: padrino.id }));
 
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioPadrino(padrino));
 
@@ -1697,8 +1781,35 @@ function abrirDetalleDeProveedor(proveedor) {
     '<span class="detalle__valor">' + seguro(r[1]) + '</span>'
   ).join('');
 
+  /* ─── PAGOS REGISTRADOS EN PRESUPUESTO (de verdad, no manual) ────────
+     `monto_total`/`anticipo` son campos que Lucila carga a mano al dar
+     de alta al proveedor — pueden quedar desactualizados. Esto suma lo
+     que EN REALIDAD se cargó como pagado en Gastos/Pagos para este
+     proveedor, sin reemplazar los campos manuales (cambiar ese modelo
+     es más grande que este pedido) — se muestra al lado, como dato
+     adicional de verificación. `DINERO.gastos`/`DINERO.pagos` ya están
+     cargados en memoria por dibujarDinero(), así que esto no pide nada
+     nuevo al servidor. */
+  const gastosDeEsteProveedor = (DINERO.gastos || []).filter(g => g.proveedor_id === proveedor.id);
+  const idsDeEsosGastos = new Set(gastosDeEsteProveedor.map(g => g.id));
+  const pagosDeEsteProveedor = (DINERO.pagos || []).filter(p => idsDeEsosGastos.has(p.gasto_id));
+  const totalPagadoDeVerdad = pagosDeEsteProveedor
+    .filter(p => p.estado === 'pagado')
+    .reduce((suma, p) => suma + (Number(p.monto) || 0), 0);
+
+  const seccionPagosReales = pagosDeEsteProveedor.length
+    ? '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">Pagos registrados en Presupuesto</div>' +
+      '<div class="detalle">' +
+        '<span class="detalle__rotulo">Pagado de verdad</span>' +
+        '<span class="detalle__valor">' + seguro(comoDinero(totalPagadoDeVerdad, false)) + '</span>' +
+        '<span class="detalle__rotulo">Cantidad de pagos</span>' +
+        '<span class="detalle__valor">' + pagosDeEsteProveedor.length + '</span>' +
+      '</div>'
+    : '';
+
   const cuerpo = abrirHoja(proveedor.nombre,
     '<div class="detalle">' + detalle + '</div>' +
+    seccionPagosReales +
     vinetasDeQueIncluye(proveedor.detalle_items) +
     botonesDeContacto(proveedor) +
     /* Generar recibo SIEMPRE está acá, disponible, sin importar si este
@@ -1718,6 +1829,9 @@ function abrirDetalleDeProveedor(proveedor) {
       '<button class="boton" id="detalle-ver-contratos">Ver contratos</button>' +
     '</div>' +
     '<div class="acciones" style="margin-top:var(--esp-2)">' +
+      '<button class="boton" id="detalle-alarma">Ponerle alarma</button>' +
+    '</div>' +
+    '<div class="acciones" style="margin-top:var(--esp-2)">' +
       '<button class="boton boton--peligro" id="detalle-borrar">Borrar</button>' +
       '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
     '</div>'
@@ -1733,6 +1847,13 @@ function abrirDetalleDeProveedor(proveedor) {
 
   buscar('#detalle-recibo', cuerpo).addEventListener('click', () => abrirGeneradorDeRecibo(proveedor));
   buscar('#detalle-contrato', cuerpo).addEventListener('click', () => abrirGeneradorDeContrato(proveedor));
+
+  // ponerleAlarmaA ya existía (22-alarmas.js) con todo el mecanismo de
+  // vínculo (atada_a_tipo/atada_a_id) armado — antes de esta ronda nadie
+  // la llamaba desde ninguna ficha. Al tocar la notificación, lleva de
+  // vuelta acá mismo.
+  buscar('#detalle-alarma', cuerpo).addEventListener('click', () =>
+    ponerleAlarmaA({ titulo: 'Sobre ' + proveedor.nombre, tipo: 'proveedor', id: proveedor.id }));
 
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioProveedor(proveedor));
 
@@ -1774,6 +1895,13 @@ function abrirGeneradorDeRecibo(proveedor) {
                    { valor: 'Otro',          texto: 'Otro' },
                  ] }) +
     campoTexto({ id: 'rec-fecha', rotulo: 'Fecha', tipo: 'date', valor: hoy }) +
+    /* Tildado por defecto: mantener los libros de Presupuesto al día es
+       lo esperable, no la excepción. Destildar es la elección
+       consciente para un recibo que de verdad no debe contarse (ver
+       la nota grande en recibos.php sobre por qué esto es opcional). */
+    campoCasilla({ id: 'rec-tambien-pago',
+                   rotulo: 'También registrarlo como pago en Presupuesto',
+                   marcado: true }) +
     '<div class="acciones">' +
       '<button type="button" class="boton boton--principal" id="rec-generar">' +
         'Generar PDF' +
@@ -1797,9 +1925,22 @@ function abrirGeneradorDeRecibo(proveedor) {
         concepto:     valorDe('rec-concepto', cuerpo),
         forma_pago:   valorDe('rec-forma', cuerpo),
         fecha:        valorDe('rec-fecha', cuerpo),
+        tambien_registrar_pago: !!valorDe('rec-tambien-pago', cuerpo),
       });
       cerrarHoja(true);
-      abrirResultadoDeDocumento('Recibo ' + resultado.numero + ' generado.',
+
+      // Si quedó vinculado a un pago, Presupuesto tiene datos nuevos:
+      // mismo refresco que ya usa guardarDinero() al guardar cualquier
+      // otra cosa, para que "Pagos registrados" y las pestañas de
+      // Gastos/Pagos lo vean sin tener que salir y volver a entrar.
+      if (resultado.pago_id) {
+        ensuciarVistas('resumen');
+        await dibujarDinero();
+      }
+
+      abrirResultadoDeDocumento(
+        'Recibo ' + resultado.numero + ' generado.'
+          + (resultado.pago_id ? ' Registrado también como pago.' : ''),
         resultado.archivo_id, resultado.nombre, proveedor);
     } catch (error) {
       avisar(error.message, true);

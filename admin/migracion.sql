@@ -347,6 +347,11 @@ CREATE TABLE IF NOT EXISTS recibos (
   numero        VARCHAR(30) NOT NULL,
   proveedor_id  INT NOT NULL,
   contrato_id   INT DEFAULT NULL,
+  -- Opcional, igual que contrato_id: si Lucila elige "también registrar
+  -- como pago" al generar el recibo, acá queda el pago real de
+  -- Presupuesto que este recibo respalda (ver admin/api/recibos.php).
+  -- Un recibo sigue existiendo perfectamente sin esto.
+  pago_id       INT DEFAULT NULL,
   fecha         DATE NOT NULL,
   concepto      VARCHAR(300) NOT NULL DEFAULT '',
   monto         DECIMAL(12,2) NOT NULL DEFAULT 0,

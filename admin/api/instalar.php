@@ -192,6 +192,11 @@ $agregarColumna('usuarios', 'respuesta_seguridad_hash', 'VARCHAR(255) NULL DEFAU
 $agregarColumna('incompatibilidades', 'acompanante_a', 'INT NULL DEFAULT NULL');
 $agregarColumna('incompatibilidades', 'acompanante_b', 'INT NULL DEFAULT NULL');
 
+/* Instalaciones que ya corrieron la migración vieja de `recibos` (Fase A,
+   sin este campo) no lo tienen — recibos.php ahora puede vincular un
+   recibo a un pago real de Presupuesto, siempre de forma opcional. */
+$agregarColumna('recibos', 'pago_id', 'INT DEFAULT NULL');
+
 
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 
