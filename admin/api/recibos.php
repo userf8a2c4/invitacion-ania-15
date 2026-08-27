@@ -308,6 +308,23 @@ case 'generar':
         );
     }
 
+    /* ⚡ CHEQUEO EXPLÍCITO DE `pago_id`, Y ES A PROPÓSITO (2026-08-26).
+       Antes de esto, una instalación que ya tenía `recibos` de la Fase A
+       pero no había vuelto a correr instalar.php después de esta ronda
+       fallaba con un error genérico de PDO ("No se pudo guardar el
+       cambio.") apenas se intentaba guardar la fila — porque la columna
+       simplemente no existía todavía. El mensaje no decía POR QUÉ, así
+       que parecía un bug de código en vez de una migración pendiente.
+       Este chequeo cuesta una consulta a information_schema, pero
+       convierte un misterio en una instrucción concreta. */
+    if (!in_array('pago_id', columnasDe('recibos'), true)) {
+        responderMal(
+            'Falta actualizar la base de datos: correr admin/api/instalar.php de nuevo.',
+            409,
+            'La tabla recibos no tiene la columna pago_id todavía'
+        );
+    }
+
     $datos = cuerpoJson();
 
     /* ─── ¿VIENE DE UN PAGO YA CARGADO, O HAY QUE CREARLO? ────────────
