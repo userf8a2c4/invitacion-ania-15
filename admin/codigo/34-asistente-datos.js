@@ -44,6 +44,23 @@ async function datosDeDineroParaElAsistente() {
 }
 
 /**
+ * Todos los recibos generados (recibos.php), pidiéndolos si hace falta.
+ * Sin caché propia a propósito: es una lista chica (nunca va a haber
+ * miles de recibos de una fiesta) y se pide de nuevo cada vez que un
+ * agente la necesita, para no arrastrar datos viejos si se generó un
+ * recibo nuevo en el medio.
+ *
+ * @returns {Promise<Array>}
+ */
+async function datosDeRecibosParaElAsistente() {
+  try {
+    return await traer('recibos.php?accion=listar');
+  } catch (error) {
+    return [];
+  }
+}
+
+/**
  * INVITADOS ya poblado, pidiéndolo si hace falta.
  *
  * @returns {Promise<Array>}

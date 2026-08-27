@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════════════
    41 · AGENTE DINERO (Paso 5 → ampliado)
 
-   QUÉ SUGIERE — cinco reglas fijas, ninguna inventa un camino de
+   QUÉ SUGIERE — seis reglas fijas, ninguna inventa un camino de
    escritura nuevo ni un umbral propio:
      1. Pagos vencidos o por vencer (la de siempre).
      2. Categorías al techo o cerca — mismo umbral que ya usa
@@ -17,8 +17,11 @@
         de la pantalla de Dinero).
      5. Proveedores contratados con saldo pendiente (monto_total menos
         anticipo).
+     6. Proveedores contratados o pagados que todavía no tienen NINGÚN
+        recibo generado — para que el respaldo documental no se quede
+        atrás del dinero que ya se movió.
 
-   Las reglas 2-5 son INFORMATIVAS (requiereConfirmacion: false): no hay
+   Las reglas 2-6 son INFORMATIVAS (requiereConfirmacion: false): no hay
    una sola acción correcta que un toque pueda resolver (asignar una
    categoría, decidir si insistir con un padrino, repedir una cotización
    o pagar un proveedor son decisiones humanas) — el botón lleva
@@ -141,11 +144,34 @@ registrarAgente('dinero', 'Dinero', async () => {
       ejecutar: irADinero,
     }));
 
+  /* 6 · Proveedores con dinero movido (contratado o pagado) sin ningún
+     recibo generado todavía. Nunca bloquea nada —es exactamente la
+     misma idea que ya proponía el prompt original de recibos/contratos:
+     "mencionar de forma suave, nunca como bloqueo"—, y deja de
+     sugerirse solo en cuanto se genera el primer recibo de ese
+     proveedor (ver recibos.php?accion=listar). */
+  const recibos = await datosDeRecibosParaElAsistente();
+  const proveedoresConRecibo = new Set(recibos.map(r => r.proveedor_id));
+
+  const sugerenciasDeRecibosFaltantes = (dinero.proveedores || [])
+    .filter(p => (p.estado === 'contratado' || p.estado === 'pagado')
+                 && !proveedoresConRecibo.has(p.id))
+    .map(p => ({
+      id: 'dinero-sin-recibo-' + p.id,
+      agente: 'dinero',
+      titulo: 'Sin recibo generado: ' + p.nombre,
+      detalle: (p.servicio ? p.servicio + ' — ' : '') + 'todavía no tiene ningún recibo',
+      prioridad: 20,
+      requiereConfirmacion: false,
+      ejecutar: irADinero,
+    }));
+
   return [].concat(
     sugerenciasDePagos,
     sugerenciasDeCategorias,
     sugerenciasDePadrinos,
     sugerenciasDeCotizaciones,
-    sugerenciasDeProveedores
+    sugerenciasDeProveedores,
+    sugerenciasDeRecibosFaltantes
   );
 });

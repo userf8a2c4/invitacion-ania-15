@@ -30,6 +30,7 @@
      GET  ?accion=ver&id=7  devuelve el archivo
      GET  ?accion=listar&tipo=gasto&id=3
      POST ?accion=borrar
+     GET  ?accion=huerfanos (solo admin) — archivos sin dueño vivo
    ══════════════════════════════════════════════════════════════════════ */
 
 require_once __DIR__ . '/_lib/bd.php';
@@ -297,6 +298,60 @@ case 'borrar':
     anotarEnBitacora($yo, 'borró un archivo', 'archivos', $id, $fila['nombre_real']);
 
     responderBien(['mensaje' => 'Archivo eliminado.']);
+    break;
+
+
+/* ─── HUÉRFANOS: archivos que quedaron sin dueño ────────────────────────
+   POR QUÉ HACE FALTA
+   `atado_a_tipo`/`atado_a_id` es una atadura lógica, no una foreign key
+   de verdad — no hay ninguna que lo sea, porque un archivo puede atarse
+   a diez tablas distintas y MySQL no permite una FK a "la que
+   corresponda". Eso significa que borrar un proveedor, un gasto o un
+   pago NO borra ni avisa de sus contratos/recibos/comprobantes: se
+   quedan apuntando a un id que ya no existe, invisibles para siempre
+   (y viajando igual en cada respaldo semanal). Esto es solo un
+   diagnóstico de lectura — nunca borra nada solo. */
+
+case 'huerfanos':
+    exigirMetodo('GET');
+    exigirAdministrador();
+
+    // A qué tabla real corresponde cada valor de atado_a_tipo. 'nota'
+    // apunta a una tabla que existe en la migración pero que ningún
+    // módulo usa todavía — se deja afuera para no generar ruido de una
+    // funcionalidad que nunca llegó a construirse.
+    $tablaDeCadaTipo = [
+        'gasto'      => 'gastos',
+        'pago'       => 'pagos',
+        'proveedor'  => 'proveedores',
+        'padrino'    => 'padrinos',
+        'categoria'  => 'categorias_gasto',
+        'cotizacion' => 'cotizaciones',
+        'tarea'      => 'tareas',
+        'regalo'     => 'regalos',
+        // 'confirmaciones' es una tabla que ya existía antes de este
+        // proyecto y no vive en migracion.sql (ver la nota grande de
+        // columnasDe() en _lib/bd.php) — por eso se comprueba con
+        // existeTabla() más abajo antes de usarla, como con cualquier
+        // otra.
+        'invitado'   => 'confirmaciones',
+    ];
+
+    $huerfanos = [];
+    foreach ($tablaDeCadaTipo as $tipo => $tabla) {
+        if (!existeTabla($tabla)) continue;
+
+        $filas = consultarTodo(
+            "SELECT a.id, a.nombre_real, a.atado_a_tipo, a.atado_a_id, a.creado_en
+             FROM archivos a
+             LEFT JOIN `$tabla` t ON t.id = a.atado_a_id
+             WHERE a.atado_a_tipo = :tipo AND t.id IS NULL",
+            [':tipo' => $tipo]
+        );
+        foreach ($filas as $fila) $huerfanos[] = $fila;
+    }
+
+    responderBien($huerfanos);
     break;
 
 

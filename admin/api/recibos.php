@@ -25,9 +25,13 @@
 
    QUÉ SE LE PUEDE PEDIR
      GET  ?accion=listar&proveedor_id=8      recibos de un proveedor
+     GET  ?accion=listar&pago_id=8           el recibo de ESE pago, si hay
      POST ?accion=generar                    { proveedor_id, monto,
                                                 concepto, forma_pago,
-                                                fecha? }
+                                                fecha?, pago_id?,
+                                                tambien_registrar_pago? }
+                                              (ver la nota grande de más
+                                              abajo sobre estos dos)
      POST ?accion=editar                     { id, monto?, concepto?,
                                                 forma_pago?, fecha? }
                                               (el PDF NO se rehace: ver
@@ -275,12 +279,17 @@ case 'listar':
     }
 
     $proveedorId = campoEntero($_GET, 'proveedor_id', 0);
-    $filas = $proveedorId > 0
-        ? consultarTodo(
-            'SELECT * FROM recibos WHERE proveedor_id = :p ORDER BY id DESC',
-            [':p' => $proveedorId]
-          )
-        : consultarTodo('SELECT * FROM recibos ORDER BY id DESC LIMIT 200');
+    $pagoId      = campoEntero($_GET, 'pago_id', 0);
+
+    if ($pagoId > 0) {
+        $filas = consultarTodo('SELECT * FROM recibos WHERE pago_id = :p ORDER BY id DESC',
+                               [':p' => $pagoId]);
+    } elseif ($proveedorId > 0) {
+        $filas = consultarTodo('SELECT * FROM recibos WHERE proveedor_id = :p ORDER BY id DESC',
+                               [':p' => $proveedorId]);
+    } else {
+        $filas = consultarTodo('SELECT * FROM recibos ORDER BY id DESC LIMIT 200');
+    }
 
     responderBien($filas);
     break;
@@ -301,24 +310,72 @@ case 'generar':
 
     $datos = cuerpoJson();
 
-    $proveedorId = campoEntero($datos, 'proveedor_id', 1);
+    /* ─── ¿VIENE DE UN PAGO YA CARGADO, O HAY QUE CREARLO? ────────────
+       POR QUÉ ESTO Y NO DOS ENDPOINTS DISTINTOS
+       Antes de esta ronda, un recibo generado desde la ficha del
+       proveedor no tocaba `gastos`/`pagos` para nada: el dinero que
+       representaba no aparecía en los totales de "pagado" del
+       Presupuesto, y Lucila tenía que cargarlo dos veces si quería que
+       las cuentas cerraran. Ahora hay dos caminos que llegan al mismo
+       lugar:
+
+       1. `pago_id` viene con un id real → el recibo es el comprobante
+          de un pago que YA EXISTE en Presupuesto (por ejemplo, desde
+          abrirDetalleDePago). Se usa tal cual, nunca se crea nada.
+
+       2. No viene `pago_id` pero sí `tambien_registrar_pago: true`
+          (el checkbox tildado por defecto en abrirGeneradorDeRecibo) →
+          se busca un gasto de este proveedor; si no hay ninguno, se
+          crea uno (mismo criterio de `a_presupuesto` en cotizador.php:
+          concepto = el servicio, presupuestado = el monto total ya
+          cargado en la ficha). Después se inserta el pago, ya marcado
+          "pagado".
+
+       3. Ninguna de las dos → el recibo queda exactamente igual que
+          antes de esta ronda: suelto, sin tocar Presupuesto. Nunca es
+          obligatorio: ver la nota grande del encabezado. */
+    $pagoIdRecibido        = campoEntero($datos, 'pago_id', 0);
+    $tambienRegistrarPago  = !empty($datos['tambien_registrar_pago']);
+
+    $pagoExistente = null;
+    if ($pagoIdRecibido > 0) {
+        $pagoExistente = consultarUno(
+            'SELECT p.*, g.proveedor_id AS proveedor_id_del_gasto
+             FROM pagos p LEFT JOIN gastos g ON g.id = p.gasto_id
+             WHERE p.id = :i', [':i' => $pagoIdRecibido]
+        );
+        if (!$pagoExistente) responderMal('Ese pago no existe.', 404);
+        if (empty($pagoExistente['proveedor_id_del_gasto'])) {
+            responderMal('Ese pago no está atado a ningún proveedor.', 400);
+        }
+    }
+
+    // Si el recibo viene de un pago ya cargado, el proveedor es el de
+    // ESE pago — no el que mande el cliente, que acá ni hace falta.
+    $proveedorId = $pagoExistente
+        ? (int) $pagoExistente['proveedor_id_del_gasto']
+        : campoEntero($datos, 'proveedor_id', 1);
+
     $proveedor = consultarUno('SELECT * FROM proveedores WHERE id = :i',
                               [':i' => $proveedorId]);
     if (!$proveedor) responderMal('Ese proveedor no existe.', 404);
 
-    $monto = campoMonto($datos, 'monto');
+    $monto = $pagoExistente ? (float) $pagoExistente['monto'] : campoMonto($datos, 'monto');
     if ($monto <= 0) responderMal('El monto tiene que ser mayor a cero.', 400);
 
-    $fecha = campoFecha($datos, 'fecha') ?? date('Y-m-d');
+    $fecha = $pagoExistente
+        ? ($pagoExistente['fecha_pagado'] ?: date('Y-m-d'))
+        : (campoFecha($datos, 'fecha') ?? date('Y-m-d'));
     $anio  = substr($fecha, 0, 4);
 
     $recibo = [
         'proveedor_id' => $proveedorId,
         'fecha'        => $fecha,
-        'concepto'     => campoTexto($datos, 'concepto', 300),
+        'concepto'     => $pagoExistente ? $pagoExistente['concepto'] : campoTexto($datos, 'concepto', 300),
         'monto'        => $monto,
-        'forma_pago'   => campoTexto($datos, 'forma_pago', 60),
+        'forma_pago'   => $pagoExistente ? $pagoExistente['metodo'] : campoTexto($datos, 'forma_pago', 60),
         'estado'       => 'pendiente',
+        'pago_id'      => $pagoIdRecibido > 0 ? $pagoIdRecibido : null,
     ];
 
     /* ─── EL NÚMERO, BAJO LLAVE ──────────────────────────────────────
@@ -350,6 +407,38 @@ case 'generar':
     }
     $recibo['numero'] = sprintf('%s-%s-%04d', $prefijo, $anio, $siguiente);
     $recibo['lugar_expedicion'] = ajusteConRespaldo('lugar_expedicion', '');
+
+    /* ─── CREAR GASTO + PAGO, SI SE PIDIÓ Y TODAVÍA NO HAY NINGUNO ────
+       Mismo defaulting que `a_presupuesto` en cotizador.php: si este
+       proveedor no tiene ni un gasto cargado, se crea uno con lo que ya
+       se sabe de él (servicio, monto total) en vez de dejarlo vacío. Si
+       ya tiene uno, se reutiliza — nunca se duplica un gasto por
+       generar un segundo recibo del mismo proveedor. */
+    if ($tambienRegistrarPago && !$pagoExistente) {
+        $gasto = consultarUno(
+            'SELECT id FROM gastos WHERE proveedor_id = :p ORDER BY id ASC LIMIT 1 FOR UPDATE',
+            [':p' => $proveedorId]
+        );
+        $gastoId = $gasto
+            ? (int) $gasto['id']
+            : insertar('gastos', [
+                'concepto'      => $proveedor['servicio'] !== '' ? $proveedor['servicio'] : $proveedor['nombre'],
+                'proveedor_id'  => $proveedorId,
+                'presupuestado' => (float) $proveedor['monto_total'],
+                'monto_real'    => (float) $proveedor['monto_total'],
+              ]);
+
+        $pagoId = insertar('pagos', [
+            'gasto_id'     => $gastoId,
+            'concepto'     => $recibo['concepto'] !== '' ? $recibo['concepto'] : 'Pago a ' . $proveedor['nombre'],
+            'monto'        => $monto,
+            'fecha_pagado' => $fecha,
+            'estado'       => 'pagado',
+            'metodo'       => $recibo['forma_pago'],
+        ]);
+
+        $recibo['pago_id'] = $pagoId;
+    }
 
     $pagadora  = nombreDeLaPagadora();
     $bytesPdf  = armarPdfDelRecibo($recibo, $proveedor, $pagadora);
@@ -393,6 +482,14 @@ case 'generar':
     $recibo['archivo_id'] = $archivoId;
     $recibo['creado_por'] = (int) $yo['id'];
 
+    /* Mismo enlace que ya hace archivos.php al subir un comprobante a
+       mano (líneas 195-201 de ese archivo) — no una versión paralela.
+       Así el pago, con o sin recibo, siempre muestra el mismo PDF como
+       su comprobante en abrirDetalleDePago(). */
+    if (!empty($recibo['pago_id'])) {
+        actualizar('pagos', (int) $recibo['pago_id'], ['comprobante_id' => $archivoId]);
+    }
+
     // lugar_expedicion es un ajuste del evento, no una columna de esta
     // tabla — se usó arriba solo para escribirlo en el PDF.
     $filaParaGuardar = $recibo;
@@ -409,6 +506,7 @@ case 'generar':
         'numero'     => $recibo['numero'],
         'archivo_id' => $archivoId,
         'nombre'     => $nombreLegible,
+        'pago_id'    => $recibo['pago_id'],
     ], 201);
     break;
 
