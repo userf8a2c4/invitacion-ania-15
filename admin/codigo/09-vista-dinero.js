@@ -1758,10 +1758,10 @@ function formularioGasto(gasto) {
                  opciones: opcionesDe(DINERO.categorias, 'Sin categoría') }) +
 
     '<div class="campo-par">' +
-      campoTexto({ id: 'gas-planeado', rotulo: 'Presupuestado', tipo: 'number',
-                   paso: '0.01', valor: d.presupuestado ? desdePesos(d.presupuestado) : '' }) +
-      campoTexto({ id: 'gas-real', rotulo: 'Costo real', tipo: 'number',
-                   paso: '0.01', valor: d.monto_real ? desdePesos(d.monto_real) : '' }) +
+      campoDinero({ id: 'gas-planeado', rotulo: 'Presupuestado',
+                    valor: d.presupuestado ? desdePesos(d.presupuestado) : '' }) +
+      campoDinero({ id: 'gas-real', rotulo: 'Costo real',
+                    valor: d.monto_real ? desdePesos(d.monto_real) : '' }) +
     '</div>' +
 
     campoLista({ id: 'gas-proveedor', rotulo: 'Proveedor',
@@ -1775,6 +1775,9 @@ function formularioGasto(gasto) {
     campoLargo({ id: 'gas-notas', rotulo: 'Notas', valor: d.notas }) +
     pieDeFormulario('Guardar', !!gasto)
   );
+
+  activarFormatoDeMiles('gas-planeado', cuerpo);
+  activarFormatoDeMiles('gas-real', cuerpo);
 
   engancharFormularioDinero(cuerpo, () => {
     const concepto = valorDe('gas-concepto', cuerpo);
@@ -1801,22 +1804,34 @@ function formularioPago(pago) {
   const metodos = metodosDePago().slice();
   if (d.metodo && !metodos.includes(d.metodo)) metodos.unshift(d.metodo);
 
+  /* ⚡ PROVEEDOR, NO "GASTO" (2026-08-27). Antes se preguntaba "Es parte
+     del gasto", con un desplegable de gastos ya cargados + "Suelto" +
+     "Crear un gasto nuevo…" — esta última opción era una ilusión: no
+     creaba nada, dejaba el pago suelto igual, y nunca hubo forma de
+     decir A QUIÉN se le pagaba. Ahora se pregunta directamente el
+     proveedor (mismo patrón que abrirGeneradorDeReciboGenerico): uno
+     existente, "Personal / sin proveedor", o escribir uno nuevo — el
+     backend (presupuesto.php, guardar_pago) arma o reusa el gasto por
+     detrás, sin que Lucila tenga que pensar en esa palabra. Al editar
+     un pago existente, el proveedor se resuelve desde su gasto actual. */
+  const gastoActual = d.gasto_id ? DINERO.gastos.find(g => g.id === d.gasto_id) : null;
+  const proveedorActualId = gastoActual && gastoActual.proveedor_id ? gastoActual.proveedor_id : '';
+
   const cuerpo = abrirHoja(pago ? 'Editar pago' : 'Nuevo pago',
     campoTexto({ id: 'pag-concepto', rotulo: 'Concepto', valor: d.concepto }) +
 
     campoListaAmpliable({
-      id: 'pag-gasto',
-      rotulo: 'Es parte del gasto',
-      valor: d.gasto_id ? String(d.gasto_id) : '',
-      textoAgregar: 'Crear un gasto nuevo…',
-      opciones: [{ valor: '', texto: 'Suelto (no pertenece a ningún gasto)' }]
-        .concat(DINERO.gastos.map(g => ({ valor: String(g.id), texto: g.concepto }))),
+      id: 'pag-proveedor',
+      rotulo: 'A quién le pagás',
+      valor: proveedorActualId ? String(proveedorActualId) : '',
+      textoAgregar: 'Agregar uno nuevo…',
+      opciones: [{ valor: '', texto: 'Personal / sin proveedor' }]
+        .concat(DINERO.proveedores.map(p => ({ valor: String(p.id), texto: p.nombre }))),
     }) +
 
     '<div class="campo-par">' +
-      campoTexto({ id: 'pag-monto', rotulo: 'Monto en ' + moneda.nombre.toLowerCase(),
-                   tipo: 'number', paso: '0.01',
-                   valor: d.monto ? desdePesos(d.monto) : '' }) +
+      campoDinero({ id: 'pag-monto', rotulo: 'Monto en ' + moneda.nombre.toLowerCase(),
+                    valor: d.monto ? desdePesos(d.monto) : '' }) +
       campoTexto({ id: 'pag-fecha', rotulo: 'Vence el', tipo: 'date',
                    valor: d.fecha_limite || '' }) +
     '</div>' +
@@ -1836,51 +1851,61 @@ function formularioPago(pago) {
     pieDeFormulario('Guardar', !!pago)
   );
 
+  activarFormatoDeMiles('pag-monto', cuerpo);
   engancharListaAmpliable('pag-metodo', cuerpo);
-  engancharListaAmpliable('pag-gasto', cuerpo);
+  engancharListaAmpliable('pag-proveedor', cuerpo);
 
   engancharFormularioDinero(cuerpo, () => {
     const concepto = valorDe('pag-concepto', cuerpo);
     const metodo   = valorDeListaAmpliable('pag-metodo', cuerpo);
+    const monto    = aPesos(valorDe('pag-monto', cuerpo));
 
-    /* El gasto es distinto de los demás: si se eligió "crear uno nuevo",
-       lo que se escribió es el NOMBRE de un gasto que todavía no existe.
-       Se avisa y se manda como concepto del pago, en vez de guardar un
-       id inventado que rompería la llave foránea. */
-    const gastoElegido = valorDe('pag-gasto', cuerpo);
-    let gastoId = gastoElegido;
-    let conceptoFinal = concepto;
-
-    if (gastoElegido === '__nuevo__') {
-      const nombreNuevo = valorDe('pag-gasto-nuevo', cuerpo);
-      if (!nombreNuevo) {
-        avisar('Escribe el nombre del gasto nuevo.', true);
-        return null;
-      }
-      gastoId = '';
-      if (!conceptoFinal) conceptoFinal = nombreNuevo;
-      avisar('El pago queda suelto. Crea el gasto desde la pestaña Gastos ' +
-             'si quieres vincularlo.');
+    if (!monto || monto <= 0) {
+      avisar('Poné un monto mayor a cero.', true);
+      return null;
     }
 
-    if (!conceptoFinal && !gastoId) {
-      avisar('Pon un concepto o elige a qué gasto pertenece.', true);
+    // Igual que antes: si no se eligió proveedor, hace falta al menos
+    // un concepto para que el pago diga algo.
+    const proveedorElegido = valorDe('pag-proveedor', cuerpo);
+    if (!concepto && !proveedorElegido) {
+      avisar('Pon un concepto o elegí a quién le pagás.', true);
       return null;
     }
 
     // Se guarda el método nuevo para que aparezca la próxima vez.
     agregarMetodoDePago(metodo);
 
-    return {
-      concepto:     conceptoFinal,
-      gasto_id:     gastoId,
+    // gasto_id existente solo se conserva si el proveedor NO cambió —
+    // si cambió (o se quitó), se omite y el backend arma/reusa el gasto
+    // que corresponda al nuevo proveedor (o deja el pago suelto).
+    const proveedorNoCambio = proveedorElegido === (proveedorActualId ? String(proveedorActualId) : '');
+
+    const carga = {
+      concepto:     concepto,
+      gasto_id:     (proveedorNoCambio && d.gasto_id) ? d.gasto_id : '',
       // El campo está en la moneda que se está mirando; la base guarda pesos.
-      monto:        aPesos(valorDe('pag-monto', cuerpo)),
+      monto:        monto,
       fecha_limite: valorDe('pag-fecha', cuerpo),
       metodo:       metodo,
       estado:       valorDe('pag-pagado', cuerpo) ? 'pagado' : 'pendiente',
       notas:        valorDe('pag-notas', cuerpo),
     };
+
+    if (proveedorElegido === '__nuevo__') {
+      const nombreNuevo = valorDe('pag-proveedor-nuevo', cuerpo);
+      if (!nombreNuevo) {
+        avisar('Escribí el nombre del proveedor nuevo.', true);
+        return null;
+      }
+      carga.proveedor_nuevo = nombreNuevo;
+    } else if (proveedorElegido) {
+      carga.proveedor_id = proveedorElegido;
+    }
+    // proveedorElegido === '' → Personal/sin proveedor: no se manda nada,
+    // igual que "Suelto" antes.
+
+    return carga;
   }, 'pago', pago);
 }
 
@@ -2285,12 +2310,21 @@ function abrirResultadoDeDocumento(mensaje, archivoId, nombreArchivo, proveedor,
   const cuerpo = abrirHoja('Listo', '' +
     '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' + seguro(mensaje) + '</p>' +
     '<div class="acciones">' +
-      '<button type="button" class="boton boton--principal" id="doc-whatsapp">' +
-        'Enviar por WhatsApp' +
-      '</button>' +
+      '<button type="button" class="boton boton--principal" id="doc-ver">Ver PDF</button>' +
+      '<button type="button" class="boton" id="doc-whatsapp">Enviar por WhatsApp</button>' +
     '</div>',
     alCerrarPersonalizado || (proveedor ? () => abrirDetalleDeProveedor(proveedor) : undefined)
   );
+
+  // ⚡ "VER PDF" (2026-08-27). Antes el único botón era "Enviar por
+  // WhatsApp", que en realidad DESCARGA el archivo (compartirArchivoPor
+  // WhatsApp usa un <a download>) — nunca hubo forma de simplemente
+  // VER el PDF recién generado. abrirArchivo ya existe (14-archivos.js,
+  // usado para los adjuntos normales) y sabe mostrar un PDF en un visor
+  // en vez de descargarlo — se reusa tal cual, no se reinventa.
+  buscar('#doc-ver', cuerpo).addEventListener('click', () => {
+    abrirArchivo(archivoId, { tipo_mime: 'application/pdf', nombre_real: nombreArchivo });
+  });
 
   buscar('#doc-whatsapp', cuerpo).addEventListener('click', () => {
     compartirArchivoPorWhatsApp(archivoId, nombreArchivo, proveedor ? proveedor.telefono : '');
@@ -2464,7 +2498,8 @@ function abrirDetalleDeDocumentoGuardado(tipo, documento, proveedor) {
     botonesDeEstado +
     (documento.archivo_id
       ? '<div class="acciones" style="margin-top:var(--esp-2)">' +
-          '<button class="boton boton--principal" id="doc-ver-whatsapp">Enviar por WhatsApp</button>' +
+          '<button class="boton boton--principal" id="doc-ver">Ver PDF</button>' +
+          '<button class="boton" id="doc-ver-whatsapp">Enviar por WhatsApp</button>' +
         '</div>'
       : '') +
     '<p class="vacio__texto" style="margin-top:var(--esp-3)">' +
@@ -2480,9 +2515,14 @@ function abrirDetalleDeDocumentoGuardado(tipo, documento, proveedor) {
   );
 
   if (documento.archivo_id) {
+    const nombreParaElArchivo = config.tituloSingular + ' ' + (documento.numero || documento.id) + '.pdf';
+
+    buscar('#doc-ver', cuerpo).addEventListener('click', () => {
+      abrirArchivo(documento.archivo_id, { tipo_mime: 'application/pdf', nombre_real: nombreParaElArchivo });
+    });
+
     buscar('#doc-ver-whatsapp', cuerpo).addEventListener('click', () => {
-      compartirArchivoPorWhatsApp(documento.archivo_id,
-        config.tituloSingular + ' ' + (documento.numero || documento.id) + '.pdf',
+      compartirArchivoPorWhatsApp(documento.archivo_id, nombreParaElArchivo,
         proveedor ? proveedor.telefono : '');
     });
   }
@@ -2725,10 +2765,10 @@ function formularioProveedor(proveedor) {
                  pista: 'Salón, DJ, fotografía…' }) +
 
     '<div class="campo-par">' +
-      campoTexto({ id: 'pro-total', rotulo: 'Monto total', tipo: 'number',
-                   paso: '0.01', valor: d.monto_total ? desdePesos(d.monto_total) : '' }) +
-      campoTexto({ id: 'pro-anticipo', rotulo: 'Anticipo pagado', tipo: 'number',
-                   paso: '0.01', valor: d.anticipo ? desdePesos(d.anticipo) : '' }) +
+      campoDinero({ id: 'pro-total', rotulo: 'Monto total',
+                    valor: d.monto_total ? desdePesos(d.monto_total) : '' }) +
+      campoDinero({ id: 'pro-anticipo', rotulo: 'Anticipo pagado',
+                    valor: d.anticipo ? desdePesos(d.anticipo) : '' }) +
     '</div>' +
 
     campoLista({ id: 'pro-estado', rotulo: 'Estado',
@@ -2774,6 +2814,8 @@ function formularioProveedor(proveedor) {
 
   if (proveedor) engancharBotonesDeContacto(cuerpo, proveedor);
   engancharListaDeDetalle('pro-detalle', cuerpo, plantillasSugeridasPara(d.servicio));
+  activarFormatoDeMiles('pro-total', cuerpo);
+  activarFormatoDeMiles('pro-anticipo', cuerpo);
 
   engancharFormularioDinero(cuerpo, () => {
     const nombre = valorDe('pro-nombre', cuerpo);

@@ -232,15 +232,21 @@ case 'ver':
     header('Content-Type: ' . $fila['tipo_mime']);
     header('Content-Length: ' . filesize($ruta));
 
-    /* inline para las imágenes (se ven en la app) y attachment para los
-       PDF (se descargan). El nombre va entre comillas y sin comillas
-       internas, para que un nombre raro no rompa la cabecera. */
+    /* inline para las imágenes y los PDF (se ven en la app, en su visor
+       nativo del navegador) y attachment para cualquier otro tipo (Word,
+       Excel, lo que sea — eso el navegador no sabe mostrarlo, así que se
+       descarga). Antes solo las imágenes eran inline: los recibos y
+       contratos (PDF) se descargaban de una en vez de abrirse, y no
+       había forma de "verlos" sin buscar el archivo descargado a mano
+       (2026-08-27). El nombre va entre comillas y sin comillas internas,
+       para que un nombre raro no rompa la cabecera. */
     /* Se sacan también los saltos de línea, no solo las comillas. Un \r
        o un \n en el nombre parte la cabecera en dos y deja meter otras
        cabeceras inventadas debajo. El nombre lo escribe quien sube el
        archivo, así que no es un dato de confianza. */
     $nombre = preg_replace('/[\r\n"]/', '', $fila['nombre_real']);
-    $como   = strpos($fila['tipo_mime'], 'image/') === 0 ? 'inline' : 'attachment';
+    $esVisible = strpos($fila['tipo_mime'], 'image/') === 0 || $fila['tipo_mime'] === 'application/pdf';
+    $como = $esVisible ? 'inline' : 'attachment';
     header("Content-Disposition: $como; filename=\"$nombre\"");
 
     // Privado: que no lo guarde ningún intermediario, solo el navegador.
