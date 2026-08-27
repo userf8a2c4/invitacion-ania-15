@@ -188,11 +188,12 @@ function cantidadEnLetra($monto) {
  * Arma el PDF del recibo y devuelve sus bytes.
  *
  * @param array  $recibo    numero, fecha, concepto, monto, forma_pago
- * @param array  $proveedor nombre, servicio, telefono, correo
+ * @param array  $destinatario  nombre (siempre), servicio (opcional —
+ *                              solo si es un proveedor).
  * @param string $pagadora
  * @return string
  */
-function armarPdfDelRecibo($recibo, $proveedor, $pagadora) {
+function armarPdfDelRecibo($recibo, $destinatario, $pagadora) {
     $pdf = new PdfSimple();
     $datosPagadora = datosDeLaPagadora();
 
@@ -214,9 +215,9 @@ function armarPdfDelRecibo($recibo, $proveedor, $pagadora) {
     if ($datosPagadora['correo'] !== '')    $pdf->filaDeDatos('Correo', $datosPagadora['correo'], 9);
     if ($datosPagadora['rfc'] !== '')       $pdf->filaDeDatos('RFC', $datosPagadora['rfc'], 9);
     $pdf->espacio(4);
-    $pdf->filaDeDatos('Recibe', $proveedor['nombre']);
-    if (!empty($proveedor['servicio'])) {
-        $pdf->filaDeDatos('Servicio', $proveedor['servicio']);
+    $pdf->filaDeDatos('Recibe', $destinatario['nombre']);
+    if (!empty($destinatario['servicio'])) {
+        $pdf->filaDeDatos('Servicio', $destinatario['servicio']);
     }
     $pdf->espacio(6);
     $pdf->linea();
@@ -317,11 +318,13 @@ case 'generar':
        que parecía un bug de código en vez de una migración pendiente.
        Este chequeo cuesta una consulta a information_schema, pero
        convierte un misterio en una instrucción concreta. */
-    if (!in_array('pago_id', columnasDe('recibos'), true)) {
+    $columnasDeRecibos = columnasDe('recibos');
+    $columnasQueHacenFalta = array_diff(['pago_id', 'beneficiario', 'padrino_id'], $columnasDeRecibos);
+    if ($columnasQueHacenFalta) {
         responderMal(
             'Falta actualizar la base de datos: correr admin/api/instalar.php de nuevo.',
             409,
-            'La tabla recibos no tiene la columna pago_id todavía'
+            'Faltan columnas en recibos: ' . implode(', ', $columnasQueHacenFalta)
         );
     }
 
@@ -367,15 +370,43 @@ case 'generar':
         }
     }
 
-    // Si el recibo viene de un pago ya cargado, el proveedor es el de
-    // ESE pago — no el que mande el cliente, que acá ni hace falta.
+    /* ─── QUIÉN RECIBE: PROVEEDOR, PADRINO, O ALGUIEN SIN FICHA ───────
+       Un recibo ya no exige un proveedor (ver la nota grande de
+       migracion.sql). Tres formas de decir quién lo recibe, en este
+       orden de prioridad:
+         1. Viene de un pago ya cargado → el proveedor de ESE pago
+            (como ya funcionaba).
+         2. `proveedor_id` directo → ficha de proveedor (como ya
+            funcionaba: la ficha de proveedor sigue mandando esto).
+         3. `padrino_id` → ficha de padrino.
+         4. `beneficiario` (texto) → alguien sin ficha propia.
+       Exactamente uno de proveedor_id/padrino_id/beneficiario tiene
+       que resolver un nombre; si ninguno lo hace, es un error del
+       formulario, no algo que adivinar acá. */
     $proveedorId = $pagoExistente
         ? (int) $pagoExistente['proveedor_id_del_gasto']
-        : campoEntero($datos, 'proveedor_id', 1);
+        : campoEntero($datos, 'proveedor_id', 0);
+    $padrinoId = $proveedorId > 0 ? 0 : campoEntero($datos, 'padrino_id', 0);
 
-    $proveedor = consultarUno('SELECT * FROM proveedores WHERE id = :i',
-                              [':i' => $proveedorId]);
-    if (!$proveedor) responderMal('Ese proveedor no existe.', 404);
+    $proveedor = null;
+    $padrino   = null;
+    $destinatario = null;   // ['nombre' => …, 'servicio' => … opcional]
+
+    if ($proveedorId > 0) {
+        $proveedor = consultarUno('SELECT * FROM proveedores WHERE id = :i', [':i' => $proveedorId]);
+        if (!$proveedor) responderMal('Ese proveedor no existe.', 404);
+        $destinatario = ['nombre' => $proveedor['nombre'], 'servicio' => $proveedor['servicio']];
+    } elseif ($padrinoId > 0) {
+        $padrino = consultarUno('SELECT * FROM padrinos WHERE id = :i', [':i' => $padrinoId]);
+        if (!$padrino) responderMal('Ese padrino no existe.', 404);
+        $destinatario = ['nombre' => $padrino['nombre']];
+    } else {
+        $beneficiarioLibre = campoTexto($datos, 'beneficiario', 200);
+        if ($beneficiarioLibre === '') {
+            responderMal('Falta decir a quién le pagás.', 400);
+        }
+        $destinatario = ['nombre' => $beneficiarioLibre];
+    }
 
     $monto = $pagoExistente ? (float) $pagoExistente['monto'] : campoMonto($datos, 'monto');
     if ($monto <= 0) responderMal('El monto tiene que ser mayor a cero.', 400);
@@ -386,7 +417,9 @@ case 'generar':
     $anio  = substr($fecha, 0, 4);
 
     $recibo = [
-        'proveedor_id' => $proveedorId,
+        'proveedor_id' => $proveedorId > 0 ? $proveedorId : null,
+        'padrino_id'   => $padrinoId > 0 ? $padrinoId : null,
+        'beneficiario' => $destinatario['nombre'],
         'fecha'        => $fecha,
         'concepto'     => $pagoExistente ? $pagoExistente['concepto'] : campoTexto($datos, 'concepto', 300),
         'monto'        => $monto,
@@ -430,8 +463,14 @@ case 'generar':
        proveedor no tiene ni un gasto cargado, se crea uno con lo que ya
        se sabe de él (servicio, monto total) en vez de dejarlo vacío. Si
        ya tiene uno, se reutiliza — nunca se duplica un gasto por
-       generar un segundo recibo del mismo proveedor. */
-    if ($tambienRegistrarPago && !$pagoExistente) {
+       generar un segundo recibo del mismo proveedor.
+
+       Solo aplica con proveedor: un pago a un padrino o a alguien sin
+       ficha no tiene con qué armar un `gasto` de verdad (esa tabla
+       exige un concepto y vive del lado de "lo que cuesta la fiesta",
+       no de "a quién le devolví plata"). Para esos casos el recibo
+       sigue generándose, simplemente no se ofrece este atajo. */
+    if ($tambienRegistrarPago && !$pagoExistente && $proveedorId > 0) {
         $gasto = consultarUno(
             'SELECT id FROM gastos WHERE proveedor_id = :p ORDER BY id ASC LIMIT 1 FOR UPDATE',
             [':p' => $proveedorId]
@@ -458,7 +497,7 @@ case 'generar':
     }
 
     $pagadora  = nombreDeLaPagadora();
-    $bytesPdf  = armarPdfDelRecibo($recibo, $proveedor, $pagadora);
+    $bytesPdf  = armarPdfDelRecibo($recibo, $destinatario, $pagadora);
 
     /* ─── GUARDAR EL ARCHIVO, IGUAL QUE archivos.php ─────────────────
        Mismo esquema de carpeta y nombre al azar que usa la subida
@@ -486,13 +525,19 @@ case 'generar':
         0, 255
     );
 
+    // A qué ficha queda visible este PDF, si corresponde a alguna —
+    // igual que archivos.php: '' (sin atar) es un valor válido, no un
+    // error, para el caso de un beneficiario sin ficha propia.
+    $atadoATipo = $proveedorId > 0 ? 'proveedor' : ($padrinoId > 0 ? 'padrino' : '');
+    $atadoAId   = $proveedorId > 0 ? $proveedorId : ($padrinoId > 0 ? $padrinoId : 0);
+
     $archivoId = insertar('archivos', [
         'nombre_real'  => $nombreLegible,
         'nombre_disco' => $nombreDisco,
         'tipo_mime'    => 'application/pdf',
         'tamano_bytes' => strlen($bytesPdf),
-        'atado_a_tipo' => 'proveedor',
-        'atado_a_id'   => $proveedorId,
+        'atado_a_tipo' => $atadoATipo,
+        'atado_a_id'   => $atadoAId,
         'subido_por'   => (int) $yo['id'],
     ]);
 
@@ -521,12 +566,16 @@ case 'generar':
        monto — y a simple vista parecía "el mismo recibo de antes"
        reapareciendo, aunque el formulario era uno nuevo en blanco.
        Se tapa en monto_total: un recibo no puede dejar el anticipo por
-       encima de lo pactado. */
-    $nuevoAnticipo = min(
-        (float) $proveedor['monto_total'],
-        (float) $proveedor['anticipo'] + $monto
-    );
-    actualizar('proveedores', $proveedorId, ['anticipo' => $nuevoAnticipo]);
+       encima de lo pactado. Solo aplica si el beneficiario es un
+       proveedor — un padrino o alguien sin ficha no tiene "anticipo"
+       que actualizar. */
+    if ($proveedorId > 0) {
+        $nuevoAnticipo = min(
+            (float) $proveedor['monto_total'],
+            (float) $proveedor['anticipo'] + $monto
+        );
+        actualizar('proveedores', $proveedorId, ['anticipo' => $nuevoAnticipo]);
+    }
 
     bd()->commit();
 

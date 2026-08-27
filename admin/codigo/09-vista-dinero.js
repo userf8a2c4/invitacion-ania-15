@@ -2078,6 +2078,125 @@ function abrirGeneradorDeRecibo(proveedor) {
 }
 
 /**
+ * El generador de recibo de verdad, sin dueño fijo: a diferencia de
+ * abrirGeneradorDeRecibo(proveedor) —pensado para abrirse YA sabiendo
+ * de qué proveedor se trata—, este elige a quién le pagás en el mismo
+ * paso, de una lista que junta proveedores y padrinos, con la opción
+ * de escribir cualquier otro nombre. Es el que abre "Nuevo recibo"
+ * desde el botón flotante (29-fab.js).
+ *
+ * POR QUÉ NO ERA SOLO "ELEGIR UN PROVEEDOR"
+ * `recibos.proveedor_id` dejó de ser obligatorio (ver la nota grande en
+ * admin/migracion.sql): un recibo puede ir a nombre de un padrino —para
+ * reembolsarle algo que adelantó, por ejemplo— o de alguien sin ficha
+ * propia. Antes de este cambio, la única forma de darle un recibo a
+ * alguien así era inventarle una ficha de proveedor falsa.
+ *
+ * @returns {Promise<void>}
+ */
+async function abrirGeneradorDeReciboGenerico() {
+  const dinero = await datosDeDineroParaElAsistente();
+  if (!dinero) { avisar('No se pudo cargar Presupuesto.', true); return; }
+
+  const hoy = new Date().toISOString().slice(0, 10);
+
+  const opcionesDeQuien = (dinero.proveedores || [])
+    .map(p => ({ valor: 'prov:' + p.id, texto: p.nombre }))
+    .concat((dinero.padrinos || [])
+      .map(p => ({ valor: 'padrino:' + p.id, texto: p.nombre + ' (padrino)' })));
+
+  const cuerpo = abrirHoja('Nuevo recibo',
+    '<button type="button" class="lista__fila" id="rec2-configurar" ' +
+            'style="margin-bottom:var(--esp-2)">' +
+      '<span class="lista__cuerpo">' +
+        '<span class="lista__titulo">⚙️ Numeración y datos de quien paga</span>' +
+      '</span>' +
+    '</button>' +
+    campoListaAmpliable({
+      id: 'rec2-quien',
+      rotulo: 'A quién le pagás',
+      valor: '',
+      textoAgregar: 'Alguien más (escribir el nombre)…',
+      opciones: opcionesDeQuien,
+    }) +
+    campoDinero({ id: 'rec2-monto', rotulo: 'Monto' }) +
+    campoLargo({ id: 'rec2-concepto', rotulo: 'Concepto' }) +
+    campoLista({ id: 'rec2-forma', rotulo: 'Forma de pago', valor: 'Transferencia',
+                 opciones: [
+                   { valor: 'Efectivo',      texto: 'Efectivo' },
+                   { valor: 'Transferencia', texto: 'Transferencia' },
+                   { valor: 'Tarjeta',       texto: 'Tarjeta' },
+                   { valor: 'Otro',          texto: 'Otro' },
+                 ] }) +
+    campoTexto({ id: 'rec2-fecha', rotulo: 'Fecha', tipo: 'date', valor: hoy }) +
+    campoCasilla({ id: 'rec2-tambien-pago',
+                   rotulo: 'También registrarlo como pago en Presupuesto (solo si es un proveedor)',
+                   marcado: true }) +
+    '<div class="acciones">' +
+      '<button type="button" class="boton boton--principal" id="rec2-generar">Generar PDF</button>' +
+    '</div>'
+  );
+
+  activarFormatoDeMiles('rec2-monto', cuerpo);
+  engancharListaAmpliable('rec2-quien', cuerpo);
+  buscar('#rec2-configurar', cuerpo).addEventListener('click', () => abrirConfiguracionDeDocumentos());
+
+  buscar('#rec2-generar', cuerpo).addEventListener('click', async () => {
+    const monto = aPesos(valorDe('rec2-monto', cuerpo));
+    if (!monto || monto <= 0) {
+      avisar('Poné un monto mayor a cero.', true);
+      return;
+    }
+
+    const quien = valorDeListaAmpliable('rec2-quien', cuerpo);
+    if (!quien) {
+      avisar('Elegí o escribí a quién le pagás.', true);
+      return;
+    }
+
+    // "prov:12" / "padrino:5" / cualquier otro texto escrito a mano.
+    const carga = {
+      monto:        monto,
+      concepto:     valorDe('rec2-concepto', cuerpo),
+      forma_pago:   valorDe('rec2-forma', cuerpo),
+      fecha:        valorDe('rec2-fecha', cuerpo),
+      tambien_registrar_pago: !!valorDe('rec2-tambien-pago', cuerpo),
+    };
+    let proveedorElegido = null;
+    if (quien.startsWith('prov:')) {
+      carga.proveedor_id = quien.slice(5);
+      proveedorElegido = (dinero.proveedores || []).find(p => String(p.id) === carga.proveedor_id);
+    } else if (quien.startsWith('padrino:')) {
+      carga.padrino_id = quien.slice(8);
+    } else {
+      carga.beneficiario = quien;
+    }
+
+    try {
+      const resultado = await mandar('recibos.php?accion=generar', carga);
+      cerrarHoja(true);
+
+      if (carga.proveedor_id || resultado.pago_id) {
+        ensuciarVistas('resumen');
+        await dibujarDinero();
+      }
+
+      const proveedorActualizado = proveedorElegido
+        ? (DINERO.proveedores.find(p => p.id === proveedorElegido.id) || proveedorElegido)
+        : null;
+
+      abrirResultadoDeDocumento(
+        'Recibo ' + resultado.numero + ' generado.'
+          + (resultado.pago_id ? ' Registrado también como pago.' : ''),
+        resultado.archivo_id, resultado.nombre, proveedorActualizado,
+        proveedorActualizado ? undefined : () => {});   // sin ficha a la que volver
+    } catch (error) {
+      avisar(error.message, true);
+    }
+  });
+}
+
+/**
  * Pantallita corta que aparece justo después de generar un recibo o un
  * contrato: confirma el número, ofrece mandarlo por WhatsApp ahí mismo
  * (ver compartirArchivoPorWhatsApp en 06-piezas.js) y, al cerrarla,
@@ -2090,7 +2209,10 @@ function abrirGeneradorDeRecibo(proveedor) {
  * @param {Object} proveedor
  * @returns {void}
  */
-function abrirResultadoDeDocumento(mensaje, archivoId, nombreArchivo, proveedor) {
+function abrirResultadoDeDocumento(mensaje, archivoId, nombreArchivo, proveedor, alCerrarPersonalizado) {
+  // proveedor puede venir null (recibo a un padrino, o a alguien sin
+  // ficha propia): en ese caso no hay a qué ficha volver al cerrar,
+  // salvo que quien llamó haya pasado su propio alCerrarPersonalizado.
   const cuerpo = abrirHoja('Listo', '' +
     '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' + seguro(mensaje) + '</p>' +
     '<div class="acciones">' +
@@ -2098,11 +2220,11 @@ function abrirResultadoDeDocumento(mensaje, archivoId, nombreArchivo, proveedor)
         'Enviar por WhatsApp' +
       '</button>' +
     '</div>',
-    () => abrirDetalleDeProveedor(proveedor)
+    alCerrarPersonalizado || (proveedor ? () => abrirDetalleDeProveedor(proveedor) : undefined)
   );
 
   buscar('#doc-whatsapp', cuerpo).addEventListener('click', () => {
-    compartirArchivoPorWhatsApp(archivoId, nombreArchivo, proveedor.telefono);
+    compartirArchivoPorWhatsApp(archivoId, nombreArchivo, proveedor ? proveedor.telefono : '');
   });
 }
 

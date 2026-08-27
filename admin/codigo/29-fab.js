@@ -83,10 +83,9 @@ const CATALOGO_FAB = [
     ejecutar: () => abrirHojaDeRespaldo() },
 
   { clave: 'recibo-rapido', nombre: 'Nuevo recibo',
-    descripcion: 'Elegir un proveedor y generar su recibo, sin pasar por Presupuesto',
+    descripcion: 'Elegir a quién le pagás (proveedor, padrino, o cualquier otro) y generar su recibo',
     soloAdmin: true,
-    ejecutar: () => abrirElegirProveedorPara('Elige a quién le pagas',
-                                             p => abrirGeneradorDeRecibo(p)) },
+    ejecutar: () => abrirGeneradorDeReciboGenerico() },
 
   { clave: 'contrato-rapido', nombre: 'Nuevo contrato',
     descripcion: 'Elegir un proveedor y generar su contrato, sin pasar por Presupuesto',
