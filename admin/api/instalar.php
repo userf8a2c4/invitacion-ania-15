@@ -197,6 +197,11 @@ $agregarColumna('incompatibilidades', 'acompanante_b', 'INT NULL DEFAULT NULL');
    recibo a un pago real de Presupuesto, siempre de forma opcional. */
 $agregarColumna('recibos', 'pago_id', 'INT DEFAULT NULL');
 
+/* Mismo motivo: instalaciones con `tareas` de antes de esta ronda no
+   tienen el vínculo a proveedor/gasto/padrino/invitado. */
+$agregarColumna('tareas', 'atada_a_tipo', "VARCHAR(30) NOT NULL DEFAULT ''");
+$agregarColumna('tareas', 'atada_a_id',   'INT NOT NULL DEFAULT 0');
+
 
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 

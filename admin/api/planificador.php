@@ -140,6 +140,13 @@ case 'guardar_tarea':
         'prioridad'    => campoOpcion($datos, 'prioridad', ['baja','media','alta'], 'media'),
         'estado'       => campoOpcion($datos, 'estado',
                           ['pendiente','haciendo','hecha'], 'pendiente'),
+        // Mismo patrón y mismas opciones que ya usa guardar_nota() acá
+        // arriba — a qué ficha pertenece esta tarea, si pertenece a
+        // alguna. Nunca obligatorio: una tarea suelta sigue siendo
+        // perfectamente válida.
+        'atada_a_tipo' => campoOpcion($datos, 'atada_a_tipo',
+                          ['', 'proveedor', 'gasto', 'padrino', 'invitado'], ''),
+        'atada_a_id'   => campoEntero($datos, 'atada_a_id', 0),
     ];
     if ($valores['titulo'] === '') responderMal('La tarea necesita un título.', 400);
 

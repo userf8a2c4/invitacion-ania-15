@@ -455,6 +455,13 @@ CREATE TABLE IF NOT EXISTS tareas (
   fecha_limite  DATE DEFAULT NULL,
   prioridad     ENUM('baja','media','alta') NOT NULL DEFAULT 'media',
   estado        ENUM('pendiente','haciendo','hecha') NOT NULL DEFAULT 'pendiente',
+  -- A qué registro pertenece, si pertenece a alguno — mismo patrón y
+  -- mismas opciones que ya usa `notas` (ver guardar_nota en
+  -- planificador.php). Antes de esta columna, una tarea como "Llamar
+  -- al salón" no tenía forma de saber cuál es "el salón" en
+  -- `proveedores`; había que adivinarlo por el título.
+  atada_a_tipo  VARCHAR(30) NOT NULL DEFAULT '',
+  atada_a_id    INT NOT NULL DEFAULT 0,
   creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY por_estado_y_fecha (estado, fecha_limite)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
