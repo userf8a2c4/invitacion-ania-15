@@ -769,8 +769,51 @@ function abrirDetalleDeGasto(gasto) {
     '<span class="detalle__valor">' + seguro(r[1]) + '</span>'
   ).join('');
 
+  /* ⚡ EL GASTO ERA UNA ISLA (2026-08-27): no mostraba sus propios pagos
+     ni tenía forma de generar/ver un recibo o contrato, a pesar de ser
+     el vínculo más directo y estable al proveedor (gastos.proveedor_id
+     es una FK real; desde un pago hay que pasar por el gasto para
+     llegar ahí). Mismo patrón que "Pagos registrados" en
+     abrirDetalleDeProveedor, pero acotado a ESTE gasto. */
+  const pagosDeEsteGasto = (DINERO.pagos || []).filter(p => p.gasto_id === gasto.id);
+  const seccionPagos = pagosDeEsteGasto.length
+    ? '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">Pagos de este gasto</div>' +
+      '<div class="lista">' +
+        pagosDeEsteGasto.map(p =>
+          '<div class="lista__fila">' +
+            '<span class="lista__cuerpo">' +
+              '<span class="lista__titulo">' + seguro(p.concepto || 'Pago') + '</span>' +
+              '<span class="lista__pie">' + seguro(p.estado === 'pagado'
+                ? 'Pagado ' + comoFecha(p.fecha_pagado) : 'Pendiente') + '</span>' +
+            '</span>' +
+            '<span class="cifra">' + seguro(comoDinero(p.monto, false)) + '</span>' +
+          '</div>'
+        ).join('') +
+      '</div>'
+    : '';
+
+  const proveedor = gasto.proveedor_id
+    ? (DINERO.proveedores || []).find(p => p.id === gasto.proveedor_id)
+    : null;
+
+  // Mismos 4 botones que la ficha de proveedor, resolviendo el
+  // proveedor directo desde gasto.proveedor_id — sin la indirección
+  // frágil gasto→DINERO.gastos→proveedor que tenía el pago.
+  const seccionDocumentos = proveedor
+    ? '<div class="acciones" style="margin-top:var(--esp-3)">' +
+        '<button class="boton" id="detalle-recibo">Generar recibo</button>' +
+        '<button class="boton" id="detalle-contrato">Generar contrato</button>' +
+      '</div>' +
+      '<div class="acciones" style="margin-top:var(--esp-2)">' +
+        '<button class="boton" id="detalle-ver-recibos">Ver recibos</button>' +
+        '<button class="boton" id="detalle-ver-contratos">Ver contratos</button>' +
+      '</div>'
+    : '';
+
   const cuerpo = abrirHoja(gasto.concepto,
     '<div class="detalle">' + detalle + '</div>' +
+    seccionPagos +
+    seccionDocumentos +
     '<div id="tareas-de-la-ficha"></div>' +
     '<div class="acciones" style="margin-top:var(--esp-3)">' +
       '<button class="boton" id="detalle-nueva-tarea">Nueva tarea</button>' +
@@ -788,6 +831,15 @@ function abrirDetalleDeGasto(gasto) {
     ponerleAlarmaA({ titulo: gasto.concepto, tipo: 'gasto', id: gasto.id }));
 
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioGasto(gasto));
+
+  if (proveedor) {
+    buscar('#detalle-recibo', cuerpo).addEventListener('click', () => abrirGeneradorDeRecibo(proveedor));
+    buscar('#detalle-contrato', cuerpo).addEventListener('click', () => abrirGeneradorDeContrato(proveedor));
+    buscar('#detalle-ver-recibos', cuerpo).addEventListener('click',
+      () => abrirListaDeDocumentos('recibo', proveedor));
+    buscar('#detalle-ver-contratos', cuerpo).addEventListener('click',
+      () => abrirListaDeDocumentos('contrato', proveedor));
+  }
 }
 
 /**
@@ -1403,26 +1455,43 @@ async function guardarDinero(accion, carga, mensaje, despues) {
  *
  * Solo tiene sentido si el pago quedó atado a un gasto con proveedor
  * —recibos.php necesita saber a quién va el recibo—; un pago suelto o
- * de un gasto sin proveedor simplemente no ofrece nada.
+ * de un gasto sin proveedor simplemente avisa que no puede, en vez de
+ * quedarse callado (ver la nota de más abajo, 2026-08-27).
  *
- * @param {Object} carga     Lo que se mandó a guardar (tiene gasto_id).
+ * ⚡ YA NO RESUELVE EL PROVEEDOR ACÁ (2026-08-27). Antes se buscaba
+ * `gasto = DINERO.gastos.find(...)` y de ahí el proveedor, a mano, en el
+ * cliente — una segunda copia de una resolución que `recibos.php` YA
+ * hace del lado del servidor con solo el `pago_id` (ver
+ * admin/api/recibos.php, case 'generar'). Esa copia dependía de que
+ * `DINERO.gastos` ya tuviera el gasto correcto en memoria, y fallaba en
+ * silencio si no — sin avisar nunca por qué "no pasaba nada". Ahora se
+ * pregunta siempre que el pago quedó marcado pagado, se le pasa el
+ * trabajo al servidor, y si el servidor dice que no hay proveedor (pago
+ * suelto), se avisa con un mensaje claro en vez de callar.
+ *
+ * @param {Object} carga     Lo que se mandó a guardar (tiene estado).
  * @param {Object} resultado La respuesta del servidor (tiene id).
  * @returns {Promise<void>}
  */
 async function ofrecerGenerarReciboDeEstePago(carga, resultado) {
-  if (carga.estado !== 'pagado' || !carga.gasto_id || !resultado || !resultado.id) return;
-
-  const gasto = (DINERO.gastos || []).find(g => Number(g.id) === Number(carga.gasto_id));
-  const proveedor = gasto ? (DINERO.proveedores || []).find(p => p.id === gasto.proveedor_id) : null;
-  if (!proveedor) return;   // sin proveedor no hay a quién nombrar en el recibo
+  // Esto sí queda en silencio a propósito: un pago que no está marcado
+  // "pagado" todavía no ocurrió de verdad, así que no corresponde
+  // ofrecerle un recibo — no es un error, es la conducta esperada.
+  if (carga.estado !== 'pagado' || !resultado || !resultado.id) return;
 
   if (!confirmarAccion('Este pago quedó marcado como pagado. ¿Generar su recibo ahora?')) return;
 
   try {
     const doc = await mandar('recibos.php?accion=generar', { pago_id: resultado.id });
+    const proveedor = doc.proveedor_id
+      ? (DINERO.proveedores || []).find(p => p.id === doc.proveedor_id)
+      : null;
     abrirResultadoDeDocumento('Recibo ' + doc.numero + ' generado.',
-      doc.archivo_id, doc.nombre, proveedor);
+      doc.archivo_id, doc.nombre, proveedor || null);
   } catch (error) {
+    // "Ese pago no está atado a ningún proveedor" es el 400 que devuelve
+    // recibos.php para un pago suelto: acá sí es información útil para
+    // Lucila, no un error del sistema — se muestra tal cual.
     avisar(error.message, true);
   }
 }
@@ -2283,41 +2352,85 @@ const TIPOS_DE_DOCUMENTO = {
  */
 async function abrirListaDeDocumentos(tipo, proveedor) {
   const config = TIPOS_DE_DOCUMENTO[tipo];
-  const cuerpo = abrirHoja(config.titulo + ' · ' + proveedor.nombre,
-    '<div class="esqueleto"></div>'.repeat(3));
+  const titulo = proveedor ? config.titulo + ' · ' + proveedor.nombre : config.titulo;
 
-  let filas;
-  try {
-    filas = await traer(config.endpoint + '?accion=listar&proveedor_id=' + proveedor.id);
-  } catch (error) {
-    cuerpo.innerHTML = '';
-    pintarError(cuerpo, error.message, () => abrirListaDeDocumentos(tipo, proveedor));
-    return;
-  }
+  // Sin proveedor: se ve TODO (recibos.php/contratos.php ya soportan
+  // listar sin filtro), con un desplegable para acotar a uno solo si
+  // hace falta — nunca es obligatorio elegir uno primero.
+  const selectorProveedor = !proveedor
+    ? campoLista({
+        id: 'doc-filtro-proveedor',
+        rotulo: 'Filtrar por proveedor',
+        valor: '',
+        opciones: [{ valor: '', texto: 'Todos los proveedores' }].concat(
+          (DINERO.proveedores || []).map(p => ({ valor: p.id, texto: p.nombre }))
+        ),
+      })
+    : '';
 
-  if (!filas.length) {
-    cuerpo.innerHTML = '';
-    pintarVacio(cuerpo, 'Todavía no hay ' + config.titulo.toLowerCase(),
-      'Los que generes van a aparecer acá, solo para consultar.');
-    return;
-  }
+  const cuerpo = abrirHoja(titulo,
+    selectorProveedor + '<div id="doc-lista-contenedor">' + '<div class="esqueleto"></div>'.repeat(3) + '</div>');
 
-  cuerpo.innerHTML = filas.map(fila => {
-    const [titulo, pie] = config.filaLista(fila);
-    return '<button class="lista__fila" data-doc-id="' + seguro(fila.id) + '">' +
-      '<span class="lista__cuerpo">' +
-        '<span class="lista__titulo">' + titulo + '</span>' +
-        '<span class="lista__pie">' + pie + '</span>' +
-      '</span>' +
-    '</button>';
-  }).join('');
+  const contenedor = buscar('#doc-lista-contenedor', cuerpo);
 
-  buscarTodos('[data-doc-id]', cuerpo).forEach(boton => {
-    boton.addEventListener('click', () => {
-      const fila = filas.find(f => String(f.id) === boton.dataset.docId);
-      if (fila) abrirDetalleDeDocumentoGuardado(tipo, fila, proveedor);
+  // Sin proveedor fijo, cada fila necesita decir a nombre de quién es —
+  // los recibos ya traen `beneficiario` (siempre completo, ver
+  // recibos.php); los contratos solo tienen proveedor_id, así que se
+  // busca el nombre en DINERO.proveedores, ya cargado en memoria.
+  const nombreDelDocumento = fila => {
+    if (tipo === 'recibo') return fila.beneficiario || '—';
+    const p = (DINERO.proveedores || []).find(x => x.id === fila.proveedor_id);
+    return p ? p.nombre : '—';
+  };
+
+  const pintarLista = async (proveedorIdFiltro) => {
+    contenedor.innerHTML = '<div class="esqueleto"></div>'.repeat(3);
+
+    let filas;
+    try {
+      filas = await traer(config.endpoint + '?accion=listar'
+        + (proveedorIdFiltro ? '&proveedor_id=' + proveedorIdFiltro : ''));
+    } catch (error) {
+      contenedor.innerHTML = '';
+      pintarError(contenedor, error.message, () => pintarLista(proveedorIdFiltro));
+      return;
+    }
+
+    if (!filas.length) {
+      contenedor.innerHTML = '';
+      pintarVacio(contenedor, 'Todavía no hay ' + config.titulo.toLowerCase(),
+        'Los que generes van a aparecer acá, solo para consultar.');
+      return;
+    }
+
+    contenedor.innerHTML = filas.map(fila => {
+      const [tituloFila, pie] = config.filaLista(fila);
+      return '<button class="lista__fila" data-doc-id="' + seguro(fila.id) + '">' +
+        '<span class="lista__cuerpo">' +
+          '<span class="lista__titulo">' + tituloFila + '</span>' +
+          (proveedor ? '' : '<span class="lista__pie">' + seguro(nombreDelDocumento(fila)) + '</span>') +
+          '<span class="lista__pie">' + pie + '</span>' +
+        '</span>' +
+      '</button>';
+    }).join('');
+
+    buscarTodos('[data-doc-id]', contenedor).forEach(boton => {
+      boton.addEventListener('click', () => {
+        const fila = filas.find(f => String(f.id) === boton.dataset.docId);
+        if (!fila) return;
+        const proveedorDeEsteDoc = proveedor
+          || (DINERO.proveedores || []).find(p => p.id === fila.proveedor_id)
+          || null;
+        abrirDetalleDeDocumentoGuardado(tipo, fila, proveedorDeEsteDoc);
+      });
     });
-  });
+  };
+
+  if (!proveedor) {
+    buscar('#doc-filtro-proveedor', cuerpo).addEventListener('change', e => pintarLista(e.target.value));
+  }
+
+  await pintarLista(proveedor ? proveedor.id : '');
 }
 
 /**
@@ -2370,7 +2483,7 @@ function abrirDetalleDeDocumentoGuardado(tipo, documento, proveedor) {
     buscar('#doc-ver-whatsapp', cuerpo).addEventListener('click', () => {
       compartirArchivoPorWhatsApp(documento.archivo_id,
         config.tituloSingular + ' ' + (documento.numero || documento.id) + '.pdf',
-        proveedor.telefono);
+        proveedor ? proveedor.telefono : '');
     });
   }
 
@@ -2407,7 +2520,11 @@ function abrirDetalleDeDocumentoGuardado(tipo, documento, proveedor) {
       .then(() => {
         cerrarHoja(true);
         avisar(config.tituloSingular + ' eliminado.');
-        abrirDetalleDeProveedor(proveedor);
+        // Sin proveedor (recibo a un padrino o a alguien sin ficha, o
+        // se venía navegando desde la lista sin filtrar) no hay a qué
+        // ficha volver — se vuelve a la lista general.
+        if (proveedor) abrirDetalleDeProveedor(proveedor);
+        else abrirListaDeDocumentos(tipo, null);
       })
       .catch(error => avisar(error.message, true));
   });
@@ -2461,7 +2578,8 @@ function abrirEdicionDeDocumento(tipo, documento, proveedor) {
         Object.assign({ id: documento.id }, cambios));
       cerrarHoja(true);
       avisar('Guardado.');
-      abrirDetalleDeProveedor(proveedor);
+      if (proveedor) abrirDetalleDeProveedor(proveedor);
+      else abrirListaDeDocumentos(tipo, null);
     } catch (error) {
       avisar(error.message, true);
     }
