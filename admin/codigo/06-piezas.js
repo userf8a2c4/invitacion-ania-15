@@ -43,19 +43,47 @@ let AL_CERRAR_HOJA = null;
 let quitarCompensacionDeTeclado = null;
 
 /**
- * Engancha el ajuste de `--alto-hoja` a `visualViewport` mientras la hoja
- * esté abierta. Sin soporte de `visualViewport`, no hace nada: el CSS ya
- * tiene `88dvh` como valor de respaldo, igual que antes de este cambio.
+ * Engancha el ajuste de `--alto-hoja` Y `--desplazamiento-hoja` a
+ * `visualViewport` mientras la hoja esté abierta. Sin soporte de
+ * `visualViewport`, no hace nada: el CSS ya tiene `88dvh` como valor de
+ * respaldo, igual que antes de este cambio.
+ *
+ * ⚡ POR QUÉ SE SUMÓ `--desplazamiento-hoja` (2026-08-27). Achicar el
+ * ALTO del panel no alcanza: `.hoja` es `position:fixed; inset:0` —
+ * ocupa el *layout* viewport completo — y con
+ * `interactive-widget=resizes-visual` (admin/index.html) ese layout
+ * viewport NO se achica cuando aparece el teclado, solo el *visual*
+ * viewport sí. Como `.hoja` usa `align-items:flex-end`, el panel queda
+ * pegado al fondo del layout viewport — que en ese momento está DETRÁS
+ * del teclado, fuera de lo que se ve. `visualViewport.offsetTop` es la
+ * distancia entre el techo del layout viewport y el techo de lo que
+ * realmente se ve; trasladar `.hoja` hacia abajo esa distancia (ver
+ * `.hoja` en 02-componentes.css) alinea el panel con el fondo REAL
+ * visible, no con el de la pantalla física entera.
  * @returns {void}
  */
 function activarCompensacionDeTeclado() {
   if (!window.visualViewport) return;
 
   function ajustar() {
-    document.documentElement.style.setProperty(
-      '--alto-hoja', Math.round(window.visualViewport.height * 0.88) + 'px'
-    );
+    const vv = window.visualViewport;
+    document.documentElement.style.setProperty('--alto-hoja', Math.round(vv.height * 0.88) + 'px');
+    document.documentElement.style.setProperty('--desplazamiento-hoja', Math.round(vv.offsetTop) + 'px');
   }
+
+  // Red de seguridad adicional: si el campo que se tocó queda tapado de
+  // todos modos (por ejemplo, estaba más abajo del área recién
+  // liberada), se lo trae a la vista. El setTimeout espera a que el
+  // teclado termine de animar — sin esto, scrollIntoView mide contra un
+  // viewport que todavía se está achicando y calcula mal.
+  function alEnfocar(evento) {
+    const campo = evento.target;
+    if (!campo || !campo.matches || !campo.matches('input, textarea, select')) return;
+    setTimeout(() => campo.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300);
+  }
+
+  const cuerpo = buscar('#hoja-cuerpo');
+  cuerpo.addEventListener('focusin', alEnfocar);
 
   ajustar();
   window.visualViewport.addEventListener('resize', ajustar);
@@ -65,7 +93,9 @@ function activarCompensacionDeTeclado() {
   quitarCompensacionDeTeclado = () => {
     window.visualViewport.removeEventListener('resize', ajustar);
     window.visualViewport.removeEventListener('scroll', ajustar);
+    cuerpo.removeEventListener('focusin', alEnfocar);
     document.documentElement.style.removeProperty('--alto-hoja');
+    document.documentElement.style.removeProperty('--desplazamiento-hoja');
   };
 }
 

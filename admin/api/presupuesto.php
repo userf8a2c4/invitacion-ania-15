@@ -324,8 +324,58 @@ case 'guardar_pago':
 
     $estado = campoOpcion($datos, 'estado', ['pendiente', 'pagado'], 'pendiente');
 
+    /* ⚡ PROVEEDOR PRIMERO, GASTO COMO PLOMERÍA INVISIBLE (2026-08-27).
+       El formulario (09-vista-dinero.js, formularioPago) ya no pregunta
+       por un "gasto" — pregunta a quién se le paga: un proveedor
+       existente (`proveedor_id`), uno nuevo escrito ahí mismo
+       (`proveedor_nuevo`), o "Personal/sin proveedor" (ninguno de los
+       dos, y sin `gasto_id`). Acá se resuelve —o se crea— el gasto que
+       le corresponde a ese proveedor, mismo criterio que ya usa
+       recibos.php para `tambien_registrar_pago`: se reusa el primer
+       gasto de ese proveedor si existe, si no se crea uno con lo que ya
+       se sabe de él. Si viene `gasto_id` directo (edición de un pago
+       cuyo proveedor no cambió), se respeta tal cual. */
+    $gastoId = idOpcional($datos, 'gasto_id');
+    $proveedorId = campoEntero($datos, 'proveedor_id', 0);
+    $proveedorNuevo = campoTexto($datos, 'proveedor_nuevo', 150);
+
+    if (!$gastoId && $proveedorNuevo !== '') {
+        $proveedorId = (int) insertar('proveedores', [
+            'nombre'      => $proveedorNuevo,
+            'servicio'    => '',
+            'contacto'    => '',
+            'telefono'    => '',
+            'correo'      => '',
+            'monto_total' => 0,
+            'anticipo'    => 0,
+            'estado'      => 'candidato',
+            'notas'       => '',
+        ]);
+        anotarEnBitacora($yo, 'creó un proveedor', 'proveedores', $proveedorId, $proveedorNuevo);
+    }
+
+    if (!$gastoId && $proveedorId > 0) {
+        $gastoExistente = consultarUno(
+            'SELECT id FROM gastos WHERE proveedor_id = :p ORDER BY id ASC LIMIT 1',
+            [':p' => $proveedorId]
+        );
+        if ($gastoExistente) {
+            $gastoId = (int) $gastoExistente['id'];
+        } else {
+            $proveedor = consultarUno('SELECT * FROM proveedores WHERE id = :i', [':i' => $proveedorId]);
+            $conceptoDelPago = campoTexto($datos, 'concepto', 200);
+            $gastoId = (int) insertar('gastos', [
+                'concepto'      => $conceptoDelPago !== '' ? $conceptoDelPago
+                                    : ($proveedor['servicio'] !== '' ? $proveedor['servicio'] : $proveedor['nombre']),
+                'proveedor_id'  => $proveedorId,
+                'presupuestado' => (float) $proveedor['monto_total'],
+                'monto_real'    => 0,
+            ]);
+        }
+    }
+
     $valores = [
-        'gasto_id'     => idOpcional($datos, 'gasto_id'),
+        'gasto_id'     => $gastoId ?: null,
         'concepto'     => campoTexto($datos, 'concepto', 200),
         'monto'        => campoMonto($datos, 'monto'),
         'fecha_limite' => campoFecha($datos, 'fecha_limite'),
