@@ -351,9 +351,39 @@ CREATE TABLE IF NOT EXISTS recibos (
   concepto      VARCHAR(300) NOT NULL DEFAULT '',
   monto         DECIMAL(12,2) NOT NULL DEFAULT 0,
   forma_pago    VARCHAR(60) NOT NULL DEFAULT '',
+  -- Solo para seguimiento propio: no bloquea nada ni cambia el PDF ya
+  -- generado. "pendiente" es "todavía no lo entregué/mandé".
+  estado        ENUM('pendiente','enviado','firmado') NOT NULL DEFAULT 'pendiente',
   archivo_id    INT DEFAULT NULL,
   creado_por    INT DEFAULT NULL,
   creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY numero_unico (numero),
+  KEY por_proveedor (proveedor_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Contratos formales de prestación de servicios. Son OPCIONALES por
+-- completo: un proveedor puede tener cero, uno o varios recibos sin
+-- haber pasado nunca por acá (ver `recibos` más arriba). Nunca se exige
+-- ni se comprueba su existencia antes de dejar generar un recibo.
+CREATE TABLE IF NOT EXISTS contratos (
+  id                    INT AUTO_INCREMENT PRIMARY KEY,
+  numero                VARCHAR(30) DEFAULT NULL,
+  proveedor_id          INT NOT NULL,
+  descripcion_servicio  TEXT,
+  fecha_inicio          DATE DEFAULT NULL,
+  fecha_firma           DATE NOT NULL,
+  monto_total           DECIMAL(12,2) NOT NULL DEFAULT 0,
+  forma_pago            VARCHAR(300) NOT NULL DEFAULT '',
+  lugar                 VARCHAR(200) NOT NULL DEFAULT '',
+  horario               VARCHAR(150) NOT NULL DEFAULT '',
+  clausulas_adicionales TEXT,
+  penalizaciones        TEXT,
+  cancelacion           TEXT,
+  jurisdiccion          VARCHAR(150) NOT NULL DEFAULT '',
+  archivo_id            INT DEFAULT NULL,
+  creado_por            INT DEFAULT NULL,
+  creado_en             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY numero_unico (numero),
   KEY por_proveedor (proveedor_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

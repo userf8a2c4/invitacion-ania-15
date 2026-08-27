@@ -72,6 +72,14 @@ const FRASES_DE_FABRICA = {
   pago:     ['marcar pago', 'pagos pendientes', 'marcar pagado', 'que falta pagar',
              'ya pago', 'cobrar', 'liquidar pago', 'saldar cuenta'],
   sync:     ['sincronizar', 'sincronizar ahora', 'actualizar todo', 'mandar los cambios'],
+  'recibo-rapido':   ['nuevo recibo', 'generar recibo', 'hacer un recibo', 'dar un recibo',
+                       'quiero un recibo', 'recibo de pago'],
+  'contrato-rapido': ['nuevo contrato', 'generar contrato', 'hacer un contrato',
+                       'quiero un contrato', 'contrato de servicio'],
+  'ver-recibos':     ['ver recibos', 'mis recibos', 'buscar recibo', 'editar recibo',
+                       'borrar recibo', 'recibos de un proveedor'],
+  'ver-contratos':   ['ver contratos', 'mis contratos', 'buscar contrato', 'editar contrato',
+                       'borrar contrato', 'contratos de un proveedor'],
 };
 
 /** A qué pestaña lleva cada frase de navegación. */
@@ -95,7 +103,7 @@ const CONTEXTO_DEL_ASISTENTE = {
   hoy:        ['Escanear pase', 'Buscar invitado', 'Ver plano'],
   resumen:    ['¿Qué necesita atención?', 'Ir a dinero'],
   invitados:  ['Buscar invitado', 'Ver plano'],
-  dinero:     ['Marcar pago', 'Sincronizar'],
+  dinero:     ['Marcar pago', 'Nuevo recibo', 'Ver recibos', 'Sincronizar'],
   correo:     ['Sincronizar', 'Ir a resumen'],
   evento:     ['Nueva tarea', 'Ir a resumen'],
   planificar: ['Nueva tarea', 'Ir a correo'],

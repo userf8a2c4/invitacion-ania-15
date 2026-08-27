@@ -755,6 +755,171 @@ function campoLista(opciones) {
 }
 
 /**
+ * Los códigos de país de todo el continente americano, para que nadie
+ * tenga que acordarse de escribir +52 a mano. México va primero: es
+ * quien usa este panel casi siempre.
+ */
+const CODIGOS_DE_PAIS_AMERICA = [
+  { pais: 'México',               codigo: '+52'  },
+  { pais: 'Estados Unidos',       codigo: '+1'   },
+  { pais: 'Canadá',               codigo: '+1'   },
+  { pais: 'Guatemala',            codigo: '+502' },
+  { pais: 'Belice',               codigo: '+501' },
+  { pais: 'Honduras',             codigo: '+504' },
+  { pais: 'El Salvador',          codigo: '+503' },
+  { pais: 'Nicaragua',            codigo: '+505' },
+  { pais: 'Costa Rica',           codigo: '+506' },
+  { pais: 'Panamá',               codigo: '+507' },
+  { pais: 'Cuba',                 codigo: '+53'  },
+  { pais: 'República Dominicana', codigo: '+1'   },
+  { pais: 'Puerto Rico',          codigo: '+1'   },
+  { pais: 'Colombia',             codigo: '+57'  },
+  { pais: 'Venezuela',            codigo: '+58'  },
+  { pais: 'Ecuador',              codigo: '+593' },
+  { pais: 'Perú',                 codigo: '+51'  },
+  { pais: 'Brasil',               codigo: '+55'  },
+  { pais: 'Bolivia',              codigo: '+591' },
+  { pais: 'Paraguay',             codigo: '+595' },
+  { pais: 'Chile',                codigo: '+56'  },
+  { pais: 'Argentina',            codigo: '+54'  },
+  { pais: 'Uruguay',              codigo: '+598' },
+];
+
+/**
+ * Separa "+52 55 1147 8600" en { codigo: '+52', numero: '55 1147 8600' }.
+ * Si no reconoce ningún código al principio, asume México (+52) y deja
+ * el texto entero como número — nunca se pierde lo que ya estaba
+ * escrito, con o sin código.
+ *
+ * @param {string} telefonoCompleto
+ * @returns {{codigo: string, numero: string}}
+ */
+function separarCodigoDePais(telefonoCompleto) {
+  const texto = String(telefonoCompleto || '').trim();
+  const porLargo = CODIGOS_DE_PAIS_AMERICA.slice()
+    .sort((a, b) => b.codigo.length - a.codigo.length);
+  const encontrado = porLargo.find(c => texto.startsWith(c.codigo));
+
+  return encontrado
+    ? { codigo: encontrado.codigo, numero: texto.slice(encontrado.codigo.length).trim() }
+    : { codigo: '+52', numero: texto };
+}
+
+/**
+ * Un teléfono con su código de país al lado, en vez de un campo de
+ * texto suelto — así nadie tiene que acordarse de escribir "+52" cada
+ * vez. México sale elegido de fábrica, porque es el país de quien usa
+ * este panel casi siempre.
+ *
+ * @param {Object} opciones
+ * @param {string} opciones.id
+ * @param {string} opciones.rotulo
+ * @param {string} [opciones.valor]  - Puede venir con o sin código.
+ * @param {string} [opciones.pista]
+ * @returns {string}
+ */
+function campoTelefono(opciones) {
+  const partes = separarCodigoDePais(opciones.valor || '');
+
+  const items = CODIGOS_DE_PAIS_AMERICA.map(c =>
+    '<option value="' + seguro(c.codigo) + '"' +
+    (c.codigo === partes.codigo ? ' selected' : '') + '>' +
+      seguro(c.codigo) + ' ' + seguro(c.pais) +
+    '</option>'
+  ).join('');
+
+  return '' +
+    '<label class="campo">' +
+      '<span class="campo__rotulo">' + seguro(opciones.rotulo || 'Teléfono') + '</span>' +
+      '<div style="display:flex;gap:6px">' +
+        '<select id="' + seguro(opciones.id) + '-cod" class="campo__control" ' +
+                'style="flex:0 0 auto;width:auto">' +
+          items +
+        '</select>' +
+        '<input type="tel" id="' + seguro(opciones.id) + '" class="campo__control" ' +
+               'value="' + seguro(partes.numero) + '"' +
+               (opciones.pista ? ' placeholder="' + seguro(opciones.pista) + '"' : '') +
+               ' style="flex:1 1 auto">' +
+      '</div>' +
+    '</label>';
+}
+
+/**
+ * Lee un campoTelefono() ya armado y devuelve el número completo, con
+ * su código de país adelante (p. ej. "+52 55 1147 8600"). Vacío si no
+ * se escribió ningún número, aunque haya un país elegido.
+ *
+ * @param {string} id
+ * @param {Element} [dentroDe]
+ * @returns {string}
+ */
+function valorTelefonoDe(id, dentroDe) {
+  const numero = valorDe(id, dentroDe);
+  if (!numero) return '';
+  const codigo = valorDe(id + '-cod', dentroDe) || '+52';
+  return codigo + ' ' + numero;
+}
+
+/**
+ * Manda un archivo ya guardado (un recibo, un contrato) por WhatsApp.
+ *
+ * CÓMO LO HACE
+ * En el teléfono, usa el panel para compartir del propio sistema
+ * operativo (Web Share API) con el PDF ya adjunto: Lucila toca
+ * WhatsApp ahí mismo y el archivo llega adjunto, sin descargar nada a
+ * mano. En escritorio (donde ese panel no sabe compartir archivos) baja
+ * el PDF y abre el chat de WhatsApp del proveedor, listo para arrastrar
+ * el archivo que se acaba de descargar.
+ *
+ * @param {number} archivoId
+ * @param {string} nombreArchivo
+ * @param {string} [telefonoProveedor] - Para el chat, si hay que hacer
+ *   el camino largo de escritorio.
+ * @returns {Promise<void>}
+ */
+async function compartirArchivoPorWhatsApp(archivoId, nombreArchivo, telefonoProveedor) {
+  let blob;
+  try {
+    const respuesta = await fetch('archivos.php?accion=ver&id=' + archivoId,
+                                   { credentials: 'same-origin' });
+    if (!respuesta.ok) throw new Error('No se pudo abrir el archivo.');
+    blob = await respuesta.blob();
+  } catch (error) {
+    avisar(error.message || 'No se pudo abrir el archivo.', true);
+    return;
+  }
+
+  const archivo = new File([blob], nombreArchivo, { type: 'application/pdf' });
+
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [archivo] })) {
+    try {
+      await navigator.share({ files: [archivo], title: nombreArchivo });
+    } catch (error) {
+      // La persona canceló el panel de compartir: no es un error real.
+    }
+    return;
+  }
+
+  // Escritorio, o un navegador sin soporte para compartir archivos:
+  // se descarga y, si hay teléfono, se abre el chat para adjuntarlo.
+  const url = URL.createObjectURL(blob);
+  const enlace = document.createElement('a');
+  enlace.href = url;
+  enlace.download = nombreArchivo;
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  URL.revokeObjectURL(url);
+
+  const numero = paraWhatsApp(telefonoProveedor);
+  if (numero) {
+    window.open('https://wa.me/' + numero + '?text='
+      + encodeURIComponent('Te comparto: ' + nombreArchivo), '_blank');
+  }
+  avisar('Se descargó el PDF' + (numero ? ' y se abrió WhatsApp: adjúntalo ahí.' : '.'));
+}
+
+/**
  * Devuelve el HTML de una casilla de verificación.
  *
  * @param {Object} opciones - id, rotulo, marcado.

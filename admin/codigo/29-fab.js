@@ -81,7 +81,92 @@ const CATALOGO_FAB = [
     descripcion: 'Mandar por correo la copia de todo, con los archivos adjuntos',
     soloAdmin: true,
     ejecutar: () => abrirHojaDeRespaldo() },
+
+  { clave: 'recibo-rapido', nombre: 'Nuevo recibo',
+    descripcion: 'Elegir un proveedor y generar su recibo, sin pasar por Presupuesto',
+    soloAdmin: true,
+    ejecutar: () => abrirElegirProveedorPara('Elige a quién le pagas',
+                                             p => abrirGeneradorDeRecibo(p)) },
+
+  { clave: 'contrato-rapido', nombre: 'Nuevo contrato',
+    descripcion: 'Elegir un proveedor y generar su contrato, sin pasar por Presupuesto',
+    soloAdmin: true,
+    ejecutar: () => abrirElegirProveedorPara('Elige el proveedor',
+                                             p => abrirGeneradorDeContrato(p)) },
+
+  /* "Ver recibos/contratos" es también el camino para MODIFICAR o
+     BORRAR uno por chat: lleva directo a la lista protegida
+     (abrirListaDeDocumentos, en 09-vista-dinero.js), donde tocar una
+     fila abre el detalle de solo lectura y ahí —recién ahí— aparecen
+     Editar y Borrar, cada uno detrás de su propia confirmación. El
+     asistente no necesita "entender" cuál documento se quiere tocar:
+     alcanza con acertar la INTENCIÓN (ver, en general) y dejar que la
+     persona elija con el dedo, que es más rápido y más seguro que
+     cualquier intento de adivinar por texto libre. */
+  { clave: 'ver-recibos', nombre: 'Ver recibos',
+    descripcion: 'Elegir un proveedor y ver, editar o borrar sus recibos',
+    soloAdmin: true,
+    ejecutar: () => abrirElegirProveedorPara('¿De qué proveedor?',
+                                             p => abrirListaDeDocumentos('recibo', p)) },
+
+  { clave: 'ver-contratos', nombre: 'Ver contratos',
+    descripcion: 'Elegir un proveedor y ver, editar o borrar sus contratos',
+    soloAdmin: true,
+    ejecutar: () => abrirElegirProveedorPara('¿De qué proveedor?',
+                                             p => abrirListaDeDocumentos('contrato', p)) },
 ];
+
+/**
+ * Lista corta de proveedores para elegir uno y actuar de inmediato —
+ * mismo espíritu que abrirMarcarPagoRapido(): un toque acá, y ya está
+ * en el formulario, sin pasar por la pestaña Presupuesto ni por su
+ * buscador. Es el atajo que hace que "Nuevo recibo" y "Nuevo contrato"
+ * cumplan con las tres toques de siempre (y dos el día de la fiesta,
+ * cuando la mayoría de los datos ya vienen pre-llenados).
+ *
+ * @param {string} titulo
+ * @param {(proveedor: Object) => void} alElegir
+ * @returns {Promise<void>}
+ */
+async function abrirElegirProveedorPara(titulo, alElegir) {
+  const cuerpo = abrirHoja(titulo, '<div class="esqueleto"></div>'.repeat(3));
+
+  let datos;
+  try {
+    datos = await traer('presupuesto.php?accion=todo');
+  } catch (error) {
+    cuerpo.innerHTML = '';
+    pintarError(cuerpo, error.message, () => abrirElegirProveedorPara(titulo, alElegir));
+    return;
+  }
+
+  const proveedores = (datos.proveedores || []).slice()
+    .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+  if (!proveedores.length) {
+    cuerpo.innerHTML = '';
+    pintarVacio(cuerpo, 'Todavía no hay proveedores',
+      'Da de alta uno primero, desde Presupuesto › Proveedores.');
+    return;
+  }
+
+  cuerpo.innerHTML = proveedores.map(p =>
+    '<button class="lista__fila" data-elegir-proveedor="' + seguro(p.id) + '">' +
+      '<span class="lista__cuerpo">' +
+        '<span class="lista__titulo">' + seguro(p.nombre) + '</span>' +
+        '<span class="lista__pie">' + seguro(p.servicio || '—') + '</span>' +
+      '</span>' +
+    '</button>'
+  ).join('');
+
+  buscarTodos('[data-elegir-proveedor]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', () => {
+      const proveedor = proveedores.find(p => String(p.id) === boton.dataset.elegirProveedor);
+      cerrarHoja(true);
+      if (proveedor) alElegir(proveedor);
+    });
+  });
+}
 
 /**
  * Salta directo a la pestaña Gente, sección Mesas — sin pasar por su
