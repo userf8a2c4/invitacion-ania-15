@@ -118,17 +118,12 @@ function ejecutar($sql, $parametros = []) {
         $sentencia->execute($parametros);
         return $sentencia->rowCount();
     } catch (PDOException $e) {
-        /* ⚡ DIAGNÓSTICO TEMPORAL (2026-08-27) — SACAR DESPUÉS DE USARLO.
-           Normalmente el detalle real de un error de base de datos NUNCA
-           va al navegador (ver la nota de responderMal en responder.php):
-           solo queda en el log del servidor, al que no siempre hay
-           acceso rápido. Se está persiguiendo un "No se pudo guardar el
-           cambio" en vivo sin poder ver ese log — esta línea lo expone
-           por única vez para encontrar la causa real de un solo tiro, en
-           vez de seguir adivinando a ciegas. Sacar el ` . $e->getMessage()`
-           en cuanto se identifique el problema: esto es solo para
-           depurar, no debe quedar así en producción. */
-        responderMal('No se pudo guardar el cambio: ' . $e->getMessage(), 500, $e->getMessage());
+        // (2026-08-28) El diagnóstico temporal que exponía $e->getMessage()
+        // en el mensaje visible ya cumplió su propósito (encontrar la
+        // tabla `confirmaciones` faltante y cargar la lista real). El
+        // detalle sigue yendo al log del servidor vía el 3er parámetro de
+        // responderMal() — solo se saca del mensaje que ve el navegador.
+        responderMal('No se pudo guardar el cambio.', 500, $e->getMessage());
     }
 }
 
