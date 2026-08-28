@@ -198,7 +198,9 @@ function armarPdfDelRecibo($recibo, $destinatario, $pagadora) {
     $datosPagadora = datosDeLaPagadora();
 
     $pdf->titulo('ANIA · XV AÑOS');
-    $pdf->parrafo('RECIBO DE PAGO — Comprobante simple, no es un CFDI', true, 10);
+    // Guion normal, no el largo (—): ISO-8859-1 no lo tiene y aLatin1()
+    // lo pierde al convertir — ver la nota grande en pdf_simple.php.
+    $pdf->parrafo('RECIBO DE PAGO - Comprobante simple, no es un CFDI', true, 10);
     $pdf->parrafo('Número ' . $recibo['numero']);
     if ($recibo['lugar_expedicion'] !== '') {
         $pdf->parrafo('Expedido en ' . $recibo['lugar_expedicion'] . ', a '
@@ -224,14 +226,14 @@ function armarPdfDelRecibo($recibo, $destinatario, $pagadora) {
     $pdf->espacio(10);
 
     $pdf->parrafo('Concepto', true);
-    $pdf->parrafo($recibo['concepto'] !== '' ? $recibo['concepto'] : '—');
+    $pdf->parrafo($recibo['concepto'] !== '' ? $recibo['concepto'] : '-');
     $pdf->espacio(10);
 
     $pdf->filaDeDatos('Monto', '$' . number_format((float) $recibo['monto'], 2));
     $pdf->parrafo('(' . cantidadEnLetra((float) $recibo['monto']) . ')', false, 9);
     $pdf->espacio(4);
     $pdf->filaDeDatos('Forma de pago', $recibo['forma_pago'] !== ''
-        ? $recibo['forma_pago'] : '—');
+        ? $recibo['forma_pago'] : '-');
 
     $pdf->espacio(40);
     $pdf->linea();
@@ -475,13 +477,23 @@ case 'generar':
             'SELECT id FROM gastos WHERE proveedor_id = :p ORDER BY id ASC LIMIT 1 FOR UPDATE',
             [':p' => $proveedorId]
         );
+        /* ⚡ CRITERIO UNIFICADO (2026-08-27): `monto_real` arranca en 0,
+           igual que en cotizador.php — no se sabe el costo final todavía
+           por generar UN recibo parcial. El resumen (presupuesto.php,
+           acción 'todo') ya usa `presupuestado` como respaldo mientras
+           `monto_real` sea 0, así que esto no hace que "Cuesta" muestre
+           menos: sigue mostrando el estimado hasta que se cargue el
+           costo real a mano en la ficha del gasto. Antes acá se ponía
+           `monto_real = monto_total` de una, distinto del criterio de
+           `guardar_pago` (que lo deja en 0) — dos caminos, dos números
+           para lo mismo. */
         $gastoId = $gasto
             ? (int) $gasto['id']
             : insertar('gastos', [
                 'concepto'      => $proveedor['servicio'] !== '' ? $proveedor['servicio'] : $proveedor['nombre'],
                 'proveedor_id'  => $proveedorId,
                 'presupuestado' => (float) $proveedor['monto_total'],
-                'monto_real'    => (float) $proveedor['monto_total'],
+                'monto_real'    => 0,
               ]);
 
         $pagoId = insertar('pagos', [
@@ -559,23 +571,16 @@ case 'generar':
 
     $reciboId = insertar('recibos', $filaParaGuardar);
 
-    /* ⚡ SUMAR AL ANTICIPO DEL PROVEEDOR, Y ES A PROPÓSITO (2026-08-27).
-       Sin esto, `proveedores.anticipo` nunca se movía al generar un
-       recibo: "Falta" seguía mostrando el mismo número de siempre, así
-       que el siguiente "Generar recibo" volvía a sugerir el mismo
-       monto — y a simple vista parecía "el mismo recibo de antes"
-       reapareciendo, aunque el formulario era uno nuevo en blanco.
-       Se tapa en monto_total: un recibo no puede dejar el anticipo por
-       encima de lo pactado. Solo aplica si el beneficiario es un
-       proveedor — un padrino o alguien sin ficha no tiene "anticipo"
-       que actualizar. */
-    if ($proveedorId > 0) {
-        $nuevoAnticipo = min(
-            (float) $proveedor['monto_total'],
-            (float) $proveedor['anticipo'] + $monto
-        );
-        actualizar('proveedores', $proveedorId, ['anticipo' => $nuevoAnticipo]);
-    }
+    /* ⚡ YA NO SE TOCA `proveedores.anticipo` ACÁ (2026-08-27). Antes este
+       bloque lo sumaba a mano, capado por `monto_total` — con el bug de
+       que un proveedor creado en $0 (por ejemplo desde "Nuevo pago")
+       quedaba con `min(0, ...) = 0` para siempre, sin importar cuánto
+       se le pagara. Ahora `anticipo` no es la fuente de verdad de nada:
+       `presupuesto.php` (acción 'todo') calcula `pagado_real` sumando
+       los pagos de verdad de este proveedor, y ese es el número que
+       se muestra. Si este recibo vino con `tambien_registrar_pago`, el
+       pago que se acaba de insertar arriba ya cuenta solo, sin que
+       nadie tenga que empujarlo a mano a ningún otro lado. */
 
     bd()->commit();
 

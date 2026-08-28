@@ -107,28 +107,52 @@ class PdfSimple {
 
     /**
      * Dos columnas en la misma línea: una etiqueta a la izquierda y un
-     * valor alineado a la derecha. Útil para "Monto: $1,000.00".
+     * valor en una segunda columna fija. Útil para "Monto: $1,000.00".
+     *
+     * ⚡ REESCRITA (2026-08-27) — el valor se salía de la hoja y
+     * desaparecía en silencio. La versión anterior alineaba el valor A
+     * LA DERECHA calculando su ancho con `strlen() * tamaño * 0.5` — un
+     * factor que subestima Helvetica de verdad (~0.55-0.61 según el
+     * carácter), así que el texto arrancaba demasiado a la derecha y la
+     * cola se pasaba del borde; el lector la recorta sin avisar. Un
+     * valor largo (más de ~65 caracteres) ni siquiera tenía wrap: una
+     * sola línea, cortada.
+     *
+     * Ahora el valor va en una columna de X FIJA (`MARGEN + 150`, deja
+     * lugar de sobra para etiquetas como "Forma de pago") y con el
+     * mismo corte de línea que ya usa `parrafo()` — si no entra en una
+     * línea, sigue en la siguiente, nunca se sale de la hoja.
      */
     public function filaDeDatos($etiqueta, $valor, $tamano = 11) {
-        $this->asegurarLugar($tamano + 6);
+        $columnaValor = self::MARGEN + 150;
+        $anchoValor   = self::ANCHO - self::MARGEN - $columnaValor;
+        // Mismo criterio que parrafo(): partir en líneas ANTES de
+        // convertir a Latin-1 (mb_strlen necesita el texto en UTF-8
+        // para contar bien los acentos).
+        $caracteresPorLinea = max(10, (int) ($anchoValor / ($tamano * 0.5)));
+        $lineasValor = $this->partirEnLineas((string) $valor, $caracteresPorLinea);
+        $alturaLinea = $tamano + 6;
+
+        $this->asegurarLugar($alturaLinea * count($lineasValor));
+        $yInicial = $this->y;
 
         $texto = $this->aLatin1($etiqueta) . ':';
         $this->comandosDeLaPagina[] = 'BT';
         $this->comandosDeLaPagina[] = "/F2 $tamano Tf";
-        $this->comandosDeLaPagina[] = sprintf('%.2F %.2F Td', self::MARGEN, $this->y);
+        $this->comandosDeLaPagina[] = sprintf('%.2F %.2F Td', self::MARGEN, $yInicial);
         $this->comandosDeLaPagina[] = '(' . $this->escaparPdf($texto) . ') Tj';
         $this->comandosDeLaPagina[] = 'ET';
 
-        $textoValor = $this->aLatin1((string) $valor);
-        $anchoAprox = strlen($textoValor) * $tamano * 0.5;
-        $x = self::ANCHO - self::MARGEN - $anchoAprox;
-        $this->comandosDeLaPagina[] = 'BT';
-        $this->comandosDeLaPagina[] = "/F1 $tamano Tf";
-        $this->comandosDeLaPagina[] = sprintf('%.2F %.2F Td', max(self::MARGEN + 140, $x), $this->y);
-        $this->comandosDeLaPagina[] = '(' . $this->escaparPdf($textoValor) . ') Tj';
-        $this->comandosDeLaPagina[] = 'ET';
+        foreach ($lineasValor as $indice => $linea) {
+            $this->comandosDeLaPagina[] = 'BT';
+            $this->comandosDeLaPagina[] = "/F1 $tamano Tf";
+            $this->comandosDeLaPagina[] = sprintf('%.2F %.2F Td',
+                $columnaValor, $yInicial - $indice * $alturaLinea);
+            $this->comandosDeLaPagina[] = '(' . $this->escaparPdf($this->aLatin1($linea)) . ') Tj';
+            $this->comandosDeLaPagina[] = 'ET';
+        }
 
-        $this->y -= ($tamano + 6);
+        $this->y -= $alturaLinea * count($lineasValor);
     }
 
     /**
@@ -199,9 +223,31 @@ class PdfSimple {
      * El PDF solo entiende Latin-1 (o fuentes embebidas, que acá no hay).
      * El español entra entero en Latin-1 —incluye á,é,í,ó,ú,ñ,¿,¡—, así
      * que esto no pierde ningún caracter real del proyecto.
+     *
+     * ⚡ YA NO USA SOLO `@mb_convert_encoding` (2026-08-27). Con la `@`
+     * delante, si faltaba la extensión `mbstring` en el hosting (o
+     * llegaban bytes que no eran UTF-8 válido), esto devolvía `false`
+     * SIN AVISAR — y en filaDeDatos() eso significaba un valor
+     * literalmente invisible (string vacío) con su etiqueta bien
+     * visible al lado: exactamente el síntoma reportado ("Fecha:",
+     * "Monto:" sin nada adelante). Ahora hay un respaldo con `iconv`
+     * y, si las dos fallan, se devuelve el texto ORIGINAL sin convertir
+     * — un acento que salga mal en el PDF es un problema muchísimo
+     * menor que un recibo con los montos en blanco.
      */
     private function aLatin1($texto) {
-        return @mb_convert_encoding((string) $texto, 'ISO-8859-1', 'UTF-8');
+        $texto = (string) $texto;
+        if ($texto === '') return '';
+
+        $convertido = @mb_convert_encoding($texto, 'ISO-8859-1', 'UTF-8');
+        if ($convertido !== false && $convertido !== '') return $convertido;
+
+        if (function_exists('iconv')) {
+            $viaIconv = @iconv('UTF-8', 'ISO-8859-1//TRANSLIT', $texto);
+            if ($viaIconv !== false && $viaIconv !== '') return $viaIconv;
+        }
+
+        return $texto;
     }
 
     /** Escapa los tres caracteres que el formato PDF trata especial. */
