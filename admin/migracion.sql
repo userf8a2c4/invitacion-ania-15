@@ -1144,3 +1144,46 @@ CREATE TABLE IF NOT EXISTS confirmaciones (
   KEY por_codigo (codigo),
   KEY por_asiste (asiste)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ─────────────────────────────────────────────────────────────────────
+-- ENTREGA 2 · ETIQUETAS LIBRES (personas Y mesas)
+--
+-- QUÉ SON
+-- Palabras que la organizadora inventa sobre la marcha para describir
+-- gente o mesas -"Familia paterna", "Jóvenes", "Compañeros de baile",
+-- "Mesa ruidosa"- y que sirven de pista para el acomodo automático: si
+-- una persona y una mesa comparten etiquetas, el bot las prefiere entre
+-- sí (ver mejorMesaPara() en _lib/mesas.php). NO son una relación fija
+-- como "familia materna/paterna" -eso ya existe en `grupos_invitados`-
+-- sino texto libre y múltiple: una persona puede tener tres etiquetas a
+-- la vez, o ninguna.
+--
+-- POR QUÉ DOS TABLAS Y NO UNA COLUMNA
+-- Mismo patrón polimórfico que ya usa el proyecto para archivos, notas y
+-- alarmas (atada_a_tipo + atada_a_id): una etiqueta puede colgar de un
+-- ACOMPAÑANTE o de una MESA, y una persona/mesa puede tener varias
+-- etiquetas a la vez -ninguna de las dos cosas entra en una sola
+-- columna sin repetir texto o inventar un separador frágil.
+--
+-- SIN FOREIGN KEY EN atado_a_id A PROPÓSITO -mismo motivo que
+-- notas.atada_a_id/archivos.atado_a_id: apunta a DOS tablas distintas
+-- según atado_a_tipo, y una FK solo puede apuntar a una.
+CREATE TABLE IF NOT EXISTS etiquetas (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  nombre     VARCHAR(60) NOT NULL,
+  creado_en  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY por_nombre (nombre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS etiquetas_asignadas (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  etiqueta_id   INT NOT NULL,
+  -- 'acompanante' | 'mesa'
+  atado_a_tipo  VARCHAR(20) NOT NULL,
+  atado_a_id    INT NOT NULL,
+  UNIQUE KEY una_vez (etiqueta_id, atado_a_tipo, atado_a_id),
+  KEY por_atadura (atado_a_tipo, atado_a_id),
+  CONSTRAINT etq_asig_etiqueta FOREIGN KEY (etiqueta_id)
+    REFERENCES etiquetas(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

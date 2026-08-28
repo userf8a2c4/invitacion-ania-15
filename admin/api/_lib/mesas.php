@@ -564,7 +564,20 @@ function movimientosDelPlan($plan, $unidades, $mesas) {
  */
 function mejorMesaPara($lugares, $quienes, $estado, $peleas) {
     $mejor = 0;
+    $mejorAfinidad = -1;
     $sobraMenos = PHP_INT_MAX;
+
+    /* ENTREGA 2 · AFINIDAD POR ETIQUETAS. Unión de las etiquetas de
+       todos los que se quieren sentar juntos ("Familia paterna",
+       "Jóvenes"…) — se calcula una sola vez acá afuera, no adentro del
+       foreach de mesas, porque es la misma para las catorce. */
+    $etiquetasDelGrupo = [];
+    foreach ($quienes as $quien) {
+        $etiquetasDelGrupo = array_merge(
+            $etiquetasDelGrupo, etiquetasDeUnidad($quien['tipo'], $quien['id'])
+        );
+    }
+    $etiquetasDelGrupo = array_unique($etiquetasDelGrupo);
 
     foreach ($estado as $mesa) {
         if ($mesa['libres'] < $lugares) continue;
@@ -580,14 +593,93 @@ function mejorMesaPara($lugares, $quienes, $estado, $peleas) {
         }
         if (!$seLlevanTodos) continue;
 
+        /* Cuántas etiquetas comparte el grupo con esta mesa ("Mesa
+           ruidosa" + persona etiquetada "Jóvenes"). Es una PREFERENCIA,
+           no una regla dura: a igual afinidad sigue ganando la mesa que
+           deja menos lugares sueltos (el criterio de siempre, y el
+           único que existía antes de esto). Sin ninguna etiqueta puesta
+           en todo el evento, $afinidad siempre da 0 en todas las mesas
+           y este bloque no cambia un solo resultado de los de antes. */
+        $afinidad = $etiquetasDelGrupo
+            ? count(array_intersect($etiquetasDelGrupo, etiquetasDeMesa($mesa['id'])))
+            : 0;
+
         $sobra = $mesa['libres'] - $lugares;
-        if ($sobra < $sobraMenos) {
+
+        if ($afinidad > $mejorAfinidad ||
+            ($afinidad === $mejorAfinidad && $sobra < $sobraMenos)) {
+            $mejorAfinidad = $afinidad;
             $sobraMenos = $sobra;
             $mejor = $mesa['id'];
         }
     }
 
     return $mejor;
+}
+
+/**
+ * Las etiquetas (ids) puestas en una mesa. Cache estática por
+ * ejecución: la misma mesa se consulta una vez por cada grupo que se
+ * evalúa durante un reparto entero (decenas de veces), y no cambia
+ * mientras dura.
+ *
+ * @param int $mesaId
+ * @return int[]
+ */
+function etiquetasDeMesa($mesaId) {
+    static $cache = [];
+    if (isset($cache[$mesaId])) return $cache[$mesaId];
+
+    $cache[$mesaId] = existeTabla('etiquetas_asignadas')
+        ? array_map('intval', array_column(consultarTodo(
+            "SELECT etiqueta_id FROM etiquetas_asignadas
+             WHERE atado_a_tipo = 'mesa' AND atado_a_id = :i",
+            [':i' => $mesaId]
+          ), 'etiqueta_id'))
+        : [];
+
+    return $cache[$mesaId];
+}
+
+/**
+ * Las etiquetas (ids) de una unidad para sentar. De un ACOMPAÑANTE
+ * suelto (Fase 9), las suyas propias. De una CONFIRMACIÓN (la familia
+ * en bloque), la unión de las de todos sus integrantes nombrados — las
+ * etiquetas de Entrega 2 solo se pegan a personas o a mesas, nunca a
+ * una confirmación entera, así que "la familia tiene la etiqueta X"
+ * significa "alguien nombrado adentro la tiene".
+ *
+ * @param string $tipo 'confirmacion' | 'acompanante'
+ * @param int    $id
+ * @return int[]
+ */
+function etiquetasDeUnidad($tipo, $id) {
+    static $cache = [];
+    $clave = $tipo . $id;
+    if (isset($cache[$clave])) return $cache[$clave];
+
+    if (!existeTabla('etiquetas_asignadas')) return $cache[$clave] = [];
+
+    if ($tipo === 'acompanante') {
+        $ids = array_column(consultarTodo(
+            "SELECT etiqueta_id FROM etiquetas_asignadas
+             WHERE atado_a_tipo = 'acompanante' AND atado_a_id = :i",
+            [':i' => $id]
+        ), 'etiqueta_id');
+    } elseif (existeTabla('acompanantes')) {
+        $ids = array_column(consultarTodo(
+            "SELECT DISTINCT ea.etiqueta_id
+             FROM acompanantes a
+             JOIN etiquetas_asignadas ea
+               ON ea.atado_a_tipo = 'acompanante' AND ea.atado_a_id = a.id
+             WHERE a.confirmacion_id = :c",
+            [':c' => $id]
+        ), 'etiqueta_id');
+    } else {
+        $ids = [];
+    }
+
+    return $cache[$clave] = array_map('intval', $ids);
 }
 
 /**

@@ -260,6 +260,7 @@ $tablasEsperadas = [
     'comandos_usuario', 'presupuestos', 'eventos_uso',
     'acompanante_reglas', 'asignacion_mesas_persona', 'invitaciones',
     'escrituras_hechas', 'envios_proveedor', 'acomodo_respaldo',
+    'etiquetas', 'etiquetas_asignadas',
 ];
 
 $faltantes = [];
