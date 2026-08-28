@@ -1455,3 +1455,94 @@ function valorDeListaDeDetalle(id, dentroDe) {
     }))
     .filter(item => item.texto);
 }
+
+
+/* ─── 7. ETIQUETAS LIBRES (ENTREGA 2) ──────────────────────────────── */
+
+/**
+ * Pinta los "chips" de etiquetas de una persona o una mesa, con forma
+ * de agregar (elegir una existente o escribir una nueva) y de quitar
+ * cada una. Autocontenido a propósito: se llama una vez, con el
+ * contenedor vacío donde va, y desde ahí se arma y refresca solo — así
+ * sirve igual desde la ficha de un acompañante (08-vista-invitados.js)
+ * que desde la de una mesa (17-mesas.js), sin duplicar nada.
+ *
+ * @param {'acompanante'|'mesa'} tipo
+ * @param {number} id
+ * @param {Element} contenedor
+ * @returns {Promise<void>}
+ */
+async function pintarEtiquetasDe(tipo, id, contenedor) {
+  if (!contenedor) return;
+
+  let puestas;
+  try {
+    const r = await traer('etiquetas_acomodo.php?accion=por_objeto&tipo=' + tipo + '&id=' + id);
+    puestas = r.filas || [];
+  } catch (error) {
+    contenedor.innerHTML = '';
+    return; // No es crítico: la ficha se puede ver igual sin esto.
+  }
+
+  contenedor.innerHTML =
+    '<span class="campo__rotulo">Etiquetas</span>' +
+    '<div class="menus-mini" style="margin-bottom:var(--esp-1)">' +
+      (puestas.length
+        ? puestas.map(e =>
+            '<span class="etiqueta" data-etiqueta-puesta="' + seguro(e.id) + '" ' +
+                  'style="cursor:pointer" title="Tocar para quitar">' +
+              seguro(e.nombre) + ' ✕' +
+            '</span>'
+          ).join('')
+        : '<span class="vacio__texto" style="margin:0">Ninguna todavía.</span>') +
+    '</div>' +
+    '<div style="display:flex;gap:6px">' +
+      '<input type="text" id="etiqueta-nueva-' + tipo + id + '" class="campo__control" ' +
+             'placeholder="Escribí o elegí una etiqueta" list="etiquetas-existentes" ' +
+             'style="flex:1">' +
+      '<button type="button" class="boton boton--chico" id="etiqueta-agregar-' + tipo + id + '">' +
+        'Agregar</button>' +
+    '</div>' +
+    '<datalist id="etiquetas-existentes"></datalist>';
+
+  // La lista completa, para el autocompletar del <input list="…">. No
+  // es crítico si falla: el campo sigue funcionando como texto libre.
+  try {
+    const catalogo = await traer('etiquetas_acomodo.php?accion=listar');
+    const datalist = buscar('#etiquetas-existentes', contenedor);
+    if (datalist) {
+      datalist.innerHTML = (catalogo.filas || [])
+        .map(e => '<option value="' + seguro(e.nombre) + '">').join('');
+    }
+  } catch (error) { /* sin autocompletar, se sigue igual */ }
+
+  buscarTodos('[data-etiqueta-puesta]', contenedor).forEach(chip => {
+    chip.addEventListener('click', async () => {
+      try {
+        await mandar('etiquetas_acomodo.php?accion=quitar', {
+          etiqueta_id: Number(chip.dataset.etiquetaPuesta), tipo: tipo, id: id,
+        });
+        pintarEtiquetasDe(tipo, id, contenedor);
+      } catch (error) {
+        avisar(error.message, true);
+      }
+    });
+  });
+
+  const campoNueva = buscar('#etiqueta-nueva-' + tipo + id, contenedor);
+  const agregar = async () => {
+    const nombre = campoNueva.value.trim();
+    if (!nombre) return;
+    try {
+      await mandar('etiquetas_acomodo.php?accion=asignar', { nombre: nombre, tipo: tipo, id: id });
+      pintarEtiquetasDe(tipo, id, contenedor);
+    } catch (error) {
+      avisar(error.message, true);
+    }
+  };
+
+  buscar('#etiqueta-agregar-' + tipo + id, contenedor).addEventListener('click', agregar);
+  campoNueva.addEventListener('keydown', evento => {
+    if (evento.key === 'Enter') { evento.preventDefault(); agregar(); }
+  });
+}

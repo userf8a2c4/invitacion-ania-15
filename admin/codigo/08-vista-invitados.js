@@ -1065,8 +1065,16 @@ function formularioDeAcompanante(confirmacionId, cupan, alGuardar, existente) {
     campoTexto({ id: 'acomp-correo', rotulo: 'Correo', tipo: 'email', valor: d.correo || '' }) +
     campoTexto({ id: 'acomp-menu', rotulo: 'Menú', valor: d.menu || '' }) +
     campoTexto({ id: 'acomp-alergias', rotulo: 'Alergias', valor: d.alergias || '' }) +
+    // Las etiquetas (Entrega 2) solo tienen sentido una vez que la
+    // persona ya existe (necesitan su id) — no se ofrecen al crear una
+    // nueva, recién en su edición posterior.
+    (existente ? '<div class="campo" id="acomp-etiquetas"></div>' : '') +
     pieDeFormulario(existente ? 'Guardar' : 'Agregar')
   );
+
+  if (existente) {
+    pintarEtiquetasDe('acompanante', existente.id, buscar('#acomp-etiquetas', cuerpo));
+  }
 
   if (!existente && tieneContactPicker) {
     buscar('#acomp-de-contactos', cuerpo).addEventListener('click', async () => {

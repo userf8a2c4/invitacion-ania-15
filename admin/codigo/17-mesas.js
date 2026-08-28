@@ -1049,9 +1049,16 @@ function abrirLaMesa(mesaId, refrescar) {
 
     gente +
 
+    // Etiquetas (Entrega 2): "Mesa ruidosa", "Jóvenes", "Familia
+    // materna"… — el bot las cruza con las de cada persona para
+    // preferir sentarla acá (ver mejorMesaPara() en _lib/mesas.php).
+    '<div class="campo" id="mesa-etiquetas" style="margin-top:var(--esp-3)"></div>' +
+
     '<button class="boton boton--ancho" id="mesa-editar" ' +
-            'style="margin-top:var(--esp-3)">Cambiar nombre o capacidad</button>'
+            'style="margin-top:var(--esp-2)">Cambiar nombre o capacidad</button>'
   );
+
+  pintarEtiquetasDe('mesa', mesaId, buscar('#mesa-etiquetas', cuerpo));
 
   buscarTodos('[data-mover-de-mesa]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () =>
