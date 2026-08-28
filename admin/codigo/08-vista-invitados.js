@@ -149,6 +149,10 @@ async function pintarSeccionDeGente() {
 
     if (clave === 'contactos') { await dibujarContactos(); return; }
 
+    // Invitaciones tiene su propia API (invitaciones.php) y no depende
+    // de evento.php — no hace falta asegurarEvento() para esta.
+    if (clave === 'invitaciones') { await dibujarInvitaciones(cuerpo); return; }
+
     /* Mesas, Regalos y Foráneos salen de evento.php, que puede no
        haberse pedido todavía si nadie entró a la pestaña Evento. */
     pintarCargando(cuerpo, 4);

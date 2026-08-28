@@ -253,7 +253,7 @@ $tablasEsperadas = [
     'regalos', 'foraneos', 'ceremonia', 'requisitos_ceremonia', 'musica',
     'citas_arreglo', 'tomas_foto', 'acompanantes', 'permisos_usuario', 'llegadas',
     'comandos_usuario', 'presupuestos', 'eventos_uso',
-    'acompanante_reglas', 'asignacion_mesas_persona',
+    'acompanante_reglas', 'asignacion_mesas_persona', 'invitaciones',
 ];
 
 $faltantes = [];

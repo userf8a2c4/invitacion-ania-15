@@ -332,6 +332,38 @@ case 'invitados':
             );
         }
 
+        /* ─── Su invitación (link personal + token) ───────────────────
+           ⚡ (2026-08-27) El teléfono de la planilla ya se guardaba en
+           `notas` como texto ("Contacto: …") porque `confirmaciones` no
+           tiene dónde ponerlo — sigue guardándose ahí IGUAL que antes
+           (no se le saca nada a nadie), pero ahora TAMBIÉN queda en
+           `invitaciones.telefono`, de verdad usable para mandar el link
+           por WhatsApp desde la pantalla Invitaciones. Mismo criterio de
+           token que admin/api/invitaciones.php: generado en el
+           servidor, nunca el que armaba el navegador del invitado. */
+        if (existeTabla('invitaciones')) {
+            do {
+                $tokenImportado = bin2hex(random_bytes(8));
+                $tokenRepetido = consultarUno('SELECT id FROM invitaciones WHERE token = :t',
+                                              [':t' => $tokenImportado]);
+            } while ($tokenRepetido);
+
+            $telefonoDeLaFila = ($contacto !== '' && $correo === '') ? mb_substr($contacto, 0, 40) : '';
+            $grupoIdDeLaFila = ($nombreGrupo !== '' && isset($idsDeGrupo[$nombreGrupo]))
+                ? $idsDeGrupo[$nombreGrupo] : null;
+
+            insertar('invitaciones', [
+                'token'           => $tokenImportado,
+                'nombre'          => mb_substr($nombre, 0, 150),
+                'telefono'        => $telefonoDeLaFila,
+                'correo'          => mb_substr($correo, 0, 190),
+                'pases'           => max(1, $adultos + $ninos),
+                'grupo_id'        => $grupoIdDeLaFila,
+                'confirmacion_id' => $idNuevo,
+                'estado'          => 'sin_enviar',
+            ]);
+        }
+
         /* ─── Su mesa ────────────────────────────────────────────────── */
         $nombreMesa = normalizarNombreDeMesa($fila['mesa'] ?? '');
         if ($nombreMesa !== '' && isset($idsDeMesa[$nombreMesa])

@@ -61,6 +61,189 @@
 
   /** La respuesta que significa "sí, voy" en la lista desplegable. */
   const RESPUESTA_AFIRMATIVA = 'Sí, asistiré';
+  /** Y la que significa que no — se usa para precargar la respuesta ya
+      dada, en el modo de invitación personalizada (ver más abajo). */
+  const RESPUESTA_NEGATIVA = 'No podré asistir';
+
+  /* ─── 0b. INVITACIÓN PERSONALIZADA (?i=TOKEN) ──────────────────────
+     SOLO SE INTERCAMBIA EL FORMULARIO — el sobre, la cuenta regresiva,
+     el mapa, todo lo demás de la web queda igual. Acá adentro, en vez
+     de borrar el formulario del HTML, se ocultan sus campos numéricos
+     y se inyecta un bloque hermano con la lista de personas del grupo
+     (si el admin las cargó) o se deja el número de siempre, pero con
+     tope de lugares.
+
+     Escucha 'invitacion-lista' (disparado por
+     codigo/04-invitado-personalizado.js) en vez de leer INVITACION
+     directamente, porque ese archivo hace un fetch: para cuando este
+     archivo termina de ejecutarse, todavía no hay respuesta. */
+  let MODO_PERSONAS_ACTIVO = false;
+  let PERSONAS_INVITACION = [];
+
+  document.addEventListener('invitacion-lista', function (evento) {
+    activarModoInvitacionPersonalizada(evento.detail);
+  });
+
+  /**
+   * Adapta el formulario a una invitación con token: nombre y correo
+   * quedan fijos, y se reemplaza el conteo de adultos/niños por la
+   * lista de personas del grupo (si se cargaron) o por un tope de
+   * lugares (si no).
+   *
+   * @param {Object} datos - La respuesta de invitacion.php.
+   * @returns {void}
+   */
+  function activarModoInvitacionPersonalizada(datos) {
+    if (!formulario || !datos) return;
+
+    // Ya respondió y ya pasó la fecha límite: se reemplaza el formulario
+    // entero por su pase, del lado del servidor TAMBIÉN se rechaza
+    // cualquier intento de cambio (ver confirmar.php) — esto es solo
+    // para no mostrar un formulario que de todos modos va a rechazar.
+    if (datos.cerrado) {
+      formulario.style.display = 'none';
+      const contenedorFormulario = formulario.parentElement;
+      if (contenedorFormulario && !buscar('#invitacion-cerrada')) {
+        const aviso = document.createElement('p');
+        aviso.id = 'invitacion-cerrada';
+        aviso.className = 'formulario__introduccion';
+        aviso.textContent = 'Las confirmaciones ya se cerraron. Si necesitas hacer un ' +
+          'cambio, escríbenos.';
+        contenedorFormulario.appendChild(aviso);
+      }
+      return;
+    }
+
+    if (campoNombre) {
+      campoNombre.value = datos.nombre;
+      campoNombre.readOnly = true;
+    }
+    if (campoCorreo && datos.correo) {
+      campoCorreo.value = datos.correo;
+      campoCorreo.readOnly = true;
+    }
+
+    if (datos.ya_respondio && campoAsistencia) {
+      campoAsistencia.value = datos.asiste ? RESPUESTA_AFIRMATIVA : RESPUESTA_NEGATIVA;
+      campoAsistencia.dispatchEvent(new Event('change'));
+      if (botonEnviar) {
+        botonEnviar.textContent = 'Actualizar mi respuesta ✦';
+      }
+    }
+
+    const introduccion = buscar('.formulario__introduccion');
+    if (introduccion) {
+      introduccion.innerHTML = 'Hemos reservado <strong>' + datos.pases +
+        (datos.pases === 1 ? ' lugar' : ' lugares') +
+        '</strong> para ustedes. Pueden modificar su respuesta cuantas ' +
+        'veces gusten mientras las confirmaciones sigan abiertas.';
+    }
+
+    const cajaCantidad = campoAdultos ? campoAdultos.closest('.campo') : null;
+
+    if (datos.personas && datos.personas.length) {
+      MODO_PERSONAS_ACTIVO = true;
+      PERSONAS_INVITACION = datos.personas.map(function (p) {
+        return {
+          id: p.id,
+          nombre: p.nombre,
+          tipo: p.tipo === 'nino' ? 'nino' : 'adulto',
+          marcado: datos.ya_respondio ? !!p.menu : true,
+          menu: p.menu || 'Estándar',
+        };
+      });
+
+      if (cajaCantidad) cajaCantidad.style.display = 'none';
+      if (bloqueMenuInfantil) bloqueMenuInfantil.classList.remove('visible');
+
+      dibujarChecklistDePersonas();
+    } else {
+      if (campoAdultos) campoAdultos.setAttribute('max', String(datos.pases));
+      if (campoNinos) campoNinos.setAttribute('max', String(datos.pases));
+
+      if (datos.ya_respondio) {
+        if (campoAdultos) campoAdultos.value = String(datos.adultos || 1);
+        if (campoNinos) campoNinos.value = String(datos.ninos || 0);
+        actualizarFilasDeAdultos();
+        actualizarFilasDeNinos();
+      }
+    }
+
+    if (datos.ya_respondio && campoAlergias && datos.alergias) {
+      campoAlergias.value = datos.alergias;
+    }
+  }
+
+  /**
+   * Pinta la lista de personas con casillas + menú, dentro del
+   * contenedor que normalmente lleva las filas de menú por adulto —
+   * se reusa ese lugar del formulario, no se agrega uno nuevo al HTML.
+   *
+   * @returns {void}
+   */
+  function dibujarChecklistDePersonas() {
+    if (!contenedorMenusAdultos) return;
+    const cajaDelTitulo = contenedorMenusAdultos.closest('.campo');
+    if (cajaDelTitulo) {
+      const titulo = cajaDelTitulo.querySelector('.campo__titulo');
+      if (titulo) titulo.textContent = 'Personas del grupo';
+    }
+
+    contenedorMenusAdultos.innerHTML = PERSONAS_INVITACION.map(function (persona, indice) {
+      const opcionesEnHtml = MENUS_DE_ADULTO.map(function (menu) {
+        return '<label class="opcion-menu opcion-menu--unica">' +
+          '<input type="radio" name="persona-menu-' + indice + '" value="' + menu.valor + '"' +
+          (menu.valor === persona.menu ? ' checked' : '') + '>' +
+          '<span>' + menu.etiqueta + '</span></label>';
+      }).join('');
+
+      return '<div class="fila-persona" data-persona-indice="' + indice + '">' +
+        '<label class="fila-persona__nombre" style="display:flex;align-items:center;gap:8px">' +
+          '<input type="checkbox" data-persona-marcada' + (persona.marcado ? ' checked' : '') + '>' +
+          limpiarTexto(persona.nombre) +
+        '</label>' +
+        '<div class="fila-persona__opciones" data-persona-opciones' +
+          (persona.marcado ? '' : ' style="display:none"') + '>' + opcionesEnHtml + '</div>' +
+      '</div>';
+    }).join('');
+
+    contenedorMenusAdultos.querySelectorAll('[data-persona-marcada]').forEach(function (casilla, indice) {
+      casilla.addEventListener('change', function () {
+        PERSONAS_INVITACION[indice].marcado = casilla.checked;
+        const opciones = contenedorMenusAdultos.querySelector(
+          '[data-persona-indice="' + indice + '"] [data-persona-opciones]');
+        if (opciones) opciones.style.display = casilla.checked ? '' : 'none';
+        actualizarContadorDePersonas();
+      });
+    });
+
+    contenedorMenusAdultos.querySelectorAll('[data-persona-indice]').forEach(function (fila, indice) {
+      fila.querySelectorAll('input[type="radio"]').forEach(function (radio) {
+        radio.addEventListener('change', function () {
+          if (radio.checked) PERSONAS_INVITACION[indice].menu = radio.value;
+        });
+      });
+    });
+
+    actualizarContadorDePersonas();
+  }
+
+  /**
+   * "3 de 4 lugares confirmados", debajo de la lista de personas.
+   *
+   * @returns {void}
+   */
+  function actualizarContadorDePersonas() {
+    if (!contenedorMenusAdultos) return;
+    let nota = contenedorMenusAdultos.parentElement.querySelector('.nota-personas');
+    if (!nota) {
+      nota = document.createElement('p');
+      nota.className = 'nota-campo nota-personas';
+      contenedorMenusAdultos.parentElement.appendChild(nota);
+    }
+    const marcados = PERSONAS_INVITACION.filter(function (p) { return p.marcado; }).length;
+    nota.textContent = marcados + ' de ' + PERSONAS_INVITACION.length + ' lugares confirmados';
+  }
 
   /** Menús que puede elegir un adulto. */
   const MENUS_DE_ADULTO = [
@@ -142,6 +325,17 @@
   /* ─── 3. LEER LO ELEGIDO Y ARMAR LOS RESÚMENES ─────────────────── */
 
   function recolectarMenusElegidos() {
+    // Modo con personas nombradas: el menú de cada quien ya se leyó al
+    // vuelo en dibujarChecklistDePersonas() (PERSONAS_INVITACION[i].menu).
+    // Acá solo se arma la lista con las que quedaron tildadas.
+    if (MODO_PERSONAS_ACTIVO) {
+      return PERSONAS_INVITACION
+        .filter(function (p) { return p.marcado; })
+        .map(function (p) {
+          return { quien: p.nombre, menu: p.tipo === 'nino' ? 'Infantil' : p.menu };
+        });
+    }
+
     const elegidos = [];
     const cantidadAdultos = limitar(parseInt(campoAdultos.value, 10) || 1, 1, 20);
     for (let i = 1; i <= cantidadAdultos; i++) {
@@ -213,9 +407,25 @@
     }
     if (!asistencia) return mostrarError('Cuéntanos si vas a poder acompañarnos.');
 
-    const vieneALaFiesta  = asistencia === RESPUESTA_AFIRMATIVA;
-    const cantidadAdultos = vieneALaFiesta ? limitar(parseInt(campoAdultos.value, 10) || 1, 1, 20) : 0;
-    const cantidadNinos   = vieneALaFiesta ? limitar(parseInt(campoNinos.value, 10) || 0, 0, 20) : 0;
+    // Con personas nombradas, "viene" significa "al menos una tildada" —
+    // el desplegable de asistencia sigue mandando (si dice que no, nadie
+    // viene aunque hubiera tildes), pero dentro del sí, el número real
+    // sale de la lista, no de un campo numérico que ni se ve.
+    const personasMarcadas = MODO_PERSONAS_ACTIVO
+      ? PERSONAS_INVITACION.filter(function (p) { return p.marcado; })
+      : [];
+
+    const vieneALaFiesta = asistencia === RESPUESTA_AFIRMATIVA &&
+      (!MODO_PERSONAS_ACTIVO || personasMarcadas.length > 0);
+
+    const cantidadAdultos = !vieneALaFiesta ? 0
+      : MODO_PERSONAS_ACTIVO
+        ? personasMarcadas.filter(function (p) { return p.tipo !== 'nino'; }).length
+        : limitar(parseInt(campoAdultos.value, 10) || 1, 1, 20);
+    const cantidadNinos = !vieneALaFiesta ? 0
+      : MODO_PERSONAS_ACTIVO
+        ? personasMarcadas.filter(function (p) { return p.tipo === 'nino'; }).length
+        : limitar(parseInt(campoNinos.value, 10) || 0, 0, 20);
     const menusElegidos   = vieneALaFiesta ? recolectarMenusElegidos() : [];
     const resumenDeMenus  = vieneALaFiesta ? armarResumenDeMenus(menusElegidos) : ', ';
     const detalleDeMenus  = vieneALaFiesta ? armarDetalleDeMenus(menusElegidos) : ', ';
@@ -234,6 +444,22 @@
       notas: notas || ', ',
       codigo: generarCodigoDePase(nombre + correo),
     };
+
+    // Con invitación personalizada, el token viaja siempre: es lo que
+    // hace que confirmar.php actualice ESA fila en vez de crear una
+    // nueva (ver la nota grande en confirmar.php, Fase 5 del plan).
+    if (typeof INVITACION !== 'undefined' && INVITACION && INVITACION.ok) {
+      datosDeLaConfirmacion.token = new URLSearchParams(window.location.search).get('i') || '';
+
+      // Con personas nombradas, cada una lleva su propio menú (o marca
+      // que no viene) — confirmar.php actualiza `acompanantes` fila por
+      // fila con esto, sin borrar y reinsertar a nadie.
+      if (MODO_PERSONAS_ACTIVO) {
+        datosDeLaConfirmacion.personas = PERSONAS_INVITACION.map(function (p) {
+          return { id: p.id, marcado: p.marcado, menu: p.tipo === 'nino' ? 'Infantil' : p.menu };
+        });
+      }
+    }
 
     /* ESTADO DE ESPERA */
     const textoOriginalDelBoton = botonEnviar.innerHTML;
