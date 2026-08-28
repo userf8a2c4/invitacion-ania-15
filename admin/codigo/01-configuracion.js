@@ -241,6 +241,11 @@ const CONFIGURACION = {
       filas: [
         ['compartir', 'Mandar los datos del evento a un proveedor por WhatsApp'],
         ['importar',  'Cargar invitados o gastos desde una hoja de cálculo'],
+        // ⚡ (2026-08-28) Antes las etiquetas de acomodo (Entrega 2) solo
+        // se podían crear o ver desde adentro de la ficha de una persona
+        // o de una mesa — no había ningún lugar central para verlas
+        // todas juntas ni para borrar las que ya no sirven.
+        ['etiquetas_acomodo', 'Ver y borrar las etiquetas de personas y mesas'],
         ['alarmas',   'Ver y probar los recordatorios activos'],
         ['bitacora',  'Quién cambió qué y cuándo', true],
       ],
@@ -278,9 +283,16 @@ const CONFIGURACION = {
   /* Mesas, Regalos y Foráneos viven acá y no en Evento a propósito: son
      cosas sobre PERSONAS. Antes había que saltar de pestaña para ver
      quién confirmó y dónde sentarlo. */
+  /* ⚡ (2026-08-28) "Invitados" e "Invitaciones" se prestaban a
+     confusión por compartir la misma raíz -leerlos rápido, parecen la
+     misma tarea repetida dos veces. La clave interna ('invitados' /
+     'invitaciones') se deja igual a propósito -la usan ensuciarVistas(),
+     los ids del DOM y varios atajos-, pero el nombre que se VE en la
+     pestaña ahora nombra la acción de cada una: "Confirmaciones" es
+     quién ya contestó, "Envíos" es mandar el link. */
   seccionesDeGente: [
-    ['invitados',    'Invitados',       'Quién confirmó, cuántos vienen y qué comen'],
-    ['invitaciones', 'Invitaciones',    'Precargar la lista, mandar el link y ver quién respondió'],
+    ['invitados',    'Confirmaciones',  'Quién ya contestó, cuántos vienen, qué comen y en qué mesa quedaron'],
+    ['invitaciones', 'Envíos',          'Crear y mandar el link personal de cada grupo, y ver si ya lo usaron'],
     ['mesas',        'Mesas',           'Quién se sienta dónde'],
     ['regalos',      'Regalos',         'Qué llegó y a quién falta agradecerle'],
     ['foraneos',     'Foráneos',        'Los que vienen de afuera: hospedaje y llegada'],

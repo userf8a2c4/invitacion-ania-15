@@ -1472,6 +1472,87 @@ function valorDeListaDeDetalle(id, dentroDe) {
  * @param {Element} contenedor
  * @returns {Promise<void>}
  */
+/**
+ * La pantalla central de etiquetas: todas las que existen, cuántas
+ * veces se usó cada una, y un botón para borrarla del todo. No permite
+ * PONERLAS desde acá a propósito — eso solo tiene sentido parado sobre
+ * una persona o una mesa concreta (ver pintarEtiquetasDe()); esta
+ * pantalla es para verlas de un vistazo y limpiar las que sobraron.
+ *
+ * @returns {Promise<void>}
+ */
+async function abrirEtiquetasAcomodo() {
+  const cuerpo = abrirHoja('Etiquetas',
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+      'Palabras libres que ponés a una persona o a una mesa —"Familia ' +
+      'paterna", "Jóvenes", "Mesa ruidosa"— para que el acomodo ' +
+      'automático las tenga en cuenta. Se agregan desde la ficha de ' +
+      'cada persona (en Gente → Confirmaciones) o de cada mesa ' +
+      '(en Gente → Mesas); acá se ven todas juntas.' +
+    '</p>' +
+    '<div id="lista-etiquetas-acomodo"><div class="esqueleto"></div></div>'
+  );
+
+  await repintarListaDeEtiquetasAcomodo(cuerpo);
+}
+
+/**
+ * @param {Element} cuerpo
+ * @returns {Promise<void>}
+ */
+async function repintarListaDeEtiquetasAcomodo(cuerpo) {
+  const contenedor = buscar('#lista-etiquetas-acomodo', cuerpo);
+  if (!contenedor) return;
+
+  let filas;
+  try {
+    const r = await traer('etiquetas_acomodo.php?accion=listar');
+    filas = r.filas || [];
+  } catch (error) {
+    pintarError(contenedor, error.message,
+      () => repintarListaDeEtiquetasAcomodo(cuerpo));
+    return;
+  }
+
+  if (!filas.length) {
+    pintarVacio(contenedor, 'Todavía no hay ninguna etiqueta',
+      'Se crean desde la ficha de una persona o de una mesa.');
+    return;
+  }
+
+  contenedor.innerHTML = filas.map(e =>
+    '<div class="lista__fila" style="cursor:default">' +
+      '<span class="lista__cuerpo">' +
+        '<span class="lista__titulo">' + seguro(e.nombre) + '</span>' +
+        '<span class="lista__pie">' +
+          seguro(pluralizar(Number(e.usos) || 0, 'uso', 'usos')) +
+        '</span>' +
+      '</span>' +
+      '<button class="boton-icono" data-borrar-etiqueta-acomodo="' + seguro(e.id) + '" ' +
+              'aria-label="Borrar etiqueta">' +
+        '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
+          '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" ' +
+                'stroke-width="1.5" stroke-linecap="round"/></svg>' +
+      '</button>' +
+    '</div>'
+  ).join('');
+
+  buscarTodos('[data-borrar-etiqueta-acomodo]', contenedor).forEach(boton => {
+    boton.addEventListener('click', async () => {
+      if (!confirmarAccion(
+        '¿Borrar esta etiqueta? Se saca de todas las personas y mesas que la tengan.'
+      )) return;
+      try {
+        await mandar('etiquetas_acomodo.php?accion=borrar',
+          { id: Number(boton.dataset.borrarEtiquetaAcomodo) });
+        repintarListaDeEtiquetasAcomodo(cuerpo);
+      } catch (error) {
+        avisar(error.message, true);
+      }
+    });
+  });
+}
+
 async function pintarEtiquetasDe(tipo, id, contenedor) {
   if (!contenedor) return;
 

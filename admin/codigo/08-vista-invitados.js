@@ -81,13 +81,21 @@ async function dibujarGente() {
   Object.keys(GENTE_CARGADA).forEach(k => { delete GENTE_CARGADA[k]; });
 
   vista.innerHTML =
-    '<div class="filtros" style="margin-bottom:var(--esp-2)">' +
+    '<div class="filtros" style="margin-bottom:6px">' +
       secciones.map(s =>
         '<button class="filtro' + (SECCION_GENTE === s[0] ? ' activo' : '') +
         '" data-gente="' + seguro(s[0]) + '">' +
         seguro(et('gente.' + s[0], s[1])) + '</button>'
       ).join('') +
     '</div>' +
+
+    /* ⚡ (2026-08-28) El texto que explica qué es cada sección (tercer
+       valor de CONFIGURACION.seccionesDeGente) existía desde siempre
+       pero nunca se pintaba en ningún lado — justo el motivo por el que
+       "Invitados" e "Invitaciones" se prestaban a confusión: no había
+       forma de leer, sin adivinar, en qué se diferencian. */
+    '<p class="vacio__texto" id="subtitulo-gente" ' +
+       'style="margin:0 0 var(--esp-2)"></p>' +
 
     /* Los cinco cuerpos conviven en el DOM y se alternan con .oculto,
        en vez de repintar uno solo. Así volver a una sección que ya se
@@ -109,11 +117,28 @@ async function dibujarGente() {
           .classList.toggle('oculto', SECCION_GENTE !== s[0]);
       });
 
+      pintarSubtituloDeGente(vista);
       pintarSeccionDeGente();
     });
   });
 
+  pintarSubtituloDeGente(vista);
   await pintarSeccionDeGente();
+}
+
+/**
+ * El texto de una línea que explica qué es la sección de Gente que
+ * está abierta — el tercer valor de cada fila de
+ * CONFIGURACION.seccionesDeGente.
+ *
+ * @param {Element} vista
+ * @returns {void}
+ */
+function pintarSubtituloDeGente(vista) {
+  const subtitulo = buscar('#subtitulo-gente', vista);
+  if (!subtitulo) return;
+  const fila = CONFIGURACION.seccionesDeGente.find(s => s[0] === SECCION_GENTE);
+  subtitulo.textContent = fila ? (fila[2] || '') : '';
 }
 
 /**
