@@ -561,6 +561,57 @@ case 'por_confirmacion':
     break;
 
 
+/* ─── GENERAR LINK PARA UNA CONFIRMACIÓN QUE YA EXISTE ────────────────────
+   Para las de antes de este modelo (formulario abierto, sin token) o
+   cualquiera que se haya creado sin invitación nominal. A diferencia de
+   'guardar' (que SIEMPRE crea una `confirmaciones` nueva), esto ATA un
+   token a una fila que YA está — nunca duplica la confirmación. */
+
+case 'generar_link':
+    exigirMetodo('POST');
+    $datos = cuerpoJson();
+    $confirmacionId = campoEntero($datos, 'confirmacion_id', 0);
+    if ($confirmacionId <= 0) responderMal('Falta decir de qué confirmación.', 400);
+
+    $conf = consultarUno('SELECT * FROM confirmaciones WHERE id = :c', [':c' => $confirmacionId]);
+    if (!$conf) responderMal('Esa confirmación no existe.', 404);
+
+    $yaTiene = consultarUno('SELECT id FROM invitaciones WHERE confirmacion_id = :c', [':c' => $confirmacionId]);
+    if ($yaTiene) responderMal('Esta confirmación ya tiene un link.', 400);
+
+    do {
+        $token = bin2hex(random_bytes(8));
+        $tokenYaExiste = consultarUno('SELECT id FROM invitaciones WHERE token = :t', [':t' => $token]);
+    } while ($tokenYaExiste);
+
+    $pases = max(1, (int) ($conf['adultos'] ?? 0) + (int) ($conf['ninos'] ?? 0));
+
+    $invitacionId = insertar('invitaciones', [
+        'token'           => $token,
+        'nombre'          => (string) ($conf['nombre'] ?? ''),
+        'telefono'        => '',
+        'correo'          => (string) ($conf['correo'] ?? ''),
+        'pases'           => $pases,
+        'grupo_id'        => null,
+        'confirmacion_id' => $confirmacionId,
+        // Se marca directamente como "confirmada"/"declinada" según lo
+        // que ya haya contestado -no tendría sentido que un invitado que
+        // YA vino a la fiesta el año pasado (o ya confirmó por teléfono)
+        // aparezca como "sin enviar" solo porque el link se generó después.
+        'estado'          => ((int) ($conf['asiste'] ?? 0) === 1) ? 'confirmada' : 'sin_enviar',
+    ]);
+
+    anotarEnBitacora($yo, 'generó un link para una confirmación existente',
+                     'invitaciones', $invitacionId, (string) ($conf['nombre'] ?? ''));
+
+    responderBien([
+        'id'    => $invitacionId,
+        'token' => $token,
+        'link'  => linkDeInvitacion($token),
+    ], 201);
+    break;
+
+
 default:
     responderMal('Acción no reconocida.', 404);
 }

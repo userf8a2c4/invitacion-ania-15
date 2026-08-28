@@ -174,10 +174,6 @@ async function pintarSeccionDeGente() {
 
     if (clave === 'contactos') { await dibujarContactos(); return; }
 
-    // Invitaciones tiene su propia API (invitaciones.php) y no depende
-    // de evento.php — no hace falta asegurarEvento() para esta.
-    if (clave === 'invitaciones') { await dibujarInvitaciones(cuerpo); return; }
-
     /* Mesas, Regalos y Foráneos salen de evento.php, que puede no
        haberse pedido todavía si nadie entró a la pestaña Evento. */
     pintarCargando(cuerpo, 4);
@@ -243,6 +239,26 @@ function ponerTituloDeInvitados(confirmaciones, personas) {
 }
 
 /**
+ * "2026-10-01" → "1 de octubre de 2026" — mismo formato que arma
+ * fechaLimiteConfigurada() en admin/api/invitaciones.php, copiado en JS
+ * porque ese texto no viaja armado en confirmaciones.php?accion=listar
+ * (esa consulta no toca `ajustes`, a propósito: una tabla más en el
+ * LEFT JOIN de la lista principal por un dato que se usa una vez, al
+ * apretar "Mandar por WhatsApp", no vale la pena).
+ *
+ * @param {string} iso - "AAAA-MM-DD"
+ * @returns {string}
+ */
+function formatearFechaLimiteLarga(iso) {
+  const meses = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  const partes = String(iso).split('-');
+  if (partes.length !== 3) return iso;
+  const [anio, mes, dia] = partes;
+  return Number(dia) + ' de ' + (meses[Number(mes)] || mes) + ' de ' + anio;
+}
+
+/**
  * Pide la lista de confirmaciones y arma su sección.
  *
  * @returns {Promise<void>}
@@ -262,17 +278,29 @@ async function dibujarInvitados() {
              'autocapitalize="off" spellcheck="false">' +
     '</div>' +
 
-    '<div class="filtros">' +
+    /* ⚡ (2026-08-28) Los filtros de "sin_enviar/sin_responder/sin_telefono"
+       vienen de la extinta pestaña Envíos, fusionada acá — ver la nota
+       grande en confirmaciones.php?accion=listar. */
+    '<div class="filtros" style="flex-wrap:wrap">' +
       '<button class="filtro activo" data-filtro="todos">Todos</button>' +
       '<button class="filtro" data-filtro="asisten">Asisten</button>' +
       '<button class="filtro" data-filtro="no_asisten">No asisten</button>' +
+      '<button class="filtro" data-filtro="sin_enviar">Sin enviar</button>' +
+      '<button class="filtro" data-filtro="sin_responder">Sin responder</button>' +
       '<button class="filtro" data-filtro="alergias">Con alergias</button>' +
       '<button class="filtro" data-filtro="sin_mesa">Sin mesa</button>' +
+      '<button class="filtro" data-filtro="sin_telefono">Sin teléfono</button>' +
     '</div>' +
 
     '<div id="lista-invitados"></div>' +
 
-    '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-3)">' +
+    // ⚡ (2026-08-28) "Fecha límite" vivía en el encabezado de la extinta
+    // pestaña Envíos (abrirConfiguracionDeInvitaciones() sigue en
+    // 48-invitaciones.js, sin tocar — solo cambia desde dónde se llama).
+    '<button type="button" class="lista__fila" id="inv-fecha-limite" ' +
+      'style="margin-bottom:var(--esp-2)">⚙️ Fecha límite para confirmar</button>' +
+
+    '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-1)">' +
       '<button class="boton" style="flex:1" id="inv-seleccionar">Seleccionar</button>' +
       '<button class="boton" style="flex:1" id="inv-descargar">Descargar</button>' +
       '<button class="boton boton--principal" style="flex:1" id="inv-nuevo">' +
@@ -303,6 +331,17 @@ async function dibujarInvitados() {
     throw error;
   }
 
+  // ⚡ (2026-08-28) FECHA_LIMITE_TEXTO (global de 48-invitaciones.js, la
+  // usa textoDeInvitacion() en el mensaje de WhatsApp) antes se cargaba
+  // sola al abrir la extinta pestaña Envíos. Con esa pestaña fusionada
+  // acá, se pide una sola vez al entrar a Invitados. No es crítico si
+  // falla: el mensaje de WhatsApp queda sin la fecha límite, nada más.
+  if (!FECHA_LIMITE_TEXTO) {
+    traer('ajustes.php?accion=obtener&clave=fecha_limite_confirmar')
+      .then(r => { if (r.valor) FECHA_LIMITE_TEXTO = formatearFechaLimiteLarga(r.valor); })
+      .catch(() => {});
+  }
+
   // Si la tabla no tiene id, el panel no puede editar ni borrar filas.
   // Se avisa una vez, en lugar de mostrar botones que fallarían.
   if (!INVITADOS_EDITABLES) {
@@ -325,12 +364,21 @@ function engancharInvitados(vista) {
     abrirHojaDeFormatos('Descargar invitados', exportarInvitados);
   });
 
+  buscar('#inv-fecha-limite', vista).addEventListener('click', () => {
+    abrirConfiguracionDeInvitaciones();
+  });
+
   buscar('#inv-nuevo', vista).addEventListener('click', () => {
     if (!INVITADOS_EDITABLES) {
       avisar('La tabla no permite agregar invitados.', true);
       return;
     }
-    abrirFormularioDeInvitado();
+    // ⚡ (2026-08-28) A pedido explícito: crear un invitado SIEMPRE
+    // genera su link de una, no dos caminos distintos según por dónde
+    // se lo cree. abrirFormularioDeInvitacion() vive en 48-invitaciones.js
+    // -mismo scope global, sin import- y llama a invitaciones.php?accion
+    // =guardar, que arma la confirmación y el token juntos.
+    abrirFormularioDeInvitacion();
   });
 
   const buscador = buscar('#buscar-invitado', vista);
@@ -485,6 +533,17 @@ function invitadoPasaElFiltro(fila) {
 
   if (FILTRO_INVITADOS === 'sin_mesa' && fila.mesa) return false;
 
+  // ⚡ (2026-08-28) Estos tres vienen de la extinta pestaña Envíos.
+  // invitacion_estado es NULL cuando la confirmación todavía no tiene
+  // link (formulario abierto viejo, o recién creada sin generar_link) —
+  // se la trata como "sin enviar" a propósito: es justo lo que hace
+  // falta resolver, no algo para esconder del filtro.
+  if (FILTRO_INVITADOS === 'sin_enviar' &&
+      fila.invitacion_estado && fila.invitacion_estado !== 'sin_enviar') return false;
+  if (FILTRO_INVITADOS === 'sin_responder' &&
+      fila.invitacion_estado && !['sin_enviar', 'enviada'].includes(fila.invitacion_estado)) return false;
+  if (FILTRO_INVITADOS === 'sin_telefono' && fila.invitacion_telefono) return false;
+
   // Búsqueda.
   if (!BUSQUEDA_INVITADOS.trim()) return true;
 
@@ -514,6 +573,9 @@ function filaDeInvitado(fila) {
   if (asiste && gente)  pie.push(pluralizar(gente, 'persona', 'personas'));
   if (asiste && fila.mesa) pie.push(fila.mesa);
   if (!asiste && fila.correo) pie.push(fila.correo);
+  // ⚡ (2026-08-28) Visible sin tener que abrir la ficha: si todavía no
+  // tiene link, no hay forma de mandarle la invitación.
+  if (!fila.invitacion_id) pie.push('Sin link');
 
   const marcado = SELECCIONADOS.has(Number(fila.id));
 
@@ -555,11 +617,30 @@ function abrirDetalleDeInvitado(id) {
   const asiste = Number(fila.asiste) === 1;
   const gente  = (Number(fila.adultos) || 0) + (Number(fila.ninos) || 0);
 
+  // ⚡ (2026-08-28) FUSIÓN CON LA EXTINTA PESTAÑA "ENVÍOS" — ver la nota
+  // grande en confirmaciones.php?accion=listar. Todo lo que antes vivía
+  // solo en `invitaciones` (grupo, teléfono, link, estado del envío)
+  // ahora viaja embebido en la misma fila; nada de esto pide otro viaje
+  // al servidor.
+  const tieneInvitacion = !!fila.invitacion_id;
+
   const renglones = [
     ['Asistencia', asiste
       ? '<span class="etiqueta etiqueta--bien">Sí asiste</span>'
       : '<span class="etiqueta etiqueta--alerta">No puede</span>', true],
     ['Correo',   seguro(fila.correo || '—')],
+  ];
+
+  if (tieneInvitacion) {
+    renglones.push(
+      ['Teléfono', seguro(fila.invitacion_telefono || '—')],
+      ['Grupo',    seguro(fila.invitacion_grupo_nombre || '—')],
+      ['Envío',    ETIQUETA_DE_ESTADO_INV[fila.invitacion_estado] ||
+                   seguro(fila.invitacion_estado || '—'), true]
+    );
+  }
+
+  renglones.push(
     ['Personas', asiste
                  ? seguro(gente + ' (' +
                      pluralizar(fila.adultos || 0, 'adulto', 'adultos') + ', ' +
@@ -571,8 +652,8 @@ function abrirDetalleDeInvitado(id) {
     ['Notas',    seguro(fila.notas || '—')],
     ['Código',   fila.codigo
                  ? '<span class="codigo-pase">' + seguro(fila.codigo) + '</span>'
-                 : '—', true],
-  ];
+                 : '—', true]
+  );
 
   if (asiste) {
     renglones.push(['Mesa', fila.mesa
@@ -585,8 +666,27 @@ function abrirDetalleDeInvitado(id) {
     '<span class="detalle__valor">' + r[1] + '</span>'
   ).join('');
 
+  // El link + WhatsApp + copiar, o el botón para crearlo si esta
+  // confirmación es de antes de este modelo (formulario abierto, sin
+  // token) y todavía no tiene ninguno.
+  const bloqueLink = tieneInvitacion
+    ? '<div class="campo" style="margin-top:var(--esp-3)">' +
+        '<span class="campo__rotulo">Link personal</span>' +
+        '<input type="text" id="link-invitacion-valor" class="campo__control" ' +
+               'value="' + seguro(fila.invitacion_link || '') + '" readonly>' +
+      '</div>' +
+      '<div class="acciones" style="flex-wrap:wrap">' +
+        (sirveParaWhatsApp(fila.invitacion_telefono)
+          ? '<button class="boton boton--principal" id="inv-whatsapp">Mandar por WhatsApp</button>'
+          : '') +
+        '<button class="boton" id="copiar-link-invitacion">Copiar link</button>' +
+      '</div>'
+    : '<button type="button" class="boton boton--ancho" style="margin-top:var(--esp-3)" ' +
+              'id="generar-link-invitado">Generar link personal</button>';
+
   const cuerpo = abrirHoja(fila.nombre || 'Confirmación',
     '<div class="detalle">' + detalle + '</div>' +
+    bloqueLink +
     (asiste
       ? '<div class="acciones">' +
           '<button class="boton" id="mesa-auto-invitado">Sentar solo</button>' +
@@ -601,7 +701,6 @@ function abrirDetalleDeInvitado(id) {
             'Marcar llegada</button>' +
         '</div>'
       : '') +
-    '<div id="bloque-link-invitacion"></div>' +
     (asiste && gente ? '<div id="bloque-acompanantes"></div>' : '') +
     (INVITADOS_EDITABLES
       ? '<div class="acciones">' +
@@ -615,12 +714,49 @@ function abrirDetalleDeInvitado(id) {
     dibujarAcompanantes(fila.id, gente, buscar('#bloque-acompanantes', cuerpo));
   }
 
-  /* ⚡ (2026-08-28) A pedido: desde acá no se podía ver el link personal
-     de esta confirmación (había que ir a la pestaña "Invitaciones" y
-     buscarlo de nuevo). Se trae aparte porque esta ficha muestra la
-     CONFIRMACIÓN, y el link vive en la tabla `invitaciones` — ver
-     admin/api/invitaciones.php, accion=por_confirmacion. */
-  dibujarLinkDeInvitacion(fila.id, buscar('#bloque-link-invitacion', cuerpo));
+  if (tieneInvitacion) {
+    const botonWhatsapp = buscar('#inv-whatsapp', cuerpo);
+    if (botonWhatsapp) {
+      botonWhatsapp.addEventListener('click', () => {
+        // textoDeInvitacion() vive en 48-invitaciones.js (mismo scope
+        // global) — mismo texto que mandaba la extinta pestaña Envíos.
+        const texto = textoDeInvitacion({
+          nombre: fila.nombre, pases: fila.invitacion_pases, link: fila.invitacion_link,
+        });
+        const numero = paraWhatsApp(fila.invitacion_telefono);
+        window.open('https://wa.me/' + numero + '?text=' + encodeURIComponent(texto), '_blank');
+        mandar('invitaciones.php?accion=marcar_enviada', { id: fila.invitacion_id }).catch(() => {});
+      });
+    }
+
+    buscar('#copiar-link-invitacion', cuerpo).addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(fila.invitacion_link);
+      } catch (error) {
+        const campo = buscar('#link-invitacion-valor', cuerpo);
+        campo.removeAttribute('readonly');
+        campo.select();
+        document.execCommand('copy');
+        campo.setAttribute('readonly', 'readonly');
+      }
+      avisar('Link copiado.');
+    });
+  } else {
+    const botonGenerar = buscar('#generar-link-invitado', cuerpo);
+    if (botonGenerar) {
+      botonGenerar.addEventListener('click', async () => {
+        try {
+          await mandar('invitaciones.php?accion=generar_link', { confirmacion_id: fila.id });
+          cerrarHoja(true);
+          avisar('Link generado.');
+          ensuciarVistas('invitados');
+          dibujarGente();
+        } catch (error) {
+          avisar(error.message, true);
+        }
+      });
+    }
+  }
 
   if (asiste) {
     const refrescar = () => { dibujarGente(); ensuciarVistas('resumen', 'evento'); };
@@ -667,8 +803,29 @@ function abrirDetalleDeInvitado(id) {
 
   if (!INVITADOS_EDITABLES) return;
 
-  buscar('#editar-invitado', cuerpo).addEventListener('click', () => {
-    abrirFormularioDeInvitado(fila);
+  buscar('#editar-invitado', cuerpo).addEventListener('click', async () => {
+    // ⚡ (2026-08-28) Con link, se edita por el camino nuevo (nombre del
+    // grupo, teléfono, correo, grupo para sentar juntos, y las personas
+    // con nombre — con sus etiquetas) para no tener dos formularios que
+    // hacen casi lo mismo. Sin link (confirmación vieja, formulario
+    // abierto), se sigue usando el formulario simple de siempre.
+    if (!tieneInvitacion) { abrirFormularioDeInvitado(fila); return; }
+
+    let personas = [];
+    try {
+      const r = await traer('acompanantes.php?accion=listar&confirmacion_id=' + fila.id);
+      personas = (r.filas || []).map(a => ({ id: a.id, nombre: a.nombre, tipo: a.tipo }));
+    } catch (error) { /* se edita igual, sin la lista de nombres precargada */ }
+
+    abrirFormularioDeInvitacion({
+      id: fila.invitacion_id,
+      nombre: fila.nombre,
+      telefono: fila.invitacion_telefono,
+      correo: fila.correo,
+      grupo_id: fila.invitacion_grupo_id,
+      pases: fila.invitacion_pases,
+      personas: personas,
+    });
   });
 
   buscar('#borrar-invitado', cuerpo).addEventListener('click', async () => {
@@ -937,51 +1094,6 @@ async function dibujarAcompanantes(confirmacionId, cupo, contenedor) {
 }
 
 /**
- * Muestra el link personal de esta confirmación, si tiene una
- * invitación nominal asociada (las viejas, del formulario abierto, no
- * tienen — ahí no se muestra nada).
- *
- * @param {number} confirmacionId
- * @param {Element} contenedor
- * @returns {Promise<void>}
- */
-async function dibujarLinkDeInvitacion(confirmacionId, contenedor) {
-  if (!contenedor) return;
-
-  let r;
-  try {
-    r = await traer('invitaciones.php?accion=por_confirmacion&confirmacion_id=' + confirmacionId);
-  } catch (error) {
-    contenedor.innerHTML = '';
-    return; // No es crítico: la ficha se puede ver igual sin esto.
-  }
-
-  if (!r.existe) { contenedor.innerHTML = ''; return; }
-
-  contenedor.innerHTML =
-    '<div class="campo" style="margin-top:var(--esp-2)">' +
-      '<span class="campo__rotulo">Link personal</span>' +
-      '<input type="text" id="link-invitacion-valor" class="campo__control" ' +
-             'value="' + seguro(r.link) + '" readonly>' +
-    '</div>' +
-    '<button type="button" class="boton boton--ancho" id="copiar-link-invitacion" ' +
-            'style="margin-bottom:var(--esp-2)">Copiar link</button>';
-
-  buscar('#copiar-link-invitacion', contenedor).addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(r.link);
-    } catch (error) {
-      const campo = buscar('#link-invitacion-valor', contenedor);
-      campo.removeAttribute('readonly');
-      campo.select();
-      document.execCommand('copy');
-      campo.setAttribute('readonly', 'readonly');
-    }
-    avisar('Link copiado.');
-  });
-}
-
-/**
  * @param {number} confirmacionId
  * @param {number} cupo
  * @param {Object[]} filas
@@ -997,17 +1109,23 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
     '</p>' +
     (filas.length
       ? filas.map(a =>
-          '<div class="fila-adjunto" style="display:flex;align-items:center;' +
-               'justify-content:space-between;padding:var(--esp-1) 0;' +
+          '<div class="fila-adjunto" style="padding:var(--esp-1) 0;' +
                'border-top:1px solid var(--borde)">' +
-            '<span>' + seguro(a.nombre) +
-              (a.alergias ? ' <span style="color:var(--texto-tenue);font-size:.85em">· ' +
-                seguro(a.alergias) + '</span>' : '') +
-            '</span>' +
-            '<span style="display:flex;gap:6px;flex-shrink:0">' +
-              '<button class="boton boton--chico" data-editar-acomp="' + a.id + '">Editar</button>' +
-              '<button class="boton boton--chico" data-quitar-acomp="' + a.id + '">Quitar</button>' +
-            '</span>' +
+            '<div style="display:flex;align-items:center;justify-content:space-between">' +
+              '<span>' + seguro(a.nombre) +
+                (a.alergias ? ' <span style="color:var(--texto-tenue);font-size:.85em">· ' +
+                  seguro(a.alergias) + '</span>' : '') +
+              '</span>' +
+              '<span style="display:flex;gap:6px;flex-shrink:0">' +
+                '<button class="boton boton--chico" data-editar-acomp="' + a.id + '">Editar</button>' +
+                '<button class="boton boton--chico" data-quitar-acomp="' + a.id + '">Quitar</button>' +
+              '</span>' +
+            '</div>' +
+            /* ⚡ (2026-08-28) A pedido: las etiquetas de cada persona se
+               ven y se tocan ACÁ MISMO, sin tener que abrir "Editar"
+               primero — pintarEtiquetasDe() (06-piezas.js) ya es
+               autónoma (trae, agrega, quita), se reusa tal cual. */
+            '<div id="etiquetas-acomp-' + a.id + '" style="margin-top:4px"></div>' +
           '</div>'
         ).join('')
       : '<p class="vacio__texto" style="padding:var(--esp-1) 0">Todavía nadie tiene nombre.</p>') +
@@ -1015,6 +1133,10 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
       ? '<button class="boton boton--ancho" style="margin-top:var(--esp-1)" ' +
                'id="agregar-acompanante">Agregar</button>'
       : '');
+
+  filas.forEach(a => {
+    pintarEtiquetasDe('acompanante', a.id, buscar('#etiquetas-acomp-' + a.id, contenedor));
+  });
 
   buscarTodos('[data-editar-acomp]', contenedor).forEach(boton => {
     boton.addEventListener('click', () => {

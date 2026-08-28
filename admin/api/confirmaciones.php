@@ -42,6 +42,22 @@ if (!existeTabla('confirmaciones')) {
 $COLUMNAS = columnasDe('confirmaciones');
 
 /**
+ * El link completo que le corresponde a un token de invitación. Copia
+ * exacta de la de invitaciones.php (mismo nombre, mismo cuerpo) — se
+ * duplica en vez de compartirse porque cada admin/api/*.php es un
+ * endpoint HTTP independiente que solo carga UN archivo top-level; no
+ * hay riesgo de redeclaración, y no vale la pena una librería
+ * compartida para tres líneas.
+ *
+ * @param string $token
+ * @return string
+ */
+function linkDeInvitacion($token) {
+    $host = preg_replace('/[^a-z0-9.\-]/i', '', $_SERVER['HTTP_HOST'] ?? 'aniaxv.com');
+    return 'https://' . $host . '/?i=' . $token;
+}
+
+/**
  * Dice si la tabla tiene una columna.
  *
  * @param string $nombre
@@ -143,10 +159,45 @@ case 'listar':
           ' LEFT JOIN mesas m ON m.id = am.mesa_id'
         : '';
 
+    /* ⚡ (2026-08-28) FUSIÓN DE "INVITADOS" E "INVITACIONES", A PEDIDO DEL
+       USUARIO: dos pestañas para la misma info repartida confundían más
+       de lo que ayudaban ("comparten raíz, se leen como la misma tarea
+       dos veces" — literal). El link, el teléfono, el grupo y el estado
+       de envío vivían solo en `invitaciones`; ahora viajan en la MISMA
+       fila que el resto, con un LEFT JOIN — así el panel arma una sola
+       ficha por persona sin tener que pedir dos listados y cruzarlos a
+       mano. Sigue siendo opcional: una confirmación vieja sin invitación
+       (del formulario abierto, antes de este modelo) simplemente trae
+       estos campos en NULL, y el panel ofrece "Generar link". */
+    $conInvitacion = $TIENE_ID && existeTabla('invitaciones');
+    $selectInv = $conInvitacion
+        ? ', inv.id AS invitacion_id, inv.token AS invitacion_token,
+            inv.telefono AS invitacion_telefono, inv.pases AS invitacion_pases,
+            inv.estado AS invitacion_estado, inv.grupo_id AS invitacion_grupo_id,
+            g.nombre AS invitacion_grupo_nombre'
+        : '';
+    $joinInv = $conInvitacion
+        ? ' LEFT JOIN invitaciones inv ON inv.confirmacion_id = confirmaciones.id' .
+          (existeTabla('grupos_invitados')
+              ? ' LEFT JOIN grupos_invitados g ON g.id = inv.grupo_id'
+              : '')
+        : '';
+
     $filas = consultarTodo(
-        "SELECT confirmaciones.* $selectMesa FROM confirmaciones $joinMesa $donde $orden",
+        "SELECT confirmaciones.* $selectMesa $selectInv
+         FROM confirmaciones $joinMesa $joinInv $donde $orden",
         $parametros
     );
+
+    // El link se arma acá (mismo host que ya usa invitaciones.php), no
+    // en el navegador: así el panel nunca tiene que adivinar el dominio.
+    if ($conInvitacion) {
+        foreach ($filas as &$fila) {
+            $fila['invitacion_link'] = $fila['invitacion_token']
+                ? linkDeInvitacion($fila['invitacion_token']) : null;
+        }
+        unset($fila);
+    }
 
     responderBien([
         'filas'    => $filas,

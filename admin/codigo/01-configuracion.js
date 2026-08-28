@@ -283,16 +283,16 @@ const CONFIGURACION = {
   /* Mesas, Regalos y Foráneos viven acá y no en Evento a propósito: son
      cosas sobre PERSONAS. Antes había que saltar de pestaña para ver
      quién confirmó y dónde sentarlo. */
-  /* ⚡ (2026-08-28) "Invitados" e "Invitaciones" se prestaban a
-     confusión por compartir la misma raíz -leerlos rápido, parecen la
-     misma tarea repetida dos veces. La clave interna ('invitados' /
-     'invitaciones') se deja igual a propósito -la usan ensuciarVistas(),
-     los ids del DOM y varios atajos-, pero el nombre que se VE en la
-     pestaña ahora nombra la acción de cada una: "Confirmaciones" es
-     quién ya contestó, "Envíos" es mandar el link. */
+  /* ⚡ (2026-08-28) "Invitados" e "Invitaciones" eran dos pestañas para
+     la misma info repartida -compartían raíz, así que además de
+     confundir por el nombre, obligaban a saltar de pantalla para ver
+     el link de alguien que ya se estaba mirando. Se fusionaron: ya no
+     existe la sección 'invitaciones' acá (dibujarInvitaciones() de
+     48-invitaciones.js queda sin usar desde la navegación, pero sus
+     funciones se siguen llamando desde 08-vista-invitados.js). Todo
+     -respuesta, mesa, link, teléfono, grupo- vive en "Invitados". */
   seccionesDeGente: [
-    ['invitados',    'Confirmaciones',  'Quién ya contestó, cuántos vienen, qué comen y en qué mesa quedaron'],
-    ['invitaciones', 'Envíos',          'Crear y mandar el link personal de cada grupo, y ver si ya lo usaron'],
+    ['invitados',    'Invitados',       'Quién confirmó, cuántos vienen, qué comen, en qué mesa quedaron y el link para invitarlos'],
     ['mesas',        'Mesas',           'Quién se sienta dónde'],
     ['regalos',      'Regalos',         'Qué llegó y a quién falta agradecerle'],
     ['foraneos',     'Foráneos',        'Los que vienen de afuera: hospedaje y llegada'],
