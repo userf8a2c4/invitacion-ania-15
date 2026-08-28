@@ -536,6 +536,31 @@ case 'borrar':
     break;
 
 
+/* ─── UNA SOLA, POR SU CONFIRMACIÓN ───────────────────────────────────────
+   Para la ficha de "Gente → Invitados" (confirmaciones.php/08-vista-
+   invitados.js): esa pantalla ve la CONFIRMACIÓN, no la invitación, y
+   hasta ahora no tenía forma de mostrar su link personal sin duplicar
+   toda la consulta de 'listar'. Devuelve lo mínimo que hace falta. */
+
+case 'por_confirmacion':
+    exigirMetodo('GET');
+    $confirmacionId = (int) ($_GET['confirmacion_id'] ?? 0);
+    if ($confirmacionId <= 0) responderMal('Falta decir de qué confirmación.', 400);
+
+    $inv = consultarUno(
+        'SELECT id, token, nombre, telefono, correo, pases, estado
+         FROM invitaciones WHERE confirmacion_id = :c LIMIT 1',
+        [':c' => $confirmacionId]
+    );
+
+    if (!$inv) { responderBien(['existe' => false]); break; }
+
+    $inv['existe'] = true;
+    $inv['link'] = linkDeInvitacion($inv['token']);
+    responderBien($inv);
+    break;
+
+
 default:
     responderMal('Acción no reconocida.', 404);
 }

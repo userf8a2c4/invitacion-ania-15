@@ -576,6 +576,7 @@ function abrirDetalleDeInvitado(id) {
             'Marcar llegada</button>' +
         '</div>'
       : '') +
+    '<div id="bloque-link-invitacion"></div>' +
     (asiste && gente ? '<div id="bloque-acompanantes"></div>' : '') +
     (INVITADOS_EDITABLES
       ? '<div class="acciones">' +
@@ -588,6 +589,13 @@ function abrirDetalleDeInvitado(id) {
   if (asiste && gente) {
     dibujarAcompanantes(fila.id, gente, buscar('#bloque-acompanantes', cuerpo));
   }
+
+  /* ⚡ (2026-08-28) A pedido: desde acá no se podía ver el link personal
+     de esta confirmación (había que ir a la pestaña "Invitaciones" y
+     buscarlo de nuevo). Se trae aparte porque esta ficha muestra la
+     CONFIRMACIÓN, y el link vive en la tabla `invitaciones` — ver
+     admin/api/invitaciones.php, accion=por_confirmacion. */
+  dibujarLinkDeInvitacion(fila.id, buscar('#bloque-link-invitacion', cuerpo));
 
   if (asiste) {
     const refrescar = () => { dibujarGente(); ensuciarVistas('resumen', 'evento'); };
@@ -904,6 +912,51 @@ async function dibujarAcompanantes(confirmacionId, cupo, contenedor) {
 }
 
 /**
+ * Muestra el link personal de esta confirmación, si tiene una
+ * invitación nominal asociada (las viejas, del formulario abierto, no
+ * tienen — ahí no se muestra nada).
+ *
+ * @param {number} confirmacionId
+ * @param {Element} contenedor
+ * @returns {Promise<void>}
+ */
+async function dibujarLinkDeInvitacion(confirmacionId, contenedor) {
+  if (!contenedor) return;
+
+  let r;
+  try {
+    r = await traer('invitaciones.php?accion=por_confirmacion&confirmacion_id=' + confirmacionId);
+  } catch (error) {
+    contenedor.innerHTML = '';
+    return; // No es crítico: la ficha se puede ver igual sin esto.
+  }
+
+  if (!r.existe) { contenedor.innerHTML = ''; return; }
+
+  contenedor.innerHTML =
+    '<div class="campo" style="margin-top:var(--esp-2)">' +
+      '<span class="campo__rotulo">Link personal</span>' +
+      '<input type="text" id="link-invitacion-valor" class="campo__control" ' +
+             'value="' + seguro(r.link) + '" readonly>' +
+    '</div>' +
+    '<button type="button" class="boton boton--ancho" id="copiar-link-invitacion" ' +
+            'style="margin-bottom:var(--esp-2)">Copiar link</button>';
+
+  buscar('#copiar-link-invitacion', contenedor).addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(r.link);
+    } catch (error) {
+      const campo = buscar('#link-invitacion-valor', contenedor);
+      campo.removeAttribute('readonly');
+      campo.select();
+      document.execCommand('copy');
+      campo.setAttribute('readonly', 'readonly');
+    }
+    avisar('Link copiado.');
+  });
+}
+
+/**
  * @param {number} confirmacionId
  * @param {number} cupo
  * @param {Object[]} filas
@@ -926,7 +979,10 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
               (a.alergias ? ' <span style="color:var(--texto-tenue);font-size:.85em">· ' +
                 seguro(a.alergias) + '</span>' : '') +
             '</span>' +
-            '<button class="boton boton--chico" data-quitar-acomp="' + a.id + '">Quitar</button>' +
+            '<span style="display:flex;gap:6px;flex-shrink:0">' +
+              '<button class="boton boton--chico" data-editar-acomp="' + a.id + '">Editar</button>' +
+              '<button class="boton boton--chico" data-quitar-acomp="' + a.id + '">Quitar</button>' +
+            '</span>' +
           '</div>'
         ).join('')
       : '<p class="vacio__texto" style="padding:var(--esp-1) 0">Todavía nadie tiene nombre.</p>') +
@@ -934,6 +990,15 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
       ? '<button class="boton boton--ancho" style="margin-top:var(--esp-1)" ' +
                'id="agregar-acompanante">Agregar</button>'
       : '');
+
+  buscarTodos('[data-editar-acomp]', contenedor).forEach(boton => {
+    boton.addEventListener('click', () => {
+      const persona = filas.find(a => Number(a.id) === Number(boton.dataset.editarAcomp));
+      if (!persona) return;
+      formularioDeAcompanante(confirmacionId, 0, () =>
+        dibujarAcompanantes(confirmacionId, cupo, contenedor), persona);
+    });
+  });
 
   buscarTodos('[data-quitar-acomp]', contenedor).forEach(boton => {
     boton.addEventListener('click', async () => {
@@ -958,43 +1023,52 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
 }
 
 /**
- * Formulario para nombrar a un acompañante.
+ * Formulario para nombrar a un acompañante, o para corregir a uno que
+ * ya tiene nombre.
  *
  * Si el teléfono soporta la Contact Picker API (Chrome en Android, nada
  * más — ni iPhone ni computadora la tienen) se ofrece un botón para
  * traer nombre y teléfono de los contactos en vez de escribirlos. En
  * todos los demás casos se escribe a mano, que es el camino normal.
  *
+ * ⚡ (2026-08-28) El backend (acompanantes.php?accion=editar) ya existía
+ * desde siempre, pero esta pantalla nunca lo llamaba: la única acción
+ * disponible por persona era "Quitar" (borrar y volver a cargar de
+ * cero). Ahora el mismo formulario sirve para las dos cosas — se le
+ * pasa el acompañante existente para editar, o nada para agregar uno.
+ *
  * @param {number} confirmacionId
- * @param {number} cupan Cuántos faltan por nombrar (solo informativo).
+ * @param {number} cupan Cuántos faltan por nombrar (solo informativo, alta nueva).
  * @param {Function} alGuardar
+ * @param {Object} [existente] - Si se manda, el formulario edita esta persona en vez de crear una.
  * @returns {void}
  */
-function formularioDeAcompanante(confirmacionId, cupan, alGuardar) {
+function formularioDeAcompanante(confirmacionId, cupan, alGuardar, existente) {
   const tieneContactPicker =
     typeof navigator !== 'undefined' && navigator.contacts && navigator.contacts.select;
+  const d = existente || {};
 
-  const cuerpo = abrirHoja('Agregar acompañante',
-    (tieneContactPicker
+  const cuerpo = abrirHoja(existente ? 'Editar acompañante' : 'Agregar acompañante',
+    (!existente && tieneContactPicker
       ? '<button type="button" class="boton boton--ancho" id="acomp-de-contactos" ' +
                'style="margin-bottom:var(--esp-2)">Traer de mis contactos</button>'
       : '') +
-    campoTexto({ id: 'acomp-nombre', rotulo: 'Nombre' }) +
+    campoTexto({ id: 'acomp-nombre', rotulo: 'Nombre', valor: d.nombre || '' }) +
     campoLista({
-      id: 'acomp-tipo', rotulo: 'Tipo', valor: 'adulto',
+      id: 'acomp-tipo', rotulo: 'Tipo', valor: d.tipo || 'adulto',
       opciones: [
         { valor: 'adulto', texto: 'Adulto' },
         { valor: 'nino', texto: 'Niño' },
       ],
     }) +
-    campoTexto({ id: 'acomp-telefono', rotulo: 'Teléfono', valor: '' }) +
-    campoTexto({ id: 'acomp-correo', rotulo: 'Correo', tipo: 'email', valor: '' }) +
-    campoTexto({ id: 'acomp-menu', rotulo: 'Menú', valor: '' }) +
-    campoTexto({ id: 'acomp-alergias', rotulo: 'Alergias', valor: '' }) +
-    pieDeFormulario('Agregar')
+    campoTexto({ id: 'acomp-telefono', rotulo: 'Teléfono', valor: d.telefono || '' }) +
+    campoTexto({ id: 'acomp-correo', rotulo: 'Correo', tipo: 'email', valor: d.correo || '' }) +
+    campoTexto({ id: 'acomp-menu', rotulo: 'Menú', valor: d.menu || '' }) +
+    campoTexto({ id: 'acomp-alergias', rotulo: 'Alergias', valor: d.alergias || '' }) +
+    pieDeFormulario(existente ? 'Guardar' : 'Agregar')
   );
 
-  if (tieneContactPicker) {
+  if (!existente && tieneContactPicker) {
     buscar('#acomp-de-contactos', cuerpo).addEventListener('click', async () => {
       try {
         const elegidos = await navigator.contacts.select(['name', 'tel'], { multiple: false });
@@ -1014,19 +1088,26 @@ function formularioDeAcompanante(confirmacionId, cupan, alGuardar) {
     const nombre = valorDe('acomp-nombre', cuerpo);
     if (!nombre) { avisar('Falta el nombre.', true); return; }
 
+    const campos = {
+      nombre:   nombre,
+      tipo:     valorDe('acomp-tipo', cuerpo),
+      telefono: valorDe('acomp-telefono', cuerpo),
+      correo:   valorDe('acomp-correo', cuerpo),
+      menu:     valorDe('acomp-menu', cuerpo),
+      alergias: valorDe('acomp-alergias', cuerpo),
+    };
+
     try {
-      await mandar('acompanantes.php?accion=agregar', {
-        confirmacion_id: confirmacionId,
-        nombre:   nombre,
-        tipo:     valorDe('acomp-tipo', cuerpo),
-        telefono: valorDe('acomp-telefono', cuerpo),
-        correo:   valorDe('acomp-correo', cuerpo),
-        menu:     valorDe('acomp-menu', cuerpo),
-        alergias: valorDe('acomp-alergias', cuerpo),
-      });
+      if (existente) {
+        await mandar('acompanantes.php?accion=editar',
+          Object.assign({ id: existente.id }, campos));
+      } else {
+        await mandar('acompanantes.php?accion=agregar',
+          Object.assign({ confirmacion_id: confirmacionId }, campos));
+      }
       registrarEvento('accion', 'crear_editar_acompanante');
       cerrarHoja(true);
-      avisar('Agregado.');
+      avisar(existente ? 'Guardado.' : 'Agregado.');
       alGuardar();
     } catch (error) {
       avisar(error.message, true);
