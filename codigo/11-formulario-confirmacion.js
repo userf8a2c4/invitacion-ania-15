@@ -117,6 +117,21 @@
     if (campoNombre) {
       campoNombre.value = datos.nombre;
       campoNombre.readOnly = true;
+
+      /* ⚡ (2026-08-28) Antes esto dejaba el input intacto (solo con
+         readOnly, sin ningún cambio visual): se veía IDÉNTICO a un campo
+         que pide escribir el nombre, aunque no se pudiera tocar — muy
+         fácil de leer como "quiere que yo escriba mi nombre". Con la
+         invitación ya nominal, no hace falta pedirlo: se muestra como un
+         dato fijo, no como una pregunta. */
+      campoNombre.style.background = 'transparent';
+      campoNombre.style.border = 'none';
+      campoNombre.style.padding = '0';
+      campoNombre.style.cursor = 'default';
+      campoNombre.tabIndex = -1;
+      const etiquetaNombre = campoNombre.closest('.campo')
+        ? campoNombre.closest('.campo').querySelector('label') : null;
+      if (etiquetaNombre) etiquetaNombre.textContent = 'Invitación para';
     }
     if (campoCorreo && datos.correo) {
       campoCorreo.value = datos.correo;
@@ -145,46 +160,57 @@
       MODO_PERSONAS_ACTIVO = true;
       PERSONAS_INVITACION = datos.personas.map(function (p) {
         const esNino = p.tipo === 'nino';
+        const alergiaPrevia = (p.alergias || '').trim();
         return {
           id: p.id,
           nombre: p.nombre,
           tipo: esNino ? 'nino' : 'adulto',
           marcado: datos.ya_respondio ? !!p.menu : true,
           menu: p.menu || (esNino ? 'Infantil' : 'Estándar'),
+          tieneAlergia: alergiaPrevia !== '',
+          alergia: alergiaPrevia,
         };
       });
 
       /* ⚡ (2026-08-28) Bug real, no un borde: en una invitación NUEVA
          (todavía nadie contestó), el bloque que contiene la lista de
          personas (id="bloque-si-asiste") solo se muestra con la clase
-         .visible, y esa clase SOLO se agregaba en el `change` de acá
-         abajo (línea ~128) — que corre nada más si `ya_respondio` es
-         true. Resultado: el invitado abría su link, veía "Hemos
-         reservado 4 lugares" y el formulario entero quedaba vacío,
-         porque la lista de nombres se dibujaba DENTRO de un contenedor
-         invisible. Con personas nombradas, la pregunta "¿confirmas tu
-         asistencia?" ya no aplica igual — el grupo YA fue invitado; lo
-         que falta decir es QUIÉNES, y eso se dice destildando casillas
-         (incluida la opción de destildarlas todas, que equivale a "no
-         viene nadie" — ver el submit). Por eso se pre-elige "Sí" y se
-         esconde el desplegable, en vez de dejarlo a mitad de camino.
+         .visible, y esa clase SOLO se agregaba en el `change` del
+         desplegable de asistencia — que corre nada más si `ya_respondio`
+         es true. Resultado: el invitado abría su link, veía "Hemos
+         reservado 4 lugares" y el formulario entero quedaba vacío.
 
-         ⚠️ SOLO si todavía no había respondido: si ya_respondio es true,
-         el bloque de arriba (línea ~126) ya puso el valor correcto
-         (Sí/No según lo que declinó o confirmó la vez pasada) y ya
-         disparó el `change` — pisarlo acá de nuevo con "Sí" siempre
-         perdería una respuesta negativa ya guardada. */
+         ⚡⚡ (2026-08-28, segunda vuelta) La primera corrección todavía
+         dependía del desplegable oculto: le forzaba el valor "Sí" y
+         disparaba su `change` para que ESE handler mostrara el bloque.
+         Eso rompía justo el caso de alguien que había declinado antes
+         (ya_respondio=true, asiste=false): el bloque de arriba dejaba el
+         desplegable en "No podré asistir" y SU `change` escondía el
+         checklist — el invitado no tenía forma de volver a tildar a
+         nadie, aunque el plan explícitamente pide que puedan cambiar de
+         opinión cuantas veces quieran antes de la fecha límite.
+
+         Con personas nombradas, la pregunta "¿confirmas tu asistencia?"
+         no existe: quién viene se dice tildando o destildando cada
+         nombre (destildarlos a todos equivale a "no viene nadie" — ver
+         el submit), así que el checklist queda SIEMPRE visible, sin
+         pasar por el desplegable ni por su lógica de visibilidad. */
       if (campoAsistencia) {
-        if (!datos.ya_respondio) {
-          campoAsistencia.value = RESPUESTA_AFIRMATIVA;
-          campoAsistencia.dispatchEvent(new Event('change'));
-        }
         const cajaAsistencia = campoAsistencia.closest('.campo');
         if (cajaAsistencia) cajaAsistencia.style.display = 'none';
       }
+      if (bloqueSiAsiste) bloqueSiAsiste.classList.add('visible');
 
       if (cajaCantidad) cajaCantidad.style.display = 'none';
       if (bloqueMenuInfantil) bloqueMenuInfantil.classList.remove('visible');
+
+      // La caja de alergias compartida deja de tener sentido: cada
+      // persona tiene la suya, dentro de su propia fila (ver
+      // dibujarChecklistDePersonas()).
+      if (campoAlergias) {
+        const cajaAlergias = campoAlergias.closest('.campo');
+        if (cajaAlergias) cajaAlergias.style.display = 'none';
+      }
 
       dibujarChecklistDePersonas();
     } else {
@@ -249,13 +275,29 @@
               '<span>' + menu.etiqueta + '</span></label>';
           }).join('');
 
+      // ⚡ (2026-08-28) Alergia por persona, a pedido explícito: antes
+      // había una sola caja de alergias para todo el grupo, y no decía
+      // cuál de los tildados era el alérgico. Con esto se sabe, por
+      // nombre, quién tiene qué — la caja compartida queda oculta (ver
+      // activarModoInvitacionPersonalizada()).
+      const alergiaEnHtml =
+        '<label class="fila-persona__alergia-check" style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:.85em">' +
+          '<input type="checkbox" data-persona-tiene-alergia' + (persona.tieneAlergia ? ' checked' : '') + '>' +
+          'Tiene alergia o restricción' +
+        '</label>' +
+        '<input type="text" data-persona-alergia-texto placeholder="¿Cuál? Ej. mariscos"' +
+          ' value="' + limpiarTexto(persona.alergia || '') + '"' +
+          (persona.tieneAlergia ? '' : ' style="display:none"') + '>';
+
       return '<div class="fila-persona" data-persona-indice="' + indice + '">' +
         '<label class="fila-persona__nombre" style="display:flex;align-items:center;gap:8px">' +
           '<input type="checkbox" data-persona-marcada' + (persona.marcado ? ' checked' : '') + '>' +
           limpiarTexto(persona.nombre) +
         '</label>' +
         '<div class="fila-persona__opciones" data-persona-opciones' +
-          (persona.marcado ? '' : ' style="display:none"') + '>' + opcionesEnHtml + '</div>' +
+          (persona.marcado ? '' : ' style="display:none"') + '>' +
+          opcionesEnHtml + alergiaEnHtml +
+        '</div>' +
       '</div>';
     }).join('');
 
@@ -275,6 +317,24 @@
           if (radio.checked) PERSONAS_INVITACION[indice].menu = radio.value;
         });
       });
+
+      const casillaAlergia = fila.querySelector('[data-persona-tiene-alergia]');
+      const textoAlergia   = fila.querySelector('[data-persona-alergia-texto]');
+      if (casillaAlergia) {
+        casillaAlergia.addEventListener('change', function () {
+          PERSONAS_INVITACION[indice].tieneAlergia = casillaAlergia.checked;
+          if (textoAlergia) {
+            textoAlergia.style.display = casillaAlergia.checked ? '' : 'none';
+            if (casillaAlergia.checked) textoAlergia.focus();
+            else { textoAlergia.value = ''; PERSONAS_INVITACION[indice].alergia = ''; }
+          }
+        });
+      }
+      if (textoAlergia) {
+        textoAlergia.addEventListener('input', function () {
+          PERSONAS_INVITACION[indice].alergia = textoAlergia.value;
+        });
+      }
     });
 
     actualizarContadorDePersonas();
@@ -417,6 +477,26 @@
       .join(' | ');
   }
 
+  /**
+   * Con personas nombradas, la alergia se carga una por una (ver
+   * dibujarChecklistDePersonas()) — esto arma el resumen de grupo que
+   * sigue viajando a confirmar.php (columna compartida de siempre) y a
+   * los correos, para no tener que leer cada acompanante por separado
+   * para saber si alguien del grupo tiene alguna.
+   *
+   * @param {Array} personasMarcadas
+   * @returns {string}
+   */
+  function armarResumenDeAlergiasPorPersona(personasMarcadas) {
+    const conAlergia = personasMarcadas.filter(function (p) {
+      return p.tieneAlergia && (p.alergia || '').trim() !== '';
+    });
+    if (!conAlergia.length) return '';
+    return conAlergia
+      .map(function (p) { return p.nombre + ': ' + p.alergia.trim(); })
+      .join(' | ');
+  }
+
   /* ─── 4. MOSTRAR Y OCULTAR SECCIONES ───────────────────────────── */
 
   if (campoAsistencia) {
@@ -457,18 +537,25 @@
     if (!pareceUnCorreoValido(correo)) {
       return mostrarError('Ese correo no parece válido. Revisa que tenga @ y un punto.');
     }
-    if (!asistencia) return mostrarError('Cuéntanos si vas a poder acompañarnos.');
+    // ⚡ (2026-08-28) Con personas nombradas no existe el desplegable de
+    // asistencia (queda oculto desde que se activa el modo personas): "
+    // ¿va a venir?" ya no se contesta ahí, se contesta tildando o
+    // destildando cada nombre de la lista. Exigirle un valor a un campo
+    // que ni siquiera se ve habría bloqueado el envío para siempre.
+    if (!MODO_PERSONAS_ACTIVO && !asistencia) {
+      return mostrarError('Cuéntanos si vas a poder acompañarnos.');
+    }
 
     // Con personas nombradas, "viene" significa "al menos una tildada" —
-    // el desplegable de asistencia sigue mandando (si dice que no, nadie
-    // viene aunque hubiera tildes), pero dentro del sí, el número real
-    // sale de la lista, no de un campo numérico que ni se ve.
+    // el número real (y quién viene) sale siempre de la lista, nunca del
+    // desplegable de asistencia (que en este modo ni se muestra).
     const personasMarcadas = MODO_PERSONAS_ACTIVO
       ? PERSONAS_INVITACION.filter(function (p) { return p.marcado; })
       : [];
 
-    const vieneALaFiesta = asistencia === RESPUESTA_AFIRMATIVA &&
-      (!MODO_PERSONAS_ACTIVO || personasMarcadas.length > 0);
+    const vieneALaFiesta = MODO_PERSONAS_ACTIVO
+      ? personasMarcadas.length > 0
+      : asistencia === RESPUESTA_AFIRMATIVA;
 
     const cantidadAdultos = !vieneALaFiesta ? 0
       : MODO_PERSONAS_ACTIVO
@@ -481,7 +568,9 @@
     const menusElegidos   = vieneALaFiesta ? recolectarMenusElegidos() : [];
     const resumenDeMenus  = vieneALaFiesta ? armarResumenDeMenus(menusElegidos) : ', ';
     const detalleDeMenus  = vieneALaFiesta ? armarDetalleDeMenus(menusElegidos) : ', ';
-    const alergias        = campoAlergias ? campoAlergias.value.trim() : '';
+    const alergias        = MODO_PERSONAS_ACTIVO
+      ? armarResumenDeAlergiasPorPersona(personasMarcadas)
+      : (campoAlergias ? campoAlergias.value.trim() : '');
     const notas           = campoNotas ? campoNotas.value.trim() : '';
 
     const datosDeLaConfirmacion = {
@@ -508,7 +597,12 @@
       // fila con esto, sin borrar y reinsertar a nadie.
       if (MODO_PERSONAS_ACTIVO) {
         datosDeLaConfirmacion.personas = PERSONAS_INVITACION.map(function (p) {
-          return { id: p.id, marcado: p.marcado, menu: p.tipo === 'nino' ? 'Infantil' : p.menu };
+          return {
+            id: p.id,
+            marcado: p.marcado,
+            menu: p.tipo === 'nino' ? 'Infantil' : p.menu,
+            alergia: p.tieneAlergia ? (p.alergia || '').trim() : '',
+          };
         });
       }
     }
