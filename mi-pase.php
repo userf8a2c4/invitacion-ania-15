@@ -50,11 +50,17 @@ if ($accion !== '') {
     $ip = substr($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0', 0, 45);
 
     if (existeTabla('intentos_login')) {
+        // ⚡ (2026-08-28) INTERVAL no acepta un placeholder salvo que PDO
+        // emule los prepares (el default, pero no garantizado para
+        // siempre): si se desactiva, este prepare() lanza y el freno cae
+        // en silencio, quedando desactivado sin que nadie lo note.
+        // FRENO_EN_MINUTOS es una constante fija de este archivo (nunca
+        // input del usuario), así que interpolarla es seguro.
         $fallidos = consultarUno(
             "SELECT COUNT(*) AS n FROM intentos_login
              WHERE ip = :ip AND correo = 'mi-pase'
-               AND cuando > DATE_SUB(NOW(), INTERVAL :min MINUTE)",
-            [':ip' => $ip, ':min' => FRENO_EN_MINUTOS]
+               AND cuando > DATE_SUB(NOW(), INTERVAL " . FRENO_EN_MINUTOS . " MINUTE)",
+            [':ip' => $ip]
         );
 
         if ((int) ($fallidos['n'] ?? 0) >= INTENTOS_DE_CODIGO) {

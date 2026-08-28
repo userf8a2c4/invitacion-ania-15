@@ -348,7 +348,21 @@ case 'invitados':
                                               [':t' => $tokenImportado]);
             } while ($tokenRepetido);
 
-            $telefonoDeLaFila = ($contacto !== '' && $correo === '') ? mb_substr($contacto, 0, 40) : '';
+            /* ⚡ (2026-08-28) Antes esto solo guardaba el teléfono cuando
+               la celda de contacto NO traía también un correo — pero la
+               lista real de invitados trae justamente eso: teléfono y
+               correo juntos en la misma celda ("55 1234 5678 /
+               ana@x.com"). Con la condición vieja, toda esa fila quedaba
+               "Sin teléfono" — exactamente el caso que este bloque dice
+               estar resolviendo. Ahora se busca el teléfono con su
+               propio patrón, sacando primero el correo ya encontrado
+               (si lo hay) para no confundir sus dígitos con un
+               teléfono. */
+            $telefonoDeLaFila = '';
+            $sinCorreoEnElTexto = $correo !== '' ? str_replace($correo, ' ', $contacto) : $contacto;
+            if (preg_match('/(\+?\d[\d\s\-\(\)]{7,}\d)/', $sinCorreoEnElTexto, $coincidencia)) {
+                $telefonoDeLaFila = mb_substr(trim($coincidencia[1]), 0, 40);
+            }
             $grupoIdDeLaFila = ($nombreGrupo !== '' && isset($idsDeGrupo[$nombreGrupo]))
                 ? $idsDeGrupo[$nombreGrupo] : null;
 

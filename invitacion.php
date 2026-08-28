@@ -77,12 +77,18 @@ const INTENTOS_MAXIMOS = 15;
 const FRENO_EN_MINUTOS = 20;
 
 try {
+    // ⚡ (2026-08-28) INTERVAL no acepta un placeholder salvo que PDO
+    // emule los prepares (comportamiento por defecto, pero no garantizado
+    // para siempre): si alguien lo desactiva, este prepare() lanza y el
+    // freno cae en silencio al catch de abajo, quedando desactivado sin
+    // que nadie lo note. FRENO_EN_MINUTOS es una constante fija de este
+    // archivo (nunca input del usuario), así que interpolarla es seguro.
     $stmt = $pdo->prepare(
         'SELECT COUNT(*) AS n FROM intentos_login
          WHERE ip = :ip AND correo = :marca
-           AND cuando > DATE_SUB(NOW(), INTERVAL :min MINUTE)'
+           AND cuando > DATE_SUB(NOW(), INTERVAL ' . FRENO_EN_MINUTOS . ' MINUTE)'
     );
-    $stmt->execute([':ip' => $ip, ':marca' => MARCA_DE_FRENO, ':min' => FRENO_EN_MINUTOS]);
+    $stmt->execute([':ip' => $ip, ':marca' => MARCA_DE_FRENO]);
     $conteo = (int) ($stmt->fetch()['n'] ?? 0);
     if ($conteo >= INTENTOS_MAXIMOS) {
         responderMalPublico('Demasiados intentos. Espera un rato.', 429);
@@ -115,15 +121,19 @@ try {
     responderMalPublico('No se pudo cargar tu invitación ahora. Intenta de nuevo en un rato.', 500);
 }
 
+/* ⚡ (2026-08-28) El INSERT de abajo se movió fuera del `if (!$inv)`:
+   antes solo se anotaban las consultas FALLIDAS, así que un token válido
+   (por ejemplo, uno filtrado) se podía consultar un número ilimitado de
+   veces sin gastar nunca el freno. Ahora cada consulta cuenta, haya
+   encontrado la invitación o no. */
+try {
+    $pdo->prepare('INSERT INTO intentos_login (ip, correo) VALUES (:ip, :marca)')
+        ->execute([':ip' => $ip, ':marca' => MARCA_DE_FRENO]);
+} catch (PDOException $e) { /* el freno es best-effort */ }
+
 if (!$inv) {
     // Mismo mensaje genérico que un token válido con datos vacíos no
-    // podría dar, para no revelar si el token existe o no. Se anota
-    // igual que un intento fallido, como hacen confirmar.php/mi-pase.php.
-    try {
-        $pdo->prepare('INSERT INTO intentos_login (ip, correo) VALUES (:ip, :marca)')
-            ->execute([':ip' => $ip, ':marca' => MARCA_DE_FRENO]);
-    } catch (PDOException $e) { /* el freno es best-effort */ }
-
+    // podría dar, para no revelar si el token existe o no.
     responderMalPublico('No encontramos esa invitación.', 404);
 }
 
@@ -169,7 +179,16 @@ echo json_encode([
     'asiste'            => $inv['asiste'] !== null ? (int) $inv['asiste'] === 1 : true,
     'adultos'           => (int) ($inv['adultos'] ?? $inv['pases']),
     'ninos'             => (int) ($inv['ninos'] ?? 0),
-    'resumen_menus'     => (string) ($inv['resumen_menus'] ?? ''),
-    'alergias'          => (string) ($inv['alergias'] ?? ''),
-    'personas'          => $personas,
+    // htmlspecialchars_decode: confirmar.php guarda estos campos ya
+    // escapados (limpiar() = htmlspecialchars). Si se devuelven crudos,
+    // el formulario los muestra escapados ("Mariscos y ma&#039;iz") y, al
+    // reenviar, se escapan de nuevo -degradando el texto un nivel en
+    // cada edición. Se desescapa acá, al leer, para cortar el ciclo.
+    'resumen_menus'     => htmlspecialchars_decode((string) ($inv['resumen_menus'] ?? ''), ENT_QUOTES),
+    'alergias'          => htmlspecialchars_decode((string) ($inv['alergias'] ?? ''), ENT_QUOTES),
+    'personas'          => array_map(function ($p) {
+        $p['nombre'] = htmlspecialchars_decode((string) ($p['nombre'] ?? ''), ENT_QUOTES);
+        $p['menu']   = htmlspecialchars_decode((string) ($p['menu'] ?? ''), ENT_QUOTES);
+        return $p;
+    }, $personas),
 ], JSON_UNESCAPED_UNICODE);

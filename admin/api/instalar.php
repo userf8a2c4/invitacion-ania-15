@@ -242,10 +242,15 @@ if (existeTabla('recibos')) {
 
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 
+/* ⚠️ ESTA LISTA SE MANTIENE A MANO Y YA MINTIÓ UNA VEZ (2026-08-28).
+   `confirmaciones` faltaba acá, así que el instalador respondía "Todo
+   listo" con la tabla central de invitados ausente y el panel entero
+   roto. Al agregar un CREATE TABLE nuevo a migracion.sql, agregá su
+   nombre acá también, o el instalador no va a avisar si falla. */
 $tablasEsperadas = [
     'usuarios', 'sesiones', 'recuperaciones_clave', 'intentos_login', 'bitacora', 'notas', 'archivos',
     'ajustes', 'alarmas', 'suscripciones_push', 'categorias_gasto', 'padrinos',
-    'proveedores',
+    'proveedores', 'confirmaciones',
     'cotizaciones', 'cotizacion_items', 'recibos', 'contratos', 'gastos', 'pagos', 'tareas', 'agenda',
     'cronograma',
     'mesas', 'asignacion_mesas', 'grupos_invitados', 'preferencias_invitado',
@@ -254,6 +259,7 @@ $tablasEsperadas = [
     'citas_arreglo', 'tomas_foto', 'acompanantes', 'permisos_usuario', 'llegadas',
     'comandos_usuario', 'presupuestos', 'eventos_uso',
     'acompanante_reglas', 'asignacion_mesas_persona', 'invitaciones',
+    'escrituras_hechas', 'envios_proveedor', 'acomodo_respaldo',
 ];
 
 $faltantes = [];
