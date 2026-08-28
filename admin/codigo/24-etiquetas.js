@@ -74,7 +74,8 @@ const ETIQUETAS_EDITABLES = {
      claves son "gente." — las mismas que usa dibujarGente() al pintar
      las píldoras. */
   'Dentro de Gente': [
-    ['gente.invitados', 'Invitados'],
+    ['gente.invitados',    'Confirmaciones'],
+    ['gente.invitaciones', 'Envíos'],
     ['gente.mesas',     'Mesas'],
     ['gente.regalos',   'Regalos'],
     ['gente.foraneos',  'Foráneos'],

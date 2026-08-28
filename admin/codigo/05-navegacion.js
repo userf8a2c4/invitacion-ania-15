@@ -321,6 +321,7 @@ function nombreDeOpcionDeMenu(clave) {
     'escanear':    'Escanear pases',
     'compartir':   'Compartir con proveedores',
     'importar':    'Importar desde una hoja de cálculo',
+    'etiquetas_acomodo': 'Etiquetas',
     'alarmas':     'Alarmas',
     'bitacora':    'Historial de cambios',
     'cuenta':      'Mi cuenta',
@@ -368,6 +369,10 @@ function atenderMenu(opcion) {
 
     case 'importar':
       abrirImportador();
+      break;
+
+    case 'etiquetas_acomodo':
+      abrirEtiquetasAcomodo();
       break;
 
     case 'compartir':
