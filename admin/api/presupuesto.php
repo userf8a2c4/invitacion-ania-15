@@ -111,7 +111,23 @@ case 'todo':
          ORDER BY pa.nombre'
     );
 
-    $proveedores = consultarTodo('SELECT * FROM proveedores ORDER BY nombre');
+    /* ⚡ `pagado_real` (2026-08-27): antes lo único que decía "cuánto se le
+       pagó a este proveedor" era `proveedores.anticipo` — un campo a
+       mano que un pago marcado 'pagado' en Presupuesto NUNCA tocaba
+       (solo lo actualizaba generar un recibo, y con un bug: quedaba
+       capado por `monto_total`, así que un proveedor creado en $0 no
+       podía subir de $0 aunque se le pagara). Acá se calcula de verdad,
+       igual que `cubre` en padrinos arriba: sumando los pagos reales de
+       sus gastos. Mismo criterio que "Pagado" en el resumen general. */
+    $proveedores = consultarTodo(
+        'SELECT pr.*,
+                COALESCE(SUM(CASE WHEN p.estado = \'pagado\' THEN p.monto ELSE 0 END), 0) AS pagado_real
+         FROM proveedores pr
+         LEFT JOIN gastos g ON g.proveedor_id = pr.id
+         LEFT JOIN pagos p  ON p.gasto_id = g.id
+         GROUP BY pr.id
+         ORDER BY pr.nombre'
+    );
     $cotizaciones = consultarTodo(
         'SELECT * FROM cotizaciones ORDER BY servicio, monto'
     );
@@ -136,14 +152,26 @@ case 'todo':
        Se calculan en SQL y no sumando en PHP porque MySQL lo hace sobre
        la tabla entera de una sola pasada. Filtrados por presupuesto
        activo, igual que la lista de gastos de arriba. */
+    /* ⚡ "CUESTA $0" CON GASTOS DE VERDAD CARGADOS (2026-08-27). Antes
+       estas tres cifras sumaban SOLO `monto_real` — un campo que ningún
+       flujo automático llena (guardar_pago, recibos.php y cotizador.php
+       crean el gasto con `monto_real=0` la mayoría de las veces). Un
+       proveedor de $10,000 con un pago de $5,000 ya cargado podía
+       mostrar "Cuesta $0" porque nadie había tocado ESE campo puntual.
+       COALESCE(NULLIF(monto_real,0), presupuestado) usa el costo real
+       en cuanto se conoce, y mientras tanto cae al estimado — que es
+       exactamente lo que ya se le pide a Lucila al crear el gasto o el
+       proveedor, no un dato nuevo. */
     $totales = consultarUno(
         'SELECT
            COALESCE(SUM(presupuestado), 0) AS planeado,
-           COALESCE(SUM(monto_real), 0)    AS costo,
+           COALESCE(SUM(COALESCE(NULLIF(monto_real, 0), presupuestado)), 0) AS costo,
            COALESCE(SUM(CASE WHEN padrino_id IS NULL
-                             THEN monto_real ELSE 0 END), 0) AS propio,
+                             THEN COALESCE(NULLIF(monto_real, 0), presupuestado)
+                             ELSE 0 END), 0) AS propio,
            COALESCE(SUM(CASE WHEN padrino_id IS NOT NULL
-                             THEN monto_real ELSE 0 END), 0) AS de_padrinos
+                             THEN COALESCE(NULLIF(monto_real, 0), presupuestado)
+                             ELSE 0 END), 0) AS de_padrinos
          FROM gastos' .
         ($tienePresupuestos ? ' WHERE presupuesto_id = :activo' : ''),
         $tienePresupuestos ? [':activo' => $activo] : []
@@ -180,7 +208,7 @@ case 'todo':
        del módulo). Acá se suma solo lo de padrinos con estado
        'entregado' — lo único que ya está, de verdad, cubierto. */
     $deEntregado = consultarUno(
-        "SELECT COALESCE(SUM(g.monto_real), 0) AS monto
+        "SELECT COALESCE(SUM(COALESCE(NULLIF(g.monto_real, 0), g.presupuestado)), 0) AS monto
          FROM gastos g JOIN padrinos pa ON pa.id = g.padrino_id
          WHERE pa.estado = 'entregado'" .
         ($tienePresupuestos ? ' AND g.presupuesto_id = :activo' : ''),
@@ -476,6 +504,13 @@ case 'guardar_proveedor':
     exigirMetodo('POST');
     $datos = cuerpoJson();
 
+    /* ⚡ `anticipo` YA NO SE ESCRIBE DESDE ACÁ (2026-08-27). Dejó de ser
+       un campo del formulario — ver la nota grande en `presupuesto.php`
+       acción 'todo' (`pagado_real`) y en 09-vista-dinero.js
+       (`formularioProveedor`). La columna se queda en la tabla (para no
+       tocar el esquema en esta ronda) pero nadie la lee ni la escribe
+       más: no se incluye en $valores para no pisarla con un dato viejo
+       en cada edición. */
     $valores = [
         'nombre'      => campoTexto($datos, 'nombre', 150),
         'servicio'    => campoTexto($datos, 'servicio', 120),
@@ -483,7 +518,6 @@ case 'guardar_proveedor':
         'telefono'    => campoTexto($datos, 'telefono', 40),
         'correo'      => campoTexto($datos, 'correo', 190),
         'monto_total' => campoMonto($datos, 'monto_total'),
-        'anticipo'    => campoMonto($datos, 'anticipo'),
         'estado'      => campoOpcion($datos, 'estado',
                          ['candidato', 'contratado', 'pagado', 'cancelado'], 'candidato'),
         /* Cuál de los textos de compartir.php le toca a este proveedor.

@@ -350,9 +350,9 @@ function exportarPresupuesto(formato) {
     {
       titulo: 'Proveedores',
       encabezados: ['Nombre', 'Servicio', 'Total (' + moneda + ')',
-                    'Anticipo (' + moneda + ')', 'Estado', 'Teléfono'],
+                    'Pagado (' + moneda + ')', 'Estado', 'Teléfono'],
       filas: DINERO.proveedores.map(p => [
-        p.nombre, p.servicio || '', monto(p.monto_total), monto(p.anticipo),
+        p.nombre, p.servicio || '', monto(p.monto_total), monto(p.pagado_real),
         p.estado, p.telefono || '',
       ]),
     },

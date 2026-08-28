@@ -640,13 +640,13 @@ select.campo__control {
   display: flex;
   align-items: flex-end;
   /* `--desplazamiento-hoja` la escribe activarCompensacionDeTeclado()
-     (06-piezas.js) a partir de `visualViewport.offsetTop`: cuánto se
-     "comió" el teclado del techo de la pantalla física. Sin esto, este
-     panel (anclado por abajo a `inset:0`, o sea al fondo de la pantalla
-     ENTERA) queda con su borde inferior detrás del teclado en vez de
-     pegado al fondo de lo que realmente se ve — trasladarlo hacia abajo
-     esa distancia lo alinea con el área visible real. Sin JS o sin
-     soporte de `visualViewport`, el valor de respaldo es 0 (sin cambio,
+     (06-piezas.js): cuánto tapa el teclado del fondo de la pantalla
+     física (`innerHeight − visualViewport visible`), en NEGATIVO. Sin
+     esto, este panel (anclado por abajo a `inset:0`, o sea al fondo de
+     la pantalla ENTERA) queda con su borde inferior detrás del teclado
+     en vez de pegado al fondo de lo que realmente se ve — subirlo esa
+     distancia lo alinea con el área visible real. Sin JS o sin soporte
+     de `visualViewport`, el valor de respaldo es 0 (sin cambio,
      comportamiento de siempre). */
   transform: translateY(var(--desplazamiento-hoja, 0px));
 }

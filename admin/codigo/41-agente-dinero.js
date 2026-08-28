@@ -132,12 +132,12 @@ registrarAgente('dinero', 'Dinero', async () => {
 
   /* 5 · Proveedores contratados con saldo pendiente. */
   const sugerenciasDeProveedores = (dinero.proveedores || [])
-    .filter(p => p.estado === 'contratado' && (Number(p.monto_total) - Number(p.anticipo)) > 0)
+    .filter(p => p.estado === 'contratado' && (Number(p.monto_total) - Number(p.pagado_real)) > 0)
     .map(p => ({
       id: 'dinero-proveedor-' + p.id,
       agente: 'dinero',
       titulo: 'Saldo pendiente: ' + p.nombre,
-      detalle: 'Faltan ' + comoDinero(Number(p.monto_total) - Number(p.anticipo), false) +
+      detalle: 'Faltan ' + comoDinero(Number(p.monto_total) - Number(p.pagado_real), false) +
         (p.servicio ? ' (' + p.servicio + ')' : ''),
       prioridad: 40,
       requiereConfirmacion: false,

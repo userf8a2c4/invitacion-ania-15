@@ -309,18 +309,6 @@ function bloqueTotales(t) {
               '). Los montos se guardan en pesos.</p>';
   }
 
-  /* Si "Cuesta" da $0 pero hay algo planeado, no es que la fiesta
-     salga gratis: es que todavía ningún gasto tiene cargado su monto
-     REAL (el estimado y el real son campos distintos a propósito, ver
-     presupuesto.php). Sin este aviso, un $0 con gastos cargados parece
-     un error del panel. */
-  if (t.costo === 0 && t.planeado > 0) {
-    avisos += '<p class="vacio__texto">Todavía no cargaste el monto ' +
-              '<strong>real</strong> de ningún gasto — solo el estimado. ' +
-              'Lo planeado suma <strong>' + seguro(comoDinero(t.planeado, false)) +
-              '</strong>.</p>';
-  }
-
   if (t.por_pagar > 0) {
     avisos += '<p class="vacio__texto">Por pagar: <strong>' +
               seguro(comoDinero(t.por_pagar, false)) + '</strong> en ' +
@@ -360,6 +348,18 @@ function bloqueTotales(t) {
       seguro(comoDinero(t.costo_por_invitado, false)) + ' por invitado' +
       ' (' + seguro(pluralizar(t.confirmados, 'confirmado', 'confirmados')) + ').</p>';
 
+  /* ⚡ TERCERA CIFRA: PAGADO (2026-08-27). "Cuesta" y "De tu bolsillo" ya
+     existían; faltaba la única que realmente responde "¿cuánto llevo
+     pagado?" — antes el panel calculaba `t.pagado` (suma real de
+     `pagos`) y lo tiraba sin usar. "Falta" es la resta directa: si da
+     negativo (se pagó de más, o Cuesta todavía no refleja el gasto
+     real), se muestra "Al día" en vez de un número negativo confuso. */
+  const falta = Math.max(0, (t.costo || 0) - (t.pagado || 0));
+  const resumenDePagado = '<p class="vacio__texto">' +
+    'Pagado: <strong>' + seguro(comoDinero(t.pagado, false)) + '</strong>' +
+    ' · Falta: <strong>' + (falta > 0.01 ? seguro(comoDinero(falta, false)) : 'Al día') +
+    '</strong></p>';
+
   return '' +
     selector +
     '<div class="tarjeta">' +
@@ -376,6 +376,7 @@ function bloqueTotales(t) {
             seguro(comoDinero(t.propio, false)) + '</div>' +
         '</div>' +
       '</div>' +
+      resumenDePagado +
       costoPorInvitado +
       avisos +
       '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-2)">' +
@@ -1224,7 +1225,7 @@ function pintarProveedores(cuerpo) {
 
   cuerpo.innerHTML = proveedores.map(prov => {
     const estado = estados[prov.estado] || estados.candidato;
-    const falta  = (Number(prov.monto_total) || 0) - (Number(prov.anticipo) || 0);
+    const falta  = (Number(prov.monto_total) || 0) - (Number(prov.pagado_real) || 0);
 
     return '' +
       '<button class="lista__fila" data-proveedor="' + seguro(prov.id) + '">' +
@@ -1974,13 +1975,20 @@ function abrirDetalleDeProveedor(proveedor) {
     candidato: 'Candidato', contratado: 'Contratado',
     pagado: 'Pagado por completo', cancelado: 'Cancelado',
   };
-  const falta = (Number(proveedor.monto_total) || 0) - (Number(proveedor.anticipo) || 0);
+  /* ⚡ "FALTA" YA NO USA `anticipo` (2026-08-27). `anticipo` era un
+     número a mano que un pago marcado 'pagado' en Presupuesto nunca
+     tocaba — se podía pagar de verdad y "Falta" seguir mostrando el
+     mismo hueco de siempre. `pagado_real` lo calcula el servidor
+     sumando los pagos de verdad de este proveedor (presupuesto.php,
+     acción 'todo'): una sola fuente, sin nada que sincronizar a mano. */
+  const pagadoReal = Number(proveedor.pagado_real) || 0;
+  const falta = (Number(proveedor.monto_total) || 0) - pagadoReal;
 
   const detalle = [
     ['Servicio', proveedor.servicio || '—'],
     ['Estado', estados[proveedor.estado] || proveedor.estado || '—'],
     ['Monto total', comoDinero(proveedor.monto_total, false)],
-    ['Anticipo pagado', comoDinero(proveedor.anticipo, false)],
+    ['Pagado', comoDinero(pagadoReal, false)],
     ['Falta', falta > 0 ? comoDinero(falta, false) : '—'],
     ['Contacto', proveedor.contacto || '—'],
     ['Teléfono', proveedor.telefono || '—'],
@@ -1991,29 +1999,19 @@ function abrirDetalleDeProveedor(proveedor) {
     '<span class="detalle__valor">' + seguro(r[1]) + '</span>'
   ).join('');
 
-  /* ─── PAGOS REGISTRADOS EN PRESUPUESTO (de verdad, no manual) ────────
-     `monto_total`/`anticipo` son campos que Lucila carga a mano al dar
-     de alta al proveedor — pueden quedar desactualizados. Esto suma lo
-     que EN REALIDAD se cargó como pagado en Gastos/Pagos para este
-     proveedor, sin reemplazar los campos manuales (cambiar ese modelo
-     es más grande que este pedido) — se muestra al lado, como dato
-     adicional de verificación. `DINERO.gastos`/`DINERO.pagos` ya están
-     cargados en memoria por dibujarDinero(), así que esto no pide nada
-     nuevo al servidor. */
+  /* Cantidad de pagos, para dar contexto a "Pagado" de arriba —
+     `DINERO.gastos`/`DINERO.pagos` ya están en memoria por
+     dibujarDinero(), así que esto no pide nada nuevo al servidor. */
   const gastosDeEsteProveedor = (DINERO.gastos || []).filter(g => g.proveedor_id === proveedor.id);
   const idsDeEsosGastos = new Set(gastosDeEsteProveedor.map(g => g.id));
-  const pagosDeEsteProveedor = (DINERO.pagos || []).filter(p => idsDeEsosGastos.has(p.gasto_id));
-  const totalPagadoDeVerdad = pagosDeEsteProveedor
-    .filter(p => p.estado === 'pagado')
-    .reduce((suma, p) => suma + (Number(p.monto) || 0), 0);
+  const cuantosPagos = (DINERO.pagos || [])
+    .filter(p => idsDeEsosGastos.has(p.gasto_id) && p.estado === 'pagado').length;
 
-  const seccionPagosReales = pagosDeEsteProveedor.length
+  const seccionPagosReales = cuantosPagos
     ? '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">Pagos registrados en Presupuesto</div>' +
       '<div class="detalle">' +
-        '<span class="detalle__rotulo">Pagado de verdad</span>' +
-        '<span class="detalle__valor">' + seguro(comoDinero(totalPagadoDeVerdad, false)) + '</span>' +
         '<span class="detalle__rotulo">Cantidad de pagos</span>' +
-        '<span class="detalle__valor">' + pagosDeEsteProveedor.length + '</span>' +
+        '<span class="detalle__valor">' + cuantosPagos + '</span>' +
       '</div>'
     : '';
 
@@ -2085,7 +2083,7 @@ function abrirDetalleDeProveedor(proveedor) {
  * @returns {void}
  */
 function abrirGeneradorDeRecibo(proveedor) {
-  const falta = (Number(proveedor.monto_total) || 0) - (Number(proveedor.anticipo) || 0);
+  const falta = (Number(proveedor.monto_total) || 0) - (Number(proveedor.pagado_real) || 0);
   const hoy   = new Date().toISOString().slice(0, 10);
 
   const cuerpo = abrirHoja('Recibo · ' + proveedor.nombre,
@@ -2144,19 +2142,19 @@ function abrirGeneradorDeRecibo(proveedor) {
       });
       cerrarHoja(true);
 
-      // Generar un recibo SIEMPRE mueve el anticipo del proveedor en el
-      // servidor (ver la nota grande en recibos.php), quedó vinculado a
-      // un pago o no — así que siempre hay que refrescar, mismo patrón
-      // que ya usa guardarDinero() al guardar cualquier otra cosa. Sin
-      // esto, "Falta" seguía mostrando el número viejo y el próximo
-      // recibo sugería el mismo monto, como si nada se hubiera guardado.
+      // `pagado_real` (presupuesto.php) se recalcula solo con el pago
+      // que este recibo puede haber creado (`tambien_registrar_pago`) —
+      // por eso hay que refrescar DINERO siempre, mismo patrón que ya
+      // usa guardarDinero() al guardar cualquier otra cosa. Sin esto,
+      // "Falta" seguía mostrando el número viejo y el próximo recibo
+      // sugería el mismo monto, como si nada se hubiera guardado.
       ensuciarVistas('resumen');
       await dibujarDinero();
 
-      // El `proveedor` de acá arriba quedó con el anticipo VIEJO —se
-      // armó antes de este guardado—; dibujarDinero() ya trajo una copia
-      // nueva. Sin este re-lookup, cerrar esta pantalla reabriría la
-      // ficha con el mismo "Falta" de siempre, aunque el número ya
+      // El `proveedor` de acá arriba quedó con el `pagado_real` VIEJO
+      // —se armó antes de este guardado—; dibujarDinero() ya trajo una
+      // copia nueva. Sin este re-lookup, cerrar esta pantalla reabriría
+      // la ficha con el mismo "Falta" de siempre, aunque el número ya
       // había cambiado en el servidor.
       const proveedorActualizado =
         DINERO.proveedores.find(p => p.id === proveedor.id) || proveedor;
@@ -2670,8 +2668,8 @@ function abrirGeneradorDeContrato(proveedor) {
       + proveedor.detalle_items.map(it => it.texto).join(', ') + '.'
     : 'Servicio de ' + proveedor.servicio + '.';
 
-  const formaDePagoSugerida = (Number(proveedor.anticipo) || 0) > 0
-    ? 'Anticipo de ' + comoDinero(proveedor.anticipo, false)
+  const formaDePagoSugerida = (Number(proveedor.pagado_real) || 0) > 0
+    ? 'Anticipo de ' + comoDinero(proveedor.pagado_real, false)
       + ' y el saldo restante contra entrega del servicio.'
     : 'A convenir entre las partes.';
 
@@ -2764,12 +2762,14 @@ function formularioProveedor(proveedor) {
     campoTexto({ id: 'pro-servicio', rotulo: 'Servicio', valor: d.servicio,
                  pista: 'Salón, DJ, fotografía…' }) +
 
-    '<div class="campo-par">' +
-      campoDinero({ id: 'pro-total', rotulo: 'Monto total',
-                    valor: d.monto_total ? desdePesos(d.monto_total) : '' }) +
-      campoDinero({ id: 'pro-anticipo', rotulo: 'Anticipo pagado',
-                    valor: d.anticipo ? desdePesos(d.anticipo) : '' }) +
-    '</div>' +
+    /* ⚡ SIN "ANTICIPO PAGADO" (2026-08-27). Antes era un número a mano
+       que un pago marcado 'pagado' en Presupuesto nunca actualizaba —
+       la ficha del proveedor ya muestra "Pagos registrados" con la
+       suma real de sus pagos (`pagado_real`, calculado en
+       presupuesto.php); pedir este número aparte solo invitaba a que
+       se desincronizara, como pasó en la práctica. */
+    campoDinero({ id: 'pro-total', rotulo: 'Monto total',
+                  valor: d.monto_total ? desdePesos(d.monto_total) : '' }) +
 
     campoLista({ id: 'pro-estado', rotulo: 'Estado',
                  valor: d.estado || 'candidato',
@@ -2815,7 +2815,6 @@ function formularioProveedor(proveedor) {
   if (proveedor) engancharBotonesDeContacto(cuerpo, proveedor);
   engancharListaDeDetalle('pro-detalle', cuerpo, plantillasSugeridasPara(d.servicio));
   activarFormatoDeMiles('pro-total', cuerpo);
-  activarFormatoDeMiles('pro-anticipo', cuerpo);
 
   engancharFormularioDinero(cuerpo, () => {
     const nombre = valorDe('pro-nombre', cuerpo);
@@ -2824,7 +2823,6 @@ function formularioProveedor(proveedor) {
       nombre:        nombre,
       servicio:      valorDe('pro-servicio', cuerpo),
       monto_total:   aPesos(valorDe('pro-total', cuerpo)),
-      anticipo:      aPesos(valorDe('pro-anticipo', cuerpo)),
       estado:        valorDe('pro-estado', cuerpo),
       contacto:      valorDe('pro-contacto', cuerpo),
       telefono:      valorDe('pro-telefono', cuerpo),

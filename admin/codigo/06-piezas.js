@@ -48,18 +48,25 @@ let quitarCompensacionDeTeclado = null;
  * `visualViewport`, no hace nada: el CSS ya tiene `88dvh` como valor de
  * respaldo, igual que antes de este cambio.
  *
- * ⚡ POR QUÉ SE SUMÓ `--desplazamiento-hoja` (2026-08-27). Achicar el
- * ALTO del panel no alcanza: `.hoja` es `position:fixed; inset:0` —
- * ocupa el *layout* viewport completo — y con
- * `interactive-widget=resizes-visual` (admin/index.html) ese layout
- * viewport NO se achica cuando aparece el teclado, solo el *visual*
- * viewport sí. Como `.hoja` usa `align-items:flex-end`, el panel queda
- * pegado al fondo del layout viewport — que en ese momento está DETRÁS
- * del teclado, fuera de lo que se ve. `visualViewport.offsetTop` es la
- * distancia entre el techo del layout viewport y el techo de lo que
- * realmente se ve; trasladar `.hoja` hacia abajo esa distancia (ver
- * `.hoja` en 02-componentes.css) alinea el panel con el fondo REAL
- * visible, no con el de la pantalla física entera.
+ * ⚡ POR QUÉ SE SUMÓ `--desplazamiento-hoja`, Y POR QUÉ LA PRIMERA
+ * VERSIÓN NO SERVÍA (2026-08-27). Achicar el ALTO del panel no
+ * alcanza: `.hoja` es `position:fixed; inset:0` — ocupa el *layout*
+ * viewport completo — y con `interactive-widget=resizes-visual`
+ * (admin/index.html) ese layout viewport NO se achica cuando aparece
+ * el teclado, solo el *visual* viewport sí. Como `.hoja` usa
+ * `align-items:flex-end`, el panel queda pegado al fondo del layout
+ * viewport — que en ese momento está DETRÁS del teclado, fuera de lo
+ * que se ve.
+ *
+ * La primera versión de este arreglo usaba `visualViewport.offsetTop`
+ * a secas — pero ese valor es 0 en el caso normal de abrir un teclado
+ * (mide cuánto SCROLLEÓ el visual viewport, no cuánto tapa el
+ * teclado), así que `translateY(0)` no cambiaba nada y el bug seguía
+ * intacto. Lo que hace falta es la distancia entre el fondo de la
+ * pantalla física (`window.innerHeight`) y el fondo de lo que
+ * realmente se ve (`offsetTop + height`) — esa es la porción tapada
+ * por el teclado, y hay que subir `.hoja` esa distancia (valor
+ * NEGATIVO de `translateY`, ver `.hoja` en 02-componentes.css).
  * @returns {void}
  */
 function activarCompensacionDeTeclado() {
@@ -68,7 +75,8 @@ function activarCompensacionDeTeclado() {
   function ajustar() {
     const vv = window.visualViewport;
     document.documentElement.style.setProperty('--alto-hoja', Math.round(vv.height * 0.88) + 'px');
-    document.documentElement.style.setProperty('--desplazamiento-hoja', Math.round(vv.offsetTop) + 'px');
+    const tapadoPorElTeclado = window.innerHeight - (vv.offsetTop + vv.height);
+    document.documentElement.style.setProperty('--desplazamiento-hoja', Math.round(-tapadoPorElTeclado) + 'px');
   }
 
   // Red de seguridad adicional: si el campo que se tocó queda tapado de
