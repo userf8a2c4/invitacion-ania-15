@@ -141,8 +141,10 @@ if (!$inv) {
 $personas = [];
 if ($inv['confirmacion_id']) {
     try {
+        // alergias: cada persona lleva la suya (ver la nota grande en
+        // confirmar.php, sección "PERSONAS DEL GRUPO").
         $stmtP = $pdo->prepare(
-            'SELECT id, nombre, tipo, menu FROM acompanantes WHERE confirmacion_id = :c ORDER BY id ASC'
+            'SELECT id, nombre, tipo, menu, alergias FROM acompanantes WHERE confirmacion_id = :c ORDER BY id ASC'
         );
         $stmtP->execute([':c' => $inv['confirmacion_id']]);
         $personas = $stmtP->fetchAll();
@@ -187,8 +189,9 @@ echo json_encode([
     'resumen_menus'     => htmlspecialchars_decode((string) ($inv['resumen_menus'] ?? ''), ENT_QUOTES),
     'alergias'          => htmlspecialchars_decode((string) ($inv['alergias'] ?? ''), ENT_QUOTES),
     'personas'          => array_map(function ($p) {
-        $p['nombre'] = htmlspecialchars_decode((string) ($p['nombre'] ?? ''), ENT_QUOTES);
-        $p['menu']   = htmlspecialchars_decode((string) ($p['menu'] ?? ''), ENT_QUOTES);
+        $p['nombre']   = htmlspecialchars_decode((string) ($p['nombre'] ?? ''), ENT_QUOTES);
+        $p['menu']     = htmlspecialchars_decode((string) ($p['menu'] ?? ''), ENT_QUOTES);
+        $p['alergias'] = htmlspecialchars_decode((string) ($p['alergias'] ?? ''), ENT_QUOTES);
         return $p;
     }, $personas),
 ], JSON_UNESCAPED_UNICODE);

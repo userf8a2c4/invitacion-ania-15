@@ -143,6 +143,10 @@ case 'analizar':
             'adultos'  => $adultos > 0 ? $adultos : (($ninos > 0) ? 0 : 1),
             'ninos'    => $ninos,
             'asiste'   => interpretarRsvp($fila[$mapa['rsvp']] ?? ''),
+            // Crudo, sin interpretar -hace falta más abajo (accion=invitados)
+            // para distinguir "dijo que no" de "no dijo nada": son dos casos
+            // muy distintos para una lista precargada (ver esRsvpExplicitoNo()).
+            'rsvp_crudo' => trim((string) ($fila[$mapa['rsvp']] ?? '')),
         ];
     }
 
@@ -293,10 +297,23 @@ case 'invitados':
             ($contacto !== '' && $correo === '') ? 'Contacto: ' . $contacto : '',
         ])));
 
+        /* ⚡ (2026-08-28) Con invitaciones nominales (token propio, cupo
+           fijo), el supuesto de partida es "sí viene, hasta que declare lo
+           contrario" -igual que crear una invitación a mano
+           (invitaciones.php:141). Sin esto, importar una lista donde nadie
+           contestó todavía (el caso normal: se importa ANTES de mandar los
+           links) dejaba a todos con asiste=0, y el bot de mesas no podía
+           proponer nada. Sin la tabla `invitaciones` (import genérico,
+           formulario abierto de toda la vida), se mantiene el criterio
+           conservador de siempre: en blanco = no se asume que viene. */
+        $asisteFinal = existeTabla('invitaciones')
+            ? !esRsvpExplicitoNo($fila['rsvp_crudo'] ?? '')
+            : (!empty($fila['asiste']) ? 1 : 0);
+
         $valores = [
             'nombre'  => mb_substr($nombre, 0, 200),
             'correo'  => mb_substr($correo, 0, 200),
-            'asiste'  => !empty($fila['asiste']) ? 1 : 0,
+            'asiste'  => $asisteFinal ? 1 : 0,
             'adultos' => $adultos,
             'ninos'   => $ninos,
             'total'   => $adultos + $ninos,
@@ -376,6 +393,36 @@ case 'invitados':
                 'confirmacion_id' => $idNuevo,
                 'estado'          => 'sin_enviar',
             ]);
+
+            /* ⚡ (2026-08-28) PERSONAS-PLACEHOLDER, a pedido explícito del
+               usuario. Una lista real casi nunca trae el nombre de CADA
+               integrante -la de Ania solo traía el contacto de la familia
+               más un conteo de adultos/niños-, y sin ningún nombre cargado
+               el invitado ve el formulario genérico (cuántos van a venir +
+               menú por lugar) en vez de la lista con casillas por persona.
+               Para que la experiencia de "checklist" exista siempre, se
+               genera un acompañante por lugar: el primer adulto usa el
+               nombre real de la fila (es el único que sí se conoce);
+               el resto queda como "Adulto 2", "Adulto 3"…/"Niño 1", "Niño
+               2"… -editable después desde el panel (admin/api/invitaciones.php,
+               reconciliarPersonasDelGrupo) apenas se sepan los nombres
+               reales, sin perder el lugar ni el menú ya elegido. */
+            if (existeTabla('acompanantes')) {
+                for ($i = 1; $i <= $adultos; $i++) {
+                    insertar('acompanantes', [
+                        'confirmacion_id' => $idNuevo,
+                        'nombre'          => $i === 1 ? mb_substr($nombre, 0, 150) : ('Adulto ' . $i),
+                        'tipo'            => 'adulto',
+                    ]);
+                }
+                for ($i = 1; $i <= $ninos; $i++) {
+                    insertar('acompanantes', [
+                        'confirmacion_id' => $idNuevo,
+                        'nombre'          => 'Niño ' . $i,
+                        'tipo'            => 'nino',
+                    ]);
+                }
+            }
         }
 
         /* ─── Su mesa ────────────────────────────────────────────────── */
@@ -527,6 +574,24 @@ function numeroDeCelda($celda) {
  * @param mixed $celda
  * @return bool
  */
+/**
+ * Dice si una celda de RSVP declara explícitamente que NO viene.
+ *
+ * Distinto de interpretarRsvp(): esa función es conservadora (en duda,
+ * asume que no confirmó) porque sirve para saber si YA CONTESTÓ. Esta
+ * sirve para lo contrario -si hay un "no" de verdad escrito, nunca para
+ * una celda vacía- porque una lista precargada arranca asumiendo que sí
+ * vienen (ver el comentario grande donde se usa, en accion=invitados).
+ *
+ * @param mixed $celda
+ * @return bool
+ */
+function esRsvpExplicitoNo($celda) {
+    $texto = sinAcentos((string) $celda);
+    if ($texto === '') return false;
+    return (bool) preg_match('/^(n|no|no asiste|cancel|rechaz)/', $texto);
+}
+
 function interpretarRsvp($celda) {
     $texto = sinAcentos((string) $celda);
     if ($texto === '') return false;

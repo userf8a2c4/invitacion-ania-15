@@ -300,8 +300,13 @@ try {
         // cualquier grupo real.
         $personasRecibidas = is_array($datos['personas'] ?? null) ? array_slice($datos['personas'], 0, 50) : [];
         if ($personasRecibidas) {
+            // ⚡ (2026-08-28) `alergias` -a pedido explícito del usuario,
+            // reemplaza la caja de alergias única del grupo cuando hay
+            // personas nombradas: cada quien lleva la suya, así se sabe
+            // por nombre quién es alérgico a qué (acompanantes.alergias
+            // ya existía en el esquema, no hizo falta agregar columna).
             $stmtPersona = $pdo->prepare(
-                'UPDATE acompanantes SET menu = :menu
+                'UPDATE acompanantes SET menu = :menu, alergias = :alergias
                  WHERE id = :id AND confirmacion_id = :conf'
             );
             foreach ($personasRecibidas as $persona) {
@@ -309,10 +314,14 @@ try {
                 if ($idPersona <= 0) continue;
                 $marcado = !empty($persona['marcado']);
                 $menuElegido = $marcado ? limpiar($persona['menu'] ?? 'Estándar') : '';
+                $alergiaElegida = $marcado
+                    ? mb_substr(limpiar($persona['alergia'] ?? ''), 0, 200)
+                    : '';
                 $stmtPersona->execute([
-                    ':menu' => $menuElegido,
-                    ':id'   => $idPersona,
-                    ':conf' => (int) $invitacion['confirmacion_id'],
+                    ':menu'     => $menuElegido,
+                    ':alergias' => $alergiaElegida,
+                    ':id'       => $idPersona,
+                    ':conf'     => (int) $invitacion['confirmacion_id'],
                 ]);
             }
         }

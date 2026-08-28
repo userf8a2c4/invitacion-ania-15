@@ -266,7 +266,7 @@ case 'listar':
         $fila['link'] = linkDeInvitacion($fila['token']);
         $fila['personas'] = ($hayAcompanantes && $fila['confirmacion_id'])
             ? consultarTodo(
-                'SELECT id, nombre, tipo, telefono, correo, menu
+                'SELECT id, nombre, tipo, telefono, correo, menu, alergias
                  FROM acompanantes WHERE confirmacion_id = :c ORDER BY id ASC',
                 [':c' => $fila['confirmacion_id']])
             : [];
