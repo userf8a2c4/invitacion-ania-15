@@ -279,11 +279,12 @@ const CONFIGURACION = {
      cosas sobre PERSONAS. Antes había que saltar de pestaña para ver
      quién confirmó y dónde sentarlo. */
   seccionesDeGente: [
-    ['invitados', 'Invitados',          'Quién confirmó, cuántos vienen y qué comen'],
-    ['mesas',     'Mesas',              'Quién se sienta dónde'],
-    ['regalos',   'Regalos',            'Qué llegó y a quién falta agradecerle'],
-    ['foraneos',  'Foráneos',           'Los que vienen de afuera: hospedaje y llegada'],
-    ['contactos', 'Contactos','Todos los teléfonos del evento en un solo lugar'],
+    ['invitados',    'Invitados',       'Quién confirmó, cuántos vienen y qué comen'],
+    ['invitaciones', 'Invitaciones',    'Precargar la lista, mandar el link y ver quién respondió'],
+    ['mesas',        'Mesas',           'Quién se sienta dónde'],
+    ['regalos',      'Regalos',         'Qué llegó y a quién falta agradecerle'],
+    ['foraneos',     'Foráneos',        'Los que vienen de afuera: hospedaje y llegada'],
+    ['contactos',    'Contactos','Todos los teléfonos del evento en un solo lugar'],
   ],
 
 

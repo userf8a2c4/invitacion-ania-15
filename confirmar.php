@@ -116,6 +116,64 @@ try {
     error_log('[Ania XV] No se pudo aplicar el freno de confirmar.php: ' . $e->getMessage());
 }
 
+/* ─── INVITACIÓN PERSONALIZADA (?i=TOKEN) ─────────────────────────────
+   Sin token, todo esto queda en null y el resto del archivo se comporta
+   EXACTAMENTE igual que siempre (INSERT nuevo, sin tope de lugares).
+   Con token: en vez de crear una fila nueva, se ACTUALIZA la que ya
+   existe (creada desde el panel, admin/api/invitaciones.php) — así
+   confirmar dos veces con el mismo link corrige la misma fila en vez de
+   duplicarla, y el número de lugares queda limitado a lo que se
+   reservó. Reusa la conexión $pdoFreno de arriba: si esa conexión no se
+   pudo abrir (freno caído), esto tampoco puede resolverse, y el envío
+   sigue el camino de "sin token" — nunca se cae la confirmación entera
+   por esto. */
+$invitacion = null;
+$tokenCrudo = preg_replace('/[^a-f0-9]/', '', strtolower((string) ($datos['token'] ?? '')));
+
+if ($tokenCrudo !== '' && isset($pdoFreno)) {
+    try {
+        $stmtInv = $pdoFreno->prepare('SELECT * FROM invitaciones WHERE token = :t LIMIT 1');
+        $stmtInv->execute([':t' => $tokenCrudo]);
+        $invitacion = $stmtInv->fetch(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log('[Ania XV] No se pudo resolver el token de invitación: ' . $e->getMessage());
+    }
+
+    if ($invitacion) {
+        // Tope de lugares: nunca confiar en lo que mande el navegador.
+        if ($total > (int) $invitacion['pases']) {
+            http_response_code(422);
+            echo json_encode(['ok' => false, 'error' =>
+                'Son más personas de las que reservamos para ustedes (' .
+                (int) $invitacion['pases'] . ' lugares).']);
+            exit;
+        }
+
+        // Fecha límite: se cierra la EDICIÓN, no la primera respuesta.
+        // Una invitación que nunca respondió puede hacerlo tarde —es
+        // mejor saber que no saber—; lo que no se permite es cambiar
+        // una respuesta ya dada después de la fecha.
+        $yaRespondioAntes = in_array($invitacion['estado'], ['confirmada', 'declinada'], true);
+        if ($yaRespondioAntes) {
+            try {
+                $filaFecha = $pdoFreno->query(
+                    "SELECT valor FROM ajustes WHERE clave = 'fecha_limite_confirmar'"
+                )->fetch(PDO::FETCH_ASSOC);
+                $fechaLimite = (string) ($filaFecha['valor'] ?? '');
+                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaLimite)) $fechaLimite = '2026-10-01';
+            } catch (PDOException $e) {
+                $fechaLimite = '2026-10-01';
+            }
+            if (date('Y-m-d') > $fechaLimite) {
+                http_response_code(423);
+                echo json_encode(['ok' => false, 'error' =>
+                    'Las confirmaciones ya se cerraron. Si necesitas hacer un cambio, escríbenos.']);
+                exit;
+            }
+        }
+    }
+}
+
 /* ─── EL CÓDIGO QR QUE YA DIBUJÓ LA WEB ──────────────────────────────── */
 /* La invitación genera el QR del pase en el navegador y nos lo manda
    como imagen. Se incrusta tal cual en el correo, así el QR del mail y
@@ -148,16 +206,82 @@ $errorBD = null;
 try {
     $pdo = new PDO("mysql:host=$DB_HOST;dbname=$DB_NAME;charset=utf8mb4", $DB_USER, $DB_PASSWORD,
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-    $pdo->prepare("INSERT INTO confirmaciones
-        (nombre,correo,asiste,adultos,ninos,total,menus,resumen_menus,alergias,notas,codigo)
-        VALUES(:nombre,:correo,:asiste,:adultos,:ninos,:total,:menus,:resumen_menus,:alergias,:notas,:codigo)")
-    ->execute([
-        ':nombre'=>$nombre, ':correo'=>$correo, ':asiste'=>$asiste?1:0,
-        ':adultos'=>$adultos, ':ninos'=>$ninos, ':total'=>$total,
-        ':menus'=>$menus, ':resumen_menus'=>$resumenMenus,
-        ':alergias'=>$alergias, ':notas'=>$notas, ':codigo'=>$codigo,
-    ]);
-    error_log('[Ania XV] ✅ BD: fila guardada para ' . $nombre);
+
+    /* ⚡ CON TOKEN, SE ACTUALIZA LA FILA QUE YA EXISTE, NUNCA SE CREA
+       OTRA (2026-08-27). Sin esto, confirmar dos veces con el mismo
+       link personalizado duplicaría al grupo entero en `confirmaciones`
+       — exactamente el bug que el token existe para evitar. El `codigo`
+       de esa fila NO se toca: ya lo generó el servidor al crear la
+       invitación (admin/api/invitaciones.php), y es el mismo que ya
+       pudo haberse mandado en un correo o un QR antes de este cambio.
+       $codigo se reescribe acá con ese valor real, para que los
+       correos de más abajo (que ya usan esa variable) muestren el
+       código verdadero y no el que inventó el navegador. */
+    if ($invitacion) {
+        $pdo->prepare("UPDATE confirmaciones
+            SET nombre=:nombre, correo=:correo, asiste=:asiste, adultos=:adultos,
+                ninos=:ninos, total=:total, menus=:menus, resumen_menus=:resumen_menus,
+                alergias=:alergias, notas=:notas
+            WHERE id=:id")
+        ->execute([
+            ':nombre'=>$nombre, ':correo'=>$correo, ':asiste'=>$asiste?1:0,
+            ':adultos'=>$adultos, ':ninos'=>$ninos, ':total'=>$total,
+            ':menus'=>$menus, ':resumen_menus'=>$resumenMenus,
+            ':alergias'=>$alergias, ':notas'=>$notas,
+            ':id'=>(int) $invitacion['confirmacion_id'],
+        ]);
+
+        $filaActual = $pdo->prepare('SELECT codigo FROM confirmaciones WHERE id = :id');
+        $filaActual->execute([':id' => (int) $invitacion['confirmacion_id']]);
+        $codigoReal = $filaActual->fetch(PDO::FETCH_ASSOC)['codigo'] ?? '';
+        if ($codigoReal !== '') $codigo = $codigoReal;
+
+        $pdo->prepare("UPDATE invitaciones SET estado=:estado, respondida_en=NOW() WHERE id=:id")
+            ->execute([
+                ':estado' => $asiste ? 'confirmada' : 'declinada',
+                ':id'     => (int) $invitacion['id'],
+            ]);
+
+        /* ─── PERSONAS DEL GRUPO: MENÚ POR PERSONA, NUNCA BORRAR/REINSERTAR ──
+           Mismo cuidado que admin/api/invitaciones.php: acompanantes.id
+           es la llave de la que cuelgan sus reglas de mesa y su lugar ya
+           asignado (ON DELETE CASCADE) — acá solo se ACTUALIZA el menú
+           de las que ya existían, nunca se borra ni se crea ninguna.
+           El `AND confirmacion_id = :conf` es la comprobación de que ese
+           id de verdad pertenece a ESTE grupo: sin eso, alguien podría
+           mandar el id de una persona de otra familia y pisarle el menú. */
+        $personasRecibidas = is_array($datos['personas'] ?? null) ? $datos['personas'] : [];
+        if ($personasRecibidas) {
+            $stmtPersona = $pdo->prepare(
+                'UPDATE acompanantes SET menu = :menu
+                 WHERE id = :id AND confirmacion_id = :conf'
+            );
+            foreach ($personasRecibidas as $persona) {
+                $idPersona = (int) ($persona['id'] ?? 0);
+                if ($idPersona <= 0) continue;
+                $marcado = !empty($persona['marcado']);
+                $menuElegido = $marcado ? limpiar($persona['menu'] ?? 'Estándar') : '';
+                $stmtPersona->execute([
+                    ':menu' => $menuElegido,
+                    ':id'   => $idPersona,
+                    ':conf' => (int) $invitacion['confirmacion_id'],
+                ]);
+            }
+        }
+
+        error_log('[Ania XV] ✅ BD: invitación ' . $invitacion['token'] . ' actualizada para ' . $nombre);
+    } else {
+        $pdo->prepare("INSERT INTO confirmaciones
+            (nombre,correo,asiste,adultos,ninos,total,menus,resumen_menus,alergias,notas,codigo)
+            VALUES(:nombre,:correo,:asiste,:adultos,:ninos,:total,:menus,:resumen_menus,:alergias,:notas,:codigo)")
+        ->execute([
+            ':nombre'=>$nombre, ':correo'=>$correo, ':asiste'=>$asiste?1:0,
+            ':adultos'=>$adultos, ':ninos'=>$ninos, ':total'=>$total,
+            ':menus'=>$menus, ':resumen_menus'=>$resumenMenus,
+            ':alergias'=>$alergias, ':notas'=>$notas, ':codigo'=>$codigo,
+        ]);
+        error_log('[Ania XV] ✅ BD: fila guardada para ' . $nombre);
+    }
 
     /* ─── SENTARLO SOLO EN UNA MESA ──────────────────────────────────
        Si el panel tiene prendido el acomodo automático, se le busca
@@ -172,7 +296,10 @@ try {
        acomoda después desde el panel, que no es un problema. */
     if ($asiste) {
         try {
-            $idNuevo = (int) $pdo->lastInsertId();
+            // Con token: el id YA existe (fila actualizada, no creada) —
+            // lastInsertId() daría 0 en una UPDATE. Sin token, sigue
+            // siendo el id recién insertado, como siempre.
+            $idNuevo = $invitacion ? (int) $invitacion['confirmacion_id'] : (int) $pdo->lastInsertId();
 
             $ajuste = $pdo->query(
                 "SELECT valor FROM ajustes WHERE clave = 'auto_al_confirmar'"

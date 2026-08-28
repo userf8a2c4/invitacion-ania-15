@@ -1048,3 +1048,51 @@ CREATE TABLE IF NOT EXISTS eventos_uso (
   CONSTRAINT fk_eventos_uso
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Invitaciones nominales (modelo sustractivo).
+--
+-- POR QUÉ ESTA TABLA EXISTE APARTE DE `confirmaciones`
+-- `confirmaciones` se creó a mano fuera de este archivo y su esquema
+-- exacto es desconocido (ver la nota del encabezado): todo el panel la
+-- lee con columnasDe() en runtime y nadie la altera. Esta tabla guarda
+-- lo que hacía falta para invitar de verdad —identidad, teléfono, cupo
+-- y estado del envío— sin tocar ni una columna de aquella.
+--
+-- POR QUÉ NO HAY FOREIGN KEY A `confirmaciones`
+-- Mismo motivo que en `asignacion_mesas`: no se le puede poner una FK a
+-- una tabla cuyo motor y tipos no controlamos. El vínculo es lógico.
+--
+-- EL TOKEN ES LA IDENTIDAD QUE NUNCA HUBO
+-- Hasta ahora el "código" del pase lo inventaba el navegador del propio
+-- invitado (codigo/12-pase-de-acceso.js) y el servidor lo aceptaba sin
+-- mirar. Este token lo genera el servidor con random_bytes: no se puede
+-- adivinar, y es lo que hace posible un link personal por familia.
+CREATE TABLE IF NOT EXISTS invitaciones (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  token           VARCHAR(32) NOT NULL,
+  -- Cómo se le habla a este grupo: "Familia Zelaya", "Ana y Miguel".
+  nombre          VARCHAR(150) NOT NULL,
+  telefono        VARCHAR(40) NOT NULL DEFAULT '',
+  correo          VARCHAR(190) NOT NULL DEFAULT '',
+  -- Cuántos lugares se le reservan. Es el tope que el invitado puede
+  -- confirmar: los "boletos limitados" del pedido original.
+  pases           INT NOT NULL DEFAULT 1,
+  -- Reusa la etiqueta que el bot de mesas YA usa para sentar juntos.
+  grupo_id        INT DEFAULT NULL,
+  -- La fila de `confirmaciones` que representa a este grupo. Se crea
+  -- junto con la invitación (con asiste=1) para que el bot de mesas
+  -- pueda acomodar desde antes de que nadie conteste.
+  confirmacion_id INT DEFAULT NULL,
+  -- La realidad del envío, separada a propósito de `asiste` (que es el
+  -- supuesto para sentar). Ver la nota grande del plan.
+  estado          ENUM('sin_enviar','enviada','confirmada','declinada')
+                  NOT NULL DEFAULT 'sin_enviar',
+  enviada_en      DATETIME DEFAULT NULL,
+  respondida_en   DATETIME DEFAULT NULL,
+  notas           TEXT,
+  creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY token_unico (token),
+  KEY por_estado (estado),
+  KEY por_confirmacion (confirmacion_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

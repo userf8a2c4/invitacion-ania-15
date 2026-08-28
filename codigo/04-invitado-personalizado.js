@@ -50,6 +50,18 @@
  */
 let NOMBRE_DEL_INVITADO = null;
 
+/**
+ * Los datos de la invitación personalizada (?i=TOKEN), o null si nadie
+ * usó un link de ese tipo. Los llena aplicarInvitacionPersonalizada()
+ * de forma asíncrona (invitacion.php es un fetch, no puede estar listo
+ * en el mismo instante en que corre este archivo) — codigo/11-formulario-
+ * confirmacion.js escucha el evento 'invitacion-lista' en vez de leer
+ * esta variable directamente, para no depender de una carrera de
+ * tiempos entre los dos archivos.
+ * @type {Object|null}
+ */
+let INVITACION = null;
+
 
 (function rellenaLaPagina() {
 
@@ -143,6 +155,41 @@ let NOMBRE_DEL_INVITADO = null;
   const campoNombre = buscar('#campo-nombre');
   if (campoNombre && NOMBRE_DEL_INVITADO && campoNombre.value === '') {
     campoNombre.value = NOMBRE_DEL_INVITADO;
+  }
+
+  /* ─── 3b. INVITACIÓN PERSONALIZADA (?i=TOKEN) ──────────────────────
+     A diferencia de ?invitado= (arriba), esto SÍ consulta el servidor:
+     el token identifica un grupo real precargado desde el panel, con
+     su cupo de lugares y —si se cargaron— los nombres de quienes lo
+     integran. Ver admin/api/invitaciones.php e invitacion.php (raíz).
+
+     Es aditivo: si no hay ?i= en el enlace, nada de este bloque corre y
+     la página se comporta exactamente igual que siempre. */
+  const token = parametrosDelEnlace.get('i');
+
+  if (token && /^[a-f0-9]{8,}$/i.test(token)) {
+    fetch('invitacion.php?accion=ver&token=' + encodeURIComponent(token))
+      .then(respuesta => respuesta.json())
+      .then(datos => {
+        if (!datos || datos.ok !== true) return;
+
+        INVITACION = datos;
+
+        // El saludo del sobre se corrige con el nombre real del grupo,
+        // pisando el genérico (o el de ?invitado=) que ya se puso arriba.
+        if (saludoDelSobre) {
+          saludoDelSobre.innerHTML = 'Para ' + limpiarTexto(datos.nombre);
+        }
+
+        // 11-formulario-confirmacion.js escucha esto para reemplazar el
+        // formulario en blanco por la lista de personas del grupo.
+        document.dispatchEvent(new CustomEvent('invitacion-lista', { detail: datos }));
+      })
+      .catch(error => {
+        // Sin conexión o el token no existe: la página sigue funcionando
+        // como el formulario abierto de siempre, no se rompe nada.
+        console.warn('No se pudo cargar la invitación personalizada:', error);
+      });
   }
 
 
