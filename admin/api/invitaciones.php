@@ -46,8 +46,15 @@ require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
 
-$yo     = exigirAdministrador();
+/* Igual que confirmaciones.php/mesas.php: ver es de cualquier cuenta con
+   permiso de 'invitados', escribir es de quien pueda editar esa
+   sección. exigirAdministrador() queda reservado solo para borrar —
+   antes estaba puesta acá arriba para TODO, así que una cuenta no-admin
+   (rol 'entrada') recibía 403 al abrir la pestaña, aunque la pestaña se
+   le mostraba igual (01-configuracion.js no filtra por rol). */
+$yo     = exigirSesion();
 $accion = (string) ($_GET['accion'] ?? 'listar');
+exigirPermiso($yo, 'invitados', ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' ? 'ver' : 'editar');
 
 if (!existeTabla('invitaciones')) {
     responderMal(
@@ -166,7 +173,12 @@ function reconciliarPersonasDelGrupo($confirmacionId, $personas) {
         'SELECT id FROM acompanantes WHERE confirmacion_id = :c',
         [':c' => $confirmacionId]
     );
-    $idsActuales = array_column($actuales, 'id');
+    // array_map('intval', ...) es a propósito: según el driver, PDO puede
+    // devolver los ids como string. Con in_array(..., true) (estricto),
+    // un id string nunca matchea contra el int que arma este archivo, y
+    // TODAS las personas se tratarían como nuevas — reproduciendo el
+    // mismo borrado en cascada que este bloque existe para evitar.
+    $idsActuales = array_map('intval', array_column($actuales, 'id'));
     $idsQueLlegan = [];
 
     foreach ($personas as $persona) {
@@ -209,28 +221,55 @@ switch ($accion) {
 case 'listar':
     exigirMetodo('GET');
 
-    $columnasConf = columnasDe('confirmaciones');
+    /* ⚡ NADA DE `confirmaciones`/`grupos_invitados` SE ASUME (2026-08-28).
+       Todo este archivo insiste en no confiar en el esquema de
+       `confirmaciones` — este SELECT era la excepción: escribía
+       `c.id AS confirmacion_id_real` a mano y hacía LEFT JOIN a las dos
+       tablas sin comprobar que existieran. Si cualquiera de las dos
+       faltaba (o no tenía `id`), la consulta entera reventaba con un
+       error de SQL crudo. Ahora el SELECT se arma en partes: cada JOIN
+       entra solo si la tabla existe. */
+    $hayConfirmaciones = existeTabla('confirmaciones');
+    $hayGrupos         = existeTabla('grupos_invitados');
+
+    $columnasConf = $hayConfirmaciones ? columnasDe('confirmaciones') : [];
+    $tieneId      = in_array('id', $columnasConf, true);
     $tieneAsiste  = in_array('asiste', $columnasConf, true);
     $tieneAdultos = in_array('adultos', $columnasConf, true);
     $tieneNinos   = in_array('ninos', $columnasConf, true);
     $tieneCodigo  = in_array('codigo', $columnasConf, true);
 
-    $selectConf = 'c.id AS confirmacion_id_real'
-        . ($tieneAsiste  ? ', c.asiste'  : ', NULL AS asiste')
-        . ($tieneAdultos ? ', c.adultos' : ', NULL AS adultos')
-        . ($tieneNinos   ? ', c.ninos'   : ', NULL AS ninos')
-        . ($tieneCodigo  ? ', c.codigo'  : ', NULL AS codigo');
+    $selectConf = ($hayConfirmaciones && $tieneId ? 'c.id AS confirmacion_id_real' : 'NULL AS confirmacion_id_real')
+        . ($hayConfirmaciones && $tieneAsiste  ? ', c.asiste'  : ', NULL AS asiste')
+        . ($hayConfirmaciones && $tieneAdultos ? ', c.adultos' : ', NULL AS adultos')
+        . ($hayConfirmaciones && $tieneNinos   ? ', c.ninos'   : ', NULL AS ninos')
+        . ($hayConfirmaciones && $tieneCodigo  ? ', c.codigo'  : ', NULL AS codigo');
+
+    $joinConf   = $hayConfirmaciones ? 'LEFT JOIN confirmaciones c ON c.id = i.confirmacion_id' : '';
+    $joinGrupos = $hayGrupos ? 'LEFT JOIN grupos_invitados g ON g.id = i.grupo_id' : '';
+    $selectGrupo = $hayGrupos ? ', g.nombre AS grupo_nombre' : ', NULL AS grupo_nombre';
 
     $filas = consultarTodo(
-        "SELECT i.*, $selectConf, g.nombre AS grupo_nombre
+        "SELECT i.*, $selectConf $selectGrupo
          FROM invitaciones i
-         LEFT JOIN confirmaciones c ON c.id = i.confirmacion_id
-         LEFT JOIN grupos_invitados g ON g.id = i.grupo_id
+         $joinConf
+         $joinGrupos
          ORDER BY i.creado_en DESC"
     );
 
+    // Las personas de cada grupo, para que el formulario de edición las
+    // pueda mostrar CON SU id — sin el id, reconciliarPersonasDelGrupo()
+    // las tomaría por nuevas y borraría las viejas en cascada (se
+    // llevaría con ellas sus reglas de mesa y su lugar ya asignado).
+    $hayAcompanantes = existeTabla('acompanantes');
     foreach ($filas as &$fila) {
         $fila['link'] = linkDeInvitacion($fila['token']);
+        $fila['personas'] = ($hayAcompanantes && $fila['confirmacion_id'])
+            ? consultarTodo(
+                'SELECT id, nombre, tipo, telefono, correo, menu
+                 FROM acompanantes WHERE confirmacion_id = :c ORDER BY id ASC',
+                [':c' => $fila['confirmacion_id']])
+            : [];
     }
     unset($fila);
 
@@ -272,6 +311,9 @@ case 'guardar':
     $personas = is_array($datos['personas'] ?? null) ? $datos['personas'] : [];
 
     if ($nombre === '') responderMal('Falta el nombre del grupo.', 400);
+    if ($correo !== '' && !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+        responderMal('Ese correo no parece válido.', 400);
+    }
 
     // Si hay personas nombradas, los pases son la cantidad de nombres
     // (con nombre no vacío) — no se piden por separado. Si no hay
@@ -379,7 +421,12 @@ case 'guardar':
 case 'marcar_enviada':
     exigirMetodo('POST');
     $datos = cuerpoJson();
-    $id    = campoEntero($datos, 'id', 1);
+    // ⚡ El 3er parámetro de campoEntero() es el MÍNIMO, no un respaldo
+    // (2026-08-28) — con 1 acá, un POST sin `id` (o id:0) daba 0, se
+    // elevaba al mínimo 1, y esta acción actuaba sobre la invitación #1
+    // en vez de fallar. Ahora se pide 0 y se rechaza a mano si no vino.
+    $id = campoEntero($datos, 'id', 0);
+    if ($id <= 0) responderMal('Falta decir qué invitación.', 400);
 
     $inv = consultarUno('SELECT * FROM invitaciones WHERE id = :i', [':i' => $id]);
     if (!$inv) responderMal('Esa invitación no existe.', 404);
@@ -409,13 +456,17 @@ case 'enviar_correo':
 
     $mandados = 0;
     $sinCorreo = 0;
+    $fallidos = 0;
 
     foreach ($ids as $idCrudo) {
         $id = (int) $idCrudo;
         if ($id <= 0) continue;
 
         $inv = consultarUno('SELECT * FROM invitaciones WHERE id = :i', [':i' => $id]);
-        if (!$inv || $inv['correo'] === '') { $sinCorreo++; continue; }
+        // Un id que ya no existe NO es lo mismo que "sin correo" — antes
+        // se contaba igual y el número de "sin_correo" mentía.
+        if (!$inv) continue;
+        if ($inv['correo'] === '') { $sinCorreo++; continue; }
 
         $link = linkDeInvitacion($inv['token']);
         $asunto = 'Ania cumple quince años — su invitación';
@@ -442,11 +493,12 @@ case 'enviar_correo':
             ]);
             $mandados++;
         } else {
+            $fallidos++;
             error_log('[Ania XV · invitaciones] No se pudo mandar a ' . $inv['correo'] . ': ' . $resultado);
         }
     }
 
-    responderBien(['mandados' => $mandados, 'sin_correo' => $sinCorreo]);
+    responderBien(['mandados' => $mandados, 'sin_correo' => $sinCorreo, 'fallidos' => $fallidos]);
     break;
 
 
@@ -454,8 +506,13 @@ case 'enviar_correo':
 
 case 'borrar':
     exigirMetodo('POST');
+    exigirAdministrador();
     $datos = cuerpoJson();
-    $id    = campoEntero($datos, 'id', 1);
+    // Mismo motivo que en marcar_enviada: el mínimo no es un respaldo.
+    // Acá el error es más grave — borraba la invitación #1 entera, con
+    // su confirmación, sus personas y su mesa, y respondía "ok".
+    $id = campoEntero($datos, 'id', 0);
+    if ($id <= 0) responderMal('Falta decir qué invitación.', 400);
 
     $inv = consultarUno('SELECT * FROM invitaciones WHERE id = :i', [':i' => $id]);
     if (!$inv) responderMal('Esa invitación no existe.', 404);

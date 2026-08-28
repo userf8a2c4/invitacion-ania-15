@@ -139,6 +139,19 @@ if ($tokenCrudo !== '' && isset($pdoFreno)) {
         error_log('[Ania XV] No se pudo resolver el token de invitación: ' . $e->getMessage());
     }
 
+    /* ⚡ (2026-08-28) Si vino un token pero no se pudo resolver la
+       invitación —conexión del freno caída, token inválido, lo que sea—
+       el código de más abajo NO debe degradar al camino “sin token”:
+       eso terminaría creando un INSERT nuevo, duplicando el grupo y
+       saltándose el tope de lugares reservados. Mejor cortar acá con
+       un error claro que dejar pasar una confirmación sin control. */
+    if ($tokenCrudo !== '' && !$invitacion) {
+        http_response_code(503);
+        echo json_encode(['ok' => false, 'error' =>
+            'No pudimos leer tu invitación ahora. Intenta de nuevo en un momento.']);
+        exit;
+    }
+
     if ($invitacion) {
         // Tope de lugares: nunca confiar en lo que mande el navegador.
         if ($total > (int) $invitacion['pases']) {
@@ -218,18 +231,50 @@ try {
        correos de más abajo (que ya usan esa variable) muestren el
        código verdadero y no el que inventó el navegador. */
     if ($invitacion) {
-        $pdo->prepare("UPDATE confirmaciones
+        /* ⚡ (2026-08-28) confirmacion_id admite NULL en la tabla. Sin
+           esta guarda, un WHERE id=0 no afecta ninguna fila -sin lanzar
+           excepción- y el resto del archivo sigue como si hubiera
+           andado: el UPDATE de invitaciones marca "confirmada", se manda
+           el correo de éxito, el invitado ve su pase... y no quedó
+           nada guardado. Mejor cortar acá con un error real. */
+        if (empty($invitacion['confirmacion_id'])) {
+            error_log('[Ania XV] Invitación ' . $invitacion['token'] . ' sin confirmacion_id.');
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' =>
+                'No pudimos registrar tu respuesta. Escríbenos y lo hacemos a mano.']);
+            exit;
+        }
+
+        $stmtUpdateConf = $pdo->prepare("UPDATE confirmaciones
             SET nombre=:nombre, correo=:correo, asiste=:asiste, adultos=:adultos,
                 ninos=:ninos, total=:total, menus=:menus, resumen_menus=:resumen_menus,
                 alergias=:alergias, notas=:notas
-            WHERE id=:id")
-        ->execute([
+            WHERE id=:id");
+        $stmtUpdateConf->execute([
             ':nombre'=>$nombre, ':correo'=>$correo, ':asiste'=>$asiste?1:0,
             ':adultos'=>$adultos, ':ninos'=>$ninos, ':total'=>$total,
             ':menus'=>$menus, ':resumen_menus'=>$resumenMenus,
             ':alergias'=>$alergias, ':notas'=>$notas,
             ':id'=>(int) $invitacion['confirmacion_id'],
         ]);
+
+        // Mismo motivo que la guarda de arriba: si el id ya no existe de
+        // verdad en la tabla, el UPDATE no lanza excepción, solo afecta
+        // cero filas -y sin este chequeo eso pasaría inadvertido.
+        if ($stmtUpdateConf->rowCount() === 0) {
+            $existeFila = $pdo->prepare('SELECT id FROM confirmaciones WHERE id = :id');
+            $existeFila->execute([':id' => (int) $invitacion['confirmacion_id']]);
+            if (!$existeFila->fetch(PDO::FETCH_ASSOC)) {
+                error_log('[Ania XV] confirmacion_id ' . $invitacion['confirmacion_id'] . ' no existe (invitacion ' . $invitacion['token'] . ').');
+                http_response_code(500);
+                echo json_encode(['ok' => false, 'error' =>
+                    'No pudimos registrar tu respuesta. Escríbenos y lo hacemos a mano.']);
+                exit;
+            }
+            // Si la fila existe pero rowCount() dio 0, es que los valores
+            // ya eran idénticos (reenvío exacto de lo mismo) -no es un
+            // error, MySQL simplemente no reporta cambios sin cambios.
+        }
 
         $filaActual = $pdo->prepare('SELECT codigo FROM confirmaciones WHERE id = :id');
         $filaActual->execute([':id' => (int) $invitacion['confirmacion_id']]);
@@ -250,7 +295,10 @@ try {
            El `AND confirmacion_id = :conf` es la comprobación de que ese
            id de verdad pertenece a ESTE grupo: sin eso, alguien podría
            mandar el id de una persona de otra familia y pisarle el menú. */
-        $personasRecibidas = is_array($datos['personas'] ?? null) ? $datos['personas'] : [];
+        // ⚡ (2026-08-28) Sin tope, un POST con miles de entradas
+        // dispara miles de UPDATE, uno por uno. 50 sobra de sobra para
+        // cualquier grupo real.
+        $personasRecibidas = is_array($datos['personas'] ?? null) ? array_slice($datos['personas'], 0, 50) : [];
         if ($personasRecibidas) {
             $stmtPersona = $pdo->prepare(
                 'UPDATE acompanantes SET menu = :menu

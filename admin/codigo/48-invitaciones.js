@@ -203,7 +203,12 @@ function abrirDetalleDeInvitacion(inv) {
         seguro(inv.link) + '" readonly>' +
     '</div>' +
     '<div class="acciones" style="margin-top:var(--esp-2);flex-wrap:wrap">' +
-      (inv.telefono
+      /* ⚡ (2026-08-28) Antes se mostraba con cualquier `telefono` no
+         vacío, aunque no sirviera para WhatsApp (muy corto, un interno,
+         etc.) — el botón abría wa.me/?text=… sin destinatario y encima
+         se marcaba como "enviada". sirveParaWhatsApp() (02-utilidades.js)
+         es la misma comprobación que ya usa paraWhatsApp() más abajo. */
+      (sirveParaWhatsApp(inv.telefono)
         ? '<button class="boton boton--principal" id="inv-whatsapp">Mandar por WhatsApp</button>'
         : '') +
       '<button class="boton" id="inv-copiar">Copiar link</button>' +
@@ -255,6 +260,9 @@ function abrirDetalleDeInvitacion(inv) {
           ids: [inv.id],
         });
         avisar(r.mandados ? 'Correo enviado.' : 'No se pudo mandar.', !r.mandados);
+        // ⚡ (2026-08-28) Sin cerrar la hoja primero, la ficha vieja
+        // quedaba encima del fondo recién repintado por dibujarGente().
+        cerrarHoja(true);
         dibujarGente();
       } catch (error) { avisar(error.message, true); }
     });
@@ -306,16 +314,17 @@ let PERSONAS_DEL_FORMULARIO = [];
  * @param {Object} [inv]
  * @returns {Promise<void>}
  */
-async function abrirFormularioDeInvitacion(inv) {
+function abrirFormularioDeInvitacion(inv) {
   const d = inv || {};
   PERSONAS_DEL_FORMULARIO = (d.personas || []).slice();
 
-  let grupos = [];
-  try {
-    const datosDeMesas = await traer('mesas.php?accion=todo');
-    grupos = datosDeMesas.grupos || [];
-  } catch (error) { /* sin grupos, se sigue igual */ }
-
+  /* ⚡ (2026-08-28) Antes el `await traer('mesas.php?accion=todo')` corría
+     ACÁ, antes de abrirHoja(): con red lenta no pasaba nada visible en
+     pantalla por varios segundos, y un doble toque impaciente disparaba
+     dos veces esta función, cada una pisando la misma global
+     PERSONAS_DEL_FORMULARIO. Ahora la hoja se abre de inmediato (el
+     selector de grupo arranca con solo "Sin grupo") y los grupos reales
+     se cargan y se agregan al selector después, en segundo plano. */
   const cuerpo = abrirHoja(inv ? 'Editar invitación' : 'Nueva invitación',
     campoTexto({ id: 'inv-nombre', rotulo: 'Nombre del grupo', valor: d.nombre,
                  pista: 'Familia Zelaya, Ana y Miguel…' }) +
@@ -328,8 +337,9 @@ async function abrirFormularioDeInvitacion(inv) {
       rotulo: 'Grupo (para sentarlos juntos)',
       valor: d.grupo_id ? String(d.grupo_id) : '',
       textoAgregar: 'Crear grupo nuevo…',
-      opciones: [{ valor: '', texto: 'Sin grupo' }]
-        .concat(grupos.map(g => ({ valor: String(g.id), texto: g.nombre }))),
+      // Arranca solo con "Sin grupo"; los grupos reales se agregan más
+      // abajo, apenas responde mesas.php?accion=todo (ver cargarGrupos()).
+      opciones: [{ valor: '', texto: 'Sin grupo' }],
     }) +
 
     '<div class="campo">' +
@@ -347,10 +357,38 @@ async function abrirFormularioDeInvitacion(inv) {
                    valor: d.pases || 1 }) +
     '</div>' +
 
-    pieDeFormulario('Guardar', !!inv)
+    /* ⚡ (2026-08-28) `pieDeFormulario(texto, conBorrar)` pintaba un botón
+       "Borrar" acá con `!!inv`, pero nunca se le enganchó ningún listener
+       — un botón muerto. El borrado real ya vive en la ficha de detalle
+       (#inv-borrar, con su confirmación); acá siempre va `false`. */
+    pieDeFormulario('Guardar', false)
   );
 
   engancharListaAmpliable('inv-grupo', cuerpo);
+
+  // Carga los grupos reales en segundo plano y los agrega al selector,
+  // sin bloquear la apertura de la hoja. Si para cuando responde el
+  // usuario ya cerró la hoja, document.contains() lo detecta y no toca
+  // nada — cuerpo es el <section> que abrirHoja() ya sacó del DOM.
+  (async () => {
+    let grupos = [];
+    try {
+      const datosDeMesas = await traer('mesas.php?accion=todo');
+      grupos = datosDeMesas.grupos || [];
+    } catch (error) { return; /* sin grupos, se sigue igual */ }
+    if (!grupos.length || !document.contains(cuerpo)) return;
+
+    const selectorGrupo = buscar('#inv-grupo', cuerpo);
+    if (!selectorGrupo) return;
+    const opcionAgregar = selectorGrupo.querySelector('option[value="__nuevo__"]');
+    grupos.forEach(g => {
+      const opcion = document.createElement('option');
+      opcion.value = String(g.id);
+      opcion.textContent = g.nombre;
+      if (d.grupo_id && String(d.grupo_id) === String(g.id)) opcion.selected = true;
+      selectorGrupo.insertBefore(opcion, opcionAgregar);
+    });
+  })();
 
   const listaPersonas = buscar('#inv-personas', cuerpo);
   const cajaPases     = buscar('#inv-caja-pases', cuerpo);
@@ -444,6 +482,11 @@ async function abrirFormularioDeInvitacion(inv) {
       await mandar('invitaciones.php?accion=guardar', carga);
       cerrarHoja(true);
       avisar('Guardado.');
+      // ⚡ (2026-08-28) Si el filtro activo era, por ejemplo, "Confirmadas"
+      // y se crea una invitación nueva (nace "Sin enviar"), sin este
+      // reset la lista repintada la esconde y parece que no se guardó
+      // nada. Volver siempre a "Todas" tras guardar.
+      FILTRO_INVITACIONES = 'todas';
       dibujarGente();
     } catch (error) { avisar(error.message, true); }
   });

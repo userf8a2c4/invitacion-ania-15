@@ -144,26 +144,69 @@
     if (datos.personas && datos.personas.length) {
       MODO_PERSONAS_ACTIVO = true;
       PERSONAS_INVITACION = datos.personas.map(function (p) {
+        const esNino = p.tipo === 'nino';
         return {
           id: p.id,
           nombre: p.nombre,
-          tipo: p.tipo === 'nino' ? 'nino' : 'adulto',
+          tipo: esNino ? 'nino' : 'adulto',
           marcado: datos.ya_respondio ? !!p.menu : true,
-          menu: p.menu || 'Estándar',
+          menu: p.menu || (esNino ? 'Infantil' : 'Estándar'),
         };
       });
+
+      /* ⚡ (2026-08-28) Bug real, no un borde: en una invitación NUEVA
+         (todavía nadie contestó), el bloque que contiene la lista de
+         personas (id="bloque-si-asiste") solo se muestra con la clase
+         .visible, y esa clase SOLO se agregaba en el `change` de acá
+         abajo (línea ~128) — que corre nada más si `ya_respondio` es
+         true. Resultado: el invitado abría su link, veía "Hemos
+         reservado 4 lugares" y el formulario entero quedaba vacío,
+         porque la lista de nombres se dibujaba DENTRO de un contenedor
+         invisible. Con personas nombradas, la pregunta "¿confirmas tu
+         asistencia?" ya no aplica igual — el grupo YA fue invitado; lo
+         que falta decir es QUIÉNES, y eso se dice destildando casillas
+         (incluida la opción de destildarlas todas, que equivale a "no
+         viene nadie" — ver el submit). Por eso se pre-elige "Sí" y se
+         esconde el desplegable, en vez de dejarlo a mitad de camino.
+
+         ⚠️ SOLO si todavía no había respondido: si ya_respondio es true,
+         el bloque de arriba (línea ~126) ya puso el valor correcto
+         (Sí/No según lo que declinó o confirmó la vez pasada) y ya
+         disparó el `change` — pisarlo acá de nuevo con "Sí" siempre
+         perdería una respuesta negativa ya guardada. */
+      if (campoAsistencia) {
+        if (!datos.ya_respondio) {
+          campoAsistencia.value = RESPUESTA_AFIRMATIVA;
+          campoAsistencia.dispatchEvent(new Event('change'));
+        }
+        const cajaAsistencia = campoAsistencia.closest('.campo');
+        if (cajaAsistencia) cajaAsistencia.style.display = 'none';
+      }
 
       if (cajaCantidad) cajaCantidad.style.display = 'none';
       if (bloqueMenuInfantil) bloqueMenuInfantil.classList.remove('visible');
 
       dibujarChecklistDePersonas();
     } else {
-      if (campoAdultos) campoAdultos.setAttribute('max', String(datos.pases));
-      if (campoNinos) campoNinos.setAttribute('max', String(datos.pases));
+      // ⚡ (2026-08-28) Antes cada campo tenía `max = pases` por
+      // separado: con 4 lugares, el HTML dejaba tipear 4 adultos Y 4
+      // niños (8 en total) y recién el servidor lo rechazaba con un
+      // 422 — un rebote evitable. Ahora cada campo recalcula su propio
+      // tope descontando lo que ya se puso en el otro.
+      const recalcularTopes = function () {
+        const adultosPuestos = campoAdultos ? (parseInt(campoAdultos.value, 10) || 0) : 0;
+        const ninosPuestos   = campoNinos   ? (parseInt(campoNinos.value, 10) || 0)   : 0;
+        if (campoAdultos) campoAdultos.setAttribute('max', String(Math.max(1, datos.pases - ninosPuestos)));
+        if (campoNinos)   campoNinos.setAttribute('max', String(Math.max(0, datos.pases - adultosPuestos)));
+      };
+      recalcularTopes();
+      if (campoAdultos) campoAdultos.addEventListener('input', recalcularTopes);
+      if (campoNinos)   campoNinos.addEventListener('input', recalcularTopes);
 
       if (datos.ya_respondio) {
         if (campoAdultos) campoAdultos.value = String(datos.adultos || 1);
         if (campoNinos) campoNinos.value = String(datos.ninos || 0);
+        recalcularTopes();
         actualizarFilasDeAdultos();
         actualizarFilasDeNinos();
       }
@@ -190,12 +233,21 @@
     }
 
     contenedorMenusAdultos.innerHTML = PERSONAS_INVITACION.map(function (persona, indice) {
-      const opcionesEnHtml = MENUS_DE_ADULTO.map(function (menu) {
-        return '<label class="opcion-menu opcion-menu--unica">' +
-          '<input type="radio" name="persona-menu-' + indice + '" value="' + menu.valor + '"' +
-          (menu.valor === persona.menu ? ' checked' : '') + '>' +
-          '<span>' + menu.etiqueta + '</span></label>';
-      }).join('');
+      // A los niños no se les ofrece elegir menú — el formulario abierto
+      // de siempre tampoco lo hace, todos llevan el mismo infantil (ver
+      // "Menú de los niños" en index.html). Antes de esto se les
+      // mostraban los mismos radios de adulto, y si ya tenían guardado
+      // 'Infantil' ningún radio matcheaba (esa etiqueta no está en
+      // MENUS_DE_ADULTO) — la fila se veía sin nada tildado, mintiendo
+      // sobre lo que se iba a guardar al enviar.
+      const opcionesEnHtml = persona.tipo === 'nino'
+        ? '<span class="fila-persona__nino">Menú infantil</span>'
+        : MENUS_DE_ADULTO.map(function (menu) {
+            return '<label class="opcion-menu opcion-menu--unica">' +
+              '<input type="radio" name="persona-menu-' + indice + '" value="' + menu.valor + '"' +
+              (menu.valor === persona.menu ? ' checked' : '') + '>' +
+              '<span>' + menu.etiqueta + '</span></label>';
+          }).join('');
 
       return '<div class="fila-persona" data-persona-indice="' + indice + '">' +
         '<label class="fila-persona__nombre" style="display:flex;align-items:center;gap:8px">' +

@@ -1096,3 +1096,51 @@ CREATE TABLE IF NOT EXISTS invitaciones (
   KEY por_estado (estado),
   KEY por_confirmacion (confirmacion_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Los invitados y su respuesta. UNA FILA = UN GRUPO (una familia, una
+-- pareja, alguien solo), no una persona: `adultos` y `ninos` dicen
+-- cuántos son. Los nombres de cada integrante, cuando se conocen, van
+-- en `acompanantes`.
+--
+-- ⚠️ POR QUÉ ESTE CREATE TABLE APARECIÓ RECIÉN AHORA (2026-08-28)
+-- Esta tabla se había creado a mano en producción antes de que
+-- existiera el panel, y este archivo la daba por hecha ("no se toca
+-- acá", ver el encabezado). Eso funcionó mientras solo existió esa
+-- base. Al montar el entorno de pruebas (PBE) desde cero, la tabla
+-- nunca se creó y el panel entero quedó roto: Invitados, Invitaciones,
+-- Mesas, Evento, Contactos, el formulario público y mi-pase.php
+-- dependen de ella.
+--
+-- El IF NOT EXISTS es lo que hace esto seguro: en producción, donde la
+-- tabla ya está con su esquema heredado, esta instrucción no hace
+-- absolutamente nada. Solo crea la tabla donde falta.
+--
+-- Las columnas salen de lo que el código realmente usa, no de una
+-- suposición: el INSERT de confirmar.php (raíz) fija las 11 primeras,
+-- y `fecha_hora` está comprobada en phpMyAdmin (ver el comentario de
+-- $COL_FECHA en admin/api/confirmaciones.php).
+CREATE TABLE IF NOT EXISTS confirmaciones (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  nombre         VARCHAR(150) NOT NULL,
+  correo         VARCHAR(190) NOT NULL DEFAULT '',
+  asiste         TINYINT(1) NOT NULL DEFAULT 0,
+  adultos        INT NOT NULL DEFAULT 0,
+  ninos          INT NOT NULL DEFAULT 0,
+  total          INT NOT NULL DEFAULT 0,
+  -- Detalle por persona, texto plano: "Adulto 1: Estándar | Niño 1: Infantil".
+  menus          TEXT,
+  -- Resumen corto: "2 estándar · 1 infantil". mi-pase.php lo limita a 300.
+  resumen_menus  VARCHAR(300) NOT NULL DEFAULT '',
+  alergias       VARCHAR(500) NOT NULL DEFAULT '',
+  notas          TEXT,
+  -- El código del pase (QR y entrada). NO lleva UNIQUE a propósito: el
+  -- importador y el alta manual crean filas sin código (cadena vacía), y
+  -- varias cadenas vacías chocarían contra un UNIQUE. La unicidad la
+  -- garantiza quien lo genera (admin/api/invitaciones.php reintenta
+  -- hasta que no se repita).
+  codigo         VARCHAR(32) NOT NULL DEFAULT '',
+  fecha_hora     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_codigo (codigo),
+  KEY por_asiste (asiste)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
