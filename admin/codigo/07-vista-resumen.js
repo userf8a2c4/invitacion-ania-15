@@ -290,6 +290,10 @@ function bloqueInvitados(invitados) {
   return '' +
     '<div class="rejilla-datos">' +
       tarjetaDato(invitados.personas, 'Personas') +
+      // ⚡ (2026-08-30) Cupo sustractivo real: "Libres" resta contra
+      // SUM(mesas.capacidad) -140 hoy, pero calculado, no pisado a
+      // mano-, no contra cantidad de invitaciones ni de filas RSVP.
+      tarjetaDato(invitados.libres, 'Libres') +
       tarjetaDato(invitados.si_asisten, 'Confirman') +
       tarjetaDato(invitados.no_asisten, 'No pueden') +
       tarjetaDato(invitados.adultos, 'Adultos') +

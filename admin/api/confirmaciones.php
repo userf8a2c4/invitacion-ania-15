@@ -245,7 +245,12 @@ case 'editar':
     anotarEnBitacora($yo, 'editó una confirmación', 'confirmaciones', $id,
                      (string) ($antes['nombre'] ?? ''));
 
-    responderBien(['mensaje' => 'Confirmación actualizada.']);
+    $excesoDeCupo = calcularExcesoDeCupo();
+    responderBien([
+        'mensaje'   => 'Confirmación actualizada.',
+        'se_excede' => $excesoDeCupo['excede'],
+        'aviso'     => $excesoDeCupo['aviso'],
+    ]);
     break;
 
 
@@ -270,7 +275,12 @@ case 'crear':
     anotarEnBitacora($yo, 'dio de alta a un invitado', 'confirmaciones', $id,
                      (string) ($cambios['nombre'] ?? ''));
 
-    responderBien(['id' => $id], 201);
+    $excesoDeCupo = calcularExcesoDeCupo();
+    responderBien([
+        'id'        => $id,
+        'se_excede' => $excesoDeCupo['excede'],
+        'aviso'     => $excesoDeCupo['aviso'],
+    ], 201);
     break;
 
 
@@ -348,6 +358,33 @@ default:
 /**
  * Toma los campos del invitado que vinieron, y solo los que existen.
  *
+ * ⚡ (2026-08-30) Cupo sustractivo: nunca bloquea (alta/edición a mano
+ * la ve Lucila antes de guardar, puede haber sobre-reserva intencional),
+ * solo informa. La capacidad sale de SUM(mesas.capacidad) -misma
+ * cuenta que ya usa admin/api/estadisticas.php-, nunca de una
+ * constante 140 pisada a mano. Se llama DESPUÉS de escribir el
+ * cambio, así "personas que asisten" ya lo incluye.
+ *
+ * @return array{excede: bool, aviso: string}
+ */
+function calcularExcesoDeCupo() {
+    if (!existeTabla('mesas') || !hay('asiste') || !hay('adultos') || !hay('ninos')) {
+        return ['excede' => false, 'aviso' => ''];
+    }
+    $ocupadas = (int) (consultarUno(
+        'SELECT COALESCE(SUM(adultos+ninos),0) AS t FROM confirmaciones WHERE asiste = 1'
+    )['t'] ?? 0);
+    $capacidadTotal = (int) (consultarUno(
+        'SELECT COALESCE(SUM(capacidad),0) AS t FROM mesas'
+    )['t'] ?? 0);
+    $excede = $capacidadTotal > 0 && $ocupadas > $capacidadTotal;
+    return [
+        'excede' => $excede,
+        'aviso'  => $excede ? 'Ojo: ya se pasan de la capacidad del salón.' : '',
+    ];
+}
+
+/**
  * @param array    $datos     Lo que mandó la app.
  * @param string[] $editables Columnas que existen y se pueden tocar.
  * @param array    $antes     La fila actual, para calcular el total.

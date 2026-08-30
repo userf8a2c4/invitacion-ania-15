@@ -406,12 +406,33 @@ case 'guardar':
 
     anotarEnBitacora($yo, 'creó una invitación', 'invitaciones', $invitacionId, $nombre);
 
+    // ⚡ (2026-08-30) Cupo sustractivo: se AVISA, nunca se bloquea acá —
+    // a diferencia del formulario público sin token (confirmar.php),
+    // esta alta la ve Lucila antes de guardar y puede haber sobre-reserva
+    // intencional (gente que históricamente no llega). armarFilaDeConfirmacion()
+    // ya insertó con asiste=1 arriba, así que la cuenta de acá ABAJO ya
+    // incluye a este grupo nuevo.
+    $seExcede = false;
+    if (existeTabla('mesas')) {
+        $ocupadas = (int) (consultarUno(
+            'SELECT COALESCE(SUM(adultos+ninos),0) AS t FROM confirmaciones WHERE asiste = 1'
+        )['t'] ?? 0);
+        $capacidadTotal = (int) (consultarUno(
+            'SELECT COALESCE(SUM(capacidad),0) AS t FROM mesas'
+        )['t'] ?? 0);
+        $seExcede = $capacidadTotal > 0 && $ocupadas > $capacidadTotal;
+    }
+
     responderBien([
         'id'              => $invitacionId,
         'token'           => $token,
         'link'            => linkDeInvitacion($token),
         'confirmacion_id' => $confirmacionId,
         'creado'          => true,
+        'se_excede'       => $seExcede,
+        'aviso'           => $seExcede
+            ? 'Ojo: con este grupo ya se pasan de la capacidad del salón.'
+            : '',
     ], 201);
     break;
 

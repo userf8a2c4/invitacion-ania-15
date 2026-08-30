@@ -187,6 +187,41 @@ if ($tokenCrudo !== '' && isset($pdoFreno)) {
     }
 }
 
+/* ─── CUPO SUSTRACTIVO: TOPE DEL SALÓN, SOLO SIN TOKEN ────────────────
+   Con token, arriba ya se topeó contra `invitaciones.pases` de ESA
+   invitación puntual — no hace falta nada más. Sin token (formulario
+   abierto), nunca hubo ningún control contra la capacidad real del
+   salón: cualquiera podía mandar cuantas confirmaciones quisiera. Es
+   el único canal sin supervisión humana (una alta o edición desde el
+   panel la ve Lucila antes de guardar), así que acá el tope es dado
+   de baja, no un aviso. "Personas que asisten" es la misma cuenta que
+   ya usa admin/api/estadisticas.php; la capacidad sale de
+   SUM(mesas.capacidad) -140 hoy, calculado, nunca una constante
+   pisada a mano. Quien declina (asiste=false) nunca resta lugar, así
+   que no hace falta frenarlo acá. */
+if (!$invitacion && $asiste && isset($pdoFreno)) {
+    try {
+        $ocupadas = (int) $pdoFreno->query(
+            'SELECT COALESCE(SUM(adultos+ninos),0) FROM confirmaciones WHERE asiste = 1'
+        )->fetchColumn();
+        $capacidadTotal = (int) $pdoFreno->query(
+            'SELECT COALESCE(SUM(capacidad),0) FROM mesas'
+        )->fetchColumn();
+
+        if ($capacidadTotal > 0 && $ocupadas + $total > $capacidadTotal) {
+            http_response_code(422);
+            echo json_encode(['ok' => false, 'error' =>
+                'Ya no quedan lugares disponibles. Escríbenos directamente y lo resolvemos a mano.']);
+            exit;
+        }
+    } catch (PDOException $e) {
+        // Si este chequeo mismo falla (freno caído, tabla mesas
+        // inexistente), no puede tumbar una confirmación real: se deja
+        // pasar y se anota, mismo criterio que el freno de arriba.
+        error_log('[Ania XV] No se pudo verificar el cupo del salón: ' . $e->getMessage());
+    }
+}
+
 /* ─── EL CÓDIGO QR QUE YA DIBUJÓ LA WEB ──────────────────────────────── */
 /* La invitación genera el QR del pase en el navegador y nos lo manda
    como imagen. Se incrusta tal cual en el correo, así el QR del mail y
