@@ -717,6 +717,201 @@ function pintarMensajesNuevosDeMegaBot(hilo, mensajes) {
 }
 
 /**
+ * MegaBot offline (sin URL guardada, webhook caído, o timeout — ver
+ * chat.php?accion=enviar): resuelve EN EL TELÉFONO con lo que ya existía
+ * antes de este chat. Nunca cae a esto el servidor — lo decide esta
+ * función, cliente, cuando `enviar`/`reenviar` vuelven con
+ * `offline: true`.
+ *
+ *   1. El matcher de siempre (sección 3 de este archivo): frases de
+ *      fábrica + las que cada cuenta enseñó. Si hay una coincidencia
+ *      fuerte, se abre directo — son las mismas herramientas que el
+ *      sandwich del FAB ya ejecuta con un toque, nunca escrituras
+ *      silenciosas.
+ *   2. Si no hay frase, las sugerencias que ya arma la campana para
+ *      esta pantalla (40-agentes.js y sus agentes 41-44/46, que volvieron
+ *      a cargarse). Si una escribe, se pinta con Confirmar/Cancelar —
+ *      nunca se ejecuta a ciegas.
+ *   3. Una palabra cariñosa (46), si el texto la dispara.
+ *   4. Si nada de lo anterior tuvo algo: una línea corta. Nunca "pedile
+ *      a Carlos que configure MegaBot" como respuesta principal — el
+ *      sandwich del toque largo sigue ahí para lo que haga falta.
+ *
+ * Pinta todo en el MISMO hilo, como burbuja de MegaBot — Lucila nunca ve
+ * "agente dinero" ni "agente mesas" como quien le contesta.
+ *
+ * @param {Element} hilo
+ * @param {string} texto
+ * @returns {Promise<void>}
+ */
+async function resolverMegaBotOffline(hilo, texto) {
+  const coincidencias = buscarCoincidencias(texto);
+  const mejor = coincidencias[0];
+
+  if (mejor && mejor.puntaje >= 60) {
+    pintarMensajesNuevosDeMegaBot(hilo, [{
+      id: 'local-' + Date.now(), rol: 'megabot',
+      texto: 'Abriendo: ' + mejor.intencion.nombre + '.', estado: 'enviado', propuestas: [],
+    }]);
+    cerrarHoja(true);
+    mejor.intencion.ejecutar();
+    return;
+  }
+
+  if (typeof recogerSugerencias === 'function') {
+    try {
+      const sugerencias = await recogerSugerencias(VISTA_ACTUAL);
+      if (sugerencias.length) {
+        pintarSugerenciasEnHiloDeMegaBot(hilo, sugerencias.slice(0, 3));
+        return;
+      }
+    } catch (error) {
+      // Sigue al resto de los pasos — nunca se corta acá.
+    }
+  }
+
+  if (typeof respuestaCarinosaPara === 'function') {
+    const carinosa = respuestaCarinosaPara(texto);
+    if (carinosa) {
+      pintarMensajesNuevosDeMegaBot(hilo, [{
+        id: 'local-' + Date.now(), rol: 'megabot', texto: carinosa, estado: 'enviado', propuestas: [],
+      }]);
+      return;
+    }
+  }
+
+  pintarMensajesNuevosDeMegaBot(hilo, [{
+    id: 'local-' + Date.now(), rol: 'megabot',
+    texto: 'No tengo eso a mano. Prueba el menú largo del botón.',
+    estado: 'enviado', propuestas: [],
+  }]);
+}
+
+/**
+ * La versión mínima —solo lectura + confirmar— de la caja de
+ * sugerencias (40-agentes.js), pensada para vivir DENTRO de una burbuja
+ * de chat en vez de en su propia caja. No reusa cajaDeSugerencias()/
+ * engancharSugerencias() tal cual porque esas están armadas para un
+ * contenedor y un array fijos propios de la campana — acá el contenedor
+ * es el hilo del chat, que sigue recibiendo burbujas nuevas por polling.
+ *
+ * @param {Element} hilo
+ * @param {Array} sugerencias
+ * @returns {void}
+ */
+function pintarSugerenciasEnHiloDeMegaBot(hilo, sugerencias) {
+  const idBurbuja = 'local-' + Date.now();
+
+  const html =
+    '<div class="megabot-fila megabot-fila--megabot" data-mensaje-id="' + seguro(idBurbuja) + '">' +
+      '<div class="megabot-burbuja megabot-burbuja--megabot">' +
+        'No estoy conectado ahora mismo, pero esto es lo que veo:' +
+      '</div>' +
+      sugerencias.map((s, i) =>
+        '<div class="megabot-propuesta" data-offline-sugerencia="' + i + '">' +
+          '<div class="megabot-propuesta__titulo">' + seguro(s.titulo) + '</div>' +
+          (s.detalle
+            ? '<div class="vacio__texto" style="margin:2px 0 6px">' + seguro(s.detalle) + '</div>'
+            : '') +
+          '<div class="acciones">' +
+            (s.requiereConfirmacion
+              ? '<button class="boton boton--chico" data-offline-cancelar="' + i + '">Descartar</button>' +
+                '<button class="boton boton--chico boton--principal" data-offline-confirmar="' + i + '">' +
+                  'Confirmar</button>'
+              : '<button class="boton boton--chico boton--principal" data-offline-confirmar="' + i + '">' +
+                  'Hacer</button>') +
+          '</div>' +
+        '</div>'
+      ).join('') +
+    '</div>';
+
+  hilo.insertAdjacentHTML('beforeend', html);
+  hilo.scrollTop = hilo.scrollHeight;
+
+  const contenedor = hilo.querySelector('[data-mensaje-id="' + idBurbuja + '"]');
+  contenedor.addEventListener('click', async evento => {
+    const cancelar = evento.target.closest('[data-offline-cancelar]');
+    if (cancelar) {
+      const tarjeta = cancelar.closest('[data-offline-sugerencia]');
+      if (tarjeta) tarjeta.remove();
+      return;
+    }
+
+    const confirmar = evento.target.closest('[data-offline-confirmar]');
+    if (confirmar) {
+      const s = sugerencias[Number(confirmar.dataset.offlineConfirmar)];
+      if (!s) return;
+
+      confirmar.disabled = true;
+      try {
+        await s.ejecutar();
+        registrarEvento('asistente', 'sugerencia_hecha', { agente: s.agente, id: s.id });
+        const tarjeta = confirmar.closest('[data-offline-sugerencia]');
+        if (tarjeta) {
+          tarjeta.innerHTML =
+            '<div class="megabot-propuesta__titulo">✓ ' + seguro(s.titulo) + '</div>' +
+            '<div class="vacio__texto">' + seguro(s.detalleHecho || 'Hecho.') + '</div>';
+        }
+      } catch (error) {
+        confirmar.disabled = false;
+        avisar(error.message, true);
+      }
+    }
+  });
+}
+
+/**
+ * Segundos hasta el reinicio → "1 h 17 min" / "23 min" / "1 h", en
+ * español corto — nada de horas Y minutos si uno de los dos es cero.
+ *
+ * @param {number} segundos
+ * @returns {string}
+ */
+function compactarTiempoDeUsoDeMegaBot(segundos) {
+  const minutosTotales = Math.round(segundos / 60);
+  const horas = Math.floor(minutosTotales / 60);
+  const minutos = minutosTotales % 60;
+
+  if (horas <= 0) return minutos + ' min';
+  if (minutos <= 0) return horas + ' h';
+  return horas + ' h ' + minutos + ' min';
+}
+
+/**
+ * Pinta los números chicos del encabezado de la hoja MegaBot —
+ * "65% · 1 h 17 min", o solo una de las dos partes, según lo que haya.
+ * Nunca inventa un dato: sin nada que mostrar, el span queda oculto
+ * (ver la tabla del contrato en chat.php). Solo esta hoja lo llena —
+ * abrirHoja()/cerrarHoja() (06-piezas.js) lo vacían para el resto.
+ *
+ * @param {{porcentaje:?number, reinicia_en:number, agotado:boolean}|null} uso
+ * @returns {void}
+ */
+function pintarUsoDeMegaBot(uso) {
+  const span = document.getElementById('hoja-uso');
+  if (!span) return;
+
+  const tienePorcentaje = uso && typeof uso.porcentaje === 'number';
+  if (!uso || (!tienePorcentaje && !uso.agotado)) {
+    span.textContent = '';
+    span.hidden = true;
+    return;
+  }
+
+  const tiempo = uso.reinicia_en > 0 ? compactarTiempoDeUsoDeMegaBot(uso.reinicia_en) : '';
+  let texto = '';
+
+  if (uso.agotado) {
+    texto = tiempo || 'Agotado';
+  } else if (tienePorcentaje) {
+    texto = tiempo ? uso.porcentaje + '% · ' + tiempo : uso.porcentaje + '%';
+  }
+
+  span.textContent = texto;
+  span.hidden = !texto;
+}
+
+/**
  * Abre el chat de MegaBot: historial persistente (no se borra al
  * cerrar), un campo para escribir, y chips que mandan una pregunta
  * directo al hilo (ya no ejecutan CATALOGO_FAB — eso lo sigue haciendo
@@ -756,6 +951,7 @@ function abrirAsistente() {
     if (!(r.mensajes || []).length) {
       hilo.innerHTML = '<p class="vacio__texto">Escribile a MegaBot lo que necesites.</p>';
     }
+    pintarUsoDeMegaBot(r.uso);
     entrada.focus();
   }).catch(error => {
     hilo.innerHTML = '<p class="aviso-error">' + seguro(error.message) + '</p>';
@@ -778,7 +974,8 @@ function abrirAsistente() {
     }]);
 
     try {
-      await mandar('chat.php?accion=enviar', { texto: texto, pantalla: VISTA_ACTUAL });
+      const r = await mandar('chat.php?accion=enviar', { texto: texto, pantalla: VISTA_ACTUAL });
+      if (r && r.offline) await resolverMegaBotOffline(hilo, texto);
     } catch (error) {
       avisar(error.message, true);
     }
@@ -808,6 +1005,7 @@ function abrirAsistente() {
       // tienen id numérico — no hace falta sacarlos, la fila real de
       // Lucila llega con OTRO id y simplemente se agrega al lado.
       pintarMensajesNuevosDeMegaBot(hilo, r.mensajes || []);
+      pintarUsoDeMegaBot(r.uso);
     } catch (error) {
       // Sin red: se reintenta solo en el próximo tick, sin avisar cada
       // 2 segundos que algo falló.
