@@ -234,8 +234,13 @@ function construirContexto($pantalla, $usuario) {
 /**
  * POSTea el mensaje al Orquestador. Nunca espera su respuesta real
  * (eso llega después, por accion=responder) — solo confirma que el
- * webhook aceptó el POST. Timeout corto para no bloquear a Lucila
- * mientras escribe.
+ * webhook aceptó el POST. Timeout de 10s para que un ACK lento no
+ * se tome como «no contestó».
+ *
+ * Las cabeceras salen con la misma $claveSaliente (megabot_webhook_clave):
+ * el webhook de Grok Bot exige `Authorization: Bearer …` (y acepta
+ * `X-Automation-Key`); `X-MegaBot-Clave` se mantiene para documentar
+ * nuestra identidad en el callback. Nunca se loguea la clave.
  *
  * @param array $payload
  * @return bool true si el POST salió (código 2xx), false si no.
@@ -245,14 +250,37 @@ function mandarWebhookDeMegabot($payload) {
     if ($url === '') return false;
 
     $claveSaliente = (string) (consultarUno("SELECT valor FROM ajustes WHERE clave = 'megabot_webhook_clave'")['valor'] ?? '');
+    $cuerpo = json_encode($payload, JSON_UNESCAPED_UNICODE);
+    $cabeceras = [
+        'Content-Type: application/json',
+        'Authorization: Bearer ' . $claveSaliente,
+        'X-Automation-Key: ' . $claveSaliente,
+        'X-MegaBot-Clave: ' . $claveSaliente,
+    ];
+
+    // Mismo camino que avisos push (_lib/push.php): cURL si está.
+    if (function_exists('curl_init')) {
+        $curl = curl_init($url);
+        curl_setopt_array($curl, [
+            CURLOPT_POST           => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_HTTPHEADER     => $cabeceras,
+            CURLOPT_POSTFIELDS     => $cuerpo,
+        ]);
+        $resultado = curl_exec($curl);
+        $codigo    = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        curl_close($curl);
+        if ($resultado === false) return false;
+        return $codigo >= 200 && $codigo < 300;
+    }
 
     $contexto = stream_context_create([
         'http' => [
             'method'  => 'POST',
-            'header'  => "Content-Type: application/json\r\n" .
-                         "X-MegaBot-Clave: " . $claveSaliente . "\r\n",
-            'content' => json_encode($payload, JSON_UNESCAPED_UNICODE),
-            'timeout' => 3,
+            'header'  => implode("\r\n", $cabeceras) . "\r\n",
+            'content' => $cuerpo,
+            'timeout' => 10,
             'ignore_errors' => true,
         ],
     ]);
