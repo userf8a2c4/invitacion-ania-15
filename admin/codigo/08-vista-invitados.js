@@ -579,6 +579,30 @@ function filaDeInvitado(fila) {
 
   const marcado = SELECCIONADOS.has(Number(fila.id));
 
+  /* ⚡ (2026-08-30) Punto de color + cuántas veces se mandó, a pedido
+     explícito: gris sin enviar, azul enviada (sin responder todavía),
+     verde confirmada, rojo declinada — mismos colores que ya usa el
+     punto de "asiste" a la izquierda, reutilizados por semántica
+     (verde/rojo significan lo mismo ahí y acá). El número de al lado
+     es "veces que se tocó Mandar", no "veces que llegó de verdad" —
+     WhatsApp no avisa si el mensaje se mandó de verdad (mismo límite
+     que ya tiene envios_proveedor, documentado en migracion.sql). */
+  const puntoEnvio = fila.invitacion_id
+    ? '<span class="punto-envio" title="' +
+        seguro((TEXTO_DE_ESTADO_INV[fila.invitacion_estado] || fila.invitacion_estado) +
+               ' · mandado ' + pluralizar(Number(fila.invitacion_veces_enviado) || 0, 'vez', 'veces')) + '">' +
+        '<span class="punto ' +
+          (fila.invitacion_estado === 'confirmada' ? 'punto--si'
+            : fila.invitacion_estado === 'declinada' ? 'punto--no'
+            : fila.invitacion_estado === 'enviada' ? 'punto--enviada' : '') +
+        '"></span>' +
+        (Number(fila.invitacion_veces_enviado) > 0
+          ? '<span class="vacio__texto" style="margin:0">×' +
+              seguro(fila.invitacion_veces_enviado) + '</span>'
+          : '') +
+      '</span>'
+    : '';
+
   return '' +
     '<button class="lista__fila" data-invitado="' + seguro(fila.id) + '">' +
       (SELECCION_ACTIVA
@@ -588,6 +612,7 @@ function filaDeInvitado(fila) {
         '<span class="lista__titulo">' + seguro(fila.nombre || 'Sin nombre') + '</span>' +
         '<span class="lista__pie">' + seguro(pie.join(' · ')) + '</span>' +
       '</span>' +
+      puntoEnvio +
       (esFilaPendiente(fila.id)
         ? '<span class="etiqueta etiqueta--tenue lista__lado">Pendiente</span>'
         : (tieneAlergia
@@ -632,11 +657,16 @@ function abrirDetalleDeInvitado(id) {
   ];
 
   if (tieneInvitacion) {
+    const vecesEnviado = Number(fila.invitacion_veces_enviado) || 0;
     renglones.push(
       ['Teléfono', seguro(fila.invitacion_telefono || '—')],
       ['Grupo',    seguro(fila.invitacion_grupo_nombre || '—')],
-      ['Envío',    ETIQUETA_DE_ESTADO_INV[fila.invitacion_estado] ||
-                   seguro(fila.invitacion_estado || '—'), true]
+      ['Envío',    (ETIQUETA_DE_ESTADO_INV[fila.invitacion_estado] ||
+                    seguro(fila.invitacion_estado || '—')) +
+                   (vecesEnviado > 0
+                     ? ' <span class="vacio__texto" style="margin:0">· mandado ' +
+                       seguro(pluralizar(vecesEnviado, 'vez', 'veces')) + '</span>'
+                     : ''), true]
     );
   }
 

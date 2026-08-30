@@ -1119,6 +1119,17 @@
 }
 .punto--si { background: var(--bien); }
 .punto--no { background: var(--alerta); }
+/* (2026-08-30) El de envío reusa punto--si/punto--no para
+   confirmada/declinada (ya son verde/rojo) — solo hace falta el azul
+   de "enviada, sin responder todavía". Sin enviar usa .punto solo,
+   que ya es gris por defecto. */
+.punto--enviada { background: var(--info); }
+
+.punto-envio {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 
 /* La casilla del modo selección múltiple (Fase 5), en el mismo lugar
    donde va el punto de color cuando no se está seleccionando. */

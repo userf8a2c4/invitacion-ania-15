@@ -1091,6 +1091,12 @@ CREATE TABLE IF NOT EXISTS invitaciones (
   enviada_en      DATETIME DEFAULT NULL,
   respondida_en   DATETIME DEFAULT NULL,
   notas           TEXT,
+  -- Cuántas veces se tocó "Mandar por WhatsApp" o se mandó por correo
+  -- con éxito. Con WhatsApp es un conteo optimista: el botón solo ABRE
+  -- la app con el texto puesto, no hay forma de saber si adentro se
+  -- tocó enviar de verdad — mismo límite ya documentado para
+  -- envios_proveedor más arriba en este archivo.
+  veces_enviado   INT NOT NULL DEFAULT 0,
   creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY token_unico (token),
   KEY por_estado (estado),

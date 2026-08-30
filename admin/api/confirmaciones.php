@@ -174,6 +174,7 @@ case 'listar':
         ? ', inv.id AS invitacion_id, inv.token AS invitacion_token,
             inv.telefono AS invitacion_telefono, inv.pases AS invitacion_pases,
             inv.estado AS invitacion_estado, inv.grupo_id AS invitacion_grupo_id,
+            inv.veces_enviado AS invitacion_veces_enviado,
             g.nombre AS invitacion_grupo_nombre'
         : '';
     $joinInv = $conInvitacion

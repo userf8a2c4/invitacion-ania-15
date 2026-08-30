@@ -140,9 +140,12 @@ function filtroDeInvitacionPasa(inv) {
 
 /** Etiqueta visual de cada estado — mismo patrón de clases que ya usa
     09-vista-dinero.js (etiqueta--bien / etiqueta--alerta / etiqueta--tenue). */
+// (2026-08-30) "Enviada" pasa de gris a azul (etiqueta--info) para que
+// coincida con el punto de color de la lista de Invitados: gris =
+// nadie la tocó todavía, azul = se mandó y espera respuesta.
 const ETIQUETA_DE_ESTADO_INV = {
   sin_enviar:  '<span class="etiqueta etiqueta--tenue">Sin enviar</span>',
-  enviada:     '<span class="etiqueta etiqueta--tenue">Enviada</span>',
+  enviada:     '<span class="etiqueta etiqueta--info">Enviada</span>',
   confirmada:  '<span class="etiqueta etiqueta--bien">Confirmada</span>',
   declinada:   '<span class="etiqueta etiqueta--alerta">No viene</span>',
 };
