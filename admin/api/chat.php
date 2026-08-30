@@ -250,9 +250,11 @@ function mandarWebhookDeMegabot($payload) {
         'http' => [
             'method'  => 'POST',
             'header'  => "Content-Type: application/json\r\n" .
+                         "Authorization: Bearer " . $claveSaliente . "\r\n" .
+                         "X-Automation-Key: " . $claveSaliente . "\r\n" .
                          "X-MegaBot-Clave: " . $claveSaliente . "\r\n",
             'content' => json_encode($payload, JSON_UNESCAPED_UNICODE),
-            'timeout' => 3,
+            'timeout' => 10,
             'ignore_errors' => true,
         ],
     ]);
@@ -314,7 +316,7 @@ case 'enviar':
     $datos = cuerpoJson();
 
     $texto = campoTexto($datos, 'texto', 2000);
-    if ($texto === '') responderMal('Escribí algo primero.', 400);
+    if ($texto === '') responderMal('Escribe algo primero.', 400);
     $pantalla = campoTexto($datos, 'pantalla', 60);
 
     $hiloId = hiloDe((int) $yo['id']);

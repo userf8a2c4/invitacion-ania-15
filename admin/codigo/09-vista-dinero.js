@@ -1870,7 +1870,7 @@ function formularioPago(pago) {
     // un concepto para que el pago diga algo.
     const proveedorElegido = valorDe('pag-proveedor', cuerpo);
     if (!concepto && !proveedorElegido) {
-      avisar('Pon un concepto o elegí a quién le pagás.', true);
+      avisar('Pon un concepto o elige a quién le pagas.', true);
       return null;
     }
 
@@ -1896,7 +1896,7 @@ function formularioPago(pago) {
     if (proveedorElegido === '__nuevo__') {
       const nombreNuevo = valorDe('pag-proveedor-nuevo', cuerpo);
       if (!nombreNuevo) {
-        avisar('Escribí el nombre del proveedor nuevo.', true);
+        avisar('Escribe el nombre del proveedor nuevo.', true);
         return null;
       }
       carga.proveedor_nuevo = nombreNuevo;
@@ -2242,7 +2242,7 @@ async function abrirGeneradorDeReciboGenerico() {
 
     const quien = valorDeListaAmpliable('rec2-quien', cuerpo);
     if (!quien) {
-      avisar('Elegí o escribí a quién le pagás.', true);
+      avisar('Elige o escribe a quién le pagas.', true);
       return;
     }
 
@@ -2431,7 +2431,7 @@ async function abrirListaDeDocumentos(tipo, proveedor) {
     if (!filas.length) {
       contenedor.innerHTML = '';
       pintarVacio(contenedor, 'Todavía no hay ' + config.titulo.toLowerCase(),
-        'Los que generes van a aparecer acá, solo para consultar.');
+        'Los que generes van a aparecer aquí, solo para consultar.');
       return;
     }
 

@@ -354,7 +354,7 @@ const SECCIONES = {
     rotulo: 'Foráneos',
     titulo: 'Invitados de fuera',
     vacio: ['Todavía no hay nadie de fuera',
-            'Quién viene de otra ciudad, dónde se queda y cómo llega — se va a ver acá.'],
+            'Quién viene de otra ciudad, dónde se queda y cómo llega — se va a ver aquí.'],
     campos: [
       { id: 'nombre',     rotulo: 'Nombre' },
       { id: 'ciudad',     rotulo: 'De dónde viene' },

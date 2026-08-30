@@ -114,7 +114,7 @@ case 'crear':
     exigirMetodo('POST');
     $datos  = cuerpoJson();
     $nombre = trim(mb_substr((string) ($datos['nombre'] ?? ''), 0, 60));
-    if ($nombre === '') responderMal('Escribí un nombre para la etiqueta.', 400);
+    if ($nombre === '') responderMal('Escribe un nombre para la etiqueta.', 400);
 
     // Idempotente a propósito: crear "Jóvenes" dos veces no debe dar
     // error ni duplicar la fila, solo devolver la que ya existía — así
