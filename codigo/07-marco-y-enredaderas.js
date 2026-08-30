@@ -1863,7 +1863,7 @@
     let indiceDePlanta = 0;
 
     function medirUnaTanda() {
-      const desplazamientoDelScroll = window.scrollY;
+      const desplazamientoDelScroll = scrollActualY();
       const limite = Math.min(indiceDePlanta + PLANTAS_MEDIDAS_POR_TANDA, plantas.length);
 
       for (; indiceDePlanta < limite; indiceDePlanta++) {
