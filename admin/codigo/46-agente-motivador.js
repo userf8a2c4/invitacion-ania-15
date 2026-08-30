@@ -124,7 +124,7 @@ async function guardarDiccionarioCarinoso() {
  * Cortas, tranquilas, sin exclamaciones en cadena — a propósito.
  */
 const RESPUESTAS_CARINOSAS_DE_FABRICA = [
-  'Acá ando, contigo.',
+  'Aquí ando, contigo.',
   'Un ratito de aire no le hace mal a nadie — sigue cuando quieras.',
   'Se está armando lindo, aunque no lo parezca en medio del lío.',
   'Anda tranquila, esto no se va a ningún lado.',

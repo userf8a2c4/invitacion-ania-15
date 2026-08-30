@@ -831,7 +831,7 @@ function abrirComandosDelAsistente() {
   const cuerpo = abrirHoja('Comandos del asistente',
     '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
       'Estas son tus frases. El asistente aprende solo cuando confirmas ' +
-      'una sugerencia, pero también puedes agregarlas acá a mano.' +
+      'una sugerencia, pero también puedes agregarlas aquí a mano.' +
     '</p>' +
     '<div id="comandos-lista"></div>'
   );

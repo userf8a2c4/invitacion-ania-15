@@ -107,7 +107,7 @@ async function abrirBandejaDeAvisos() {
 
   if (!pendientes.length && !rechazados.length && !CANTIDAD_SUGERENCIAS_DE_AGENTES) {
     pintarVacio(donde, 'No hay nada pendiente',
-      'Cuando haya un pago por vencer, una tarea atrasada o un cambio que el servidor rechace, va a aparecer acá.');
+      'Cuando haya un pago por vencer, una tarea atrasada o un cambio que el servidor rechace, va a aparecer aquí.');
     return;
   }
 

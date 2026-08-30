@@ -106,8 +106,8 @@ function pintarListaDeInvitaciones(cuerpo, totales, capacidad) {
   const listaEl = buscar('#lista-invitaciones', cuerpo);
 
   if (!visibles.length) {
-    pintarVacio(listaEl, 'No hay invitaciones acá',
-      'Cambiá el filtro o creá la primera con el botón de abajo.');
+    pintarVacio(listaEl, 'No hay invitaciones aquí',
+      'Cambia el filtro o crea la primera con el botón de abajo.');
   } else {
     listaEl.innerHTML = visibles.map(filaDeInvitacion).join('');
     buscarTodos('[data-inv]', listaEl).forEach(fila => {
@@ -348,7 +348,7 @@ function abrirFormularioDeInvitacion(inv) {
     '<div class="campo">' +
       '<span class="campo__rotulo">Personas del grupo (opcional)</span>' +
       '<p class="vacio__texto" style="margin:4px 0 8px">' +
-        'Si no sabés los nombres todavía, dejalo vacío y poné solo cuántos lugares apartás.' +
+        'Si no sabes los nombres todavía, déjalo vacío y pon solo cuántos lugares apartas.' +
       '</p>' +
       '<div id="inv-personas"></div>' +
       '<button type="button" class="boton boton--chico" id="inv-agregar-persona" ' +
@@ -456,7 +456,7 @@ function abrirFormularioDeInvitacion(inv) {
 
     if (grupoElegido === '__nuevo__') {
       const nombreNuevo = valorDe('inv-grupo-nuevo', cuerpo);
-      if (!nombreNuevo) { avisar('Escribí el nombre del grupo nuevo.', true); return; }
+      if (!nombreNuevo) { avisar('Escribe el nombre del grupo nuevo.', true); return; }
       try {
         const r = await mandar('mesas.php?accion=guardar_grupo', { nombre: nombreNuevo });
         grupoId = r.id;
@@ -532,7 +532,7 @@ async function abrirConfiguracionDeInvitaciones() {
 
   buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
     const valor = valorDe('cfg-inv-fecha-limite', cuerpo);
-    if (!valor) { avisar('Elegí una fecha.', true); return; }
+    if (!valor) { avisar('Elige una fecha.', true); return; }
     try {
       await mandar('ajustes.php?accion=guardar', { clave: 'fecha_limite_confirmar', valor: valor });
       cerrarHoja(true);

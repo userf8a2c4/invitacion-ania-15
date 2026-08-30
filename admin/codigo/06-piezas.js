@@ -1484,11 +1484,11 @@ function valorDeListaDeDetalle(id, dentroDe) {
 async function abrirEtiquetasAcomodo() {
   const cuerpo = abrirHoja('Etiquetas',
     '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
-      'Palabras libres que ponés a una persona o a una mesa —"Familia ' +
+      'Palabras libres que pones a una persona o a una mesa —"Familia ' +
       'paterna", "Jóvenes", "Mesa ruidosa"— para que el acomodo ' +
       'automático las tenga en cuenta. También se agregan desde la ficha ' +
       'de cada persona (en Gente → Invitados) o de cada mesa (en Gente → ' +
-      'Mesas); acá se ven todas juntas.' +
+      'Mesas); aquí se ven todas juntas.' +
     '</p>' +
     /* ⚡ (2026-08-30) A pedido: antes esta pantalla solo listaba y
        borraba — no tenía sentido un menú de configuración de etiquetas
@@ -1506,7 +1506,7 @@ async function abrirEtiquetasAcomodo() {
   const campoNueva = buscar('#etiqueta-nueva-acomodo', cuerpo);
   const crear = async () => {
     const nombre = campoNueva.value.trim();
-    if (!nombre) { avisar('Escribí un nombre para la etiqueta.', true); return; }
+    if (!nombre) { avisar('Escribe un nombre para la etiqueta.', true); return; }
     try {
       await mandar('etiquetas_acomodo.php?accion=crear', { nombre: nombre });
       campoNueva.value = '';
@@ -1544,7 +1544,7 @@ async function repintarListaDeEtiquetasAcomodo(cuerpo) {
 
   if (!filas.length) {
     pintarVacio(contenedor, 'Todavía no hay ninguna etiqueta',
-      'Creá la primera arriba, o desde la ficha de una persona o una mesa.');
+      'Crea la primera arriba, o desde la ficha de una persona o una mesa.');
     return;
   }
 
@@ -1607,7 +1607,7 @@ async function pintarEtiquetasDe(tipo, id, contenedor) {
     '</div>' +
     '<div style="display:flex;gap:6px">' +
       '<input type="text" id="etiqueta-nueva-' + tipo + id + '" class="campo__control" ' +
-             'placeholder="Escribí o elegí una etiqueta" list="etiquetas-existentes" ' +
+             'placeholder="Escribe o elige una etiqueta" list="etiquetas-existentes" ' +
              'style="flex:1">' +
       '<button type="button" class="boton boton--chico" id="etiqueta-agregar-' + tipo + id + '">' +
         'Agregar</button>' +
