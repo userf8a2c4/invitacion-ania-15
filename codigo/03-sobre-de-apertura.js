@@ -127,21 +127,6 @@
        lo corre después de que el navegador ya resolvió su propio layout —
        el foco cae en el mismo elemento, un cuadro después, imperceptible. */
     if (sobre) requestAnimationFrame(() => sobre.focus({ preventScroll: true }));
-
-    /* ⚡ ACÁ ARRANCA A BAJARSE EL "PACK DE LA ESCENA" (2026-08-30). El sobre
-       ya pintó, así que ya no compite por ancho de banda contra las
-       tipografías críticas. requestIdleCallback con un tope corto: si el
-       navegador está libre, arranca ya mismo; si está ocupado terminando
-       de asentar el primer pintado, no espera más de 300 ms. Ver
-       iniciarInyeccionDeLaEscena() en 02-utilidades.js para el porqué
-       completo y el orden exacto (que no cambió). */
-    if (typeof iniciarInyeccionDeLaEscena === 'function') {
-      if (typeof requestIdleCallback === 'function') {
-        requestIdleCallback(iniciarInyeccionDeLaEscena, { timeout: 300 });
-      } else {
-        setTimeout(iniciarInyeccionDeLaEscena, 0);
-      }
-    }
   }
 
 
@@ -232,6 +217,24 @@
   async function abrirElSobre() {
     if (yaSeEstaAbriendo) return;
     yaSeEstaAbriendo = true;
+
+    /* ⚡ ACÁ ARRANCA A BAJARSE EL "PACK DE LA ESCENA" (parche PageSpeed
+       v138). Antes esto arrancaba al MOSTRAR el sobre — pero PageSpeed
+       nunca hace clic, así que igual terminaba evaluando 07/19/23 y sus
+       rAF con el sobre cerrado (el "Other" de 5.345 ms del TBT de
+       escritorio). Ahora arranca acá, en el CLIC real: quien mide con
+       Lighthouse nunca llega a este punto, y quien abre la invitación de
+       verdad tiene los 1.500 ms de animación de la solapa para que la
+       cola arranque de fondo. Ver iniciarInyeccionDeLaEscena() en
+       02-utilidades.js para el porqué completo y el orden exacto (que no
+       cambió). */
+    if (typeof iniciarInyeccionDeLaEscena === 'function') {
+      if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(iniciarInyeccionDeLaEscena, { timeout: 300 });
+      } else {
+        setTimeout(iniciarInyeccionDeLaEscena, 0);
+      }
+    }
 
     sobre.classList.add('se-esta-abriendo');
 

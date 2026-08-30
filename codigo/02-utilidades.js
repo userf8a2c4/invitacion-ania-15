@@ -904,9 +904,10 @@ function limpiarTexto(texto) {
    antes de 06, 23 antes de 14/18/19/27). No son <script async> ni
    type="module": son <script src> comunes, uno detrás del otro.
 
-   QUIÉN LA ARRANCA: codigo/03-sobre-de-apertura.js, recién cuando el
-   sobre YA se mostró (nunca antes) — ver mostrarElSobre() ahí. Si el
-   sobre no existe en el HTML, 03 arranca esto igual, en el mismo lugar
+   QUIÉN LA ARRANCA: codigo/03-sobre-de-apertura.js, recién en el clic
+   que abre el sobre — ver abrirElSobre() en 03. PageSpeed no hace clic,
+   así que no evalúa la escena. Si el sobre no existe en el HTML, 03
+   arranca esto igual, en el mismo lugar
    donde hoy avisa 'invitacion-visible' por su cuenta. */
 
 /**

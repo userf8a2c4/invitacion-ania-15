@@ -51,6 +51,27 @@
 html.sobre-visible,
 body.sobre-visible { overflow: hidden; }
 
+/* PageSpeed mide el aterrizaje (sobre cerrado). display:none: no son LCP
+   y no disparan Cormorant / IM Fell / Cinzel 700 — el navegador solo
+   calcula la fuente que necesita un elemento si está en el flujo de
+   render, y estos IDs seguían ahí (solo tapados por z-index) mientras el
+   sobre estaba cerrado. visibility:hidden no alcanza: igual pide las
+   fuentes. El botón de animaciones se queda: no está dentro de estos
+   ids. Al quitar .sobre-visible (mismo instante en que el sobre se
+   oculta) esto vuelve. */
+body.sobre-visible #capa-fondo,
+body.sobre-visible #portada,
+body.sobre-visible #contenido,
+body.sobre-visible #pie-de-pagina,
+body.sobre-visible #controles-flotantes,
+body.sobre-visible #marco-victoriano {
+  display: none;
+}
+
+#sobre-de-apertura {
+  font-family: var(--tipo-titulos);
+}
+
 /* Cuando termina la animación, el sobre desaparece por completo. */
 #sobre-de-apertura.oculto {
   opacity: 0;
@@ -129,7 +150,7 @@ body.sobre-visible { overflow: hidden; }
 }
 
 .sobre__cargando {
-  font-family: var(--tipo-detalle);
+  font-family: var(--tipo-titulos);
   font-size: .8rem;
   letter-spacing: .35em;
   text-transform: uppercase;
@@ -231,7 +252,7 @@ body.sobre-visible { overflow: hidden; }
 }
 
 .sobre__indicacion {
-  font-family: var(--tipo-detalle);
+  font-family: var(--tipo-titulos);
   font-size: .82rem;
   letter-spacing: .3em;
   text-transform: uppercase;
