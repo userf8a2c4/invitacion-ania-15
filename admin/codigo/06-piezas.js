@@ -1486,12 +1486,40 @@ async function abrirEtiquetasAcomodo() {
     '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
       'Palabras libres que ponés a una persona o a una mesa —"Familia ' +
       'paterna", "Jóvenes", "Mesa ruidosa"— para que el acomodo ' +
-      'automático las tenga en cuenta. Se agregan desde la ficha de ' +
-      'cada persona (en Gente → Confirmaciones) o de cada mesa ' +
-      '(en Gente → Mesas); acá se ven todas juntas.' +
+      'automático las tenga en cuenta. También se agregan desde la ficha ' +
+      'de cada persona (en Gente → Invitados) o de cada mesa (en Gente → ' +
+      'Mesas); acá se ven todas juntas.' +
     '</p>' +
+    /* ⚡ (2026-08-30) A pedido: antes esta pantalla solo listaba y
+       borraba — no tenía sentido un menú de configuración de etiquetas
+       que no dejara crear ninguna. El backend (etiquetas_acomodo.php?accion
+       =crear) ya existía, solo faltaba conectarlo acá. */
+    '<div style="display:flex;gap:6px;margin-bottom:var(--esp-3)">' +
+      '<input type="text" id="etiqueta-nueva-acomodo" class="campo__control" ' +
+             'placeholder="Nombre de la etiqueta nueva" style="flex:1">' +
+      '<button type="button" class="boton boton--principal" id="crear-etiqueta-acomodo">' +
+        'Crear</button>' +
+    '</div>' +
     '<div id="lista-etiquetas-acomodo"><div class="esqueleto"></div></div>'
   );
+
+  const campoNueva = buscar('#etiqueta-nueva-acomodo', cuerpo);
+  const crear = async () => {
+    const nombre = campoNueva.value.trim();
+    if (!nombre) { avisar('Escribí un nombre para la etiqueta.', true); return; }
+    try {
+      await mandar('etiquetas_acomodo.php?accion=crear', { nombre: nombre });
+      campoNueva.value = '';
+      avisar('Etiqueta creada.');
+      repintarListaDeEtiquetasAcomodo(cuerpo);
+    } catch (error) {
+      avisar(error.message, true);
+    }
+  };
+  buscar('#crear-etiqueta-acomodo', cuerpo).addEventListener('click', crear);
+  campoNueva.addEventListener('keydown', evento => {
+    if (evento.key === 'Enter') { evento.preventDefault(); crear(); }
+  });
 
   await repintarListaDeEtiquetasAcomodo(cuerpo);
 }
@@ -1516,7 +1544,7 @@ async function repintarListaDeEtiquetasAcomodo(cuerpo) {
 
   if (!filas.length) {
     pintarVacio(contenedor, 'Todavía no hay ninguna etiqueta',
-      'Se crean desde la ficha de una persona o de una mesa.');
+      'Creá la primera arriba, o desde la ficha de una persona o una mesa.');
     return;
   }
 

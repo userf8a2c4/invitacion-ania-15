@@ -170,11 +170,22 @@ case 'listar':
        (del formulario abierto, antes de este modelo) simplemente trae
        estos campos en NULL, y el panel ofrece "Generar link". */
     $conInvitacion = $TIENE_ID && existeTabla('invitaciones');
+    // ⚡ (2026-08-30) BUG REAL: `veces_enviado` se agregó a `invitaciones`
+    // en una ronda posterior a la que creó esta tabla (ver migracion.sql),
+    // y esta consulta la pedía sin comprobar que existiera — a diferencia
+    // de TODO el resto de este archivo, que sí se cuida con existeTabla()/
+    // hay(). En cualquier instalación donde no se haya vuelto a correr
+    // instalar.php después de esa ronda, "columna desconocida" tumbaba
+    // esta consulta entera — y esta es la que carga "Gente". Mismo
+    // criterio que columnasDe()/hay() usan en todo el archivo.
+    $columnasInv = $conInvitacion ? columnasDe('invitaciones') : [];
+    $selectVecesEnviado = in_array('veces_enviado', $columnasInv, true)
+        ? 'inv.veces_enviado' : 'NULL';
     $selectInv = $conInvitacion
         ? ', inv.id AS invitacion_id, inv.token AS invitacion_token,
             inv.telefono AS invitacion_telefono, inv.pases AS invitacion_pases,
             inv.estado AS invitacion_estado, inv.grupo_id AS invitacion_grupo_id,
-            inv.veces_enviado AS invitacion_veces_enviado,
+            ' . $selectVecesEnviado . ' AS invitacion_veces_enviado,
             g.nombre AS invitacion_grupo_nombre'
         : '';
     $joinInv = $conInvitacion

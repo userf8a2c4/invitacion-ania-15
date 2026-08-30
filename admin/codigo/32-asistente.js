@@ -509,157 +509,310 @@ function mostrarOpcionesDeEntidad(resultado, opciones, etiqueta, alElegir) {
 }
 
 
-/* ─── 4. LA HOJA DEL ASISTENTE ──────────────────────────────────────── */
+/* ─── 4. MEGABOT — EL CHAT (2026-08-30) ─────────────────────────────
+   Reemplaza el cuerpo de abrirAsistente() de arriba (que comparaba lo
+   escrito contra FRASES_DE_FABRICA/aprendidas y ejecutaba directo).
+   Las funciones de las secciones 2 y 3 (aprendizaje, motor de
+   coincidencia, intentarConEntidad) QUEDAN en el archivo sin usar
+   desde acá, a propósito — es el camino de rollback si hiciera falta
+   volver atrás. `abrirComandosDelAsistente()` (sección 5, más abajo)
+   sigue abriendo el matcher de frases viejo, para quien lo use desde
+   el menú de Ajustes.
+
+   El "cerebro" de MegaBot vive AFUERA de este repo (un Orquestador,
+   equipo Cursor) — este archivo solo dibuja el hilo, manda lo que
+   Lucila escribe a chat.php, y hace polling cada 2s mientras la hoja
+   está abierta para ver las respuestas nuevas sin recargar. */
+
+/** La whitelist de acciones que una propuesta de MegaBot puede pedir
+    ejecutar — MISMA LISTA que ACCIONES_PERMITIDAS_PARA_MEGABOT en
+    admin/api/chat.php. Si se cambia una, hay que cambiar la otra. */
+const ACCIONES_PERMITIDAS_PARA_MEGABOT = [
+  'presupuesto.php?accion=marcar_pagado',
+  'mesas.php?accion=sentar_auto',
+  'mesas.php?accion=autoasignar',
+  'mesas.php?accion=deshacer',
+  'planificador.php?accion=estado_tarea',
+];
+
+/** El id del último mensaje ya pintado, para pedir solo los nuevos. */
+let MEGABOT_ULTIMO_ID = 0;
+/** El intervalo de polling activo, o null si la hoja está cerrada. */
+let MEGABOT_INTERVALO = null;
 
 /**
- * Pide las sugerencias de todos los agentes (40-agentes.js) y las
- * pinta. Si un agente falla o no hay señal, se apaga en silencio —
- * el asistente sigue sirviendo para escribir aunque las sugerencias
- * no hayan podido cargar.
+ * Qué pantallas hay que refrescar después de que una propuesta de
+ * MegaBot se ejecutó — mismo criterio que ya usan las pantallas reales
+ * al llamar a esa misma acción a mano.
  *
- * @param {Element} contenedor
- * @returns {Promise<void>}
+ * @param {string} accion
+ * @returns {string[]}
  */
-async function cargarSugerenciasDelAsistente(contenedor) {
-  if (!contenedor) return;
-
-  let sugerencias;
-  try {
-    sugerencias = await recogerSugerencias(VISTA_ACTUAL);
-  } catch (error) {
-    contenedor.innerHTML = '';
-    return;
-  }
-
-  contenedor.innerHTML = cajaDeSugerencias(sugerencias);
-  // Las tarjetas cambian de estado adentro de sí mismas (confirmar,
-  // hecho, deshacer) — no hace falta volver a pedir la lista entera
-  // después de cada acción, ver engancharSugerencias() en 40-agentes.js.
-  engancharSugerencias(contenedor, sugerencias);
+function vistasParaEnsuciarPorAccion(accion) {
+  if (accion.startsWith('presupuesto.php')) return ['resumen', 'dinero'];
+  if (accion.startsWith('mesas.php'))       return ['resumen', 'evento', 'invitados'];
+  if (accion.startsWith('planificador.php')) return ['resumen', 'evento'];
+  return ['resumen'];
 }
 
 /**
- * Abre el asistente: las sugerencias de los agentes (Paso 5) arriba de
- * todo, un campo para escribir, chips de contexto según la pestaña
- * donde se esté, y el resultado de lo que se pida.
+ * El HTML de una burbuja, según quién habla.
+ *
+ * @param {Object} m - Fila de chat_mensajes, con `propuestas` adjuntas.
+ * @returns {string}
+ */
+function htmlDeBurbujaMegaBot(m) {
+  const esLucila = m.rol === 'lucila';
+  const esSistema = m.rol === 'sistema';
+
+  return '' +
+    '<div class="megabot-fila megabot-fila--' + m.rol + '" data-mensaje-id="' + seguro(m.id) + '">' +
+      '<div class="megabot-burbuja megabot-burbuja--' + m.rol + '">' +
+        seguro(m.texto) +
+        (m.estado === 'error'
+          ? '<div class="megabot-burbuja__error">No se pudo mandar. ' +
+            '<button type="button" data-megabot-reenviar="' + seguro(m.id) + '">Reintentar</button></div>'
+          : '') +
+      '</div>' +
+      (!esLucila && !esSistema && m.propuestas && m.propuestas.length
+        ? m.propuestas.map(p => htmlDePropuestaMegaBot(p)).join('')
+        : '') +
+    '</div>';
+}
+
+/** Texto de cada estado final de una propuesta, para no dejarla muda. */
+const TEXTO_DE_ESTADO_PROPUESTA = {
+  ejecutada: 'Hecho.',
+  rechazada: 'Descartado.',
+  fallida:   'No se pudo hacer.',
+};
+
+/**
+ * El HTML de UNA propuesta dentro de una burbuja de MegaBot. Si su
+ * acción no está en la whitelist, no se pinta ningún botón — "acción
+ * fuera de whitelist: no hay botón", tal como lo pide el contrato.
+ *
+ * @param {Object} p - Fila de chat_propuestas.
+ * @returns {string}
+ */
+function htmlDePropuestaMegaBot(p) {
+  if (p.estado !== 'abierta') {
+    return '<div class="megabot-propuesta megabot-propuesta--resuelta" data-propuesta-id="' + seguro(p.id) + '">' +
+      '<div class="megabot-propuesta__titulo">' + seguro(p.titulo) + '</div>' +
+      '<div class="vacio__texto">' + seguro(TEXTO_DE_ESTADO_PROPUESTA[p.estado] || p.estado) + '</div>' +
+    '</div>';
+  }
+
+  if (!ACCIONES_PERMITIDAS_PARA_MEGABOT.includes(p.accion)) {
+    return '';
+  }
+
+  return '' +
+    '<div class="megabot-propuesta" data-propuesta-id="' + seguro(p.id) + '">' +
+      '<div class="megabot-propuesta__titulo">' + seguro(p.titulo) + '</div>' +
+      (p.detalle ? '<div class="vacio__texto" style="margin:2px 0 6px">' + seguro(p.detalle) + '</div>' : '') +
+      '<div class="acciones">' +
+        '<button class="boton boton--chico" data-propuesta-cancelar="' + seguro(p.id) + '">Cancelar</button>' +
+        '<button class="boton boton--chico boton--principal" data-propuesta-confirmar="' + seguro(p.id) + '">' +
+          'Confirmar</button>' +
+      '</div>' +
+    '</div>';
+}
+
+/**
+ * Engancha los botones de reenviar y de propuestas de TODO el hilo, por
+ * delegación en el contenedor — así sirve para las burbujas ya
+ * pintadas y para las que llegan después por polling, sin re-enganchar
+ * cada vez.
+ *
+ * @param {Element} hilo
+ * @returns {void}
+ */
+function engancharHiloDeMegaBot(hilo) {
+  if (hilo.dataset.megabotEnganchado) return;
+  hilo.dataset.megabotEnganchado = '1';
+
+  hilo.addEventListener('click', async evento => {
+    const botonReenviar = evento.target.closest('[data-megabot-reenviar]');
+    if (botonReenviar) {
+      try {
+        await mandar('chat.php?accion=reenviar', { mensaje_id: Number(botonReenviar.dataset.megabotReenviar) });
+        avisar('Reenviado.');
+      } catch (error) {
+        avisar(error.message, true);
+      }
+      return;
+    }
+
+    const botonCancelar = evento.target.closest('[data-propuesta-cancelar]');
+    if (botonCancelar) {
+      const id = Number(botonCancelar.dataset.propuestaCancelar);
+      const tarjeta = botonCancelar.closest('[data-propuesta-id]');
+      try {
+        await mandar('chat.php?accion=propuesta_estado', { id: id, estado: 'rechazada' });
+        if (tarjeta) {
+          tarjeta.className = 'megabot-propuesta megabot-propuesta--resuelta';
+          tarjeta.innerHTML = tarjeta.querySelector('.megabot-propuesta__titulo').outerHTML +
+            '<div class="vacio__texto">Descartado.</div>';
+        }
+      } catch (error) {
+        avisar(error.message, true);
+      }
+      return;
+    }
+
+    const botonConfirmar = evento.target.closest('[data-propuesta-confirmar]');
+    if (botonConfirmar) {
+      const tarjeta = botonConfirmar.closest('[data-propuesta-id]');
+      const id = Number(botonConfirmar.dataset.propuestaConfirmar);
+      const filaPropuesta = ESTADO_PROPUESTAS_MEGABOT[id];
+      if (!filaPropuesta) return;
+
+      // Cinturón además del tirante: el servidor (chat.php?accion=
+      // responder) ya descarta cualquier propuesta fuera de la
+      // whitelist antes de guardarla — esto es solo para no confiar
+      // ciegamente en lo que haya quedado pintado en pantalla.
+      if (!ACCIONES_PERMITIDAS_PARA_MEGABOT.includes(filaPropuesta.accion)) return;
+
+      botonConfirmar.disabled = true;
+      try {
+        const cuerpo = JSON.parse(filaPropuesta.cuerpo_json || '{}');
+        await mandar(filaPropuesta.accion, cuerpo);
+        await mandar('chat.php?accion=propuesta_estado', { id: id, estado: 'aceptada' });
+        ensuciarVistas.apply(null, vistasParaEnsuciarPorAccion(filaPropuesta.accion));
+        if (tarjeta) {
+          tarjeta.className = 'megabot-propuesta megabot-propuesta--resuelta';
+          tarjeta.innerHTML = tarjeta.querySelector('.megabot-propuesta__titulo').outerHTML +
+            '<div class="vacio__texto">Hecho.</div>';
+        }
+      } catch (error) {
+        botonConfirmar.disabled = false;
+        avisar(error.message, true);
+      }
+      return;
+    }
+  });
+}
+
+/** Las propuestas ya pintadas, por id — para leer su `accion`/
+    `cuerpo_json` al confirmar sin tener que releerlo del DOM. */
+let ESTADO_PROPUESTAS_MEGABOT = {};
+
+/**
+ * Agrega los mensajes nuevos al hilo (los que ya estaban, por id, se
+ * saltean — puede llegar el mismo dos veces entre un poll y otro).
+ *
+ * @param {Element} hilo
+ * @param {Object[]} mensajes
+ * @returns {void}
+ */
+function pintarMensajesNuevosDeMegaBot(hilo, mensajes) {
+  mensajes.forEach(m => {
+    if (hilo.querySelector('[data-mensaje-id="' + m.id + '"]')) return;
+    (m.propuestas || []).forEach(p => { ESTADO_PROPUESTAS_MEGABOT[p.id] = p; });
+    hilo.insertAdjacentHTML('beforeend', htmlDeBurbujaMegaBot(m));
+    MEGABOT_ULTIMO_ID = Math.max(MEGABOT_ULTIMO_ID, m.id);
+  });
+  if (mensajes.length) hilo.scrollTop = hilo.scrollHeight;
+}
+
+/**
+ * Abre el chat de MegaBot: historial persistente (no se borra al
+ * cerrar), un campo para escribir, y chips que mandan una pregunta
+ * directo al hilo (ya no ejecutan CATALOGO_FAB — eso lo sigue haciendo
+ * el sandwich del toque largo, ver 29-fab.js).
  *
  * @returns {void}
  */
 function abrirAsistente() {
-  const chips = CONTEXTO_DEL_ASISTENTE[VISTA_ACTUAL] || CONTEXTO_DEL_ASISTENTE.resumen;
+  const chips = ['¿Cómo vamos de cupo?', '¿Qué mesas faltan?', '¿Qué vence hoy?', 'Pagos pendientes'];
 
-  const cuerpo = abrirHoja('Asistente',
-    '<div id="asistente-sugerencias" style="margin-bottom:var(--esp-2)">' +
-      '<p class="vacio__texto">Revisando qué hace falta…</p>' +
-    '</div>' +
+  const cuerpo = abrirHoja('MegaBot',
+    '<div id="megabot-hilo" class="megabot-hilo"></div>' +
 
-    // .filtros ya existe (estilos/03-vistas.css) y es exactamente esto:
-    // una fila de botones chicos que se acomodan solos.
-    '<div class="filtros">' +
-      chips.map(c => '<button class="filtro" data-asistente-chip="' + seguro(c) + '">' +
+    '<div class="filtros" style="margin:var(--esp-2) 0">' +
+      chips.map(c => '<button class="filtro" data-megabot-chip="' + seguro(c) + '">' +
                        seguro(c) + '</button>').join('') +
     '</div>' +
 
-    '<div style="display:flex;gap:var(--esp-1);margin-top:var(--esp-2)">' +
+    '<div style="display:flex;gap:var(--esp-1)">' +
       '<input type="text" id="asistente-entrada" class="campo__control" ' +
-             'placeholder="Escribe qué necesitas…" autocomplete="off">' +
+             'placeholder="Escribile a MegaBot…" autocomplete="off">' +
       '<button class="boton boton--principal" id="asistente-mandar" ' +
-              'style="flex-shrink:0">Ir</button>' +
-    '</div>' +
-
-    '<div id="asistente-resultado" style="margin-top:var(--esp-3)"></div>'
+              'style="flex-shrink:0">Enviar</button>' +
+    '</div>'
   );
 
-  cargarSugerenciasDelAsistente(buscar('#asistente-sugerencias', cuerpo));
-
+  const hilo = buscar('#megabot-hilo', cuerpo);
   const entrada = buscar('#asistente-entrada', cuerpo);
-  const resultado = buscar('#asistente-resultado', cuerpo);
-  entrada.focus();
+  MEGABOT_ULTIMO_ID = 0;
+  ESTADO_PROPUESTAS_MEGABOT = {};
+  engancharHiloDeMegaBot(hilo);
 
-  const procesar = async texto => {
-    if (!texto || !texto.trim()) return;
-    resultado.innerHTML = '';
-
-    // Primero se prueba si la frase nombra algo real (un pago, un
-    // invitado). Si algún patrón se hace cargo, no sigue al camino de
-    // las frases fijas.
-    const seHizoCargo = await intentarConEntidad(texto, resultado);
-    if (seHizoCargo) {
-      registrarEvento('asistente', 'frase_exitosa', { texto: texto.trim() });
-      return;
+  hilo.innerHTML = '<p class="vacio__texto">Cargando…</p>';
+  traer('chat.php?accion=listar&despues_de=0').then(r => {
+    hilo.innerHTML = '';
+    pintarMensajesNuevosDeMegaBot(hilo, r.mensajes || []);
+    if (!(r.mensajes || []).length) {
+      hilo.innerHTML = '<p class="vacio__texto">Escribile a MegaBot lo que necesites.</p>';
     }
+    entrada.focus();
+  }).catch(error => {
+    hilo.innerHTML = '<p class="aviso-error">' + seguro(error.message) + '</p>';
+  });
 
-    const coincidencias = buscarCoincidencias(texto);
-    const mejor = coincidencias[0];
+  const enviar = async textoCrudo => {
+    const texto = (textoCrudo || '').trim();
+    if (!texto) return;
+    entrada.value = '';
 
-    if (mejor && mejor.puntaje >= 60) {
-      // Confianza alta: se ejecuta directo. Ninguna de las acciones de
-      // este catálogo es destructiva ni masiva —todas abren una
-      // pantalla o navegan—, así que no hace falta pedir confirmación
-      // antes de correrla.
-      registrarEvento('asistente', 'frase_exitosa', { texto: texto.trim() });
-      cerrarHoja(true);
-      mejor.intencion.ejecutar();
-      return;
+    // Optimista: se pinta ya, con un id temporal que nunca va a chocar
+    // con uno real (los de la base son numéricos). El poll de abajo va
+    // a traer la fila de verdad — misma idea que el resto del panel
+    // (ver 36-optimista.js), simplificada porque acá no hace falta
+    // deshacer nada si falla: el mensaje ya quedó guardado del lado
+    // del servidor salvo que la red haya fallado de verdad.
+    if (hilo.querySelector('.vacio__texto')) hilo.innerHTML = '';
+    pintarMensajesNuevosDeMegaBot(hilo, [{
+      id: 'local-' + Date.now(), rol: 'lucila', texto: texto, estado: 'enviado', propuestas: [],
+    }]);
+
+    try {
+      await mandar('chat.php?accion=enviar', { texto: texto, pantalla: VISTA_ACTUAL });
+    } catch (error) {
+      avisar(error.message, true);
     }
-
-    if (coincidencias.length) {
-      // Confianza media o baja: cuenta como "no entendió a la primera",
-      // igual que el caso sin ninguna coincidencia — en los dos tuvo
-      // que reformular o elegir a mano.
-      registrarEvento('asistente', 'frase_fallida', { texto: texto.trim() });
-
-      resultado.innerHTML =
-        '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
-          'No estoy segura. ¿Quisiste decir…' +
-        '</p>' +
-        coincidencias.slice(0, 3).map((c, i) =>
-          '<button class="lista__fila" data-asistente-opcion="' + i + '">' +
-            '<span class="lista__cuerpo">' +
-              '<span class="lista__titulo">' + seguro(c.intencion.nombre) + '</span>' +
-            '</span>' +
-          '</button>'
-        ).join('');
-
-      buscarTodos('[data-asistente-opcion]', resultado).forEach(boton => {
-        boton.addEventListener('click', async () => {
-          const c = coincidencias[Number(boton.dataset.asistenteOpcion)];
-          await enseñarFrase(c.intencion.clave, texto.trim());
-          cerrarHoja(true);
-          c.intencion.ejecutar();
-        });
-      });
-      return;
-    }
-
-    // Antes de rendirse: ¿es una muestra de cariño o jerga afectiva
-    // reconocida (46-agente-motivador.js)? Acá, en el chat libre, es
-    // donde esta capa tiene que notarse más — no hay una pantalla más
-    // "de charla" que esta. No cuenta como frase fallida: entendió
-    // perfectamente lo que se le dijo, solo que no era un comando.
-    if (typeof respuestaCarinosaPara === 'function') {
-      const carinosa = respuestaCarinosaPara(texto);
-      if (carinosa) {
-        resultado.innerHTML = '<p style="margin:var(--esp-1) 0">' + seguro(carinosa) + '</p>';
-        return;
-      }
-    }
-
-    registrarEvento('asistente', 'frase_fallida', { texto: texto.trim() });
-
-    resultado.innerHTML =
-      '<p class="aviso-error">No conozco esa frase todavía. Prueba con otras ' +
-      'palabras, o elige una de arriba.</p>';
   };
 
-  buscar('#asistente-mandar', cuerpo).addEventListener('click', () => procesar(entrada.value));
+  buscar('#asistente-mandar', cuerpo).addEventListener('click', () => enviar(entrada.value));
   entrada.addEventListener('keydown', evento => {
-    if (evento.key === 'Enter') procesar(entrada.value);
+    if (evento.key === 'Enter') enviar(entrada.value);
+  });
+  buscarTodos('[data-megabot-chip]', cuerpo).forEach(chip => {
+    chip.addEventListener('click', () => enviar(chip.dataset.megabotChip));
   });
 
-  buscarTodos('[data-asistente-chip]', cuerpo).forEach(chip => {
-    chip.addEventListener('click', () => procesar(chip.dataset.asistenteChip));
-  });
+  // Poll cada 2s mientras la hoja exista. Un solo intervalo activo a la
+  // vez: si se abre el chat dos veces sin que el anterior se cerrara
+  // del todo, el viejo se corta acá, nunca quedan dos corriendo juntos.
+  if (MEGABOT_INTERVALO) clearInterval(MEGABOT_INTERVALO);
+  MEGABOT_INTERVALO = setInterval(async () => {
+    if (!document.body.contains(hilo)) {
+      clearInterval(MEGABOT_INTERVALO);
+      MEGABOT_INTERVALO = null;
+      return;
+    }
+    try {
+      const r = await traer('chat.php?accion=listar&despues_de=' + MEGABOT_ULTIMO_ID);
+      // Los locales (optimistas, sin llegar todavía por el servidor) no
+      // tienen id numérico — no hace falta sacarlos, la fila real de
+      // Lucila llega con OTRO id y simplemente se agrega al lado.
+      pintarMensajesNuevosDeMegaBot(hilo, r.mensajes || []);
+    } catch (error) {
+      // Sin red: se reintenta solo en el próximo tick, sin avisar cada
+      // 2 segundos que algo falló.
+    }
+  }, 2000);
 }
 
 
@@ -758,5 +911,124 @@ function engancharComandos(cuerpo, repintar) {
       avisar('Aprendida.');
       repintar();
     });
+  });
+}
+
+
+/* ─── 6. AJUSTES → MEGABOT ──────────────────────────────────────────── */
+
+/**
+ * La hoja donde Carlos pega la URL del webhook de MegaBot y maneja sus
+ * dos claves. Mismo molde que abrirConfiguracionDelFab() (29-fab.js):
+ * abrirHoja + campos + Guardar.
+ *
+ * Solo admin — el menú ya esconde esta fila para 'entrada' (ver
+ * dibujarMas() en 05-navegacion.js); este chequeo es el cinturón por si
+ * alguna vez se llama a mano.
+ *
+ * @returns {void}
+ */
+async function abrirConfiguracionMegaBot() {
+  if (USUARIO.rol !== 'admin') {
+    avisar('Solo una cuenta admin configura MegaBot.', true);
+    return;
+  }
+
+  let urlActual = '';
+  let yaTieneClaveSaliente = false;
+  try {
+    const [rUrl, rClave] = await Promise.all([
+      traer('ajustes.php?accion=obtener&clave=megabot_webhook_url'),
+      traer('ajustes.php?accion=obtener&clave=megabot_webhook_clave'),
+    ]);
+    urlActual = rUrl && rUrl.valor ? rUrl.valor : '';
+    yaTieneClaveSaliente = !!(rClave && rClave.valor);
+  } catch (error) { /* se abre igual, con los campos vacíos */ }
+
+  const cuerpo = abrirHoja('MegaBot',
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
+      'El chat del botón redondo habla con MegaBot. Sin URL, los ' +
+      'mensajes se guardan pero nadie contesta. Solo una cuenta admin ' +
+      've esta pantalla.' +
+    '</p>' +
+
+    campoTexto({ id: 'megabot-url', rotulo: 'URL del webhook', tipo: 'url', valor: urlActual }) +
+
+    '<div class="campo">' +
+      '<label for="megabot-clave-saliente">Clave que se manda al webhook</label>' +
+      '<input type="password" id="megabot-clave-saliente" class="campo__control" ' +
+             'autocomplete="new-password" placeholder="' +
+             (yaTieneClaveSaliente ? 'Dejar en blanco para no cambiarla' : 'Sin clave todavía') + '">' +
+      (yaTieneClaveSaliente
+        ? '<p class="nota-campo">Ya hay una clave guardada.</p>'
+        : '') +
+    '</div>' +
+
+    '<div class="campo">' +
+      '<span class="campo__rotulo">Clave de servicio</span>' +
+      '<p class="vacio__texto" style="margin:4px 0 8px">' +
+        'La que usa MegaBot para contestar. Nunca se muestra, salvo la ' +
+        'vez que la generás.' +
+      '</p>' +
+      '<div id="megabot-clave-servicio-resultado"></div>' +
+      '<button type="button" class="boton" id="megabot-rotar-clave">' +
+        'Generar / rotar clave de servicio</button>' +
+    '</div>' +
+
+    pieDeFormulario('Guardar')
+  );
+
+  buscar('#megabot-rotar-clave', cuerpo).addEventListener('click', () => {
+    if (!confirmarAccion(
+      'La clave anterior deja de servir. Copiá la nueva ahora — no se ' +
+      'vuelve a mostrar. ¿Generar una nueva?'
+    )) return;
+
+    mandar('chat.php?accion=rotar_clave', {}).then(r => {
+      buscar('#megabot-clave-servicio-resultado', cuerpo).innerHTML =
+        '<p class="aviso-error" style="margin-bottom:6px">' +
+          'Copiala ahora. Al cerrar esta hoja no la vas a ver otra vez.' +
+        '</p>' +
+        '<div style="display:flex;gap:6px;align-items:center">' +
+          '<code style="flex:1;overflow-wrap:anywhere">' + seguro(r.clave) + '</code>' +
+          '<button type="button" class="boton boton--chico" id="megabot-copiar-clave">Copiar</button>' +
+        '</div>';
+
+      buscar('#megabot-copiar-clave', cuerpo).addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(r.clave);
+          avisar('Copiada.');
+        } catch (error) { avisar('No se pudo copiar — seleccionala a mano.', true); }
+      });
+    }).catch(error => avisar(error.message, true));
+  });
+
+  buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
+    const boton = buscar('#pie-guardar', cuerpo);
+    const url = valorDe('megabot-url', cuerpo).trim();
+    const claveSaliente = buscar('#megabot-clave-saliente', cuerpo).value;
+
+    if (url !== '' && !url.startsWith('https://')) {
+      avisar('La URL tiene que empezar con https://', true);
+      return;
+    }
+
+    boton.disabled = true;
+    boton.textContent = 'Guardando…';
+
+    try {
+      await mandar('ajustes.php?accion=guardar', { clave: 'megabot_webhook_url', valor: url });
+      // No pisar la clave existente si el campo quedó vacío — dejarlo
+      // en blanco significa "no cambiarla", no "borrarla".
+      if (claveSaliente !== '') {
+        await mandar('ajustes.php?accion=guardar', { clave: 'megabot_webhook_clave', valor: claveSaliente });
+      }
+      cerrarHoja(true);
+      avisar('Guardado.');
+    } catch (error) {
+      avisar(error.message, true);
+      boton.disabled = false;
+      boton.textContent = 'Guardar';
+    }
   });
 }

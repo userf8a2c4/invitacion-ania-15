@@ -1372,3 +1372,79 @@
   box-shadow: 0 0 0 999px rgba(0, 0, 0, .35);
   pointer-events: none;
 }
+
+
+/* ─── MEGABOT (2026-08-30) ────────────────────────────────────────── */
+/* El hilo del chat. Clases mínimas nuevas; todo lo demás (.tarjeta,
+   .boton, .acciones, .vacio__texto) ya existía y se reusa tal cual. */
+
+.megabot-hilo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 160px;
+  max-height: 55vh;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.megabot-fila {
+  display: flex;
+  flex-direction: column;
+}
+.megabot-fila--lucila  { align-items: flex-end; }
+.megabot-fila--megabot { align-items: flex-start; }
+.megabot-fila--sistema { align-items: center; }
+
+.megabot-burbuja {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: var(--redondeo-chico);
+  font-size: .95em;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.megabot-burbuja--lucila {
+  background: var(--oro);
+  color: var(--texto-sobre-principal);
+  border-bottom-right-radius: 4px;
+}
+.megabot-burbuja--megabot {
+  background: var(--fondo-tarjeta);
+  border: 1px solid var(--borde);
+  border-bottom-left-radius: 4px;
+}
+.megabot-burbuja--sistema {
+  background: transparent;
+  color: var(--texto-tenue);
+  font-size: .85em;
+  text-align: center;
+  max-width: 100%;
+}
+
+.megabot-burbuja__error {
+  margin-top: 6px;
+  font-size: .85em;
+  color: var(--alerta);
+}
+.megabot-burbuja__error button {
+  background: none;
+  border: none;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+
+.megabot-propuesta {
+  margin-top: 6px;
+  max-width: 85%;
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo-chico);
+  padding: 10px 12px;
+}
+.megabot-propuesta--resuelta { opacity: .7; }
+.megabot-propuesta__titulo { font-weight: 600; }

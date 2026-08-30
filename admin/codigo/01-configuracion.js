@@ -260,6 +260,11 @@ const CONFIGURACION = {
         ['etiquetas',  'Cambiar cómo se llaman las cosas en la app', true],
         ['colores',    'Elegir la paleta de colores del panel', true],
         ['fab-config', 'Elegir qué hace el botón redondo de abajo'],
+        // ⚡ (2026-08-30) Solo admin: acá van la URL del webhook y las
+        // dos claves de MegaBot — la de servicio nunca se muestra
+        // (solo al rotarla), así que no tiene sentido que una cuenta
+        // no-admin ni siquiera vea si hay una configurada.
+        ['megabot', 'URL y claves para conectar el chat con MegaBot', true],
         ['comandos-asistente', 'Ver y agregar frases del asistente'],
         ['respaldo',   'Cuándo se guardó por última vez la copia de todo', true],
         ['instalar',   'Poner el acceso directo en la pantalla de inicio'],

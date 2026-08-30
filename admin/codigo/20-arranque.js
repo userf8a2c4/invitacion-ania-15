@@ -480,7 +480,13 @@ async function encender() {
     // leer su localStorage.
     cargarSandwichGuardadoEnElTelefono();
     cargarFrasesAprendidasEnElTelefono();
-    cargarDiccionarioCarinosoEnElTelefono();
+    // ⚡ (2026-08-30) Vive en 46-agente-motivador.js, que dejó de
+    // cargarse (MegaBot lo reemplaza) — el archivo queda en el repo por
+    // si hace falta volver atrás, pero esta llamada tiene que
+    // sobrevivir a que no esté, o el login entero tira ReferenceError.
+    if (typeof cargarDiccionarioCarinosoEnElTelefono === 'function') {
+      cargarDiccionarioCarinosoEnElTelefono();
+    }
 
     arrancarLaApp();
 
@@ -493,7 +499,11 @@ async function encender() {
     sincronizarPaletaConServidor();
     sincronizarSandwichConServidor();
     sincronizarFrasesConServidor();
-    sincronizarDiccionarioCarinosoConServidor();
+    // ⚡ (2026-08-30) Mismo motivo que arriba: 46-agente-motivador.js
+    // dejó de cargarse.
+    if (typeof sincronizarDiccionarioCarinosoConServidor === 'function') {
+      sincronizarDiccionarioCarinosoConServidor();
+    }
 
     // Deja guardada una copia de cada sección por si se corta la señal
     // más tarde (Fase 8 del rediseño). Mismo criterio: no se espera, no

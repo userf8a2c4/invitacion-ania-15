@@ -245,6 +245,32 @@ if (existeTabla('recibos')) {
 }
 
 
+/* ─── SEMBRAR LA CLAVE DE SERVICIO DE MEGABOT ──────────────────────────
+   Es la que compara admin/api/chat.php contra el header entrante
+   `X-MegaBot-Clave` (acciones 'responder'/'contexto', sin sesión de
+   usuario). Solo si todavía no existe -no se pisa una vez generada, y
+   nunca queda en blanco: sin ella, ese lado del puente queda cerrado
+   para siempre en vez de fallar en silencio. No hay ningún patrón
+   previo en este archivo para "sembrar una clave de ajustes si falta"
+   -esto es nuevo, no una copia de otro lado. */
+if (existeTabla('ajustes')) {
+    $yaTiene = consultarUno(
+        "SELECT valor FROM ajustes WHERE clave = 'megabot_servicio_clave'"
+    );
+    if (!$yaTiene || trim((string) $yaTiene['valor']) === '') {
+        // ON DUPLICATE KEY UPDATE en vez de un insertar() liso: `clave`
+        // es PRIMARY KEY, y una fila con valor vacío (de una corrida
+        // anterior fallida) rebotaría un insertar() normal con "llave
+        // duplicada" en vez de completarse.
+        ejecutar(
+            "INSERT INTO ajustes (clave, valor) VALUES ('megabot_servicio_clave', :v)
+             ON DUPLICATE KEY UPDATE valor = VALUES(valor)",
+            [':v' => bin2hex(random_bytes(32))]
+        );
+    }
+}
+
+
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 
 /* ⚠️ ESTA LISTA SE MANTIENE A MANO Y YA MINTIÓ UNA VEZ (2026-08-28).
@@ -266,6 +292,7 @@ $tablasEsperadas = [
     'acompanante_reglas', 'asignacion_mesas_persona', 'invitaciones',
     'escrituras_hechas', 'envios_proveedor', 'acomodo_respaldo',
     'etiquetas', 'etiquetas_asignadas',
+    'chat_hilos', 'chat_mensajes', 'chat_propuestas',
 ];
 
 $faltantes = [];
