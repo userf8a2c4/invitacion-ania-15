@@ -331,6 +331,7 @@ function nombreDeOpcionDeMenu(clave) {
     'etiquetas':   'Cambiar los nombres',
     'colores':     'Colores del panel',
     'fab-config':  'Mis herramientas rápidas',
+    'megabot':     'MegaBot',
     'comandos-asistente': 'Comandos del asistente',
     'respaldo':    'Estado del respaldo',
     'instalar':    'Instalar en la pantalla de inicio',
@@ -413,6 +414,10 @@ function atenderMenu(opcion) {
 
     case 'fab-config':
       abrirConfiguracionDelFab();
+      break;
+
+    case 'megabot':
+      abrirConfiguracionMegaBot();
       break;
 
     case 'comandos-asistente':

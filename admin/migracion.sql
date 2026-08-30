@@ -1185,11 +1185,82 @@ CREATE TABLE IF NOT EXISTS etiquetas (
 CREATE TABLE IF NOT EXISTS etiquetas_asignadas (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   etiqueta_id   INT NOT NULL,
-  -- 'acompanante' | 'mesa'
+  -- 'acompanante' | 'mesa' | 'confirmacion' (2026-08-30: un paquete sin
+  -- nombres cargados todavía necesitaba poder tener etiqueta propia, no
+  -- solo heredada de sus acompañantes -ver etiquetasDeUnidad() en
+  -- _lib/mesas.php).
   atado_a_tipo  VARCHAR(20) NOT NULL,
   atado_a_id    INT NOT NULL,
   UNIQUE KEY una_vez (etiqueta_id, atado_a_tipo, atado_a_id),
   KEY por_atadura (atado_a_tipo, atado_a_id),
   CONSTRAINT etq_asig_etiqueta FOREIGN KEY (etiqueta_id)
     REFERENCES etiquetas(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- MEGABOT: EL CHAT DEL PANEL (2026-08-30)
+-- ══════════════════════════════════════════════════════════════════════
+--
+-- Reemplaza a las reglas fijas de los agentes 40-44/46 (que quedan en el
+-- repo, sin cargarse — ver admin/index.html): Lucila ya no habla con un
+-- matcher de frases, habla con "MegaBot", un solo hilo persistente por
+-- cuenta. El "cerebro" de MegaBot vive AFUERA de este repo (un
+-- Orquestador ajeno, equipo Cursor) — estas tablas son solo el buzón:
+-- lo que Lucila escribe, lo que MegaBot contesta, y las propuestas de
+-- acción que ella puede aceptar o rechazar. Ver admin/api/chat.php.
+--
+-- POR QUÉ TRES TABLAS Y NO UNA
+-- Un hilo por cuenta (chat_hilos), sus mensajes en orden (chat_mensajes,
+-- rol lucila/megabot/sistema), y las propuestas que puede traer un
+-- mensaje de megabot COMO FILAS APARTE (chat_propuestas) en vez de
+-- json suelto sin id propio -así cada propuesta se puede marcar
+-- aceptada/rechazada/ejecutada/fallida una por una, sin tener que
+-- reescribir el mensaje entero para cambiar el estado de una sola.
+--
+-- SIN FK DE chat_propuestas.mensaje_id A PROPÓSITO -es una relación
+-- 1 a N normal, se podría poner, pero mensaje_id nunca se borra desde
+-- el panel (no hay 'borrar mensaje' en el chat) así que no hace falta
+-- la garantía de integridad referencial para este caso.
+
+CREATE TABLE IF NOT EXISTS chat_hilos (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id    INT NOT NULL,
+  creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY un_hilo_por_usuario (usuario_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS chat_mensajes (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  hilo_id         INT NOT NULL,
+  rol             ENUM('lucila','megabot','sistema') NOT NULL,
+  texto           TEXT NOT NULL,
+  -- Las propuestas de ESTE mensaje van en chat_propuestas (mensaje_id);
+  -- esta columna queda para lo que el Orquestador haya mandado crudo,
+  -- por si hace falta depurar sin ir a reconstruirlo desde las filas.
+  propuestas_json TEXT NULL,
+  estado          ENUM('pendiente','enviado','error','visto') NOT NULL DEFAULT 'enviado',
+  creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_hilo (hilo_id, id),
+  CONSTRAINT chat_msg_hilo FOREIGN KEY (hilo_id)
+    REFERENCES chat_hilos(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS chat_propuestas (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  mensaje_id    INT NOT NULL,
+  titulo        VARCHAR(200) NOT NULL,
+  detalle       VARCHAR(500) NOT NULL DEFAULT '',
+  -- 'mesas.php?accion=autoasignar' -mismo string que usa mandar() en el
+  -- browser, validado contra la whitelist en admin/api/chat.php.
+  accion        VARCHAR(120) NOT NULL,
+  -- El payload exacto que mandar() le pasa a esa acción cuando Lucila
+  -- confirma -texto JSON, no columnas sueltas: cada acción de la
+  -- whitelist tiene su propia forma de cuerpo.
+  cuerpo_json   TEXT,
+  estado        ENUM('abierta','aceptada','rechazada','ejecutada','fallida')
+                NOT NULL DEFAULT 'abierta',
+  creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_mensaje (mensaje_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
