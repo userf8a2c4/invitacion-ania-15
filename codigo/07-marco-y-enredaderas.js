@@ -1971,7 +1971,26 @@
   function construirUnaSolaVez() {
     if (yaSeConstruyo) return;
     yaSeConstruyo = true;
+    /* ⚡ EL SCROLL SE LEE ACÁ, NO AL EVALUAR EL SCRIPT (2026-08-30).
+       Antes esta lectura vivía en la línea de abajo, corriendo apenas
+       cargaba el archivo — con el sobre todavía cerrado y nadie mirando.
+       Ese es justo el "reprocesamiento forzado" que PageSpeed medía en
+       escritorio durante el TBT: scrollActualY() ya es barata (lee una
+       variable cacheada, ver 02-utilidades.js), pero forzarla mientras el
+       navegador todavía está resolviendo layout de la carga inicial no lo
+       es. Ahora se lee recién cuando de verdad hacen falta las
+       enredaderas: al abrir el sobre. */
+    posicionDeScrollAnterior = scrollActualY();
     repartirPlantas();
+    /* ⚡ EL BUCLE DE CUADRO TAMPOCO ARRANCA HASTA ACÁ (2026-08-30). Antes
+       `requestAnimationFrame(dibujarCuadro)` se pedía al evaluar el script,
+       "siempre", y dibujarCuadro se auto-reagendaba para siempre aunque
+       hayAlgoQueMirar() devolviera false —un cuadro vacío pedido de sobra
+       en cada vsync mientras el sobre tapaba todo—. Arrancarlo recién con
+       la invitación visible ahorra esos cuadros sin tocar el contrato de
+       hayAlgoQueMirar(): una vez arrancado, el bucle se sigue reagendando
+       igual que antes, animaciones-off incluido. */
+    requestAnimationFrame(dibujarCuadro);
   }
 
   document.addEventListener('invitacion-visible', construirUnaSolaVez);
@@ -1979,15 +1998,10 @@
 
   /* ─── 6. MOVIMIENTO ────────────────────────────────────────────── */
 
-  /* ⚡ scrollActualY() Y NO window.scrollY (2026-08-24): esta línea corre
-     apenas carga el script, justo después de que 03/04/05/24/06 ya
-     escribieron clases y crearon nodos — el momento exacto en que una
-     lectura cruda de scroll fuerza el reflow completo que después paga
-     ESTA línea (PageSpeed lo midió: "reprocesamiento forzado" atribuido acá).
-     scrollActualY() ya es la fuente de verdad cacheada del proyecto para
-     esto (02-utilidades.js) — el propio bucle de cuadro de este archivo, un
-     poco más abajo, ya la usa por el mismo motivo. */
-  let posicionDeScrollAnterior = scrollActualY();
+  /* Arranca en 0: recién se lee el scroll de verdad dentro de
+     construirUnaSolaVez(), cuando se abre el sobre (ver arriba). Antes de
+     eso las plantas no existen, así que este valor no se usa para nada. */
+  let posicionDeScrollAnterior = 0;
   let mouseX = -9999;
   let mouseY = -9999;
 
@@ -2345,9 +2359,12 @@
     requestAnimationFrame(dibujarCuadro);
   }
 
-  /* El bucle arranca SIEMPRE (aunque las animaciones estén apagadas): se
-     queda en reposo hasta que se enciendan, para poder reanudar en vivo. */
-  requestAnimationFrame(dibujarCuadro);
+  /* ⛔ ACÁ YA NO VA `requestAnimationFrame(dibujarCuadro)` A SECAS.
+     El bucle arranca dentro de construirUnaSolaVez(), al recibir
+     'invitacion-visible' (ver más arriba) — no antes. Una vez arrancado
+     sigue reagendándose para siempre, animaciones-off incluido, igual que
+     antes: lo único que cambió es CUÁNDO se pide el primer cuadro, no el
+     contrato de hayAlgoQueMirar(). */
 
 
   /* Si cambia el tamaño de la ventana hay que rehacer todo. Se espera un

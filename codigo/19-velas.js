@@ -858,6 +858,15 @@
       // Recién con todas las piezas creadas tiene sentido medirlas.
       () => acomodarTodo(observarLasSecciones)
     );
+
+    /* ⚡ EL BUCLE DEL TITILEO ARRANCA ACÁ, NO AL EVALUAR EL SCRIPT
+       (2026-08-30). Antes `requestAnimationFrame(dibujarCuadro)` se pedía
+       de una, sin importar si el sobre estaba abierto: un cuadro vacío
+       pedido de sobra en cada vsync (hayAlgoQueMirar() lo cortaba, pero
+       igual competía por el turno). Recién hace falta un cuadro cuando la
+       invitación se ve, así que recién ahí se pide el primero; una vez
+       arrancado se sigue reagendando para siempre, igual que antes. */
+    requestAnimationFrame(dibujarCuadro);
   }
 
   document.addEventListener('invitacion-visible', construirYAcomodarUnaSolaVez);
@@ -1043,6 +1052,8 @@
     }
     requestAnimationFrame(dibujarCuadro);
   }
-  requestAnimationFrame(dibujarCuadro);
+  /* ⛔ ACÁ YA NO VA `requestAnimationFrame(dibujarCuadro)` A SECAS: el
+     primer cuadro se pide dentro de construirYAcomodarUnaSolaVez(), al
+     recibir 'invitacion-visible' (ver más arriba). */
 
 })();
