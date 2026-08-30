@@ -702,7 +702,20 @@ select.campo__control {
   border-bottom: 1px solid var(--borde);
 }
 
-.hoja__titulo { font-size: 16px; }
+.hoja__titulo { font-size: 16px; flex: 1; }
+
+/* Números chicos de uso de MegaBot, al otro extremo del encabezado
+   (entre el título y el botón de cerrar). Solo la hoja MegaBot lo
+   llena — abrirHoja()/cerrarHoja() lo vacían y ocultan para que el
+   resto de las hojas no lo hereden (06-piezas.js). Nada de fondo,
+   borde ni barra: es texto, no una tarjeta. */
+.hoja__uso {
+  font-size: 12px;
+  color: var(--texto-tenue);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  line-height: 1;
+}
 
 .hoja__cuerpo {
   padding: var(--esp-3);

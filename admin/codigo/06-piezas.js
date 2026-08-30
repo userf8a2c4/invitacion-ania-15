@@ -143,6 +143,13 @@ function abrirHoja(titulo, contenido, alCerrar) {
   buscar('#hoja-titulo').textContent = titulo;
   HOJA_TITULO_ACTUAL = titulo;
 
+  // Los números de uso son solo de la hoja MegaBot (32-asistente.js los
+  // llena después de abrirla) — cualquier otra hoja arranca sin heredar
+  // el dato de la anterior.
+  const hojaUso = buscar('#hoja-uso');
+  hojaUso.textContent = '';
+  hojaUso.hidden = true;
+
   cuerpo.innerHTML = '';
   if (typeof contenido === 'string') {
     cuerpo.innerHTML = contenido;
@@ -203,6 +210,9 @@ function cerrarHoja(forzar) {
   hoja.classList.add('oculto');
   desactivarCompensacionDeTeclado();
   buscar('#hoja-cuerpo').innerHTML = '';
+  const hojaUsoAlCerrar = buscar('#hoja-uso');
+  hojaUsoAlCerrar.textContent = '';
+  hojaUsoAlCerrar.hidden = true;
   document.body.style.overflow = '';
 
   if (AL_CERRAR_HOJA) {

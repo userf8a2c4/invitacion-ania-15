@@ -281,6 +281,52 @@ function linkDeCallback() {
     return 'https://' . $host . '/admin/api/chat.php';
 }
 
+/**
+ * El snapshot de uso que mandó MegaBot la última vez (o null si nunca
+ * mandó nada) — se guarda como ajuste, mismo patrón que cualquier otro
+ * valor chico de `ajustes`. Nunca se inventa un número acá: si no hay
+ * dato, el encabezado se queda en blanco (lo decide el JS).
+ *
+ * @return array|null
+ */
+function usoDeMegabotGuardado() {
+    $fila = consultarUno("SELECT valor FROM ajustes WHERE clave = 'megabot_uso'");
+    $valor = (string) ($fila['valor'] ?? '');
+    if ($valor === '') return null;
+
+    $uso = json_decode($valor, true);
+    return is_array($uso) ? $uso : null;
+}
+
+/**
+ * Valida y guarda el `uso` opcional que mandó MegaBot en `accion=
+ * responder`. Nunca corta la petición si viene mal formado — el texto
+ * de la respuesta es lo importante, el uso es un extra.
+ *
+ * @param mixed $usoCrudo
+ * @return void
+ */
+function guardarUsoDeMegabotSiVino($usoCrudo) {
+    if (!is_array($usoCrudo)) return;
+
+    $porcentaje = isset($usoCrudo['porcentaje']) ? (int) $usoCrudo['porcentaje'] : null;
+    if ($porcentaje !== null) $porcentaje = max(0, min(100, $porcentaje));
+
+    $reiniciaEn = isset($usoCrudo['reinicia_en']) ? max(0, (int) $usoCrudo['reinicia_en']) : 0;
+    $agotado = !empty($usoCrudo['agotado']);
+
+    // Sin porcentaje no hay nada honesto que mostrar (ver tabla del
+    // encabezado) — no se guarda un uso vacío.
+    if ($porcentaje === null && !$agotado) return;
+
+    $uso = ['porcentaje' => $porcentaje, 'reinicia_en' => $reiniciaEn, 'agotado' => $agotado];
+    ejecutar(
+        "INSERT INTO ajustes (clave, valor) VALUES ('megabot_uso', :v)
+         ON DUPLICATE KEY UPDATE valor = VALUES(valor)",
+        [':v' => json_encode($uso, JSON_UNESCAPED_UNICODE)]
+    );
+}
+
 
 switch ($accion) {
 
@@ -306,7 +352,7 @@ case 'listar':
     }
     unset($m);
 
-    responderBien(['hilo_id' => $hiloId, 'mensajes' => $mensajes]);
+    responderBien(['hilo_id' => $hiloId, 'mensajes' => $mensajes, 'uso' => usoDeMegabotGuardado()]);
     break;
 
 
@@ -327,16 +373,14 @@ case 'enviar':
     anotarEnBitacora($yo, 'chat_enviar', 'chat_mensajes', $mensajeId, mb_substr($texto, 0, 200));
 
     $url = (string) (consultarUno("SELECT valor FROM ajustes WHERE clave = 'megabot_webhook_url'")['valor'] ?? '');
+    $offline = true;
 
     if ($url === '') {
-        // Sin webhook configurado: se guarda igual, pero se avisa que
-        // nadie va a contestar — nunca se cae al matcher de frases viejo.
+        // Sin webhook configurado: se guarda igual, sin burbuja de
+        // sistema — el JS (32-asistente.js) resuelve local con los
+        // agentes 40-44/46 y el matcher viejo. Nunca se cae a eso desde
+        // acá: es la UI la que decide qué mostrar con offline=true.
         actualizar('chat_mensajes', $mensajeId, ['estado' => 'pendiente']);
-        insertar('chat_mensajes', [
-            'hilo_id' => $hiloId, 'rol' => 'sistema',
-            'texto' => 'MegaBot no está conectado. Pedile a Carlos que lo configure en Ajustes.',
-            'estado' => 'enviado',
-        ]);
     } else {
         $contexto = construirContexto($pantalla, $yo);
         $enviado = mandarWebhookDeMegabot([
@@ -350,17 +394,11 @@ case 'enviar':
             'callback' => linkDeCallback(),
         ]);
 
-        if (!$enviado) {
-            actualizar('chat_mensajes', $mensajeId, ['estado' => 'error']);
-            insertar('chat_mensajes', [
-                'hilo_id' => $hiloId, 'rol' => 'sistema',
-                'texto' => 'MegaBot no contestó; reintentá o usá el menú largo del botón.',
-                'estado' => 'enviado',
-            ]);
-        }
+        $offline = !$enviado;
+        actualizar('chat_mensajes', $mensajeId, ['estado' => $enviado ? 'enviado' : 'error']);
     }
 
-    responderBien(['id' => $mensajeId, 'hilo_id' => $hiloId]);
+    responderBien(['id' => $mensajeId, 'hilo_id' => $hiloId, 'offline' => $offline]);
     break;
 
 
@@ -411,7 +449,7 @@ case 'reenviar':
     ]);
 
     actualizar('chat_mensajes', $mensajeId, ['estado' => $enviado ? 'enviado' : 'error']);
-    responderBien(['reenviado' => $enviado]);
+    responderBien(['reenviado' => $enviado, 'offline' => !$enviado]);
     break;
 
 
@@ -447,6 +485,7 @@ case 'responder':
 
     $texto = campoTexto($datos, 'texto', 4000);
     $propuestasCrudas = is_array($datos['propuestas'] ?? null) ? $datos['propuestas'] : [];
+    guardarUsoDeMegabotSiVino($datos['uso'] ?? null);
 
     // Cada propuesta se valida contra la whitelist ACÁ, en el servidor —
     // nunca confiar en que el Orquestador solo mande lo permitido. La

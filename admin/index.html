@@ -277,6 +277,7 @@
     <div class="hoja__agarre" aria-hidden="true"></div>
     <header class="hoja__encabezado">
       <h2 id="hoja-titulo" class="hoja__titulo"></h2>
+      <span id="hoja-uso" class="hoja__uso" hidden></span>
       <button id="hoja-cerrar" class="boton-icono" aria-label="Cerrar">
         <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
           <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.5"
@@ -401,9 +402,18 @@
 <script src="codigo/31-vista-planificar.js"></script>
 <script src="codigo/38-metricas.js"></script>
 <script src="codigo/39-vista-metricas.js"></script>
-<!-- (2026-08-30) Paso 5 (reglas fijas) fuera; el chat es MegaBot (32 +
-     chat.php). Archivos 40-44 y 46 quedan en el repo por rollback, sin
-     cargarse — sacarlos de acá es lo que hace que dejen de pedirse. -->
+<!-- (2026-08-30) Vuelven a cargarse: el chat es MegaBot (32 + chat.php)
+     cuando hay webhook conectado, pero si MegaBot está offline (sin URL,
+     webhook caído, timeout) el chat sigue contestando con estos mismos
+     agentes de reglas fijas — no se borraron nunca, solo dejaron de ser
+     la única voz. También siguen alimentando la campana
+     (refrescarSugerenciasDeAgentesParaLaCampana). -->
+<script src="codigo/40-agentes.js"></script>
+<script src="codigo/41-agente-dinero.js"></script>
+<script src="codigo/42-agente-mesas.js"></script>
+<script src="codigo/43-agente-fechas.js"></script>
+<script src="codigo/44-agente-hoy.js"></script>
+<script src="codigo/46-agente-motivador.js"></script>
 <script src="codigo/45-novedades.js"></script>
 <!-- Usa campoTelefono/campoListaAmpliable (06, 09) y traer/mandar (03);
      dibujarInvitaciones() se llama desde 08-vista-invitados.js. -->
