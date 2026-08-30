@@ -55,6 +55,16 @@ function exigirPermisoDeEtiqueta($yo, $tipo) {
     exigirPermiso($yo, $seccion, 'editar');
 }
 
+/* ⚡ (2026-08-30) 'confirmacion' se suma a los tipos válidos: antes solo
+   se podía taguear a una PERSONA nombrada o a una mesa. La mayoría de
+   los paquetes de la lista real no tienen a nadie nombrado todavía
+   (ver el prompt "cupo sustractivo + etiquetas"), así que sin esto
+   nunca podían tener afinidad con ninguna mesa. Ver etiquetasDeUnidad()
+   en _lib/mesas.php, que ya sabía leer etiquetas heredadas de los
+   acompañantes de una confirmación — ahora también lee las puestas
+   directo al paquete. */
+const TIPOS_DE_ETIQUETA_VALIDOS = ['acompanante', 'mesa', 'confirmacion'];
+
 
 switch ($accion) {
 
@@ -82,7 +92,7 @@ case 'por_objeto':
 
     $tipo = (string) ($_GET['tipo'] ?? '');
     $id   = (int) ($_GET['id'] ?? 0);
-    if (!in_array($tipo, ['acompanante', 'mesa'], true) || $id < 1) {
+    if (!in_array($tipo, TIPOS_DE_ETIQUETA_VALIDOS, true) || $id < 1) {
         responderMal('Falta decir de qué persona o mesa.', 400);
     }
 
@@ -125,7 +135,7 @@ case 'asignar':
 
     $tipo = (string) ($datos['tipo'] ?? '');
     $id   = campoEntero($datos, 'id', 0);
-    if (!in_array($tipo, ['acompanante', 'mesa'], true) || $id < 1) {
+    if (!in_array($tipo, TIPOS_DE_ETIQUETA_VALIDOS, true) || $id < 1) {
         responderMal('Falta decir a qué persona o mesa.', 400);
     }
     exigirPermisoDeEtiqueta($yo, $tipo);
@@ -166,7 +176,7 @@ case 'quitar':
     $tipo       = (string) ($datos['tipo'] ?? '');
     $id         = campoEntero($datos, 'id', 0);
     $etiquetaId = campoEntero($datos, 'etiqueta_id', 0);
-    if (!in_array($tipo, ['acompanante', 'mesa'], true) || $id < 1 || $etiquetaId < 1) {
+    if (!in_array($tipo, TIPOS_DE_ETIQUETA_VALIDOS, true) || $id < 1 || $etiquetaId < 1) {
         responderMal('Falta decir qué etiqueta sacar de dónde.', 400);
     }
     exigirPermisoDeEtiqueta($yo, $tipo);

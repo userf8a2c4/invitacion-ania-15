@@ -482,9 +482,12 @@ function abrirFormularioDeInvitacion(inv) {
     if (inv) carga.id = inv.id;
 
     try {
-      await mandar('invitaciones.php?accion=guardar', carga);
+      const r = await mandar('invitaciones.php?accion=guardar', carga);
       cerrarHoja(true);
       avisar('Guardado.');
+      // ⚡ (2026-08-30) Cupo sustractivo: se avisa, no se bloquea — la
+      // decisión de sobre-reservar es de Lucila, no del formulario.
+      if (r && r.se_excede) avisar(r.aviso, true);
       // ⚡ (2026-08-28) Si el filtro activo era, por ejemplo, "Confirmadas"
       // y se crea una invitación nueva (nace "Sin enviar"), sin este
       // reset la lista repintada la esconde y parece que no se guardó

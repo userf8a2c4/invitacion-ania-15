@@ -62,6 +62,19 @@ if (existeTabla('confirmaciones')) {
 
     $adultos = (int) ($totales['adultos'] ?? 0);
     $ninos   = (int) ($totales['ninos'] ?? 0);
+    $personas = $adultos + $ninos;
+
+    // ⚡ (2026-08-30) Cupo sustractivo real: hasta acá este archivo
+    // calculaba "personas que asisten" pero nunca lo restaba contra la
+    // capacidad de verdad del salón. `capacidad` sale de SUM(mesas.capacidad)
+    // -misma fuente que ya usa invitaciones.php?accion=listar, no se
+    // reinventa- y nunca de una constante 140 pisada a mano: si algún día
+    // cambian las mesas, este número se actualiza solo. Quien declina
+    // (asiste=0) no resta, tal como pide la regla de negocio.
+    $capacidad = existeTabla('mesas')
+        ? (int) (consultarUno('SELECT COALESCE(SUM(capacidad),0) AS total FROM mesas')['total'] ?? 0)
+        : 0;
+    $libres = max(0, $capacidad - $personas);
 
     $resultado['invitados'] = [
         'hay'         => true,
@@ -72,7 +85,9 @@ if (existeTabla('confirmaciones')) {
         'ninos'       => $ninos,
         // Este es EL número: cuántas sillas y cuántos platos hay que
         // pedirle al salón y al banquete.
-        'personas'    => $adultos + $ninos,
+        'personas'    => $personas,
+        'capacidad'   => $capacidad,
+        'libres'      => $libres,
     ];
 
     /* Desglose de menús. Se cuenta sobre la columna resumen_menus, que

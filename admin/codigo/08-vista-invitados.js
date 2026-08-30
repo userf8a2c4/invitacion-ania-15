@@ -732,6 +732,15 @@ function abrirDetalleDeInvitado(id) {
         '</div>'
       : '') +
     (asiste && gente ? '<div id="bloque-acompanantes"></div>' : '') +
+    /* ⚡ (2026-08-30) Etiquetas del PAQUETE, siempre visibles — no solo
+       cuando hay acompañantes nombrados. Es lo que permite taguear
+       "Familia paterna"/"Jóvenes" a un grupo entero (la mayoría de la
+       lista real no tiene ni un nombre cargado todavía), para que el
+       acomodo automático tenga con qué calcular afinidad — ver
+       etiquetasDeUnidad() en _lib/mesas.php. */
+    '<div class="campo" style="margin-top:var(--esp-2)">' +
+      '<div id="etiquetas-confirmacion"></div>' +
+    '</div>' +
     (INVITADOS_EDITABLES
       ? '<div class="acciones">' +
           '<button class="boton boton--peligro" id="borrar-invitado">Borrar</button>' +
@@ -743,6 +752,8 @@ function abrirDetalleDeInvitado(id) {
   if (asiste && gente) {
     dibujarAcompanantes(fila.id, gente, buscar('#bloque-acompanantes', cuerpo));
   }
+
+  pintarEtiquetasDe('confirmacion', fila.id, buscar('#etiquetas-confirmacion', cuerpo));
 
   if (tieneInvitacion) {
     const botonWhatsapp = buscar('#inv-whatsapp', cuerpo);
@@ -1058,9 +1069,11 @@ function abrirFormularioDeInvitado(fila) {
        ese camino sigue esperando la respuesta del servidor como antes. */
     if (esNuevo) {
       try {
-        await mandar('confirmaciones.php?accion=crear', carga);
+        const r = await mandar('confirmaciones.php?accion=crear', carga);
         cerrarHoja(true);
         avisar('Invitado agregado.');
+        // ⚡ (2026-08-30) Cupo sustractivo: aviso, no bloqueo.
+        if (r && r.se_excede) avisar(r.aviso, true);
         ensuciarVistas('resumen');
         dibujarGente();
       } catch (error) {

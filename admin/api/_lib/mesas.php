@@ -90,23 +90,25 @@ function panoramaDeMesas() {
        comparando letra por letra. */
     $mesas = existeTabla('mesas') ? consultarTodo('SELECT * FROM mesas') : [];
 
-    /* Primero las MEJORES mesas, después las peores; a igualdad, por
-       nombre natural ("Mesa 2" antes que "Mesa 10", que es lo que uno
-       espera y lo que el ORDER BY de MySQL haría al revés).
+    /* ⚡ (2026-08-30) ORDEN NEUTRAL, A PROPÓSITO — antes se ordenaba por
+       `prioridad` (derivada de la fila: pista primero, fondo al final),
+       y como mejorMesaPara() nunca desempata "hacia atrás" en un empate
+       total, esa posición terminaba siendo el desempate final. Resultado
+       real: sin ninguna etiqueta puesta, el grupo de `grupos_invitados.orden`
+       más bajo se llevaba SIEMPRE la mesa de pista, solo por procesarse
+       primero contra una lista que ya la traía de punta — exactamente la
+       regla rígida ("familia cerca de la pista por número de orden") que
+       el acomodo por etiquetas (Entrega 2 + esta ronda) viene a reemplazar.
 
-       ⚠️ EL ORDEN DE ESTA LISTA NO ES COSMÉTICO. mejorMesaPara() la
-       recorre en este orden y, a igualdad de lugares sobrantes, se queda
-       con la primera. O sea que esto es lo que decide qué significa "la
-       mejor mesa" cuando un grupo de orden bajo elige.
-
-       Antes se ordenaba SOLO por nombre, así que la promesa de que "los
-       grupos de orden más bajo se quedan con las mejores mesas" se
-       cumplía dándoles la que se llamaba Mesa 1 — que puede estar en el
-       fondo, al lado del baño. */
+       Ahora el orden es neutral (nombre natural), y quién se sienta cerca
+       del escenario lo decide la AFINIDAD de etiquetas en mejorMesaPara()
+       (zona de la mesa vs. etiquetas del paquete) — no la posición en esta
+       lista. `grupos_invitados.orden` sigue decidiendo qué familia ELIGE
+       PRIMERO entre las mesas disponibles (ver `porGrupo` en
+       repartirEnMesas() más abajo, sin cambios) — eso es otra cosa, y el
+       prompt no pide tocarla. La columna `prioridad` queda sin usar acá
+       a propósito: no se borra, por si se le encuentra otro uso después. */
     usort($mesas, function ($a, $b) {
-        $pa = (int) ($a['prioridad'] ?? 50);
-        $pb = (int) ($b['prioridad'] ?? 50);
-        if ($pa !== $pb) return $pa - $pb;
         return strnatcasecmp($a['nombre'], $b['nombre']);
     });
 
@@ -666,20 +668,36 @@ function etiquetasDeUnidad($tipo, $id) {
              WHERE atado_a_tipo = 'acompanante' AND atado_a_id = :i",
             [':i' => $id]
         ), 'etiqueta_id');
-    } elseif (existeTabla('acompanantes')) {
-        $ids = array_column(consultarTodo(
+    } else {
+        /* ⚡ (2026-08-30) Para un paquete (confirmación), la afinidad
+           ahora es la UNIÓN de dos fuentes, no solo la heredada:
+             (a) etiquetas puestas DIRECTO al paquete — hace falta para
+                 la mayoría de la lista real, que no tiene a nadie
+                 nombrado todavía (ver el prompt de cupo/etiquetas);
+             (b) heredadas de sus acompañantes nombrados, como ya hacía
+                 esta función antes de este cambio.
+           Aditivo a propósito: un paquete que ya tenía afinidad por (b)
+           sigue teniendo exactamente la misma, más lo que se le sume
+           por (a). */
+        $directas = array_column(consultarTodo(
+            "SELECT etiqueta_id FROM etiquetas_asignadas
+             WHERE atado_a_tipo = 'confirmacion' AND atado_a_id = :i",
+            [':i' => $id]
+        ), 'etiqueta_id');
+
+        $heredadas = existeTabla('acompanantes') ? array_column(consultarTodo(
             "SELECT DISTINCT ea.etiqueta_id
              FROM acompanantes a
              JOIN etiquetas_asignadas ea
                ON ea.atado_a_tipo = 'acompanante' AND ea.atado_a_id = a.id
              WHERE a.confirmacion_id = :c",
             [':c' => $id]
-        ), 'etiqueta_id');
-    } else {
-        $ids = [];
+        ), 'etiqueta_id') : [];
+
+        $ids = array_merge($directas, $heredadas);
     }
 
-    return $cache[$clave] = array_map('intval', $ids);
+    return $cache[$clave] = array_values(array_unique(array_map('intval', $ids)));
 }
 
 /**

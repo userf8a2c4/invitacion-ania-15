@@ -37,6 +37,27 @@ $yo     = exigirSesion();
 exigirPermiso($yo, 'mesas', ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' ? 'ver' : 'editar');
 $accion = (string) ($_GET['accion'] ?? 'todo');
 
+/**
+ * La zona de una mesa según su fila en el plano — mismo criterio que
+ * ya usaba `salon.prioridadPorFila` en 01-configuracion.js (la 3 está
+ * pegada a la pista, la 6 es el fondo), pero como etiqueta real en vez
+ * de un número que solo servía para ordenar. Se usa al armar el salón
+ * (ver 'armar_salon' abajo) para que la zona exista desde el día uno
+ * sin que Lucila tenga que cargarla a mano en las 14 mesas.
+ *
+ * @param int $fila
+ * @return string Cadena vacía si la fila no tiene una zona conocida.
+ */
+function zonaPorFila($fila) {
+    $zonas = [
+        3 => 'Cerca del escenario',
+        4 => 'Zona media',
+        5 => 'Al fondo',
+        6 => 'Al fondo',
+    ];
+    return $zonas[(int) $fila] ?? '';
+}
+
 
 switch ($accion) {
 
@@ -174,7 +195,7 @@ case 'armar_salon':
             continue;
         }
 
-        insertar('mesas', [
+        $mesaId = insertar('mesas', [
             'nombre'    => $nombre,
             'capacidad' => $capacidad,
             'ubicacion' => '',
@@ -183,6 +204,28 @@ case 'armar_salon':
             'prioridad' => $prioridad,
         ]);
         $creadas++;
+
+        /* ⚡ (2026-08-30) Zona como etiqueta real desde el día uno, no
+           una palabra que Lucila tenga que acordarse de escribir en
+           las 14 mesas: se auto-asigna acá, con el mismo sistema de
+           etiquetas de siempre (etiquetas_acomodo.php), derivada de la
+           fila. Solo al CREAR (no al reubicar una que ya existía, más
+           arriba): si Lucila la editó o la borró a mano, no se le pisa
+           en la próxima corrida de "Armar el salón". */
+        if (existeTabla('etiquetas') && existeTabla('etiquetas_asignadas')) {
+            $zona = zonaPorFila($fila);
+            if ($zona !== '') {
+                $etiquetaZona = consultarUno('SELECT id FROM etiquetas WHERE nombre = :n', [':n' => $zona]);
+                $etiquetaZonaId = $etiquetaZona
+                    ? (int) $etiquetaZona['id']
+                    : insertar('etiquetas', ['nombre' => $zona]);
+                insertar('etiquetas_asignadas', [
+                    'etiqueta_id'  => $etiquetaZonaId,
+                    'atado_a_tipo' => 'mesa',
+                    'atado_a_id'   => $mesaId,
+                ]);
+            }
+        }
     }
 
     anotarEnBitacora($yo, 'armó el plano del salón', 'mesas', 0,
