@@ -405,63 +405,35 @@ function scrollActualX() {
 }
 
 
-/* ─── SCROLL "DE ESTE CUADRO" — fresco en cada cuadro, sin forzar nada ──
-   POR QUÉ scrollActualY() NO ALCANZA ACÁ (2026-08-24)
-   scrollActualY() se actualiza con el evento 'scroll', que en un gesto
-   rápido o con inercia puede llegar con MENOS frecuencia que el repintado
-   visual real (sobre todo en Safari/iOS) — codigo/23-lienzo-de-luz.js
-   documenta por qué necesita, para UNA lectura puntual, el valor de
-   verdad más reciente y no esa copia. Pero leer window.scrollY ahí mismo,
-   en medio de su propio bucle de animación, forzaba exactamente el
-   reprocesamiento que este archivo lleva evitando desde arriba: un perfil
-   real en pbe.aniaxv.com lo mostró colgado de esa línea.
+/* ─── SCROLL "DE ESTE CUADRO" — por qué esto ya NO lee window.scrollY ──
+   HISTORIA (2026-08-24 → parche v140)
+   La idea original era leer window.scrollY una vez por cuadro, al
+   principio de un requestAnimationFrame perpetuo registrado ACÁ (segundo
+   script en cargar, antes que cualquier enredadera/joya/luz), para que
+   23-lienzo-de-luz.js tuviera un valor más fresco que scrollActualY()
+   sin forzar un reprocesamiento — la teoría era que leerlo "primero en
+   la fila" salía gratis.
 
-   La salida no es "cachear peor", es "leer más temprano". Este archivo
-   (02-utilidades.js) es el SEGUNDO script que carga —antes que cualquier
-   enredadera, joya o luz— así que si acá se pide un requestAnimationFrame,
-   su callback es el PRIMERO en la fila de todos los que se registran
-   después, cuadro tras cuadro. Leer window.scrollY como lo primero que
-   pasa en el cuadro no cuesta nada (todavía nadie escribió un estilo ese
-   cuadro); leerlo más tarde, después de que las enredaderas y las joyas ya
-   escribieron sus transforms, es lo que sale caro. Mismo valor, mismo
-   momento del cuadro real, distinto lugar en la fila.
+   Un perfil real (?fps=1, calidad baja, sobre YA abierto) la desmintió:
+   esta función seguía siendo el Self Time más caro de todo el cuadro
+   (715 ms, 35.7 %), aun con el guardia de hayAlgoQueMirar() que se le
+   había sumado después. El costo no era CUÁNDO se leía window.scrollY
+   dentro del cuadro — era que hubiera un rAF perpetuo más, para siempre,
+   solo para mantener ese valor fresco.
 
-   ⚡ CON EL MISMO GUARDIA QUE TODO EL RESTO DEL PROYECTO (2026-08-24) — ESTO
-   SE ME HABÍA PASADO. Un perfil real en PBE mostró este bucle atribuido de
-   nuevo a "reprocesamiento forzado" (121 ms en celular): estaba leyendo
-   window.scrollY en CADA cuadro, para siempre, incluso con el sobre
-   todavía cerrado — cuando el único que consume este valor
-   (23-lienzo-de-luz.js) ni siquiera arrancó, porque él mismo se apaga con
-   hayAlgoQueMirar(). Sin nadie mirando, esta lectura no evitaba ningún
-   costo real: solo lo agregaba. Con el mismo `if` que ya usan las
-   enredaderas, las joyas y la luz, el valor se congela en lo último que
-   valió la pena leer, y la lectura de verdad vuelve sola en cuanto se
-   abre el sobre. */
-let _scrollDeEsteCuadroY = window.scrollY;
-
-function actualizarScrollDeEsteCuadro() {
-  if (hayAlgoQueMirar()) _scrollDeEsteCuadroY = window.scrollY;
-  requestAnimationFrame(actualizarScrollDeEsteCuadro);
-}
-requestAnimationFrame(actualizarScrollDeEsteCuadro);
-
-/**
- * Cuánto se bajó la página, tan fresco como window.scrollY pero leído al
- * principio del cuadro —antes de que cualquier otro módulo escriba un
- * estilo—, así que nunca fuerza un reprocesamiento. A diferencia de
- * scrollActualY() (que espera al evento 'scroll'), este valor se
- * actualiza SIEMPRE, una vez por cuadro de animación, incluso durante un
- * scroll con inercia donde el evento 'scroll' tarda en llegar.
- *
- * Para el bucle de animación de las enredaderas, las joyas o el marco,
- * scrollActualY() sigue siendo la opción correcta —barata y de sobra—.
- * Esta función es solo para el caso puntual que la necesita de verdad
- * (ver la nota grande de acá arriba).
+   23-lienzo-de-luz.js repinta cada 30 ms en calidad alta (nunca al
+   vsync, a propósito — ver CADA_CUANTO_REPINTAR_POR_CALIDAD ahí), así
+   que no necesita un scroll más nuevo que el que ya mantienen los
+   listeners pasivos de scroll/resize/load en _scrollGuardadoY. Se saca
+   el rAF y la lectura directa; scrollDeEsteCuadro() pasa a ser un alias
+   de scrollActualY() — se deja como función aparte (no se borra el
+   nombre) porque 23 y otros la siguen llamando así, y renombrar cada
+   llamador no aporta nada.
  *
  * @returns {number}
  */
 function scrollDeEsteCuadro() {
-  return _scrollDeEsteCuadroY;
+  return _scrollGuardadoY;
 }
 
 /**

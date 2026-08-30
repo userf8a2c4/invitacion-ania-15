@@ -72,6 +72,16 @@ body.sobre-visible #marco-victoriano {
   font-family: var(--tipo-titulos);
 }
 
+/* #boton-animaciones (01-fundamentos.css) usa IM Fell y no entra en la
+   lista de arriba a propósito: Lucila tiene que poder apagar el
+   movimiento ANTES de abrir el sobre, así que nunca se oculta. Pero con
+   el sobre cerrado no hace falta que dispare esa fuente — solo la
+   tipografía, nunca su visibilidad. */
+body.sobre-visible #boton-animaciones {
+  font-family: var(--tipo-titulos);
+  font-weight: 400;
+}
+
 /* Cuando termina la animación, el sobre desaparece por completo. */
 #sobre-de-apertura.oculto {
   opacity: 0;
@@ -245,6 +255,7 @@ body.sobre-visible #marco-victoriano {
 /* ─── 4. SALUDO Y BOTÓN ────────────────────────────────────────────── */
 .sobre__saludo {
   font-family: var(--tipo-titulos);
+  font-weight: 400;
   font-size: clamp(1.1rem, 3.4vw, 1.6rem);
   color: var(--color-oro-claro);
   margin: 0;
