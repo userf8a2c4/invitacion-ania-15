@@ -168,28 +168,38 @@ let INVITACION = null;
   const token = parametrosDelEnlace.get('i');
 
   if (token && /^[a-f0-9]{8,}$/i.test(token)) {
-    fetch('invitacion.php?accion=ver&token=' + encodeURIComponent(token))
-      .then(respuesta => respuesta.json())
-      .then(datos => {
-        if (!datos || datos.ok !== true) return;
+    /* ⚡ EL FETCH SE CORRE UN CUADRO DESPUÉS (2026-08-30), NO EN LA MISMA
+       EVALUACIÓN DEL SCRIPT. En Slow 4G, esta petición competía por ancho
+       de banda contra la única descarga que de verdad bloquea el primer
+       pintado: Cinzel Decorative 400 (ver codigo/03-sobre-de-apertura.js).
+       Un requestAnimationFrame no cambia nada del resultado —el token no
+       tiene apuro real, el saludo genérico ya se puso arriba y este fetch
+       solo lo corrige cuando llega— pero le da a la fuente un cuadro de
+       ventaja para arrancar primero. */
+    requestAnimationFrame(() => {
+      fetch('invitacion.php?accion=ver&token=' + encodeURIComponent(token))
+        .then(respuesta => respuesta.json())
+        .then(datos => {
+          if (!datos || datos.ok !== true) return;
 
-        INVITACION = datos;
+          INVITACION = datos;
 
-        // El saludo del sobre se corrige con el nombre real del grupo,
-        // pisando el genérico (o el de ?invitado=) que ya se puso arriba.
-        if (saludoDelSobre) {
-          saludoDelSobre.innerHTML = 'Para ' + limpiarTexto(datos.nombre);
-        }
+          // El saludo del sobre se corrige con el nombre real del grupo,
+          // pisando el genérico (o el de ?invitado=) que ya se puso arriba.
+          if (saludoDelSobre) {
+            saludoDelSobre.innerHTML = 'Para ' + limpiarTexto(datos.nombre);
+          }
 
-        // 11-formulario-confirmacion.js escucha esto para reemplazar el
-        // formulario en blanco por la lista de personas del grupo.
-        document.dispatchEvent(new CustomEvent('invitacion-lista', { detail: datos }));
-      })
-      .catch(error => {
-        // Sin conexión o el token no existe: la página sigue funcionando
-        // como el formulario abierto de siempre, no se rompe nada.
-        console.warn('No se pudo cargar la invitación personalizada:', error);
-      });
+          // 11-formulario-confirmacion.js escucha esto para reemplazar el
+          // formulario en blanco por la lista de personas del grupo.
+          document.dispatchEvent(new CustomEvent('invitacion-lista', { detail: datos }));
+        })
+        .catch(error => {
+          // Sin conexión o el token no existe: la página sigue funcionando
+          // como el formulario abierto de siempre, no se rompe nada.
+          console.warn('No se pudo cargar la invitación personalizada:', error);
+        });
+    });
   }
 
 

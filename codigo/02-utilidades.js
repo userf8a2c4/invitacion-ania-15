@@ -877,3 +877,90 @@ function limpiarTexto(texto) {
   cajaTemporal.textContent = String(texto);
   return cajaTemporal.innerHTML;
 }
+
+
+/* ─── 6. INYECCIÓN EN SERIE DEL "PACK DE LA ESCENA" (2026-08-30) ───────
+   POR QUÉ EXISTE ESTO
+   Antes, los 23 archivos de la escena (enredaderas, velas, luz, joyas,
+   pétalos, cursor, etc.) eran <script defer> comunes en index.html: el
+   navegador los bajaba TODOS en paralelo —compitiendo por ancho de banda
+   contra las tipografías críticas del sobre, en Slow 4G— y los EVALUABA a
+   todos apenas terminaba de parsear el HTML, con el sobre todavía
+   cerrado. Eso era buena parte del Total Blocking Time de 1.380 ms medido
+   en escritorio: nadie estaba viendo nada de eso, pero el hilo principal
+   igual pagaba el parseo y la inicialización de cada uno.
+
+   La lista de esos 23 archivos vive en index.html, dentro de
+   <script type="application/json" id="scripts-de-la-escena">, para que
+   herramientas/subir-version.mjs los versione con el mismo "?v=\d+" que
+   usa para todo el resto del archivo (es una reescritura de TEXTO: no le
+   importa si el patrón está dentro de un <script defer> o de un
+   <script type="application/json">).
+
+   CÓMO SE INYECTAN: uno por uno, encadenados por el evento 'load' del
+   anterior — nunca dos evaluándose a la vez, y siempre en el mismo orden
+   en que están escritos en el JSON (el mismo orden que tenían como
+   <script defer>, con las mismas dos reglas de precedencia intactas: 24
+   antes de 06, 23 antes de 14/18/19/27). No son <script async> ni
+   type="module": son <script src> comunes, uno detrás del otro.
+
+   QUIÉN LA ARRANCA: codigo/03-sobre-de-apertura.js, recién cuando el
+   sobre YA se mostró (nunca antes) — ver mostrarElSobre() ahí. Si el
+   sobre no existe en el HTML, 03 arranca esto igual, en el mismo lugar
+   donde hoy avisa 'invitacion-visible' por su cuenta. */
+
+/**
+ * Lee la lista de scripts de la escena (el JSON en index.html) y los va
+ * agregando al documento de a uno, esperando a que cada uno termine de
+ * ejecutarse (evento 'load') antes de pedir el siguiente.
+ *
+ * Si el JSON no está (por ejemplo, alguien lo borró sin querer) no rompe
+ * nada: simplemente no hay escena, igual que si el sobre no existiera y
+ * nadie llamara a esta función.
+ *
+ * @returns {void}
+ */
+let _laEscenaYaEmpezoAInyectarse = false;
+
+function iniciarInyeccionDeLaEscena() {
+  // Guardia de reentrada: mostrarElSobre() y el camino de "no hay sobre"
+  // podrían, en teoría, llamar a esto más de una vez.
+  if (_laEscenaYaEmpezoAInyectarse) return;
+  _laEscenaYaEmpezoAInyectarse = true;
+
+  const contenedorDeLaLista = document.getElementById('scripts-de-la-escena');
+  if (!contenedorDeLaLista) return;
+
+  let urls;
+  try {
+    urls = JSON.parse(contenedorDeLaLista.textContent);
+  } catch (error) {
+    console.error('No se pudo leer la lista de scripts de la escena (JSON inválido):', error);
+    return;
+  }
+  if (!Array.isArray(urls) || urls.length === 0) return;
+
+  let indice = 0;
+
+  function pedirElSiguiente() {
+    if (indice >= urls.length) return;
+    const url = urls[indice++];
+
+    const etiquetaScript = document.createElement('script');
+    etiquetaScript.src = url;
+    // Nunca async ni type="module": tienen que ejecutarse en ESTE orden,
+    // exacto, uno después de que el anterior terminó — el mismo contrato
+    // que ya tenían como <script defer> seguidos.
+    etiquetaScript.onload = pedirElSiguiente;
+    // Si un archivo no carga (typo, 404, sin red), no se traba la cola:
+    // se sigue con el resto, igual que el navegador seguiría con el resto
+    // de una lista de <script defer> si uno fallara.
+    etiquetaScript.onerror = () => {
+      console.error('No se pudo cargar un script de la escena:', url);
+      pedirElSiguiente();
+    };
+    document.body.appendChild(etiquetaScript);
+  }
+
+  pedirElSiguiente();
+}

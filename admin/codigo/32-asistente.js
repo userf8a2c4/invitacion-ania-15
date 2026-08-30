@@ -635,11 +635,24 @@ function engancharHiloDeMegaBot(hilo) {
   hilo.addEventListener('click', async evento => {
     const botonReenviar = evento.target.closest('[data-megabot-reenviar]');
     if (botonReenviar) {
+      // El texto original vive en la burbuja de Lucila, no en el botón
+      // — hace falta para resolverMegaBotOffline() si esto sigue sin
+      // señal.
+      const filaOriginal = botonReenviar.closest('[data-mensaje-id]');
+      const textoOriginal = filaOriginal
+        ? filaOriginal.querySelector('.megabot-burbuja').firstChild.textContent
+        : '';
+
       try {
-        await mandar('chat.php?accion=reenviar', { mensaje_id: Number(botonReenviar.dataset.megabotReenviar) });
-        avisar('Reenviado.');
+        const r = await mandar('chat.php?accion=reenviar', { mensaje_id: Number(botonReenviar.dataset.megabotReenviar) });
+        if (r && r.offline) {
+          await resolverMegaBotOffline(hilo, textoOriginal);
+        } else {
+          avisar('Reenviado.');
+        }
       } catch (error) {
         avisar(error.message, true);
+        await resolverMegaBotOffline(hilo, textoOriginal);
       }
       return;
     }
@@ -977,7 +990,12 @@ function abrirAsistente() {
       const r = await mandar('chat.php?accion=enviar', { texto: texto, pantalla: VISTA_ACTUAL });
       if (r && r.offline) await resolverMegaBotOffline(hilo, texto);
     } catch (error) {
+      // Sin red ni para llegar a chat.php: mandar() tira acá, así que
+      // nunca llega el offline:true de arriba. Es exactamente el caso
+      // sin señal que 40-44/46 tienen que resolver — no basta con
+      // avisar el error y dejar el hilo mudo.
       avisar(error.message, true);
+      await resolverMegaBotOffline(hilo, texto);
     }
   };
 
