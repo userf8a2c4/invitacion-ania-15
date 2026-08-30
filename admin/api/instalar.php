@@ -202,6 +202,11 @@ $agregarColumna('recibos', 'pago_id', 'INT DEFAULT NULL');
 $agregarColumna('tareas', 'atada_a_tipo', "VARCHAR(30) NOT NULL DEFAULT ''");
 $agregarColumna('tareas', 'atada_a_id',   'INT NOT NULL DEFAULT 0');
 
+/* Instalaciones con `invitaciones` de antes de esta ronda (2026-08-30):
+   el punto de color + numerito por invitación necesita contar cuántas
+   veces se tocó "Mandar" — ver la nota grande en migracion.sql. */
+$agregarColumna('invitaciones', 'veces_enviado', 'INT NOT NULL DEFAULT 0');
+
 /* Un recibo ya no es exclusivo de un proveedor — puede ir a nombre de
    un padrino o de alguien sin ficha propia (ver la nota grande en
    migracion.sql, justo arriba de CREATE TABLE recibos). */

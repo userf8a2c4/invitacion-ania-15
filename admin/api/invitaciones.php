@@ -433,9 +433,12 @@ case 'marcar_enviada':
 
     // Si ya respondió (confirmada/declinada), no la volvemos a "enviada"
     // para atrás: marcar_enviada es solo para el primer contacto.
+    $cambios = ['veces_enviado' => (int) ($inv['veces_enviado'] ?? 0) + 1];
     if ($inv['estado'] === 'sin_enviar') {
-        actualizar('invitaciones', $id, ['estado' => 'enviada', 'enviada_en' => date('Y-m-d H:i:s')]);
+        $cambios['estado'] = 'enviada';
+        $cambios['enviada_en'] = date('Y-m-d H:i:s');
     }
+    actualizar('invitaciones', $id, $cambios);
 
     responderBien(['id' => $id]);
     break;
@@ -488,8 +491,9 @@ case 'enviar_correo':
         $resultado = enviarCorreo($inv['correo'], $asunto, $cuerpoHtml);
         if ($resultado === true) {
             actualizar('invitaciones', $id, [
-                'estado'     => $inv['estado'] === 'sin_enviar' ? 'enviada' : $inv['estado'],
-                'enviada_en' => date('Y-m-d H:i:s'),
+                'estado'        => $inv['estado'] === 'sin_enviar' ? 'enviada' : $inv['estado'],
+                'enviada_en'    => date('Y-m-d H:i:s'),
+                'veces_enviado' => (int) ($inv['veces_enviado'] ?? 0) + 1,
             ]);
             $mandados++;
         } else {
