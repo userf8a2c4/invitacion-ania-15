@@ -152,10 +152,19 @@
    ventana entera; el JS los redimensiona.
 
    Son 3 capas en total, en vez de las 29 que costaban los pétalos como
-   divs: ahí estaba clavado "Layerize" en el 27,6 % del perfil. */
+   divs: ahí estaba clavado "Layerize" en el 27,6 % del perfil.
+
+   ⚠️ SIN `inset: 0`. El lienzo nace en 1×1 (ver el createElement en
+   24-lienzo-de-petalos.js) y el propio JS le pone `style.width`/
+   `style.height` en cuanto conoce el tamaño real de la ventana. Con
+   `inset: 0` el navegador estira ese bitmap 1×1 —o el 300×150 por
+   defecto si el JS todavía no corrió— a toda la pantalla: exactamente
+   el bug de "pétalos gigantes" (un pétalo dibujado cerca del origen del
+   canvas chico sale agrandado). El tamaño lo decide el JS, no el CSS. */
 .lienzo-de-petalos {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
   pointer-events: none;
 }
 
