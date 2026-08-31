@@ -895,28 +895,34 @@ function limpiarTexto(texto) {
  */
 let _laEscenaYaEmpezoAInyectarse = false;
 
-function iniciarInyeccionDeLaEscena() {
+function iniciarInyeccionDeLaEscena(alTerminar) {
+  const avisar = () => { if (typeof alTerminar === 'function') alTerminar(); };
+
   // Guardia de reentrada: mostrarElSobre() y el camino de "no hay sobre"
-  // podrían, en teoría, llamar a esto más de una vez.
-  if (_laEscenaYaEmpezoAInyectarse) return;
+  // podrían, en teoría, llamar a esto más de una vez. Si ya se había
+  // llamado sin callback y ahora alguien pasa uno, no hay forma honesta
+  // de saber cuándo terminó la primera tanda desde acá — se avisa ya,
+  // mejor que dejarlo colgado para siempre.
+  if (_laEscenaYaEmpezoAInyectarse) { avisar(); return; }
   _laEscenaYaEmpezoAInyectarse = true;
 
   const contenedorDeLaLista = document.getElementById('scripts-de-la-escena');
-  if (!contenedorDeLaLista) return;
+  if (!contenedorDeLaLista) { avisar(); return; }
 
   let urls;
   try {
     urls = JSON.parse(contenedorDeLaLista.textContent);
   } catch (error) {
     console.error('No se pudo leer la lista de scripts de la escena (JSON inválido):', error);
+    avisar();
     return;
   }
-  if (!Array.isArray(urls) || urls.length === 0) return;
+  if (!Array.isArray(urls) || urls.length === 0) { avisar(); return; }
 
   let indice = 0;
 
   function pedirElSiguiente() {
-    if (indice >= urls.length) return;
+    if (indice >= urls.length) { avisar(); return; }
     const url = urls[indice++];
 
     const etiquetaScript = document.createElement('script');
