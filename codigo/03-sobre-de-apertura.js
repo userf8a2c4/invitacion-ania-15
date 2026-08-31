@@ -93,6 +93,24 @@
      fondo: ninguno de los tres se ve con el sobre cerrado. */
   requestAnimationFrame(mostrarElSobre);
 
+  /* ⚡ LA DESCARGA DE LA ESCENA ARRANCA ACÁ, NO EN EL CLIC (2026-08-31).
+     Antes esto vivía dentro de abrirElSobre(), disparado recién al hacer
+     clic — con la idea de que PageSpeed nunca hace clic, así que nunca
+     pagaba el costo de bajar los 23 archivos. Cierto, pero el costo real
+     no desaparecía: le caía entero al invitado, en la ventana de 1.500 ms
+     de la solapa, EN SERIE (uno por uno, esperando el 'load' del
+     anterior) — en una conexión real eso se siente como que "todo tarda".
+
+     Adelantar la descarga a este punto no le cambia nada a PageSpeed (el
+     sobre se sigue mostrando en el mismo cuadro que antes, arriba; nadie
+     hace clic durante la auditoría) y le da a los 23 archivos todo el
+     tiempo entre que se pinta el sobre y que la persona decide tocarlo
+     para llegar cacheados. CONSTRUIR (07/19 armando el marco y las
+     velas) sigue esperando 'invitacion-visible' exactamente como antes
+     —eso no se toca—: lo único que cambia es CUÁNDO arranca la descarga
+     por red, nunca cuándo se arma la escena. */
+  if (typeof iniciarInyeccionDeLaEscena === 'function') iniciarInyeccionDeLaEscena();
+
 
   /* ─── 3. MOSTRAR EL SOBRE ──────────────────────────────────────── */
 
@@ -218,23 +236,13 @@
     if (yaSeEstaAbriendo) return;
     yaSeEstaAbriendo = true;
 
-    /* ⚡ ACÁ ARRANCA A BAJARSE EL "PACK DE LA ESCENA" (parche PageSpeed
-       v138). Antes esto arrancaba al MOSTRAR el sobre — pero PageSpeed
-       nunca hace clic, así que igual terminaba evaluando 07/19/23 y sus
-       rAF con el sobre cerrado (el "Other" de 5.345 ms del TBT de
-       escritorio). Ahora arranca acá, en el CLIC real: quien mide con
-       Lighthouse nunca llega a este punto, y quien abre la invitación de
-       verdad tiene los 1.500 ms de animación de la solapa para que la
-       cola arranque de fondo. Ver iniciarInyeccionDeLaEscena() en
-       02-utilidades.js para el porqué completo y el orden exacto (que no
-       cambió). */
-    if (typeof iniciarInyeccionDeLaEscena === 'function') {
-      if (typeof requestIdleCallback === 'function') {
-        requestIdleCallback(iniciarInyeccionDeLaEscena, { timeout: 300 });
-      } else {
-        setTimeout(iniciarInyeccionDeLaEscena, 0);
-      }
-    }
+    /* ⛔ ACÁ YA NO SE ARRANCA LA DESCARGA DE LA ESCENA (2026-08-31). Se
+       mueve a más arriba, al mostrar el sobre (ver la sección 2) — para
+       cuando la persona llega a este clic, los 23 archivos ya deberían
+       estar cacheados de sobra. iniciarInyeccionDeLaEscena() tiene su
+       propia guardia de reentrada, así que llamarla acá de nuevo sería
+       inofensivo, pero ya no hace falta: se saca para no confundir sobre
+       cuándo arranca de verdad. */
 
     sobre.classList.add('se-esta-abriendo');
 
