@@ -386,11 +386,6 @@
 
   /** El óvalo del relicario en píxeles de pantalla, o null si no se ve. */
   let relicario = null;
-  /* ⚡ OBJETO REUSABLE, NUNCA null (2026-08-31) — ver medirElRelicario()
-     más abajo. `relicario` en sí sigue pudiendo ser null (cuando no hay
-     nada que medir); lo que deja de crearse por cuadro es el literal
-     `{ centroX, centroY, rx, ry }` cuando SÍ hay medida. */
-  const _relicarioReusable = { centroX: 0, centroY: 0, rx: 0, ry: 0 };
 
   /**
    * Anota dónde está el relicario ahora mismo.
@@ -417,13 +412,12 @@
       return;
     }
 
-    // ⚡ SIN LITERAL NUEVO POR CUADRO: se reescriben los 4 campos del
-    // mismo objeto (ver _relicarioReusable, arriba) en vez de crear uno.
-    _relicarioReusable.centroX = caja.left + caja.width / 2;
-    _relicarioReusable.centroY = caja.top + caja.height / 2;
-    _relicarioReusable.rx = (302 / 860) * caja.width;
-    _relicarioReusable.ry = (268 / 816) * caja.height;
-    relicario = _relicarioReusable;
+    relicario = {
+      centroX: caja.left + caja.width / 2,
+      centroY: caja.top + caja.height / 2,
+      rx: (302 / 860) * caja.width,
+      ry: (268 / 816) * caja.height,
+    };
   }
 
   /**
