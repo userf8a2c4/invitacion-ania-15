@@ -223,6 +223,12 @@
     [1,    'rgba(170, 100, 46,  0)'],
   ]);
 
+  /* Se exponen para que codigo/19-velas.js pueda dibujar sus propias
+     fuentes en SU PROPIO canvas (ver Etapa B, 2026-08-31) sin fabricar un
+     segundo par de degradados — son bitmaps ya rasterizados, prestarlos es
+     gratis. Este archivo sigue siendo el único que los CREA. */
+  window.LienzoDeLuz.sellos = { nucleo: SELLO_NUCLEO, derrame: SELLO_DERRAME };
+
   /* El polvo: un puntito con halo. Mismas paradas que tenía .mota. */
   const SELLO_MOTA = hacerUnSello([
     [0,    'rgba(255, 246, 214, .95)'],
