@@ -427,23 +427,24 @@
       );
     }
 
-    /* ⚡ ACÁ SÍ VA window.scrollY DIRECTO, NO scrollActualY().
-       scrollActualY() devuelve una copia que solo se actualiza cuando
-       dispara el evento 'scroll' del navegador — y en Safari/iOS, durante
-       un scroll rápido o con inercia, ese evento llega con MUCHA menos
-       frecuencia que el repintado visual real. La llama de una vela es
-       un elemento normal: el navegador la mueve por el compositor en el
-       mismo instante que se mueve la pantalla, sin esperar a JavaScript.
-       Si acá se sigue usando la copia cacheada, el resplandor se dibuja
-       en la posición VIEJA mientras la llama ya está en la nueva —eso es
-       el "la luz se queda atrás de la vela" que se reportó—.
+    /* ⚡ scrollActualY() Y NO window.scrollY DIRECTO (2026-08-31).
+       Este comentario decía lo contrario hasta acá: que hacía falta leer
+       window.scrollY directo para que la luz de las velas nunca se
+       separara de la llama. Esa razón caducó el 2026-08-20 — desde
+       entonces las velas dejan de entregarle sus fuegos a este lienzo
+       (ver usaElLienzoAhora() en codigo/19-velas.js, siempre false) y se
+       dibujan con divs propios que el navegador mueve por compositor.
 
-       Esto NO es el mismo caso que motivó el caché (cientos de lecturas
-       por cuadro, una por cada joya colgante): acá es UNA lectura, una
-       vez por cuadro dibujado, como mucho 60 veces por segundo. El costo
-       es insignificante comparado con el beneficio de que la luz nunca
-       se separe de la llama. */
-    const desplazamiento = window.scrollY;
+       Lo que este valor sigue posicionando hoy son SOLO las fuentes de
+       `fuentes` (que quedaron en 0, ver más abajo) y la fauna nocturna
+       (2 a 6 luciérnagas) — donde un cuadro de atraso en Safari/iOS es
+       imperceptible. A cambio, leer window.scrollY acá, DESPUÉS de que
+       07/17/19 ya escribieron sus transforms de este mismo cuadro, forzaba
+       un reflow completo: un perfil real en pbe.aniaxv.com lo midió en
+       159 ms de Layout + 107 ms de Recalculate style, colgados de esta
+       línea exacta. scrollActualY() ya es la copia cacheada que mantienen
+       los listeners pasivos de scroll/resize/load (02-utilidades.js). */
+    const desplazamiento = scrollActualY();
     const fuentes = window.LienzoDeLuz.fuentes;
 
     /* ── CUÁNTO MANDAN LAS VELAS A ESTA HORA ──
@@ -664,7 +665,7 @@
     if (!_laInvitacionSeVe || document.hidden) return;
     dibujarUnCuadro(hayAlgoQueMirar());
     ultimoRepintado = performance.now();
-    ultimoDesplazamientoDibujado = window.scrollY;
+    ultimoDesplazamientoDibujado = scrollActualY();
   }, { passive: true });
 
 })();

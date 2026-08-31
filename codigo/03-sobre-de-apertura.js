@@ -121,6 +121,21 @@
   function mostrarElSobre() {
     sobre.classList.remove('esta-cargando');
 
+    /* ⚡ PRECARGA DE CINZEL DECORATIVE 700 ACÁ, NO EN EL <head> (2026-08-31).
+       .portada__nombre (el "ANIA") rinde en 700 y es el elemento LCP de la
+       invitación ABIERTA — pero la portada vive detrás del sobre, y esta
+       fuente se sacó del <head> el 2026-08-30 justamente para no competir
+       por ancho de banda con la cadena crítica del sobre (Cinzel 400). Acá
+       ya no compite con nada: el sobre recién se mostró, así que hay tiempo
+       de sobra para que llegue lista antes de que alguien haga clic. */
+    const preCinzel700 = document.createElement('link');
+    preCinzel700.rel = 'preload';
+    preCinzel700.as = 'font';
+    preCinzel700.type = 'font/woff2';
+    preCinzel700.crossOrigin = 'anonymous';
+    preCinzel700.href = 'recursos/tipografias/cinzel-decorative-700-normal-latin.woff2';
+    document.head.appendChild(preCinzel700);
+
     /* Se le da el foco al sobre para que se pueda abrir con Enter sin
        necesidad de usar el mouse.
 
@@ -282,9 +297,35 @@
     document.body.classList.remove('sobre-visible');
     document.documentElement.classList.remove('sobre-visible');
 
-    // Avisamos que la invitación ya es visible, por si algún otro archivo
-    // quiere empezar sus animaciones justo en este momento.
-    document.dispatchEvent(new CustomEvent('invitacion-visible'));
+    /* ⚡ EL SOBRE SALE DEL ÁRBOL CUANDO SU TRANSICIÓN TERMINÓ (2026-08-31).
+       Con solo opacity:0 + visibility:hidden (la clase .oculto) seguía
+       siendo una capa position:fixed a pantalla completa, z-index 2000, el
+       resto de la visita. Peor: .se-esta-abriendo nunca se sacaba, y esa
+       clase aplica transform: rotateX(-172deg) a la solapa — la única
+       transformación 3D de todo el proyecto, que promueve capa de
+       compositor sin condición. La transición de opacidad/visibilidad de
+       .oculto dura 1.1s (estilos/03-sobre-de-apertura.css); se espera un
+       poco más para no cortarla a mitad de camino. */
+    setTimeout(() => {
+      sobre.classList.remove('se-esta-abriendo');
+      sobre.style.display = 'none';
+    }, 1300);
+
+    /* ⚡ UN CUADRO DE AIRE ANTES DE CONSTRUIR (2026-08-31). Quitar
+       sobre-visible devuelve SEIS subárboles (#capa-fondo, #portada,
+       #contenido, #pie-de-pagina, #controles-flotantes, #marco-victoriano)
+       al árbol de render de golpe, y en ese mismo cuadro se enciende el
+       doble drop-shadow de 45px de .marco__sombra-exterior sobre ~150
+       nodos SVG. Disparar acá mismo invitacion-visible metía ADEMÁS la
+       construcción de ~350 flores (07) y 52 velas (19) en esa misma tarea:
+       eso es el CLS de 0.19 y los ~900ms de presentation delay medidos en
+       vivo. Un requestAnimationFrame de por medio deja que el navegador
+       presente ese layout antes de empezar a construir la escena. */
+    requestAnimationFrame(() => {
+      // Avisamos que la invitación ya es visible, por si algún otro
+      // archivo quiere empezar sus animaciones justo en este momento.
+      document.dispatchEvent(new CustomEvent('invitacion-visible'));
+    });
   }
 
   // El sobre entero es el botón: se abre haciendo clic en cualquier parte.

@@ -351,8 +351,11 @@
       for (let L = 0; L < plano.listas.length; L++) {
         const lista = plano.listas[L];
         for (let i = 0; i < lista.length; i++) {
-          const caja = lista[i].cajaAnterior;
-          if (caja) pincel.clearRect(caja[0] - 2, caja[1] - 2, caja[2] + 4, caja[3] + 4);
+          const p = lista[i];
+          if (p.seDibujoUltimoCuadro) {
+            const caja = p.cajaAnterior;
+            pincel.clearRect(caja[0] - 2, caja[1] - 2, caja[2] + 4, caja[3] + 4);
+          }
         }
       }
 
@@ -362,7 +365,7 @@
       const lista = plano.listas[L];
       for (let i = 0; i < lista.length; i++) {
         const pet = lista[i];
-        pet.cajaAnterior = null;
+        pet.seDibujoUltimoCuadro = false;
 
         if (!pet.activo || pet.opacidad <= 0.004) continue;
 
@@ -394,11 +397,20 @@
         /* Se anota QUÉ ZONA ocupó, para poder borrar solo eso el próximo
            cuadro. Un pétalo girado ocupa más que su lado: la diagonal. Se
            usa el lado × 1,45 (√2 redondeado hacia arriba) centrado, que
-           cubre cualquier ángulo. Quedarse corto acá deja estelas. */
+           cubre cualquier ángulo. Quedarse corto acá deja estelas.
+
+           ⚡ SIN ARRAY NUEVO POR PÉTALO Y POR CUADRO (2026-08-31). Antes
+           esto creaba un literal `[...]` cada vez — con ~36 pétalos a
+           60fps son miles de arrays por segundo tirados a la basura, parte
+           de la recolección de basura medida en el perfil real. Se reusa
+           el mismo array de siempre, reescribiendo sus 4 posiciones. */
         const radio = pet.tamaño * 0.725;
-        pet.cajaAnterior = [
-          pet.x + medio - radio, pet.y + medio - radio, radio * 2, radio * 2,
-        ];
+        if (!pet.cajaAnterior) pet.cajaAnterior = [0, 0, 0, 0];
+        pet.cajaAnterior[0] = pet.x + medio - radio;
+        pet.cajaAnterior[1] = pet.y + medio - radio;
+        pet.cajaAnterior[2] = radio * 2;
+        pet.cajaAnterior[3] = radio * 2;
+        pet.seDibujoUltimoCuadro = true;
       }
       }
     }

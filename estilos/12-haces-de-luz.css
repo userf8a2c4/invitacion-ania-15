@@ -440,7 +440,12 @@
   transform: rotate(18deg);
 
   opacity: 0;            /* el JS le da su valor; sin JS no molesta */
-  will-change: transform, opacity;
+  /* ⚡ SIN `will-change`, mismo motivo que .vela más arriba (2026-08-31).
+     .haz vive DENTRO de #haces-de-luz, que tiene mix-blend-mode: screen.
+     Un elemento que se mezcla no se puede componer por separado: el
+     navegador necesita el fondo para calcularlo, así que la capa que se
+     le reservaba había que volver a fundirla igual — puro trabajo
+     perdido, 5 capas que el compositor administraba sin beneficio. */
 }
 
 /* Cada haz arranca en un sitio distinto. El JS los mueve a partir de acá. */
