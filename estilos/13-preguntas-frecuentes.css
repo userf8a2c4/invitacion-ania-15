@@ -106,7 +106,6 @@ body.sobre-visible #boton-qa { display: none; }
      queda tapado por la píldora justo donde se cruzan. */
   z-index: 1;
   background: rgba(6, 3, 2, .72);
-  backdrop-filter: blur(2px);
   opacity: 0;
 
   /* ⚠️ IMPRESCINDIBLE, y no es un detalle.
@@ -120,7 +119,14 @@ body.sobre-visible #boton-qa { display: none; }
 
   transition: opacity .3s var(--curva-elegante);
 }
-#velo-qa.qa-abierto { pointer-events: auto; }
+/* ⚡ backdrop-filter SOLO CON EL PANEL ABIERTO (2026-08-31). Antes vivía en
+   la regla de arriba, así que el velo era una capa de compositor con
+   desenfoque a pantalla completa TODO el tiempo que la invitación está
+   abierta, aunque nadie tocara nunca el FAQ (opacity:0 no libera esa capa,
+   el navegador la sigue componiendo igual). Medido en pbe.aniaxv.com:
+   display:block + backdrop-filter activos de forma permanente. Movido acá,
+   solo existe mientras el panel realmente está en pantalla. */
+#velo-qa.qa-abierto { pointer-events: auto; backdrop-filter: blur(2px); }
 
 
 /* ─── 3. EL PANEL ──────────────────────────────────────────────────────

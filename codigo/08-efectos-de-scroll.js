@@ -139,6 +139,18 @@
   medirElSobrante();
   actualizarEfectos();
 
+  /* ⚡ VOLVER A MEDIR AL ABRIR (2026-08-31) — BUG REAL, NO SOLO RENDIMIENTO.
+     Este archivo se inyecta y evalúa con el sobre TODAVÍA cerrado, cuando
+     #capa-fondo está en display:none (estilos/03-sobre-de-apertura.css).
+     medirElSobrante() de la línea de arriba lee offsetHeight sobre un
+     elemento oculto → 0, así que sobranteDisponible queda en un valor
+     negativo/cero y el parallax se clampea ahí hasta el próximo resize.
+     En los hechos, el parallax no se movía nunca. Se vuelve a medir apenas
+     la capa existe de verdad. */
+  document.addEventListener('invitacion-visible', () => {
+    requestAnimationFrame(medirElSobrante);
+  });
+
 })();
 
 
