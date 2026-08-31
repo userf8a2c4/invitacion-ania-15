@@ -107,9 +107,25 @@
             || (typeof mem === 'number' && mem <= 2)
             || (typeof nucleos === 'number' && nucleos <= 2)) {
           calidad = 2;   // señales claras de equipo débil o red limitada
-        } else if (typeof nucleos === 'number' && nucleos >= 4
+        } else if (typeof nucleos === 'number' && nucleos >= 6
                    && (typeof mem !== 'number' || mem >= 8)) {
           calidad = 0;   // bastantes núcleos y memoria de sobra: se anima entero
+          /* ⚡ VUELTA A 6 NÚCLEOS, NO 4 (2026-09-01). El 26 de agosto se
+             bajó este umbral a 4 porque en esa fecha CALIDAD MEDIA estaba
+             rota (el canvas de luz se repintaba 2 veces por cuadro, ver
+             codigo/23-lienzo-de-luz.js) y rendía peor que ALTA incluso en
+             equipos débiles — bajar de nivel no ayudaba en nada. Esa
+             rotura ya se arregló. Con el umbral en 4, un equipo real de
+             referencia (i5-4590T, 4 núcleos, gráficos integrados, 16GB
+             RAM) arrancaba en ALTA y se quedaba ahí: 25-40 ms/cuadro
+             sostenidos, CPU al 84%, sensación de página congelada — la
+             adivinanza de arranque lo clasificaba como "equipo potente"
+             solo por tener 4 núcleos y bastante RAM, sin mirar generación
+             de CPU ni GPU (ninguna de las dos señales existe en el
+             navegador). Con calidad MEDIA ya funcionando, ya no hace
+             falta forzar ALTA en equipos de 4 núcleos: el propio
+             gobernador (codigo/21-monitor-de-rendimiento.js) puede
+             subirlos a ALTA en vivo si de verdad la aguantan. */
         } else {
           calidad = 1;   // el caso más común y el más seguro por defecto
         }
@@ -2266,10 +2282,10 @@
      que pesa un 80% menos. Acá abajo se pide la copia liviana; el
      original comentado sigue intacto en codigo/, es el que se edita.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/produccion/01-configuracion.js?v=144"></script>
-<script defer src="codigo/produccion/02-utilidades.js?v=144"></script>
-<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=144"></script>
-<script defer src="codigo/produccion/04-invitado-personalizado.js?v=144"></script>
+<script defer src="codigo/produccion/01-configuracion.js?v=145"></script>
+<script defer src="codigo/produccion/02-utilidades.js?v=145"></script>
+<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=145"></script>
+<script defer src="codigo/produccion/04-invitado-personalizado.js?v=145"></script>
 
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda) — es MARCADO, no script.
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
@@ -2327,7 +2343,7 @@
      para EXISTIR, solo para reaccionar al clic — y ese clic no puede
      llegar antes de que la lista termine de bajar el archivo 20. -->
 <script type="application/json" id="scripts-de-la-escena">
-["codigo/produccion/10-reproductor-de-musica.js?v=144", "codigo/produccion/05-cursor-personalizado.js?v=144", "codigo/produccion/24-lienzo-de-petalos.js?v=144", "codigo/produccion/06-petalos-con-fisica.js?v=144", "codigo/produccion/07-marco-y-enredaderas.js?v=144", "codigo/produccion/08-efectos-de-scroll.js?v=144", "codigo/produccion/09-cuenta-regresiva.js?v=144", "codigo/produccion/11-formulario-confirmacion.js?v=144", "codigo/produccion/12-pase-de-acceso.js?v=144", "codigo/produccion/13-agregar-al-calendario.js?v=144", "codigo/produccion/23-lienzo-de-luz.js?v=144", "codigo/produccion/27-fauna-nocturna.js?v=144", "codigo/produccion/14-haces-de-luz.js?v=144", "codigo/produccion/15-registro-de-confirmaciones.js?v=144", "codigo/produccion/16-volver-arriba.js?v=144", "codigo/produccion/17-joyas-colgantes.js?v=144", "codigo/produccion/18-motas-de-polvo.js?v=144", "codigo/produccion/19-velas.js?v=144", "codigo/produccion/20-boton-de-animaciones.js?v=144", "codigo/produccion/21-monitor-de-rendimiento.js?v=144", "codigo/produccion/22-luz-de-la-hora.js?v=144", "codigo/produccion/25-preguntas-frecuentes.js?v=144", "codigo/produccion/26-mapa-a-pedido.js?v=144"]
+["codigo/produccion/10-reproductor-de-musica.js?v=145", "codigo/produccion/05-cursor-personalizado.js?v=145", "codigo/produccion/24-lienzo-de-petalos.js?v=145", "codigo/produccion/06-petalos-con-fisica.js?v=145", "codigo/produccion/07-marco-y-enredaderas.js?v=145", "codigo/produccion/08-efectos-de-scroll.js?v=145", "codigo/produccion/09-cuenta-regresiva.js?v=145", "codigo/produccion/11-formulario-confirmacion.js?v=145", "codigo/produccion/12-pase-de-acceso.js?v=145", "codigo/produccion/13-agregar-al-calendario.js?v=145", "codigo/produccion/23-lienzo-de-luz.js?v=145", "codigo/produccion/27-fauna-nocturna.js?v=145", "codigo/produccion/14-haces-de-luz.js?v=145", "codigo/produccion/15-registro-de-confirmaciones.js?v=145", "codigo/produccion/16-volver-arriba.js?v=145", "codigo/produccion/17-joyas-colgantes.js?v=145", "codigo/produccion/18-motas-de-polvo.js?v=145", "codigo/produccion/19-velas.js?v=145", "codigo/produccion/20-boton-de-animaciones.js?v=145", "codigo/produccion/21-monitor-de-rendimiento.js?v=145", "codigo/produccion/22-luz-de-la-hora.js?v=145", "codigo/produccion/25-preguntas-frecuentes.js?v=145", "codigo/produccion/26-mapa-a-pedido.js?v=145"]
 </script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
