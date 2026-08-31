@@ -72,6 +72,9 @@
      más rápidos que el refresco físico), con un piso de 6 ms para no
      envenenar la medida con algún cuadro raro. */
   let intervaloIdeal = 16.7;
+  /** Muestras recientes de duración de cuadro, para deducir el ritmo real
+      de la pantalla sin dejar que un solo cuadro anómalo lo envenene. */
+  const muestrasDeIntervalo = [];
 
   /* Cuántos cuadros seguidos en zona de degradar/mejorar hacen falta.
      Degradar es rápido (proteger la fluidez YA); mejorar (confiar en que
@@ -142,7 +145,24 @@
     /* Se aprende cuál es el cuadro "perfecto" de ESTA pantalla: ningún cuadro
        puede ser más rápido que su refresco físico, así que el más rápido que
        se vea es una buena estimación (60 Hz → ~16,7 ms; 120 Hz → ~8,3 ms). */
-    if (delta > 6 && delta < intervaloIdeal) intervaloIdeal = delta;
+    /* ⚡ EL IDEAL SE DEDUCE DE LA PANTALLA, NO DEL CUADRO MÁS RÁPIDO QUE SE
+       HAYA VISTO NUNCA (2026-09-01). Antes se quedaba con el mínimo
+       histórico y un solo cuadro anómalo de 6,1 ms lo dejaba clavado ahí:
+       con intervaloIdeal=6, degradar a BAJA exigía superar 10,5 ms, o sea
+       que degradaba apenas la página no corriera a 95 fps. En capturas
+       reales el overlay reportaba "164 Hz", "141 Hz", "65 Hz" y "60 Hz" en
+       corridas distintas del MISMO monitor, y la calidad quedaba siempre en
+       baja. Ahora se toma la mediana de los cuadros rápidos, que es estable
+       y no la puede envenenar un solo valor suelto. */
+    if (delta > 6 && delta < 30) {
+      muestrasDeIntervalo.push(delta);
+      if (muestrasDeIntervalo.length > 120) muestrasDeIntervalo.shift();
+      if (muestrasDeIntervalo.length >= 30) {
+        const ordenadas = muestrasDeIntervalo.slice().sort((a, b) => a - b);
+        const p10 = ordenadas[Math.floor(ordenadas.length * 0.10)];
+        intervaloIdeal = Math.max(p10, 8);
+      }
+    }
 
     /* El peor cuadro de los últimos ~4 segundos (para el cartel de
        diagnóstico). Se olvida solo, así refleja lo que pasa AHORA. */
