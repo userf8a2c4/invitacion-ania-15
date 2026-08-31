@@ -374,11 +374,6 @@
     return mostrado + (objetivo - mostrado) * factor;
   }
 
-  /** El scroll con el que se dibujó el último cuadro. Ver la nota grande
-   *  en pintarLaLuz(): si cambió, el throttle se salta para que la luz
-   *  no se quede atrás de la llama real (DOM) durante el scroll. */
-  let ultimoDesplazamientoDibujado = null;
-
   /* ⚠️ SE APAGABAN LAS ANIMACIONES Y LA LUZ SE QUEDABA CONGELADA.
      hayAlgoQueMirar() agrupa tres motivos bajo un mismo "no dibujes":
      sobre todavía cerrado, pestaña de fondo, o animaciones apagadas a
@@ -427,23 +422,18 @@
       );
     }
 
-    /* ⚡ ACÁ SÍ VA window.scrollY DIRECTO, NO scrollActualY().
-       scrollActualY() devuelve una copia que solo se actualiza cuando
-       dispara el evento 'scroll' del navegador — y en Safari/iOS, durante
-       un scroll rápido o con inercia, ese evento llega con MUCHA menos
-       frecuencia que el repintado visual real. La llama de una vela es
-       un elemento normal: el navegador la mueve por el compositor en el
-       mismo instante que se mueve la pantalla, sin esperar a JavaScript.
-       Si acá se sigue usando la copia cacheada, el resplandor se dibuja
-       en la posición VIEJA mientras la llama ya está en la nueva —eso es
-       el "la luz se queda atrás de la vela" que se reportó—.
-
-       Esto NO es el mismo caso que motivó el caché (cientos de lecturas
-       por cuadro, una por cada joya colgante): acá es UNA lectura, una
-       vez por cuadro dibujado, como mucho 60 veces por segundo. El costo
-       es insignificante comparado con el beneficio de que la luz nunca
-       se separe de la llama. */
-    const desplazamiento = window.scrollY;
+    /* ⚡ scrollActualY() Y NO window.scrollY DIRECTO (2026-09-01).
+       Acá decía lo contrario: que había que leer window.scrollY directo
+       para que la luz nunca se atrasara de la llama. Un perfil real en
+       pbe.aniaxv.com (v141) mostró exactamente lo que ese razonamiento
+       negaba — 288 ms de Recalculate style + 191 ms de Layout colgados
+       de esta línea, con "Layerize" en 48-64 % del tiempo total. Para
+       cuando este bucle corre, otros módulos (07, 17) ya escribieron sus
+       transforms de este mismo cuadro: preguntarle al navegador acá
+       fuerza a recalcular todo lo pendiente. scrollActualY()
+       (02-utilidades.js) es la copia cacheada que mantienen los
+       listeners pasivos de scroll/resize/load — no fuerza nada. */
+    const desplazamiento = scrollActualY();
     const fuentes = window.LienzoDeLuz.fuentes;
 
     /* ── CUÁNTO MANDAN LAS VELAS A ESTA HORA ──
@@ -560,48 +550,18 @@
     }
     yaSeDibujoElEstadoQuieto = false;
 
-    /* ⚠️ EL DESFASE DE LA LLAMA AL HACER SCROLL, Y POR QUÉ EL THROTTLE DE
-       ARRIBA LO CAUSABA.
-       Las velas (DOM: la mecha, la llamita del SVG) se mueven con el
-       scroll NATIVO del navegador, a la frecuencia real de la pantalla
-       —60, 90, 120 Hz—. Pero el resplandor que las rodea es este canvas,
-       y este canvas se repinta cada 45 ms (~22 fps) A PROPÓSITO, porque
-       el titileo que lo alimenta (velas, haces, motas) solo cambia esa
-       seguido: repintar más rápido dibujaba el mismo resplandor varias
-       veces.
-
-       El problema es que esa cuenta no incluye el SCROLL: la posición
-       del resplandor también depende de cuánto se scrolleó, y esa sí
-       cambia cada cuadro nativo. Con el throttle a ciegas, al scrollear
-       rápido la llama (DOM) ya se movió y el resplandor (canvas) todavía
-       muestra dónde estaba hace dos o tres cuadros: se ve como si la luz
-       se quedara atrás un instante.
-
-       La solución: SOLO se respeta el throttle cuando el scroll no se
-       movió desde el último repintado. En cuanto se detecta que sí, se
-       dibuja YA —el resplandor sigue al scroll cuadro a cuadro, igual
-       que la llama—, y el throttle vuelve a mandar apenas el scroll se
-       queda quieto. Estampar el canvas es barato (ver el resto de este
-       archivo): la ventana en la que esto corre a más fps es la del
-       gesto de scroll, que dura instantes.
-
-       ⚡ scrollDeEsteCuadro() Y NO window.scrollY DIRECTO (2026-08-24):
-       un perfil real en pbe.aniaxv.com mostró "Layout"/"Recalculate style"
-       colgados de ESTA línea — para cuando este bucle corre, las
-       enredaderas y las joyas ya escribieron sus transforms de este mismo
-       cuadro, así que preguntarle al navegador acá fuerza a recalcular
-       todo lo pendiente. scrollDeEsteCuadro() (02-utilidades.js) da el
-       mismo valor —se lee en el mismísimo cuadro, no una copia vieja del
-       último evento 'scroll'— pero LEÍDO ANTES, en el primer cuadro de la
-       fila, cuando todavía no hay nada que recalcular. No es el mismo
-       caso que motivó scrollActualY() en su momento (esa sí puede quedar
-       un cuadro atrás en Safari/iOS con inercia); acá se necesitaba
-       "fresco de verdad" y "barato" al mismo tiempo, y por eso existe
-       esta segunda copia en vez de reusar la primera. */
-    const desplazamientoActual = scrollDeEsteCuadro();
-    const seMovioElScroll = desplazamientoActual !== ultimoDesplazamientoDibujado;
-
-    if (!seMovioElScroll && ahora - ultimoRepintado < cadaCuantoRepintar) {
+    /* ⚡ EL THROTTLE SE RESPETA SIEMPRE, TAMBIÉN DURANTE EL SCROLL
+       (2026-09-01). Antes había una excepción ("si el scroll se movió,
+       repintar ya") que en la práctica anulaba el throttle apenas alguien
+       scrolleaba — justo cuando más cuadros por segundo hacen falta. Y
+       ADEMÁS había un listener de scroll aparte (más abajo, ya borrado)
+       que repintaba el canvas ENTERO otra vez en el mismo evento: dos
+       repintados completos de 2401x5933 por cuadro de scroll. Un perfil
+       real en v141 puso "Layerize" en 48-64 % del tiempo con este patrón.
+       El resplandor puede quedar hasta cadaCuantoRepintar (30-90 ms según
+       calidad) detrás de la llama en un scroll muy rápido — compromiso
+       aceptado a cambio de que la página deje de estar a 13 fps. */
+    if (ahora - ultimoRepintado < cadaCuantoRepintar) {
       requestAnimationFrame(pintarLaLuz);
       return;
     }
@@ -612,7 +572,6 @@
       ? Math.min(ahora - ultimoRepintado, 250)
       : cadaCuantoRepintar;
     ultimoRepintado = ahora;
-    ultimoDesplazamientoDibujado = desplazamientoActual;
     dibujarUnCuadro(true, dtDesdeElUltimoRepintado);
 
     requestAnimationFrame(pintarLaLuz);
@@ -620,51 +579,15 @@
 
   requestAnimationFrame(pintarLaLuz);
 
-  /* ⚡ TODAVÍA QUEDABA UNA VUELTA DE COLA, Y ESTO LA SACA.
-     El fix de arriba (seMovioElScroll) hace que el canvas se repinte en
-     cuanto pintarLaLuz nota que el scroll cambió — pero pintarLaLuz corre
-     dentro de un requestAnimationFrame, que es UN turno más del hilo
-     principal detrás de todo lo demás que también usa rAF (el vaivén de
-     las plantas, las joyas colgantes, el monitor de rendimiento…). El
-     scroll nativo lo mueve el COMPOSITOR, un hilo aparte que no espera
-     ese turno. En un cuadro cargado, ese turno de más ya se nota.
-
-     Este listener dibuja DIRECTO desde el propio evento 'scroll', en el
-     mismo turno en que el navegador ya avisó que la posición cambió, sin
-     esperar la vuelta completa de pintarLaLuz. Es seguro hacerlo acá:
-     dibujar en un canvas no fuerza layout ni reflow, así que no cuesta lo
-     que costaría, por ejemplo, leer un getBoundingClientRect() en el
-     mismo lugar.
-
-     Con equipos muy cargados igual puede quedar algo de desfase —es el
-     límite de sincronizar un canvas con el scroll por JavaScript, no algo
-     que un ajuste más vaya a borrar del todo—, pero esto lo deja en el
-     mínimo posible dentro de esta arquitectura.
-
-     ⚠️ ACÁ NO VA hayAlgoQueMirar(), Y ES A PROPÓSITO —ESTE FUE EL BUG
-     REPORTADO: "con 'Sin animación' la luz se queda en el mismo punto,
-     no se queda con la vela".
-     hayAlgoQueMirar() es falso con las animaciones apagadas (incluye el
-     botón, no solo el sobre cerrado o la pestaña de fondo —ver
-     02-utilidades.js—), así que este listener se cortaba ENTERO: con
-     "Sin animación" puesto, scrollear ya no repintaba nada, y el
-     resplandor quedaba congelado en el lugar exacto donde estaba cuando
-     se apagaron las animaciones, mientras la llama (DOM) seguía
-     moviéndose con la página.
-
-     Pero reposicionar el resplandor al scrollear NO ES una animación:
-     es hacer que algo estático siga estando en su lugar. Por eso acá se
-     pregunta por separado si la invitación está a la vista y la pestaña
-     activa (sin importar si las animaciones están prendidas), y con eso
-     alcanza para redibujar. El PARÁMETRO que sí depende de las
-     animaciones es conMovimiento: con animaciones apagadas se redibuja
-     iigual, pero sin mover haces, motas ni fauna —solo el resplandor de
-     las velas, quieto pero en el lugar correcto—. */
-  window.addEventListener('scroll', () => {
-    if (!_laInvitacionSeVe || document.hidden) return;
-    dibujarUnCuadro(hayAlgoQueMirar());
-    ultimoRepintado = performance.now();
-    ultimoDesplazamientoDibujado = window.scrollY;
-  }, { passive: true });
+  /* ⛔ ACÁ YA NO VA UN LISTENER DE SCROLL QUE REPINTE (2026-09-01).
+     Repintaba el canvas ENTERO (2401x5933: clearRect + 68 velas + motas)
+     en cada evento de scroll, sin throttle, mientras el rAF de arriba
+     repintaba OTRA VEZ el mismo cuadro porque su propio throttle quedaba
+     anulado al detectar scroll. Eran dos repintados completos de pantalla
+     por cuadro, más tres lecturas forzadas de window.scrollY. El
+     repintado ahora ocurre una sola vez, en pintarLaLuz(). El compromiso
+     que este listener resolvía (la luz atrasada de la llama en scroll
+     rápido) sigue existiendo, acotado al throttle de cadaCuantoRepintar
+     — ver la nota de arriba. */
 
 })();
