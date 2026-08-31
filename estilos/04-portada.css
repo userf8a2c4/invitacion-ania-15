@@ -300,6 +300,19 @@ html.sobre-visible .marco__sombra-exterior {
   filter: none;
 }
 
+/* ⚡ SIN LOS DOS drop-shadow EN MEDIA Y BAJA (2026-09-01). Son un blur de
+   45px y otro de 30px sobre 3 envoltorios de ~150 nodos SVG; en una
+   pantalla de 2400px eso es enorme, y cada vez que el subárbol se
+   re-rasteriza hay que rehacerlos. codigo/17-joyas-colgantes.js:328-333 ya
+   documenta este filtro como causa de "Layerize" en un perfil real. En
+   calidad alta se conserva intacto: el equipo que llega a alta lo aguanta.
+   En media y baja el relicario pierde el halo dorado y la sombra de peso,
+   y conserva todo lo demás (forma, gemas, oro, joyas colgantes). */
+html.calidad-media .marco__sombra-exterior,
+html.calidad-baja  .marco__sombra-exterior {
+  filter: none;
+}
+
 /* ⚡ EL FAST-FOLLOW QUE HABÍA QUEDADO PENDIENTE, MEDIDO Y APLICADO
    (2026-08-20): cuando se sacó el filtro exterior de encima de la
    enredadera/borlas/cadena, quedó anotado que agregar `will-change:
