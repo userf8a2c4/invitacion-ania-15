@@ -149,25 +149,6 @@
     const lienzo = document.createElement('canvas');
     lienzo.className = 'lienzo-de-petalos';
     lienzo.setAttribute('aria-hidden', 'true');
-
-    /* ⚡ PÉTALOS GIGANTES — EL CORTE DE SIEMPRE, AHORA SÍ. Un <canvas> sin
-       width/height nace con el default HTML: 300×150. El CSS (antes
-       `inset:0`) lo estiraba a toda la ventana: cualquier pétalo dibujado
-       cerca del origen del canvas 300×150, antes de que ajustarLosLienzos()
-       alcance a correr, sale gigante, estampado por el navegador al
-       agrandar el bitmap.
-
-       Se nace en 1×1 y oculto (no display:none: eso impediría medir), y el
-       tamaño real se asigna abajo, en ajustarLosLienzos(). Asignar
-       width/height real BORRA el canvas (efecto de lado del propio
-       navegador), así que no importa qué se haya llegado a dibujar en el
-       1×1: desaparece solo. */
-    lienzo.width = 1;
-    lienzo.height = 1;
-    lienzo.style.width = '0px';
-    lienzo.style.height = '0px';
-    lienzo.style.visibility = 'hidden';
-
     contenedor.appendChild(lienzo);
 
     const pincel = lienzo.getContext('2d', { alpha: true });
@@ -245,9 +226,6 @@
       plano.lienzo.height = Math.max(1, Math.round(alto  * densidad));
       plano.lienzo.style.width  = ancho + 'px';
       plano.lienzo.style.height = alto  + 'px';
-      // Recién con el tamaño real puesto se destapa: antes de esto era el
-      // 1×1 oculto de más arriba (ver el createElement de este mismo lienzo).
-      plano.lienzo.style.visibility = '';
     }
 
     /* ⚡ REPINTAR ACÁ MISMO, NO ESPERAR AL PRÓXIMO CUADRO.
@@ -280,15 +258,7 @@
      ajuste (así es hoy); con esto ese ajuste llega un cuadro después
      (~16ms), después de que el navegador ya resolvió su propio layout
      por su cuenta — imperceptible, y no hay un solo pétalo para dibujar
-     todavía a esa altura.
-
-     ⚡ SE LLAMA TAMBIÉN AHORA, SÍNCRONO. El rAF de abajo queda como
-     respaldo, pero ya no es la única vía: conviene salir del 1×1 oculto
-     lo antes posible en vez de esperar un cuadro más — mismo criterio que
-     ya usa 23-lienzo-de-luz.js (ajustarElLienzo() en sync al evaluar).
-     Llamarla dos veces (acá y en el rAF) no cuesta nada extra: la segunda
-     simplemente vuelve a medir lo mismo. */
-  ajustarLosLienzos();
+     todavía a esa altura. */
   requestAnimationFrame(ajustarLosLienzos);
   /* ⚡ alCambiarElAncho: ignora el 'resize' falso de la barra del navegador
      en celular (ver la nota grande junto a la función, en 02-utilidades.js).
@@ -323,12 +293,6 @@
    * @returns {void}
    */
   function pintarLosPetalos() {
-    // El lienzo puede seguir en el 1×1 oculto de arranque (o en medio de un
-    // resize) por una fracción de cuadro: dibujar ahí no sirve de nada y
-    // arriesga volver a "pétalos gigantes" si algún camino se saltea
-    // ajustarLosLienzos(). Mejor no dibujar ese cuadro.
-    if (ancho < 2 || alto < 2) return;
-
     for (let p = 0; p < planos.length; p++) {
       const plano = planos[p];
       const pincel = plano.pincel;
@@ -351,11 +315,8 @@
       for (let L = 0; L < plano.listas.length; L++) {
         const lista = plano.listas[L];
         for (let i = 0; i < lista.length; i++) {
-          const p = lista[i];
-          if (p.seDibujoUltimoCuadro) {
-            const caja = p.cajaAnterior;
-            pincel.clearRect(caja[0] - 2, caja[1] - 2, caja[2] + 4, caja[3] + 4);
-          }
+          const caja = lista[i].cajaAnterior;
+          if (caja) pincel.clearRect(caja[0] - 2, caja[1] - 2, caja[2] + 4, caja[3] + 4);
         }
       }
 
@@ -365,7 +326,7 @@
       const lista = plano.listas[L];
       for (let i = 0; i < lista.length; i++) {
         const pet = lista[i];
-        pet.seDibujoUltimoCuadro = false;
+        pet.cajaAnterior = null;
 
         if (!pet.activo || pet.opacidad <= 0.004) continue;
 
@@ -397,20 +358,11 @@
         /* Se anota QUÉ ZONA ocupó, para poder borrar solo eso el próximo
            cuadro. Un pétalo girado ocupa más que su lado: la diagonal. Se
            usa el lado × 1,45 (√2 redondeado hacia arriba) centrado, que
-           cubre cualquier ángulo. Quedarse corto acá deja estelas.
-
-           ⚡ SIN ARRAY NUEVO POR PÉTALO Y POR CUADRO (2026-08-31). Antes
-           esto creaba un literal `[...]` cada vez — con ~36 pétalos a
-           60fps son miles de arrays por segundo tirados a la basura, parte
-           de la recolección de basura medida en el perfil real. Se reusa
-           el mismo array de siempre, reescribiendo sus 4 posiciones. */
+           cubre cualquier ángulo. Quedarse corto acá deja estelas. */
         const radio = pet.tamaño * 0.725;
-        if (!pet.cajaAnterior) pet.cajaAnterior = [0, 0, 0, 0];
-        pet.cajaAnterior[0] = pet.x + medio - radio;
-        pet.cajaAnterior[1] = pet.y + medio - radio;
-        pet.cajaAnterior[2] = radio * 2;
-        pet.cajaAnterior[3] = radio * 2;
-        pet.seDibujoUltimoCuadro = true;
+        pet.cajaAnterior = [
+          pet.x + medio - radio, pet.y + medio - radio, radio * 2, radio * 2,
+        ];
       }
       }
     }
