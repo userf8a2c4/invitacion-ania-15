@@ -149,6 +149,25 @@
     const lienzo = document.createElement('canvas');
     lienzo.className = 'lienzo-de-petalos';
     lienzo.setAttribute('aria-hidden', 'true');
+
+    /* ⚡ PÉTALOS GIGANTES — EL CORTE DE SIEMPRE, AHORA SÍ. Un <canvas> sin
+       width/height nace con el default HTML: 300×150. El CSS (antes
+       `inset:0`) lo estiraba a toda la ventana: cualquier pétalo dibujado
+       cerca del origen del canvas 300×150, antes de que ajustarLosLienzos()
+       alcance a correr, sale gigante, estampado por el navegador al
+       agrandar el bitmap.
+
+       Se nace en 1×1 y oculto (no display:none: eso impediría medir), y el
+       tamaño real se asigna abajo, en ajustarLosLienzos(). Asignar
+       width/height real BORRA el canvas (efecto de lado del propio
+       navegador), así que no importa qué se haya llegado a dibujar en el
+       1×1: desaparece solo. */
+    lienzo.width = 1;
+    lienzo.height = 1;
+    lienzo.style.width = '0px';
+    lienzo.style.height = '0px';
+    lienzo.style.visibility = 'hidden';
+
     contenedor.appendChild(lienzo);
 
     const pincel = lienzo.getContext('2d', { alpha: true });
@@ -226,6 +245,9 @@
       plano.lienzo.height = Math.max(1, Math.round(alto  * densidad));
       plano.lienzo.style.width  = ancho + 'px';
       plano.lienzo.style.height = alto  + 'px';
+      // Recién con el tamaño real puesto se destapa: antes de esto era el
+      // 1×1 oculto de más arriba (ver el createElement de este mismo lienzo).
+      plano.lienzo.style.visibility = '';
     }
 
     /* ⚡ REPINTAR ACÁ MISMO, NO ESPERAR AL PRÓXIMO CUADRO.
@@ -258,7 +280,15 @@
      ajuste (así es hoy); con esto ese ajuste llega un cuadro después
      (~16ms), después de que el navegador ya resolvió su propio layout
      por su cuenta — imperceptible, y no hay un solo pétalo para dibujar
-     todavía a esa altura. */
+     todavía a esa altura.
+
+     ⚡ SE LLAMA TAMBIÉN AHORA, SÍNCRONO. El rAF de abajo queda como
+     respaldo, pero ya no es la única vía: conviene salir del 1×1 oculto
+     lo antes posible en vez de esperar un cuadro más — mismo criterio que
+     ya usa 23-lienzo-de-luz.js (ajustarElLienzo() en sync al evaluar).
+     Llamarla dos veces (acá y en el rAF) no cuesta nada extra: la segunda
+     simplemente vuelve a medir lo mismo. */
+  ajustarLosLienzos();
   requestAnimationFrame(ajustarLosLienzos);
   /* ⚡ alCambiarElAncho: ignora el 'resize' falso de la barra del navegador
      en celular (ver la nota grande junto a la función, en 02-utilidades.js).
@@ -293,6 +323,12 @@
    * @returns {void}
    */
   function pintarLosPetalos() {
+    // El lienzo puede seguir en el 1×1 oculto de arranque (o en medio de un
+    // resize) por una fracción de cuadro: dibujar ahí no sirve de nada y
+    // arriesga volver a "pétalos gigantes" si algún camino se saltea
+    // ajustarLosLienzos(). Mejor no dibujar ese cuadro.
+    if (ancho < 2 || alto < 2) return;
+
     for (let p = 0; p < planos.length; p++) {
       const plano = planos[p];
       const pincel = plano.pincel;
