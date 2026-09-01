@@ -699,20 +699,44 @@ function trabajarPorTandas(cuantos, hacerUno, alTerminar, presupuestoMs = 8) {
      50ms que define una "tarea larga"—. Una pestaña de fondo real sigue
      terminando en una fracción de segundo (lejos de los "minutos" de
      antes), y la auditoría deja de ver ninguna tarea que la penalice. */
+  /* ⚡ UN ELEMENTO QUE FALLA YA NO MATA LA CONSTRUCCIÓN ENTERA
+     (2026-09-02). Antes ni esta función ni cederElHilo() tenían un solo
+     try/catch: si hacerUno() lanzaba —una planta con una medida rara, un
+     nodo que no está — la excepción rompía la cadena y TODO lo que faltaba
+     dejaba de construirse, sin reintento y sin dejar rastro visible. Peor
+     todavía con scheduler.yield() (Chrome moderno): ahí la excepción se
+     convierte en una promesa rechazada, que ni siquiera aparece como error
+     en rojo. Así desaparecían enredaderas enteras sin que nada lo dijera.
+
+     Ahora se anota y se sigue con el resto: perder una flor es infinitamente
+     mejor que perder el marco entero, y el error queda registrado para que
+     el cartel de ?fps=1 lo muestre. */
+  function intentar(hacerAlgo) {
+    try {
+      hacerAlgo();
+    } catch (error) {
+      console.error('Falló un paso de una construcción por tandas:', error);
+      if (!window._ultimoErrorSinAtrapar) {
+        window._ultimoErrorSinAtrapar = 'tanda — ' + (error && error.message ? error.message : error);
+      }
+    }
+  }
+
   if (document.hidden) {
     const presupuestoOculto = 40;   // bajo el umbral de "tarea larga" (50ms)
 
     function unaTandaOculta() {
       const arranque = performance.now();
       do {
-        hacerUno(indice++);
+        const cual = indice++;
+        intentar(() => hacerUno(cual));
       } while (indice < cuantos && performance.now() - arranque < presupuestoOculto);
 
       if (indice < cuantos) {
         setTimeout(unaTandaOculta, 0);
         return;
       }
-      if (typeof alTerminar === 'function') alTerminar();
+      if (typeof alTerminar === 'function') intentar(alTerminar);
     }
     unaTandaOculta();
     return;
@@ -725,18 +749,19 @@ function trabajarPorTandas(cuantos, hacerUno, alTerminar, presupuestoMs = 8) {
        presupuesto no se puede partir por la mitad, pero sin esta garantía
        en un equipo muy lento no avanzaría nunca. */
     do {
-      hacerUno(indice++);
+      const cual = indice++;
+      intentar(() => hacerUno(cual));
     } while (indice < cuantos && performance.now() - arranque < presupuestoMs);
 
     if (indice < cuantos) {
       cederElHilo(unaTanda);
       return;
     }
-    if (typeof alTerminar === 'function') alTerminar();
+    if (typeof alTerminar === 'function') intentar(alTerminar);
   }
 
   if (cuantos > 0) unaTanda();
-  else if (typeof alTerminar === 'function') alTerminar();
+  else if (typeof alTerminar === 'function') intentar(alTerminar);
 }
 
 /* ─── 5. MEDICIÓN COMPARTIDA DEL RELICARIO ─────────────────────────── */

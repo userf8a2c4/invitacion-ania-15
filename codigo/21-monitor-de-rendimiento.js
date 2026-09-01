@@ -244,7 +244,19 @@
   let peorTareaAlCargar = 0;
   let peorTareaDespues = 0;
   let laInvitacionEsVisible = false;
-  document.addEventListener('invitacion-visible', () => {
+  /* ⚡ escucharEventoQueQuizasYaPaso() Y NO addEventListener DIRECTO
+     (2026-09-02). ESTE ARCHIVO ES EL INSTRUMENTO CON EL QUE SE DIAGNOSTICA
+     TODO LO DEMÁS, Y ESTABA SESGADO.
+
+     Este archivo entra en la posición 20 de los 23 que se inyectan al hacer
+     clic, mientras que 'invitacion-visible' se dispara a un plazo fijo tras
+     el clic. En un equipo lento el archivo llegaba DESPUÉS del evento y su
+     escucha nunca corría: `laInvitacionEsVisible` se quedaba en false para
+     siempre y, por lo tanto, TODA tarea larga se contabilizaba como "de
+     carga". Por eso el cartel de ?fps=1 mostraba siempre "DESPUÉS 0 ms",
+     aunque hubiera bloqueos durante la navegación — justo el número que
+     había que llevar a cero. Se estaba midiendo con una regla rota. */
+  escucharEventoQueQuizasYaPaso('invitacion-visible', () => {
     /* Se da un respiro: la construcción diferida arranca justo acá y sus
        tareas son todavía "de carga", no de navegación. */
     setTimeout(() => { laInvitacionEsVisible = true; }, 2500);
@@ -342,7 +354,25 @@
        Cada 20 s en vez de 5 basta de sobra: la cantidad de nodos apenas
        cambia una vez que la página terminó de construirse. */
     function contarElementos(ahora) {
-      if (ahora - ultimoConteo < 20000 && ultimoConteo !== 0) return;
+      /* ⚡ AL PRINCIPIO SE CUENTA SEGUIDO, DESPUÉS NO (2026-09-02).
+         ESTE CARTEL ESTABA MINTIENDO, Y SE USABA PARA DIAGNOSTICAR.
+
+         El conteo es caro (recorre todo el DOM), así que se hacía cada
+         20 segundos. El problema es CUÁNDO se hacía el primero: al segundo
+         1 de cargar la página, con el sobre todavía cerrado y la escena sin
+         construir. Ese "flores: 0" quedaba congelado en pantalla hasta el
+         segundo 21 — o sea que en TODA carga, mirar el cartel antes de los
+         21 segundos mostraba cero flores, se hubieran construido o no.
+         Varias capturas que se usaron como prueba de que las flores
+         fallaban no probaban nada.
+
+         Ahora, durante los primeros 30 segundos —que es cuando se abre el
+         sobre y se construye todo, y por lo tanto lo único que interesa
+         mirar— se cuenta cada 2 segundos. Pasado ese rato, vuelve al
+         intervalo largo de siempre. El costo extra dura medio minuto y solo
+         existe con ?fps=1. */
+      const cadaCuantoContar = ahora < 30000 ? 2000 : 20000;
+      if (ahora - ultimoConteo < cadaCuantoContar && ultimoConteo !== 0) return;
       ultimoConteo = ahora;
 
       /* Se cuenta en un hueco libre —no en medio del trabajo de animación— y

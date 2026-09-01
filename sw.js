@@ -45,7 +45,7 @@
    antes de subir a producción.
    ══════════════════════════════════════════════════════════════════════ */
 
-const VERSION = 'ania-xv-v151';
+const VERSION = 'ania-xv-v152';
 
 /** Extensiones de assets pesados/estables: para esos, "primero la copia". */
 const ASSETS_ESTABLES = /\.(?:mp3|ogg|wav|png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf)$/i;
@@ -71,19 +71,54 @@ self.addEventListener('activate', evento => {
   );
 });
 
-/* Guarda una copia de la respuesta (clonada, porque se consume una vez). */
+/* Guarda una copia de la respuesta (clonada, porque se consume una vez).
+
+   ⚡ SOLO SE GUARDA LO QUE SIRVE (2026-09-02). Antes se guardaba
+   cualquier respuesta que llegara, sin mirar el estado: un 404 o un 500
+   pasajero quedaba cacheado con la misma URL versionada y se volvía a
+   servir en cada visita hasta la siguiente subida de versión. Un error
+   guardado es peor que no tener copia. */
 function guardarCopia(pedido, respuesta) {
+  if (!respuesta || !respuesta.ok) return;
   const paraGuardar = respuesta.clone();
   caches.open(VERSION).then(cache => cache.put(pedido, paraGuardar)).catch(() => {});
 }
 
 /* "Primero la RED": para el código de la app. Se pide a la red y, si llega,
    se sirve y se guarda para poder abrir offline. Si no hay red, se cae a la
-   copia guardada (y, si tampoco hay copia, a la portada). */
+   copia guardada.
+
+   ⚠️ Y SI TAMPOCO HAY COPIA, SE FALLA — NO SE DEVUELVE LA PORTADA
+   (2026-09-02). ESTE ERA UN BUG GRAVE Y SILENCIOSO.
+
+   Antes, el último recurso de esta función era `caches.match('./index.html')`
+   para CUALQUIER pedido. O sea que si fallaba la descarga de un archivo de
+   JavaScript —una red intermitente, una recarga en medio, demasiadas
+   conexiones a la vez en un equipo lento— y todavía no había copia guardada
+   (cada versión nueva arranca con el caché casi vacío, porque `activate`
+   borra los anteriores), el Service Worker entregaba **el index.html como si
+   fuera el script**. El navegador intentaba leer HTML como código, tiraba
+   `SyntaxError: Unexpected token '<'`, y ese módulo entero no corría: no
+   construía nada, no registraba sus escuchas, y no dejaba más rastro que una
+   línea en la consola. Eso explica capas que faltaban de forma intermitente
+   —distinta en cada carga, sin patrón— mientras el resto de la web se veía
+   perfecta.
+
+   La portada como respaldo solo tiene sentido para una NAVEGACIÓN (abrir la
+   página sin conexión). Para un script o una hoja de estilo es mejor fallar
+   de verdad: un error de red se ve y se puede reintentar; HTML disfrazado de
+   JavaScript, no.
+
+   El propio archivo ya documentaba este peligro más abajo, pero solo lo
+   había resuelto para /admin. */
 function primeroLaRed(pedido) {
   return fetch(pedido)
     .then(respuesta => { guardarCopia(pedido, respuesta); return respuesta; })
-    .catch(() => caches.match(pedido).then(copia => copia || caches.match('./index.html')));
+    .catch(() => caches.match(pedido).then(copia => {
+      if (copia) return copia;
+      if (pedido.mode === 'navigate') return caches.match('./index.html');
+      return Response.error();
+    }));
 }
 
 /* "Primero la COPIA": para assets pesados y estables. Si está guardado, se

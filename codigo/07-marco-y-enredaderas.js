@@ -1883,8 +1883,23 @@
       const desplazamientoDelScroll = scrollActualY();
       const limite = Math.min(indiceDePlanta + PLANTAS_MEDIDAS_POR_TANDA, plantas.length);
 
-      for (; indiceDePlanta < limite; indiceDePlanta++) {
-        medirUnaPlanta(plantas[indiceDePlanta], desplazamientoDelScroll);
+      /* ⚡ try/finally, PARA NO DEJAR LA BANDERA TRABADA (2026-09-02).
+         `medicionEnCurso` se pone en true antes de este recorrido y solo
+         vuelve a false al terminarlo entero. Si medirUnaPlanta() lanzaba,
+         la bandera quedaba en true PARA SIEMPRE y a partir de ahí toda
+         medición futura —la del resize, la de la construcción, la del
+         reintento— se iba en la primera línea sin hacer nada: las flores se
+         quedaban con posiciones viejas y sin reaccionar al mouse, sin ningún
+         error a la vista. Ahora un fallo en una planta no arrastra al resto
+         ni traba el sistema. */
+      try {
+        for (; indiceDePlanta < limite; indiceDePlanta++) {
+          medirUnaPlanta(plantas[indiceDePlanta], desplazamientoDelScroll);
+        }
+      } catch (error) {
+        console.error('Falló al medir una flor; se sigue con las demás:', error);
+        indiceDePlanta = limite;   // esa planta se saltea, no se reintenta en bucle
+        medicionEnCurso = false;
       }
 
       if (indiceDePlanta < plantas.length) {
@@ -2020,6 +2035,44 @@
      llegan a construirse. Confirmado en la práctica en un equipo real de
      gama baja. Esta función se entera igual, tarde o no. */
   escucharEventoQueQuizasYaPaso('invitacion-visible', construirUnaSolaVez);
+
+  /* ⚡ RED DE SEGURIDAD: SI DESPUÉS DE UN RATO NO HAY NADA, SE REHACE UNA
+     VEZ (2026-09-02).
+
+     POR QUÉ HACE FALTA
+     Armar las enredaderas no termina cuando construirUnaSolaVez() retorna:
+     sigue durante decenas de cuadros, en tandas. En todo ese rato hay varias
+     formas de que la cadena se corte y no quede nadie para reanudarla —un
+     paso que falla, una corrida que se invalida—, y el estado queda trabado
+     de manera que ningún camino vuelve a intentarlo: las banderas
+     `yaSeConstruyo` y `ultimaCuantasEntran` ya están marcadas. El resultado
+     es el peor posible: el marco vacío, para siempre, en la única visita que
+     esa persona va a hacer.
+
+     POR QUÉ ESTO NO ES EL "RESPALDO POR CRONÓMETRO" QUE SE QUITÓ
+     Aquel corría SIEMPRE, con el sobre todavía cerrado, y construía 354
+     flores que nadie estaba mirando: costó 2.790 ms de bloqueo medidos en
+     PageSpeed. Este es lo contrario: no construye nada por su cuenta, solo
+     MIRA —una vez, varios segundos después de que la invitación ya se ve— si
+     el resultado quedó vacío, y solo en ese caso rehace. Si todo salió bien,
+     que es lo normal, no hace absolutamente nada. */
+  escucharEventoQueQuizasYaPaso('invitacion-visible', () => {
+    setTimeout(() => {
+      const noHayPlantas = plantas.length === 0;
+      const faltanRamilletes = !window.EstadoDeLosRamilletes;
+      if (!noHayPlantas && !faltanRamilletes) return;
+
+      console.warn('Las enredaderas quedaron sin construir; se rehacen una vez.',
+        { plantas: plantas.length, ramilletes: !!window.EstadoDeLosRamilletes });
+
+      /* Se destraban las banderas que impedirían reintentar. Sin esto,
+         repartirPlantas() se iría por su salida temprana (cuantasEntran no
+         cambió) y no reconstruiría nada. */
+      ultimaCuantasEntran = -1;
+      medicionEnCurso = false;
+      repartirPlantas();
+    }, 6000);
+  });
 
 
   /* ─── 6. MOVIMIENTO ────────────────────────────────────────────── */
