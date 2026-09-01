@@ -1542,9 +1542,6 @@
   let corridaVigente = 0;
 
   function repartirPlantas() {
-    const miCorrida = ++corridaVigente;
-    const sigoVigente = () => miCorrida === corridaVigente;
-
     const altoDelDocumento = document.body.scrollHeight;
     const cuantasEntran = Math.max(3, Math.floor(altoDelDocumento / SEPARACION_ENTRE_PLANTAS));
 
@@ -1552,12 +1549,32 @@
        operación más cara de toda la web (ver la nota de troceado, abajo).
        Si la cantidad de plantas que entran no cambió, alcanza con volver a
        medir dónde quedó cada una —el ancho sí pudo cambiar—, sin recrear
-       ningún SVG. */
+       ningún SVG.
+
+       ⚡ ESTE CHEQUEO VA ANTES DE TOCAR corridaVigente (2026-09-01). Antes
+       ++corridaVigente vivía arriba de este if, así que CUALQUIER llamada
+       —incluso una que terminaba acá mismo sin reconstruir nada— invalidaba
+       la corrida anterior. Si un resize (la barra del navegador
+       apareciendo/ocultándose, o simplemente el layout asentándose en un
+       equipo lento) llegaba MIENTRAS las ~20 plantas todavía se estaban
+       armando en tandas —proceso que dura decenas de cuadros, ver la nota
+       de corridaVigente más abajo— y el ancho no alcanzaba a cambiar
+       cuántas plantas entran, esta función cortaba la corrida en curso
+       (vaciando enredaderaIzquierda/enredaderaDerecha) y no arrancaba
+       ninguna nueva: las enredaderas quedaban vacías para siempre, sin
+       ningún disparador que las reconstruyera. En un equipo lento, donde
+       la construcción tarda mucho más, la ventana para que esto pase es
+       mucho más ancha — es la causa confirmada de "las flores no
+       aparecen". Ahora solo se invalida una corrida en marcha cuando de
+       verdad va a arrancar una nueva. */
     if (cuantasEntran === ultimaCuantasEntran) {
       medirLasFlores();
       return;
     }
     ultimaCuantasEntran = cuantasEntran;
+
+    const miCorrida = ++corridaVigente;
+    const sigoVigente = () => miCorrida === corridaVigente;
 
     enredaderaIzquierda.innerHTML = '';
     enredaderaDerecha.innerHTML = '';
