@@ -181,11 +181,22 @@ case 'listar':
     $columnasInv = $conInvitacion ? columnasDe('invitaciones') : [];
     $selectVecesEnviado = in_array('veces_enviado', $columnasInv, true)
         ? 'inv.veces_enviado' : 'NULL';
+    /* ⚡ respondida_en viaja al panel para poder decir "quién falta" sin
+       adivinar (2026-09-02). El filtro "Sin responder" se calculaba solo
+       con inv.estado, y una fila sin invitación (las importadas, que son
+       la mayoría) tenía estado NULL y pasaba SIEMPRE — la lista filtrada
+       quedaba idéntica a "Todos". Con esto el panel puede distinguir
+       "contestó" de "todavía no" en los dos casos. Se consulta con el
+       mismo criterio defensivo que veces_enviado, por si la columna no
+       existe en una base vieja. */
+    $selectRespondidaEn = in_array('respondida_en', $columnasInv, true)
+        ? 'inv.respondida_en' : 'NULL';
     $selectInv = $conInvitacion
         ? ', inv.id AS invitacion_id, inv.token AS invitacion_token,
             inv.telefono AS invitacion_telefono, inv.pases AS invitacion_pases,
             inv.estado AS invitacion_estado, inv.grupo_id AS invitacion_grupo_id,
             ' . $selectVecesEnviado . ' AS invitacion_veces_enviado,
+            ' . $selectRespondidaEn . ' AS invitacion_respondida_en,
             g.nombre AS invitacion_grupo_nombre'
         : '';
     $joinInv = $conInvitacion

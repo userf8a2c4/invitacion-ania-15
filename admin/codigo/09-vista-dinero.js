@@ -354,11 +354,41 @@ function bloqueTotales(t) {
      `pagos`) y lo tiraba sin usar. "Falta" es la resta directa: si da
      negativo (se pagó de más, o Cuesta todavía no refleja el gasto
      real), se muestra "Al día" en vez de un número negativo confuso. */
-  const falta = Math.max(0, (t.costo || 0) - (t.pagado || 0));
+  /* ⚡ "AL DÍA" YA NO TAPA DOS SITUACIONES DISTINTAS (2026-09-02).
+     Antes cualquier resta negativa se mostraba como "Al día", y eso
+     producía una pantalla que se contradice sola: decía que la fiesta
+     cuesta $10,000, que ya se pagaron $128,145, y en el lugar donde
+     debería decir cuánto falta decía "Al día". Nadie lee eso como "no
+     debés nada": se lee como que la pantalla está rota, y quien la usa
+     deja de confiar en el resto de los números.
+
+     Ahora se separan los dos casos que antes se mezclaban:
+       · Presupuesto sin definir — lo pagado supera al presupuesto por
+         muchísimo, señal de que "Cuesta" todavía es un valor de arranque
+         y no el costo real. Se dice así, y se dice qué hacer.
+       · Pagado de más — diferencia real y chica: se muestra el sobrante
+         con ese nombre, que es información útil, no un error.
+       · Y si de verdad no falta nada, recién ahí "Al día". */
+  const costo  = t.costo  || 0;
+  const pagado = t.pagado || 0;
+  const falta  = costo - pagado;
+
+  let cierreDeLaCuenta;
+  if (falta > 0.01) {
+    cierreDeLaCuenta = 'Falta: <strong>' + seguro(comoDinero(falta, false)) + '</strong>';
+  } else if (costo > 0.01 && pagado > costo * 2) {
+    cierreDeLaCuenta = '<strong>Presupuesto sin definir</strong> — lo pagado supera ' +
+      'al presupuesto cargado. Definí el presupuesto para ver cuánto falta.';
+  } else if (falta < -0.01) {
+    cierreDeLaCuenta = 'Pagado de más: <strong>' +
+      seguro(comoDinero(Math.abs(falta), false)) + '</strong>';
+  } else {
+    cierreDeLaCuenta = '<strong>Al día</strong>';
+  }
+
   const resumenDePagado = '<p class="vacio__texto">' +
     'Pagado: <strong>' + seguro(comoDinero(t.pagado, false)) + '</strong>' +
-    ' · Falta: <strong>' + (falta > 0.01 ? seguro(comoDinero(falta, false)) : 'Al día') +
-    '</strong></p>';
+    ' · ' + cierreDeLaCuenta + '</p>';
 
   return '' +
     selector +

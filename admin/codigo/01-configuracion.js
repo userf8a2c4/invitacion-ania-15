@@ -573,7 +573,7 @@ const CONFIGURACION = {
     },
 
     'mesas.acomodar': {
-      titulo: 'Acomodar solo',
+      titulo: 'Acomodar a todos',
       texto:
         'Reparte a todos los que confirmaron entre las mesas, respetando ' +
         'los grupos, las reglas de "no sentar juntos" y lo que fijaste ' +
