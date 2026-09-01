@@ -2116,6 +2116,10 @@
      rama tarda un poquito más en reaccionar y se repinta con menos
      frecuencia —el mismo criterio que ya se usa para el titileo de las
      velas: una rama de verdad tampoco responde con precisión de cuadro. */
+  /* Cuánto más allá del borde de la pantalla se siguen meciendo las
+     plantas, en píxeles. Ver la nota en el culling de dibujarCuadro. */
+  const MARGEN_DE_CERCANIA_POR_CALIDAD = { 0: 500, 1: 300, 2: 150 };
+
   let calidad = nivelDeCalidad();
   const SALTO_DEL_RESORTE_POR_CALIDAD = { 0: 1, 1: 2, 2: 3 };
   let saltoDelResorte = SALTO_DEL_RESORTE_POR_CALIDAD[calidad] ?? 1;
@@ -2170,9 +2174,20 @@
 
     for (const planta of plantas) {
       /* Si la planta está lejísimos de la pantalla no perdemos tiempo.
-         El margen de 500 px hace que ya venga meciéndose al aparecer. */
-      const estaCerca = planta.alturaEnLaPagina > arribaDeLaVentana - 500 &&
-                        planta.alturaEnLaPagina < abajoDeLaVentana + 500;
+         El margen hace que ya venga meciéndose al aparecer.
+
+         ⚡ EL MARGEN SE ACHICA EN CALIDAD MEDIA Y BAJA (2026-09-02). Era de
+         500 px fijos hacia arriba y hacia abajo: en una pantalla de 1300 px
+         eso significa recalcular casi DOS pantallas de plantas a la vez, y
+         cada planta cuesta un transform propio más los de sus seis nudos.
+         En un equipo con gráficos integrados esa cuenta es de las más caras
+         del cuadro. Con un margen menor, las plantas siguen entrando ya
+         meciéndose —solo empiezan a hacerlo un poco más cerca del borde— y
+         se dejan de mover las que están a una pantalla entera de distancia,
+         que nadie está mirando. En calidad alta no cambia nada. */
+      const margen = MARGEN_DE_CERCANIA_POR_CALIDAD[calidad] ?? 500;
+      const estaCerca = planta.alturaEnLaPagina > arribaDeLaVentana - margen &&
+                        planta.alturaEnLaPagina < abajoDeLaVentana + margen;
       if (!estaCerca) continue;
 
       /* ── a) La planta entera se mece con el scroll ──
