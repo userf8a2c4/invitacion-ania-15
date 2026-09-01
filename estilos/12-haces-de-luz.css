@@ -237,6 +237,22 @@
   overflow: hidden;
 }
 
+/* El lienzo de las velas (Etapa B, 2026-08-31, codigo/19-velas.js) — un
+   canvas PROPIO, separado del de 23-lienzo-de-luz.js (que sigue fixed,
+   con haces/motas/fauna). `position: absolute`, sin `inset`: el JS le da
+   su propio ancho/alto (el del documento, no el de la ventana) y lo
+   posiciona en (0,0) dentro de #luz-de-velas — así el navegador lo mueve
+   con el scroll nativo, igual que a la llama, sin que ningún JavaScript
+   tenga que restarle nada. Sin `mix-blend-mode`: adentro del canvas la
+   suma la hace `globalCompositeOperation = 'lighter'` (misma matemática
+   que `screen`), sin costarle una capa de compositor a esta página. */
+#lienzo-de-velas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
 /* Cada vela emite DOS resplandores superpuestos (los crea el JS):
      · .vela--nucleo  → chico y brillante, el corazón de la llama.
      · .vela--derrame → ancho y suave, el que de verdad ilumina la sección.
