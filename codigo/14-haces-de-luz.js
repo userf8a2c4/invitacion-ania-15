@@ -151,8 +151,39 @@
   /* Se le entregan al lienzo los objetos de los haces. A partir de acá el
      bucle solo les cambia los números; la lista no se vuelve a armar. Y la
      capa vieja, con su mix-blend-mode a pantalla completa, se apaga. */
+  /* ⚡ CUÁNTOS HACES SE DIBUJAN, SEGÚN CALIDAD (2026-09-02).
+     ESTE AHORRO ESTABA ESCRITO PERO NUNCA SE APLICABA.
+     estilos/12-haces-de-luz.css tiene reglas para mostrar 4 de los 5 haces en
+     calidad media y solo 2 en baja — pero esas reglas actúan sobre los divs
+     de #haces-de-luz, y cuatro líneas más abajo esa capa entera se apaga
+     porque la luz pasó a dibujarse en el lienzo. O sea que el CSS ocultaba
+     elementos invisibles mientras el lienzo seguía pintando los cinco haces
+     en TODOS los niveles. La reducción existía en el papel y no existía en
+     la práctica: se respetan ahora las mismas cantidades que el CSS ya
+     declaraba.
+
+     ⚠️ SE RECORTA LO QUE SE DIBUJA, NO LO QUE SE CALCULA. El bucle sigue
+     recorriendo los cinco: de ahí sale el promedio de posición e intensidad
+     de la luz ambiente (--luz-x y --luz-intensidad) que usan el oro del
+     relicario y las motas. Calcular menos haces correría ese promedio y
+     cambiaría la iluminación general de la escena, que no es lo que se
+     quiere: lo caro no es esa aritmética, son los estampados grandes en el
+     lienzo. */
+  const CUANTOS_HACES_POR_CALIDAD = { 0: 5, 1: 4, 2: 2 };
+
+  function ajustarCuantosHacesSeDibujan(calidad) {
+    if (!usaElLienzo) return;
+    const cuantos = CUANTOS_HACES_POR_CALIDAD[calidad] ?? estadoDeLosHaces.length;
+    window.LienzoDeLuz.haces = estadoDeLosHaces
+      .slice(0, cuantos)
+      .map(h => h.enElLienzo);
+  }
+
   if (usaElLienzo) {
-    window.LienzoDeLuz.haces = estadoDeLosHaces.map(h => h.enElLienzo);
+    ajustarCuantosHacesSeDibujan(nivelDeCalidad());
+    document.addEventListener('calidad-cambio', evento => {
+      ajustarCuantosHacesSeDibujan((evento.detail && evento.detail.calidad) ?? 0);
+    });
     const capaDeHaces = buscar('#haces-de-luz');
     if (capaDeHaces) capaDeHaces.style.display = 'none';
   }
