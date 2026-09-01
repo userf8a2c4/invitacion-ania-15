@@ -51,7 +51,7 @@
   if (!sobre) {
     // En el siguiente tick, para que los demás archivos alcancen a
     // registrar su escucha de este evento (este archivo es el 03 de 24).
-    setTimeout(() => document.dispatchEvent(new CustomEvent('invitacion-visible')), 0);
+    setTimeout(() => dispararEventoQueQuizasLleguenTarde('invitacion-visible'), 0);
     // Sin sobre no hay "mostrarElSobre()" que dispare la escena (ver más
     // abajo): se arranca acá, en el mismo lugar donde se avisa que la
     // invitación ya se ve.
@@ -264,7 +264,7 @@
        así que el navegador SÍ nos va a dejar reproducir la música.
        Avisamos con un evento y el reproductor se encarga.
     */
-    document.dispatchEvent(new CustomEvent('sobre-abierto'));
+    dispararEventoQueQuizasLleguenTarde('sobre-abierto');
 
     // Esperamos a que termine la animación de apertura…
     await esperar(1500);
@@ -276,7 +276,7 @@
 
     // Avisamos que la invitación ya es visible, por si algún otro archivo
     // quiere empezar sus animaciones justo en este momento.
-    document.dispatchEvent(new CustomEvent('invitacion-visible'));
+    dispararEventoQueQuizasLleguenTarde('invitacion-visible');
   }
 
   // El sobre entero es el botón: se abre haciendo clic en cualquier parte.

@@ -1993,7 +1993,16 @@
     requestAnimationFrame(dibujarCuadro);
   }
 
-  document.addEventListener('invitacion-visible', construirUnaSolaVez);
+  /* ⚡ escucharEventoQueQuizasYaPaso() Y NO addEventListener DIRECTO
+     (2026-09-01): este script se inyecta encadenado detrás de otros (ver
+     iniciarInyeccionDeLaEscena en 02-utilidades.js), e 'invitacion-visible'
+     se dispara a un plazo fijo tras el clic. En un equipo lento —o si un
+     script anterior en la cola tarda en construirse— este archivo puede
+     registrar su escucha DESPUÉS de que el evento ya pasó, y como es de
+     una sola vez, se pierde para siempre: las enredaderas y flores nunca
+     llegan a construirse. Confirmado en la práctica en un equipo real de
+     gama baja. Esta función se entera igual, tarde o no. */
+  escucharEventoQueQuizasYaPaso('invitacion-visible', construirUnaSolaVez);
 
 
   /* ─── 6. MOVIMIENTO ────────────────────────────────────────────── */
@@ -2395,7 +2404,9 @@
   /* Las posiciones se vuelven a medir cuando la página termina de cargar
      (las imágenes pueden haber corrido el contenido). */
   window.addEventListener('load', medirLasFlores);
-  document.addEventListener('invitacion-visible', () => setTimeout(medirLasFlores, 400));
+  // Mismo motivo que la escucha de construirUnaSolaVez, más arriba: el
+  // evento puede haber pasado antes de que este script cargara.
+  escucharEventoQueQuizasYaPaso('invitacion-visible', () => setTimeout(medirLasFlores, 400));
 
   /* (Acá hubo un IntersectionObserver que volvía a medir las flores cuando
      una planta o un ramillete reaparecía en pantalla. Existía para sostener

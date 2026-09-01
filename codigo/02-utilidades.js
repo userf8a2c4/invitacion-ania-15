@@ -851,6 +851,61 @@ function limpiarTexto(texto) {
 }
 
 
+/* ─── 5B. EVENTOS QUE PUEDEN LLEGAR TARDE (2026-09-01) ─────────────────
+   POR QUÉ HACE FALTA ESTO
+   'sobre-abierto' y 'invitacion-visible' se disparan UNA vez, en un
+   momento fijo (el clic, o un setTimeout con un plazo fijo) — no cuando
+   el módulo interesado ya está listo para escucharlos. Varios de esos
+   módulos (10-reproductor-de-musica.js, 07-marco-y-enredaderas.js) se
+   inyectan recién DESPUÉS del clic, encadenados uno detrás de otro (ver
+   iniciarInyeccionDeLaEscena, más abajo), así que en un equipo lento —o
+   si algún script anterior en la cola tarda en construirse— pueden
+   registrar su addEventListener DESPUÉS de que el evento ya pasó, y se
+   lo pierden PARA SIEMPRE: no hay ninguna segunda oportunidad, porque
+   el evento no vuelve a dispararse.
+
+   Confirmado en la práctica: en un equipo real de gama baja la música no
+   sonó hasta que la persona hizo otro clic al azar más de un minuto
+   después (la reproducía solo la red de seguridad de "cualquier clic" de
+   10-reproductor-de-musica.js, no el evento en sí) y las flores/
+   enredaderas de 07-marco-y-enredaderas.js no llegaron a construirse.
+
+   LA SOLUCIÓN: guardar que el evento YA ocurrió, para que quien pregunte
+   tarde se entere igual. dispararEventoQueQuizasLleguenTarde() dispara Y
+   deja la marca; escucharEventoQueQuizasYaPaso() escucha normal, pero si
+   la marca ya está puesta llama al callback DE UNA, sin esperar un
+   segundo disparo que no va a llegar. */
+
+const _eventosDeLaEscenaYaOcurridos = Object.create(null);
+
+/**
+ * Dispara un CustomEvent y deja anotado que ya ocurrió, para quien
+ * pregunte después de este momento (ver escucharEventoQueQuizasYaPaso).
+ * @param {string} nombre - Nombre del evento.
+ * @returns {void}
+ */
+function dispararEventoQueQuizasLleguenTarde(nombre) {
+  _eventosDeLaEscenaYaOcurridos[nombre] = true;
+  document.dispatchEvent(new CustomEvent(nombre));
+}
+
+/**
+ * Como document.addEventListener, pero si el evento YA se disparó antes
+ * de esta llamada, ejecuta el callback de inmediato en vez de quedarse
+ * esperando un segundo disparo que nunca va a llegar.
+ * @param {string} nombre - Nombre del evento.
+ * @param {Function} callback - Qué hacer cuando ocurre (o ya ocurrió).
+ * @returns {void}
+ */
+function escucharEventoQueQuizasYaPaso(nombre, callback) {
+  if (_eventosDeLaEscenaYaOcurridos[nombre]) {
+    callback();
+    return;
+  }
+  document.addEventListener(nombre, callback, { once: true });
+}
+
+
 /* ─── 6. INYECCIÓN EN SERIE DEL "PACK DE LA ESCENA" (2026-08-30) ───────
    POR QUÉ EXISTE ESTO
    Antes, los 23 archivos de la escena (enredaderas, velas, luz, joyas,

@@ -42,7 +42,10 @@
      19-velas.js para arrancar) más un respiro, mismo patrón de espera que
      ya usan codigo/22-luz-de-la-hora.js y codigo/02-utilidades.js para
      este exacto problema. */
-  document.addEventListener('invitacion-visible', () => setTimeout(preparar, 600));
+  // escucharEventoQueQuizasYaPaso() (02-utilidades.js): este script se
+  // inyecta encadenado detrás de otros — el evento puede haber pasado
+  // antes de que cargara.
+  escucharEventoQueQuizasYaPaso('invitacion-visible', () => setTimeout(preparar, 600));
 
   function preparar() {
 

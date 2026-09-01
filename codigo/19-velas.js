@@ -941,7 +941,10 @@
     requestAnimationFrame(dibujarCuadro);
   }
 
-  document.addEventListener('invitacion-visible', construirYAcomodarUnaSolaVez);
+  // escucharEventoQueQuizasYaPaso() (02-utilidades.js): este script se
+  // inyecta encadenado detrás de otros — el evento puede haber pasado
+  // antes de que cargara.
+  escucharEventoQueQuizasYaPaso('invitacion-visible', construirYAcomodarUnaSolaVez);
 
   /* Rehacer si cambia el tamaño de la ventana (con un respiro).
      Si todavía no se construyó nada, no hay nada que acomodar. */
