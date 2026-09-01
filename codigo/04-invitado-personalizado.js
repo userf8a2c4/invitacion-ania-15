@@ -180,7 +180,12 @@ let INVITACION = null;
       fetch('invitacion.php?accion=ver&token=' + encodeURIComponent(token))
         .then(respuesta => respuesta.json())
         .then(datos => {
-          if (!datos || datos.ok !== true) return;
+          if (!datos || datos.ok !== true) {
+            // El token no corresponde a ninguna invitación viva.
+            dispararEventoQueQuizasLleguenTarde('invitacion-sin-acceso',
+              { motivo: 'no-encontrada' });
+            return;
+          }
 
           INVITACION = datos;
 
@@ -190,16 +195,39 @@ let INVITACION = null;
             saludoDelSobre.innerHTML = 'Para ' + limpiarTexto(datos.nombre);
           }
 
-          // 11-formulario-confirmacion.js escucha esto para reemplazar el
-          // formulario en blanco por la lista de personas del grupo.
-          document.dispatchEvent(new CustomEvent('invitacion-lista', { detail: datos }));
+          /* 11-formulario-confirmacion.js escucha esto para reemplazar el
+             formulario en blanco por la lista de personas del grupo.
+
+             ⚡ SE DISPARA CON MEMORIA (2026-09-02), Y ESTO ARREGLA UN BUG
+             REAL. Este archivo es "core": corre al abrir la página, mucho
+             antes del clic. El 11, en cambio, se inyecta RECIÉN en el clic
+             (ver iniciarInyeccionDeLaEscena en 02-utilidades.js). O sea que
+             para cuando el 11 registraba su escucha, este evento ya había
+             pasado hacía rato y se lo perdía: el invitado abría su link
+             personal y veía igual el formulario genérico en blanco, sin sus
+             nombres ni sus lugares. El comentario del 11 que justificaba
+             escuchar el evento ("todavía no hay respuesta del fetch")
+             describía cómo cargaban los archivos ANTES de diferir la
+             escena al clic; quedó viejo y nadie lo notó. */
+          dispararEventoQueQuizasLleguenTarde('invitacion-lista', datos);
         })
         .catch(error => {
-          // Sin conexión o el token no existe: la página sigue funcionando
-          // como el formulario abierto de siempre, no se rompe nada.
+          /* Sin conexión. NO es lo mismo que "este link no vale": puede ser
+             un invitado legítimo con una red mala, así que se lo trata
+             aparte para no acusarlo de nada y pedirle que recargue. */
           console.warn('No se pudo cargar la invitación personalizada:', error);
+          dispararEventoQueQuizasLleguenTarde('invitacion-sin-acceso',
+            { motivo: 'sin-conexion' });
         });
     });
+  } else {
+    /* ⚡ SIN LINK PERSONAL NO HAY FORMULARIO (2026-09-02). Las invitaciones
+       son nominales y con cupo real: cada grupo familiar tiene su propio
+       enlace. Un formulario en blanco donde cualquiera con la dirección
+       puede anotarse contradice las dos cosas. Se avisa acá y el 11
+       reemplaza el formulario por un mensaje. */
+    dispararEventoQueQuizasLleguenTarde('invitacion-sin-acceso',
+      { motivo: 'sin-link' });
   }
 
 
