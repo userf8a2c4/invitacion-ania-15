@@ -262,6 +262,28 @@
      gastaban los SVG de las plantas. */
   const FRACCION_ACTIVA_POR_CALIDAD = { 0: 1, 1: 0.78, 2: 0.5 };
 
+  /* ⚡ CADA CUÁNTO SE MUEVE Y SE REDIBUJA, SEGÚN CALIDAD (2026-09-02).
+     ESTE ERA EL ÚNICO SISTEMA DE DIBUJO DEL SITIO SIN FRENO POR CALIDAD.
+     Todos los demás bajan su cadencia cuando el equipo sufre —el lienzo de
+     luz y las velas pasan de 30 ms a 90 ms, o sea de 33 a 11 veces por
+     segundo—, pero los pétalos seguían calculando física y repintando su
+     canvas de 3,2 millones de píxeles 60 veces por segundo también en el
+     nivel más exigido: 5 veces más repintados que cualquier otro.
+
+     POR QUÉ ESTO NO CAMBIA CÓMO SE VEN LOS PÉTALOS
+     La física de este archivo NO asume un cuadro fijo: todo se calcula con
+     `dt`, el tiempo real transcurrido (ver más abajo: `frenadoDelCuadro` y
+     `escalaDelCuadro` salen de él). Si pasa más tiempo entre cuadros, cada
+     paso avanza proporcionalmente más, y los pétalos caen exactamente a la
+     misma velocidad — solo con menos pasos intermedios. El tope elegido para
+     baja (45 ms) queda por debajo del límite de 0,05 s con el que ya se
+     acota `dt`, así que ni siquiera se toca ese recorte.
+
+     En calidad alta no hay freno: cero cambios respecto de hoy. */
+  const CADA_CUANTO_MOVER_POR_CALIDAD = { 0: 0, 1: 32, 2: 45 };
+  let calidadDeLosPetalos = nivelDeCalidad();
+  let ultimoMovimiento = 0;
+
   function ajustarCantidadDePetalos(calidad) {
     const fraccion = FRACCION_ACTIVA_POR_CALIDAD[calidad] ?? 1;
     const cuantosActivos = Math.ceil(petalos.length * fraccion);
@@ -280,7 +302,9 @@
   ajustarCantidadDePetalos(nivelDeCalidad());
 
   document.addEventListener('calidad-cambio', evento => {
-    ajustarCantidadDePetalos((evento.detail && evento.detail.calidad) ?? 0);
+    const calidad = (evento.detail && evento.detail.calidad) ?? 0;
+    calidadDeLosPetalos = calidad;
+    ajustarCantidadDePetalos(calidad);
   });
 
 
@@ -714,6 +738,15 @@
       requestAnimationFrame(dibujarCuadro);
       return;
     }
+
+    /* Freno por calidad (ver CADA_CUANTO_MOVER_POR_CALIDAD). Se pide el
+       cuadro siguiente igual, para no cortar el bucle. */
+    const cadaCuantoMover = CADA_CUANTO_MOVER_POR_CALIDAD[calidadDeLosPetalos] || 0;
+    if (cadaCuantoMover && momentoActual - ultimoMovimiento < cadaCuantoMover) {
+      requestAnimationFrame(dibujarCuadro);
+      return;
+    }
+    ultimoMovimiento = momentoActual;
 
     // dt en segundos. Se limita a 0,05 (20 cuadros por segundo) porque si
     // la pestaña estuvo minimizada, el salto sería enorme y los pétalos

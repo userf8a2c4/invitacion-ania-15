@@ -541,25 +541,6 @@ function salirDeSeleccion() {
 }
 
 /**
- * Dice si una confirmación pasa el filtro y la búsqueda actuales.
- *
- * @param {Object} fila
- * @returns {boolean}
- */
-function invitadoPasaElFiltro(fila) {
-  // Filtro.
-  if (FILTRO_INVITADOS === 'asisten'    && Number(fila.asiste) !== 1) return false;
-  if (FILTRO_INVITADOS === 'no_asisten' && Number(fila.asiste) !== 0) return false;
-
-  if (FILTRO_INVITADOS === 'alergias') {
-    const alergias = paraBuscar(fila.alergias || '');
-    const nada = ['', 'ninguna', 'ninguno', 'no', 'n/a', '-'];
-    if (nada.includes(alergias)) return false;
-  }
-
-  if (FILTRO_INVITADOS === 'sin_mesa' && fila.mesa) return false;
-
-/**
  * ¿Esta persona YA contestó la invitación?
  *
  * ⚡ DEFINICIÓN ÚNICA (2026-09-02). Antes "sin responder" se calculaba en
@@ -585,6 +566,26 @@ function yaRespondio(fila) {
   return fila.invitacion_estado === 'confirmada' ||
          fila.invitacion_estado === 'declinada';
 }
+
+/**
+ * Dice si una confirmación pasa el filtro y la búsqueda actuales.
+ *
+ * @param {Object} fila
+ * @returns {boolean}
+ */
+function invitadoPasaElFiltro(fila) {
+  // Filtro.
+  if (FILTRO_INVITADOS === 'asisten'    && Number(fila.asiste) !== 1) return false;
+  if (FILTRO_INVITADOS === 'no_asisten' && Number(fila.asiste) !== 0) return false;
+
+  if (FILTRO_INVITADOS === 'alergias') {
+    const alergias = paraBuscar(fila.alergias || '');
+    const nada = ['', 'ninguna', 'ninguno', 'no', 'n/a', '-'];
+    if (nada.includes(alergias)) return false;
+  }
+
+  if (FILTRO_INVITADOS === 'sin_mesa' && fila.mesa) return false;
+
 
   // ⚡ (2026-08-28) Estos tres vienen de la extinta pestaña Envíos.
   // invitacion_estado es NULL cuando la confirmación todavía no tiene
