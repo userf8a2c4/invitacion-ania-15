@@ -884,9 +884,9 @@ const _eventosDeLaEscenaYaOcurridos = Object.create(null);
  * @param {string} nombre - Nombre del evento.
  * @returns {void}
  */
-function dispararEventoQueQuizasLleguenTarde(nombre) {
-  _eventosDeLaEscenaYaOcurridos[nombre] = true;
-  document.dispatchEvent(new CustomEvent(nombre));
+function dispararEventoQueQuizasLleguenTarde(nombre, detalle) {
+  _eventosDeLaEscenaYaOcurridos[nombre] = { detalle: detalle };
+  document.dispatchEvent(new CustomEvent(nombre, { detail: detalle }));
 }
 
 /**
@@ -898,8 +898,21 @@ function dispararEventoQueQuizasLleguenTarde(nombre) {
  * @returns {void}
  */
 function escucharEventoQueQuizasYaPaso(nombre, callback) {
-  if (_eventosDeLaEscenaYaOcurridos[nombre]) {
-    callback();
+  const yaPaso = _eventosDeLaEscenaYaOcurridos[nombre];
+  if (yaPaso) {
+    /* Se le entrega un objeto con la misma forma que tendría el evento
+       real, para que quien escucha pueda leer `evento.detail` sin tener
+       que preguntarse si llegó tarde o temprano.
+
+       ⚠️ Y SE ENTREGA EN EL SIGUIENTE TURNO, NO EN ESTE MISMO (2026-09-02).
+       Si se llamara al callback en el acto, correría EN MEDIO de la
+       evaluación del archivo que acaba de registrarse —o sea, con las
+       constantes que están más abajo todavía sin inicializar— y cualquier
+       cosa que las tocara reventaría con un ReferenceError difícil de
+       rastrear. Un evento de verdad nunca llega así: llega cuando el
+       archivo ya terminó de cargarse. Con esto se respeta esa misma regla
+       y quien escucha no tiene que saber nada de todo esto. */
+    Promise.resolve().then(() => callback({ detail: yaPaso.detalle }));
     return;
   }
   document.addEventListener(nombre, callback, { once: true });

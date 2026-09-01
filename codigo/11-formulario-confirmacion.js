@@ -80,9 +80,56 @@
   let MODO_PERSONAS_ACTIVO = false;
   let PERSONAS_INVITACION = [];
 
-  document.addEventListener('invitacion-lista', function (evento) {
+  /* ⚡ escucharEventoQueQuizasYaPaso() Y NO addEventListener DIRECTO
+     (2026-09-02). Este archivo se inyecta recién al hacer clic en el
+     sobre, mientras que 04-invitado-personalizado.js es "core" y dispara
+     'invitacion-lista' apenas le contesta el servidor —mucho antes—. Con
+     un addEventListener común el evento ya había pasado y se perdía: el
+     invitado abría su link personal y veía igual el formulario genérico.
+     Esta función (02-utilidades.js) entrega el evento aunque haya ocurrido
+     antes, con su mismo `detail`. */
+  escucharEventoQueQuizasYaPaso('invitacion-lista', function (evento) {
     activarModoInvitacionPersonalizada(evento.detail);
   });
+
+  /* Sin link personal válido no se muestra ningún formulario: las
+     invitaciones son nominales y con cupo. Ver la nota en 04. */
+  escucharEventoQueQuizasYaPaso('invitacion-sin-acceso', function (evento) {
+    cerrarElFormularioSinLink((evento.detail || {}).motivo);
+  });
+
+  /**
+   * Reemplaza el formulario por un mensaje, según por qué no hay acceso.
+   *
+   * @param {string} motivo - 'sin-link', 'no-encontrada' o 'sin-conexion'.
+   * @returns {void}
+   */
+  function cerrarElFormularioSinLink(motivo) {
+    if (!formulario || buscar('#invitacion-sin-acceso')) return;
+
+    const textos = {
+      'sin-link':
+        'Esta invitación es personal. Abrí el enlace que te enviamos para ' +
+        'confirmar tu asistencia — ahí van a aparecer los nombres de tu ' +
+        'familia y sus lugares.',
+      'no-encontrada':
+        'No encontramos esta invitación. Puede que el enlace esté incompleto: ' +
+        'volvé a abrirlo desde el mensaje que te enviamos.',
+      'sin-conexion':
+        'No pudimos cargar tu invitación. Revisá tu conexión y volvé a ' +
+        'cargar la página.',
+    };
+
+    formulario.style.display = 'none';
+    const contenedorFormulario = formulario.parentElement;
+    if (!contenedorFormulario) return;
+
+    const aviso = document.createElement('p');
+    aviso.id = 'invitacion-sin-acceso';
+    aviso.className = 'formulario__introduccion';
+    aviso.textContent = textos[motivo] || textos['sin-link'];
+    contenedorFormulario.appendChild(aviso);
+  }
 
   /**
    * Adapta el formulario a una invitación con token: nombre y correo
