@@ -906,6 +906,28 @@ function escucharEventoQueQuizasYaPaso(nombre, callback) {
 }
 
 
+/* ─── 5C. CAPTURA DEL PRIMER ERROR SIN ATRAPAR (2026-09-02) ────────────
+   POR QUÉ HACE FALTA ESTO
+   Si algún script de la escena tira una excepción sin atrapar, esa pieza
+   queda a medio construir (por ejemplo: las enredaderas, si el error pasa
+   dentro de repartirPlantas() o algo que llama) y no hay forma de saberlo
+   sin pedirle a la persona que abra la consola del navegador e interprete
+   lo que ve — lento, y no siempre posible a distancia.
+
+   Acá se guarda el PRIMER error real (mensaje, archivo, línea) en una
+   variable global. El cartel de ?fps=1 (21-monitor-de-rendimiento.js) lo
+   muestra si existe, así una simple captura de pantalla del overlay que
+   ya se usa para medir fps alcanza para ver también esto. */
+window._ultimoErrorSinAtrapar = null;
+window.addEventListener('error', evento => {
+  if (window._ultimoErrorSinAtrapar) return;   // solo el primero: los que
+                                                 // siguen suelen ser el
+                                                 // mismo problema en cadena.
+  const archivo = evento.filename ? evento.filename.split('/').pop() : '?';
+  window._ultimoErrorSinAtrapar = `${archivo}:${evento.lineno} — ${evento.message}`;
+});
+
+
 /* ─── 6. INYECCIÓN EN SERIE DEL "PACK DE LA ESCENA" (2026-08-30) ───────
    POR QUÉ EXISTE ESTO
    Antes, los 23 archivos de la escena (enredaderas, velas, luz, joyas,
