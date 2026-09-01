@@ -60,9 +60,17 @@ const VISTAS = {
   invitados: { titulo: 'Gente',     dibujar: () => dibujarGente() },
   correo:    { titulo: 'Correo',    dibujar: () => dibujarCorreo() },
   /* La clave interna sigue siendo 'dinero' —la usan la URL de los
-     atajos del icono y las llamadas a ensuciarVistas()— pero lo que se
-     lee en pantalla es "Presupuesto". */
-  dinero:    { titulo: 'Presupuesto', dibujar: () => dibujarDinero() },
+     atajos del icono y las llamadas a ensuciarVistas()— y lo que se lee
+     en pantalla dice lo mismo.
+
+     ⚡ SE LLAMA "DINERO" EN LOS DOS LADOS (2026-09-02). El acceso del
+     índice decía "Dinero" (07-vista-resumen.js:256) y el encabezado de
+     adentro decía "Presupuesto": dos nombres para el mismo lugar obligan
+     a traducir mentalmente cada vez que se entra. Se deja la palabra más
+     simple y la que ya se usa para nombrarlo en voz alta. Adentro sigue
+     habiendo un presupuesto, claro, pero es UNA de las cosas que vive
+     acá —junto con gastos, pagos y recibos—, no el nombre del lugar. */
+  dinero:    { titulo: 'Dinero', dibujar: () => dibujarDinero() },
   /* alVolver corre al entrar a una vista que YA estaba dibujada. Evento
      lo usa para volver a su índice: si uno dejó abierta una sección y
      se fue a otra pestaña, al regresar tiene que ver el índice otra vez

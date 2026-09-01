@@ -382,7 +382,7 @@ function bloqueBotonesDeMesas() {
   return '' +
     '<div style="display:flex;gap:var(--esp-2);margin-bottom:var(--esp-2)">' +
       '<button class="boton boton--principal" style="flex:2" id="mesa-auto">' +
-        'Acomodar solo' +
+        'Acomodar a todos' +
       '</button>' +
       '<span style="display:flex;align-items:center">' +
         ayuda('mesas.acomodar') + '</span>' +
@@ -915,7 +915,7 @@ async function acomodarSolo(refrescar) {
       : '<p class="vacio__texto" style="color:var(--bien)">' +
         'No se mueve de mesa nadie que ya estuviera sentado.</p>';
 
-  const cuerpo = abrirHoja('Acomodar solo',
+  const cuerpo = abrirHoja('Acomodar a todos',
     '<p style="margin-bottom:var(--esp-2)">' +
       'Se van a sentar <strong>' + seguro(Object.keys(previa.plan || {}).length) +
       '</strong> confirmaciones.' +

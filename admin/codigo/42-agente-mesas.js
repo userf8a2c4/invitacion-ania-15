@@ -16,7 +16,7 @@
      4. Si quedan MUCHOS invitados sin mesa (≥ UMBRAL_ACOMODO_COMPLETO),
         se ofrece el acomodo automático COMPLETO en vez de ir de a uno
         — con el detalle real de qué se mueve (mismo `movimientos` que
-        ya usa "Acomodar solo" en la pantalla, vía
+        ya usa "Acomodar a todos" en la pantalla, vía
         mesas.php?accion=vista_previa) y deshacer real
         (mesas.php?accion=deshacer, restaura desde acomodo_respaldo).
         Si son pocos, se sigue sentando de a uno (regla original, sin

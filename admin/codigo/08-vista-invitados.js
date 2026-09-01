@@ -424,9 +424,35 @@ function engancharInvitados(vista) {
  *
  * @returns {void}
  */
+/**
+ * Escribe en el chip "Sin responder" cuánta gente falta, contando sobre
+ * LA MISMA lista que se está mostrando.
+ *
+ * ⚡ POR QUÉ EL NÚMERO VA ACÁ Y NO VIENE DEL SERVIDOR (2026-09-02).
+ * Había dos cuentas de "sin responder" hechas por separado —una para la
+ * lista y otra para el resumen de arriba— y medían poblaciones
+ * distintas, así que se contradecían en pantalla: el resumen podía decir
+ * 0 mientras la lista mostraba a todo el mundo. Calculándolo acá, sobre
+ * el mismo arreglo que se filtra dos líneas más abajo, es imposible que
+ * el número y la lista dejen de coincidir.
+ *
+ * El trabajo #1 en la app es saber quién falta: el número tiene que
+ * estar a la vista sin tener que tocar el filtro para averiguarlo.
+ *
+ * @returns {void}
+ */
+function actualizarElNumeroDeQuienFalta() {
+  const chip = buscar('[data-filtro="sin_responder"]');
+  if (!chip) return;
+  const faltan = INVITADOS.reduce((suma, fila) => suma + (yaRespondio(fila) ? 0 : 1), 0);
+  chip.textContent = faltan ? 'Sin responder · ' + faltan : 'Sin responder';
+}
+
 function pintarListaDeInvitados() {
   const lista = buscar('#lista-invitados');
   if (!lista) return;
+
+  actualizarElNumeroDeQuienFalta();
 
   const visibles = INVITADOS.filter(invitadoPasaElFiltro);
 
@@ -533,6 +559,33 @@ function invitadoPasaElFiltro(fila) {
 
   if (FILTRO_INVITADOS === 'sin_mesa' && fila.mesa) return false;
 
+/**
+ * ¿Esta persona YA contestó la invitación?
+ *
+ * ⚡ DEFINICIÓN ÚNICA (2026-09-02). Antes "sin responder" se calculaba en
+ * dos lugares distintos y sobre poblaciones distintas, y por eso se
+ * contradecían en pantalla:
+ *   · La lista miraba solo `invitacion_estado`, y salía temprano si ese
+ *     dato faltaba — así que las filas importadas (que no tienen
+ *     invitación todavía, o sea la mayoría de la lista real) pasaban
+ *     SIEMPRE el filtro: tocar "Sin responder" dejaba la lista igual a
+ *     "Todos".
+ *   · El contador de arriba contaba solo sobre la tabla de invitaciones,
+ *     así que esas mismas filas no existían para él y podía decir 0.
+ *
+ * Contestó = su invitación quedó confirmada o declinada, o tiene fecha de
+ * respuesta cargada. Todo lo demás —incluido "no tiene invitación
+ * todavía"— es alguien que falta, que es justo lo que hay que resolver.
+ *
+ * @param {Object} fila
+ * @returns {boolean}
+ */
+function yaRespondio(fila) {
+  if (fila.invitacion_respondida_en) return true;
+  return fila.invitacion_estado === 'confirmada' ||
+         fila.invitacion_estado === 'declinada';
+}
+
   // ⚡ (2026-08-28) Estos tres vienen de la extinta pestaña Envíos.
   // invitacion_estado es NULL cuando la confirmación todavía no tiene
   // link (formulario abierto viejo, o recién creada sin generar_link) —
@@ -540,8 +593,7 @@ function invitadoPasaElFiltro(fila) {
   // falta resolver, no algo para esconder del filtro.
   if (FILTRO_INVITADOS === 'sin_enviar' &&
       fila.invitacion_estado && fila.invitacion_estado !== 'sin_enviar') return false;
-  if (FILTRO_INVITADOS === 'sin_responder' &&
-      fila.invitacion_estado && !['sin_enviar', 'enviada'].includes(fila.invitacion_estado)) return false;
+  if (FILTRO_INVITADOS === 'sin_responder' && yaRespondio(fila)) return false;
   if (FILTRO_INVITADOS === 'sin_telefono' && fila.invitacion_telefono) return false;
 
   // Búsqueda.
