@@ -215,9 +215,12 @@
     return t * t * (3 - 2 * t);   // smoothstep
   }
 
-  document.addEventListener('sobre-abierto', () => {
+  // escucharEventoQueQuizasYaPaso() (02-utilidades.js): este script se
+  // inyecta después del clic, encadenado detrás de otros — el evento
+  // puede haber pasado antes de que cargara.
+  escucharEventoQueQuizasYaPaso('sobre-abierto', () => {
     if (inicioDelRevelado === null) inicioDelRevelado = performance.now();
-  }, { once: true });
+  });
 
   /* Si alguien llega con el sobre ya abierto (por ejemplo, al recargar en
      una sección más abajo), no tiene sentido esperar el amanecer: la luz

@@ -226,7 +226,17 @@
   /* El momento clave: cuando se abre el sobre, el navegador ya nos deja
      reproducir sonido. Esta primera vez entra como eco lejano, junto con
      el revelado por luz. */
-  document.addEventListener('sobre-abierto', () => reproducirLaCancion(true), { once: true });
+  /* ⚡ escucharEventoQueQuizasYaPaso() Y NO addEventListener DIRECTO
+     (2026-09-01): este script se inyecta DESPUÉS del clic, encadenado
+     detrás de los demás (ver iniciarInyeccionDeLaEscena en
+     02-utilidades.js). 'sobre-abierto' se dispara EN el clic, así que en
+     un equipo lento este script puede terminar de cargar y registrar su
+     escucha cuando el evento YA pasó — y como es de una sola vez, se
+     perdía para siempre. Confirmado en la práctica: en un equipo real de
+     gama baja la música no sonaba hasta que la persona hacía otro clic
+     al azar más de un minuto después (por la red de seguridad de abajo,
+     no por este evento). Esta función se entera igual, tarde o no. */
+  escucharEventoQueQuizasYaPaso('sobre-abierto', () => reproducirLaCancion(true));
 
   /* Red de seguridad: si por lo que sea la música no arrancó (o quedó
      pausada por el navegador y no se pudo retomar sola, ver más abajo),
