@@ -450,7 +450,13 @@
         `pétalos activos: ${conteos.petalos}  ·  velas: ${conteos.velas}\n` +
         lineaDeRamilletes() +
         lineaDeMemoria +
-        `\ndocumento: ${tamanoDelDocumento}`;
+        `\ndocumento: ${tamanoDelDocumento}` +
+        /* ⚡ DIAGNÓSTICO DIRECTO EN EL CARTEL (2026-09-02): si algún script
+           de la escena tiró un error sin atrapar (ver 02-utilidades.js),
+           se muestra acá. Así una captura de este overlay alcanza para ver
+           la causa real de una pieza que no terminó de construirse, sin
+           depender de leer la consola del navegador. */
+        (window._ultimoErrorSinAtrapar ? `\n⚠ ERROR: ${window._ultimoErrorSinAtrapar}` : '');
 
       /* Cada 2 s en vez de 1: escribir el cartel obliga a recalcular su
          estilo y su layout, y a 1 s eso pesaba de más en las mediciones. */
