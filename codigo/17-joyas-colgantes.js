@@ -49,6 +49,10 @@
 
 (function preparaLasJoyasColgantes() {
 
+  // Interruptor de diagnóstico: ver apagadoParaMedir() en 02-utilidades.js.
+  if (apagadoParaMedir('joyas')) return;
+
+
   const relicario = buscar('.portada__marco');
   if (!relicario) return;
 

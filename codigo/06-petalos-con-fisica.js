@@ -36,6 +36,10 @@
 
 (function preparaLaLluviaDePetalos() {
 
+  // Interruptor de diagnóstico: ver apagadoParaMedir() en 02-utilidades.js.
+  if (apagadoParaMedir('petalos')) return;
+
+
   // Hacen falta los tres planos; si falta alguno, no arrancamos
   if (!buscar('#petalos-fondo') || !buscar('#petalos-medio') || !buscar('#petalos-frente')) return;
 
