@@ -894,6 +894,71 @@ case 'personas_de':
     break;
 
 
+/* ─── QUIÉN SE SIENTA EN UNA MESA, PERSONA POR PERSONA ────────────────────
+   GET ?accion=detalle_mesa&mesa_id=N
+
+   Devuelve a cada invitado de esa mesa con su plato y su alergia. Es la
+   hoja que hace falta el día de la fiesta: el mesero necesita saber que en
+   la mesa 3 hay dos vegetarianos y alguien alérgico a los mariscos, y
+   quiénes son — ese cruce no existía en ningún lado, había que entrar
+   invitado por invitado.
+
+   La gente llega a una mesa por dos caminos distintos y hay que mirar los
+   dos: por familia entera (asignacion_mesas, una fila por confirmación) o
+   individualmente (asignacion_mesas_persona, cuando a alguien se lo sentó
+   aparte). Un mismo acompañante podría aparecer por los dos lados, así que
+   se descarta el repetido al unir. */
+case 'detalle_mesa':
+    exigirMetodo('GET');
+    $mesaId = campoEntero($_GET, 'mesa_id', 1);
+
+    $porFamilia = existeTabla('acompanantes')
+        ? consultarTodo(
+            'SELECT a.id, a.nombre, a.tipo, a.menu, a.alergias, c.nombre AS familia
+             FROM asignacion_mesas am
+             JOIN confirmaciones c ON c.id = am.confirmacion_id
+             JOIN acompanantes a   ON a.confirmacion_id = c.id
+             WHERE am.mesa_id = :m
+             ORDER BY c.nombre, a.id',
+            [':m' => $mesaId])
+        : [];
+
+    $porPersona = existeTabla('asignacion_mesas_persona')
+        ? consultarTodo(
+            'SELECT a.id, a.nombre, a.tipo, a.menu, a.alergias, c.nombre AS familia
+             FROM asignacion_mesas_persona ap
+             JOIN acompanantes a       ON a.id = ap.acompanante_id
+             LEFT JOIN confirmaciones c ON c.id = a.confirmacion_id
+             WHERE ap.mesa_id = :m
+             ORDER BY a.id',
+            [':m' => $mesaId])
+        : [];
+
+    $vistos = [];
+    $gente  = [];
+    foreach (array_merge($porFamilia, $porPersona) as $fila) {
+        $id = (int) $fila['id'];
+        if (isset($vistos[$id])) continue;
+        $vistos[$id] = true;
+
+        $alergia = trim((string) ($fila['alergias'] ?? ''));
+        $sinAlergia = $alergia === '' ||
+                      preg_match('/^(ninguna|ninguno|no|n\/a|-)$/i', $alergia) === 1;
+
+        $gente[] = [
+            'id'       => $id,
+            'nombre'   => (string) $fila['nombre'],
+            'tipo'     => (string) $fila['tipo'],
+            'menu'     => (string) ($fila['menu'] ?? ''),
+            'alergias' => $sinAlergia ? '' : $alergia,
+            'familia'  => (string) ($fila['familia'] ?? ''),
+        ];
+    }
+
+    responderBien(['gente' => $gente]);
+    break;
+
+
 default:
     responderMal('Acción desconocida.', 404);
 }
