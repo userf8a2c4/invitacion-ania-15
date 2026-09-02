@@ -109,15 +109,18 @@
 
     const textos = {
       'sin-link':
-        'Esta invitación es personal. Abrí el enlace que te enviamos para ' +
+        'Esta invitación es personal. Abre el enlace que te enviamos para ' +
         'confirmar tu asistencia — ahí van a aparecer los nombres de tu ' +
         'familia y sus lugares.',
       'no-encontrada':
         'No encontramos esta invitación. Puede que el enlace esté incompleto: ' +
-        'volvé a abrirlo desde el mensaje que te enviamos.',
+        'vuelve a abrirlo desde el mensaje que te enviamos.',
       'sin-conexion':
-        'No pudimos cargar tu invitación. Revisá tu conexión y volvé a ' +
+        'No pudimos cargar tu invitación. Revisa tu conexión y vuelve a ' +
         'cargar la página.',
+      'sin-personas':
+        'Estamos terminando de preparar tu invitación. Vuelve a abrir este ' +
+        'mismo enlace en un rato y vas a poder confirmar.',
     };
 
     formulario.style.display = 'none';
@@ -234,6 +237,23 @@
     }
 
     const cajaCantidad = campoAdultos ? campoAdultos.closest('.campo') : null;
+
+    /* ⚡ SIN NOMBRES CARGADOS NO HAY FORMULARIO (2026-09-02).
+       Antes, si el grupo no tenía sus personas cargadas en el panel, el
+       invitado caía al formulario viejo por cantidades: se le preguntaba
+       cuántos adultos y niños vienen y había una sola caja de alergias
+       para todos. O sea que dos invitados podían ver formularios distintos
+       según un dato que ellos no controlan, y se perdía justamente el
+       detalle por persona (quién come qué, quién es alérgico a qué).
+
+       Ahora hay una sola forma de contestar. Si faltan los nombres, se
+       muestra un aviso amable en vez de un formulario distinto — y en el
+       panel esa invitación queda marcada como "faltan nombres", para que
+       Lucila lo vea ANTES de repartir el enlace. */
+    if (!datos.personas || !datos.personas.length) {
+      cerrarElFormularioSinLink('sin-personas');
+      return;
+    }
 
     if (datos.personas && datos.personas.length) {
       MODO_PERSONAS_ACTIVO = true;
