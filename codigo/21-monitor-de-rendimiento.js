@@ -498,9 +498,20 @@
       const altoVentana  = Math.round(window.innerHeight);
       const megapixeles  = (anchoVentana * altoVentana / 1e6).toFixed(1);
 
+      /* Igual de importante que el aviso de animaciones: si hay un sistema
+         apagado con ?sin=, estas cifras NO son las de la web real. Una
+         medición con un interruptor puesto, anotada como si fuera la normal,
+         envenena todo lo que venga después. */
+      const apagados = (typeof sistemasApagadosParaMedir === 'function')
+        ? sistemasApagadosParaMedir()
+        : [];
+
       cartel.textContent =
         (prefiereMenosMovimiento()
           ? '⚠ ANIMACIONES APAGADAS — estas cifras no sirven para medir\n'
+          : '') +
+        (apagados.length
+          ? '⚠ APAGADO PARA MEDIR: ' + apagados.join(', ') + '\n'
           : '') +
         `calidad: ${NOMBRE_DE_LA_CALIDAD[calidad]}\n` +
         `~${fps} fps  (${promedioMs.toFixed(1)} ms/cuadro)` +

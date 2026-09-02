@@ -982,6 +982,17 @@ function apagadoParaMedir(nombre) {
   return _sistemasApagados.indexOf(nombre) !== -1;
 }
 
+/**
+ * Qué sistemas están apagados en esta visita, para que el cartel de ?fps=1
+ * pueda decirlo. Una medición hecha con un interruptor puesto y anotada como
+ * si fuera la normal envenena todo lo que venga después — ya pasó una vez con
+ * las animaciones en off, y costó días. Que se vea en pantalla.
+ * @returns {string[]} Los nombres apagados, o un arreglo vacío.
+ */
+function sistemasApagadosParaMedir() {
+  return _sistemasApagados.slice();
+}
+
 
 /* ─── 5C. CAPTURA DEL PRIMER ERROR SIN ATRAPAR (2026-09-02) ────────────
    POR QUÉ HACE FALTA ESTO
