@@ -352,3 +352,78 @@
   text-underline-offset: 3px;
 }
 .enlace-sutil:hover { color: var(--color-oro); }
+
+
+/* ─── CASILLAS DE LA LISTA DE PERSONAS ────────────────────────────────
+   Son dos preguntas de sí/no: "¿viene esta persona?" y "¿tiene alergia?".
+   Las dos van CUADRADAS, para que se lean distinto de los menús —que son
+   excluyentes y por eso llevan casilla redonda (.opcion-menu--unica)—.
+   Esa diferencia de forma no es decorativa: es la señal de que en una
+   fila se puede marcar todo lo que corresponda y en la otra hay que
+   elegir una sola cosa.
+
+   ⚠️ SIN ESTO NO SE VEÍAN. La regla genérica de más arriba
+   (.campo input) les pone `appearance: none` —que borra el tilde que
+   dibuja el sistema— y `width: 100%` —que las estira a lo ancho de la
+   fila—. O sea que la casilla de "viene" quedaba como un rectángulo
+   vacío que no cambiaba al tocarlo: la única señal de haber marcado a
+   alguien era que aparecían sus menús más abajo. Acá se les devuelve
+   forma, tamaño y, sobre todo, una marca inequívoca al elegirlas. */
+.fila-persona__nombre input[type="checkbox"],
+.fila-persona__alergia-check input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--borde-oro-fuerte);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .03);
+  cursor: pointer;
+  transition: all .25s;
+}
+
+/* La tilde vive siempre, transparente, para que al marcar no salte nada
+   de tamaño: solo aparece el color. */
+.fila-persona__nombre input[type="checkbox"]::after,
+.fila-persona__alergia-check input[type="checkbox"]::after {
+  content: '✓';
+  font-size: .95rem;
+  font-weight: bold;
+  line-height: 1;
+  color: transparent;
+  transition: color .2s;
+}
+
+.fila-persona__nombre input[type="checkbox"]:checked,
+.fila-persona__alergia-check input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, var(--color-oro), var(--color-oro-claro));
+  border-color: var(--color-oro-claro);
+  box-shadow: 0 0 10px rgba(201, 168, 76, .45);
+}
+.fila-persona__nombre input[type="checkbox"]:checked::after,
+.fila-persona__alergia-check input[type="checkbox"]:checked::after {
+  color: var(--color-negro);
+}
+
+/* Al navegar con el teclado tiene que verse cuál está enfocada. */
+.fila-persona__nombre input[type="checkbox"]:focus-visible,
+.fila-persona__alergia-check input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--color-oro-claro);
+  outline-offset: 2px;
+}
+
+/* Toda la fila se enciende cuando esa persona queda confirmada: así se ve
+   de un vistazo quiénes vienen, sin tener que leer casilla por casilla. */
+.fila-persona:has(input[data-persona-marcada]:checked) {
+  border-color: var(--color-oro);
+  background: rgba(201, 168, 76, .06);
+}
+.fila-persona:has(input[data-persona-marcada]:checked) .fila-persona__nombre {
+  color: var(--color-oro-claro);
+}

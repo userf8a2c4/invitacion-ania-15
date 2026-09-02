@@ -614,6 +614,17 @@ function invitadoPasaElFiltro(fila) {
  * @param {Object} fila
  * @returns {string}
  */
+/* Nombres CORTOS de estado para la lista de Gente. El largo
+   (TEXTO_DE_ESTADO_INV, en 48-invitaciones.js) se sigue usando en la ficha
+   y en el `title`; acá hace falta algo que entre al lado del punto de
+   color sin romper la fila en un teléfono. */
+const TEXTO_CORTO_DE_ESTADO_INV = {
+  sin_enviar: 'Sin enviar',
+  enviada:    'Sin responder',
+  confirmada: 'Confirmada',
+  declinada:  'No viene',
+};
+
 function filaDeInvitado(fila) {
   const asiste = Number(fila.asiste) === 1;
   const gente  = (Number(fila.adultos) || 0) + (Number(fila.ninos) || 0);
@@ -649,6 +660,17 @@ function filaDeInvitado(fila) {
             : fila.invitacion_estado === 'declinada' ? 'punto--no'
             : fila.invitacion_estado === 'enviada' ? 'punto--enviada' : '') +
         '"></span>' +
+        /* ⚡ EL ESTADO TAMBÉN SE ESCRIBE, no solo se pinta (2026-09-02).
+           El color estaba solo en el punto y su significado únicamente en
+           el `title`, que en un teléfono no se ve nunca: no hay dónde
+           apoyar el cursor. Así que la leyenda no existía para quien usa
+           la app en el celular, que es como se usa de verdad. Se escribe
+           corto al lado, para no tener que acordarse de qué quiere decir
+           cada color. */
+        '<span class="vacio__texto" style="margin:0">' +
+          seguro(TEXTO_CORTO_DE_ESTADO_INV[fila.invitacion_estado] ||
+                 fila.invitacion_estado || '') +
+        '</span>' +
         (Number(fila.invitacion_veces_enviado) > 0
           ? '<span class="vacio__texto" style="margin:0">×' +
               seguro(fila.invitacion_veces_enviado) + '</span>'

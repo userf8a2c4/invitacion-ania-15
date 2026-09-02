@@ -72,9 +72,39 @@ $alergias     = limpiar($datos['alergias'] ?? 'Ninguna');
 $notas        = limpiar($datos['notas'] ?? ', ');
 $codigo       = limpiar($datos['codigo'] ?? '');
 
-if (!$nombre || !filter_var($datos['correo'] ?? '', FILTER_VALIDATE_EMAIL)) {
+/* ⚡ EL CORREO YA NO ES OBLIGATORIO CUANDO HAY LINK PERSONAL (2026-09-02).
+   Las invitaciones pasaron a ser nominales: cada grupo familiar recibe su
+   propio enlace, y los datos de contacto los administra Lucila desde el
+   panel. El invitado ya no escribe su correo —no tiene por qué—, así que
+   el formulario dejó de pedirlo.
+
+   Sin este cambio, sacar el campo rompía TODO: esta validación devolvía
+   422 y la confirmación no se guardaba en absoluto.
+
+   Las reglas quedan así:
+     · El nombre siempre hace falta.
+     · Con token (link personal), el correo es opcional: la invitación ya
+       identifica a quién corresponde esta respuesta, sin ambigüedad.
+     · Sin token se sigue exigiendo, igual que siempre.
+     · Si viene un correo, tiene que ser válido en los dos casos: se
+       rechaza uno mal escrito, pero no la ausencia. */
+$hayToken     = preg_match('/^[a-f0-9]{8,}$/', strtolower((string) ($datos['token'] ?? ''))) === 1;
+$correoCrudo  = trim((string) ($datos['correo'] ?? ''));
+$correoValido = $correoCrudo !== '' && filter_var($correoCrudo, FILTER_VALIDATE_EMAIL) !== false;
+
+if (!$nombre) {
     http_response_code(422);
-    echo json_encode(['ok'=>false,'error'=>'Nombre o correo inválido.']);
+    echo json_encode(['ok'=>false,'error'=>'Falta el nombre.']);
+    exit;
+}
+if ($correoCrudo !== '' && !$correoValido) {
+    http_response_code(422);
+    echo json_encode(['ok'=>false,'error'=>'El correo no parece válido.']);
+    exit;
+}
+if (!$hayToken && !$correoValido) {
+    http_response_code(422);
+    echo json_encode(['ok'=>false,'error'=>'Falta el correo.']);
     exit;
 }
 
@@ -531,20 +561,33 @@ $imagenesDelInvitado = ($asiste && $qrPng)
     ? [['cid' => 'qrpase', 'tipo' => 'image/png', 'datos' => $qrPng]]
     : [];
 
-$r1 = smtpEnviar(
-    $correo,
-    $asiste ? "¡Tu confirmación está lista! ✦ Ania XV" : "Gracias por avisarnos · Ania XV",
-    $htmlInvitado,
-    $CORREO_FROM, 'Ania XV',
-    $SMTP_HOST, $SMTP_PORT, $SMTP_USER, $SMTP_PASS,
-    '',                      // sin Reply-To distinto
-    $imagenesDelInvitado
-);
-if ($r1 !== true) {
-    $errores[] = "Correo al invitado: $r1";
-    error_log('[Ania XV] ❌ Correo invitado: ' . $r1);
+/* ⚡ SI NO HAY A QUIÉN ESCRIBIRLE, NO ES UN ERROR (2026-09-02).
+   Con las invitaciones nominales, un grupo puede no tener correo cargado en
+   el panel —y el invitado ya no lo escribe—. Antes se intentaba mandar el
+   mail igual, fallaba, y ese fallo se sumaba a $errores: la respuesta salía
+   con ok:false y el invitado veía "No pudimos registrar tu confirmación"
+   AUNQUE la confirmación sí se había guardado. Peor imposible: le decíamos
+   que falló algo que en realidad funcionó, y volvía a intentarlo.
+   Su pase sigue estando a mano: se le muestra en pantalla al confirmar y
+   vuelve a aparecer cada vez que abre su link personal. */
+if ($correoValido) {
+    $r1 = smtpEnviar(
+        $correo,
+        $asiste ? "¡Tu confirmación está lista! ✦ Ania XV" : "Gracias por avisarnos · Ania XV",
+        $htmlInvitado,
+        $CORREO_FROM, 'Ania XV',
+        $SMTP_HOST, $SMTP_PORT, $SMTP_USER, $SMTP_PASS,
+        '',                      // sin Reply-To distinto
+        $imagenesDelInvitado
+    );
+    if ($r1 !== true) {
+        $errores[] = "Correo al invitado: $r1";
+        error_log('[Ania XV] ❌ Correo invitado: ' . $r1);
+    } else {
+        error_log('[Ania XV] ✅ Correo enviado a: ' . $correo);
+    }
 } else {
-    error_log('[Ania XV] ✅ Correo enviado a: ' . $correo);
+    error_log('[Ania XV] ℹ Sin correo del invitado: se guardó la confirmación y no se manda pase por mail.');
 }
 
 // Correo a las administradoras (Procesar múltiples correos)
