@@ -60,6 +60,10 @@
 
 (function preparaLasVelas() {
 
+  // Interruptor de diagnóstico: ver apagadoParaMedir() en 02-utilidades.js.
+  if (apagadoParaMedir('velas')) return;
+
+
   const capaApliques = buscar('#apliques');
   const capaLuz      = buscar('#luz-de-velas');
   if (!capaApliques || !capaLuz) return;

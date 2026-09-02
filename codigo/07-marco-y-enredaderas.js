@@ -62,6 +62,10 @@
 
 (function preparaLasEnredaderasDelMarco() {
 
+  // Interruptor de diagnóstico: ver apagadoParaMedir() en 02-utilidades.js.
+  if (apagadoParaMedir('enredaderas')) return;
+
+
   const enredaderaIzquierda = buscar('.marco__enredadera--izquierda');
   const enredaderaDerecha   = buscar('.marco__enredadera--derecha');
   if (!enredaderaIzquierda || !enredaderaDerecha) return;

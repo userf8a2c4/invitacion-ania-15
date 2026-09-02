@@ -944,6 +944,45 @@ function escucharEventoQueQuizasYaPaso(nombre, callback) {
 }
 
 
+/* ─── 5D. INTERRUPTORES DE DIAGNÓSTICO (2026-09-02) ───────────────
+   POR QUÉ EXISTE ESTO
+   En un equipo modesto, "Layerize" —el paso donde el navegador arma el
+   árbol de capas— se lleva casi la mitad del tiempo de cada cuadro, y
+   ninguna lectura del código alcanzó para decir CUÁL sistema lo provoca:
+   se descartó el tamaño del árbol (sacar 313 nodos no movió los fps), se
+   descartó el Hit test (bajó de 204 ms a 15) y se descartaron las capas de
+   mezcla (están apagadas). Adivinar de nuevo cuesta una ronda entera.
+
+   Con esto se apaga un sistema por vez desde la dirección y se mide:
+
+     ?sin=petalos       la lluvia de pétalos y su lienzo
+     ?sin=enredaderas   el marco floral entero
+     ?sin=joyas         las joyas colgantes del relicario
+     ?sin=velas         los candelabros y su lienzo
+     ?sin=petalos,joyas se pueden combinar con comas
+
+   La diferencia de fps entre una corrida y la siguiente dice, sin
+   discusión, cuánto cuesta ese sistema. Es solo para medir: sin ?sin= en la
+   dirección no cambia absolutamente nada. */
+const _sistemasApagados = (function () {
+  try {
+    const crudo = new URLSearchParams(location.search).get('sin') || '';
+    return crudo.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  } catch (error) {
+    return [];
+  }
+})();
+
+/**
+ * ¿Este sistema está apagado a propósito, para medir sin él?
+ * @param {string} nombre - 'petalos', 'enredaderas', 'joyas', 'velas'…
+ * @returns {boolean}
+ */
+function apagadoParaMedir(nombre) {
+  return _sistemasApagados.indexOf(nombre) !== -1;
+}
+
+
 /* ─── 5C. CAPTURA DEL PRIMER ERROR SIN ATRAPAR (2026-09-02) ────────────
    POR QUÉ HACE FALTA ESTO
    Si algún script de la escena tira una excepción sin atrapar, esa pieza
