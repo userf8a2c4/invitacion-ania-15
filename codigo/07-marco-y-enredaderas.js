@@ -65,6 +65,26 @@
   // Interruptor de diagnóstico: ver apagadoParaMedir() en 02-utilidades.js.
   if (apagadoParaMedir('enredaderas')) return;
 
+  /* ── INTERRUPTORES FINOS, SOLO PARA MEDIR ──────────────────────────────
+     'sin=enredaderas' (arriba) apaga el módulo entero, y con eso los fps de
+     la máquina de referencia pasaron de 18 a 38. Pero adentro de este
+     archivo conviven tres cosas que cuestan por motivos distintos, y hasta
+     no saber cuál pesa, cualquier arreglo es una apuesta:
+
+       · las 24 trepadoras de los costados, que tienen física y se mecen;
+       · los 4 ramilletes de las esquinas, que son 140 de las 234 flores y
+         NO se mueven nunca (son puro dibujo);
+       · el meneo en sí — las ~400 escrituras de transform por cuadro.
+
+     Si apagar el meneo devuelve los fps, el costo es de la animación y se
+     arregla componiendo. Si NO los devuelve, el costo es de rasterizar el
+     dibujo mientras se hace scroll, que es otro problema y otro arreglo.
+     Estos tres interruptores separan esas facturas. Sin ?sin= en la
+     dirección no cambia absolutamente nada. */
+  const SIN_PLANTAS    = apagadoParaMedir('plantas');
+  const SIN_RAMILLETES = apagadoParaMedir('ramilletes');
+  const SIN_MENEO      = apagadoParaMedir('meneo');
+
 
   const enredaderaIzquierda = buscar('.marco__enredadera--izquierda');
   const enredaderaDerecha   = buscar('.marco__enredadera--derecha');
@@ -1259,6 +1279,15 @@
    * @returns {void}
    */
   function colocarLosRamilletesDeEsquina(alTerminar, sigoVigente) {
+    /* Interruptor de medición: se salta el armado Y el verificador tardío
+       (que vive adentro de esta misma función y volvería a dibujarlos a los
+       6 segundos), pero se sigue llamando a alTerminar para no cortar la
+       cadena de construcción que viene detrás. */
+    if (SIN_RAMILLETES) {
+      if (typeof alTerminar === 'function') alTerminar();
+      return;
+    }
+
     let semilla = 9100;
     // Si no se pasa control de corrida, se asume que siempre es vigente.
     const vigente = (typeof sigoVigente === 'function') ? sigoVigente : () => true;
@@ -1763,7 +1792,7 @@
          cambió cuántas plantas entran), esta se apaga sin tocar nada. Se
          pregunta por planta y no por tanda porque ahora las tandas no tienen
          un tamaño fijo; la comprobación es una comparación de enteros. */
-      i => { if (sigoVigente()) crearUnaPlanta(tareas[i]); },
+      i => { if (sigoVigente() && !SIN_PLANTAS) crearUnaPlanta(tareas[i]); },
       /* Recién cuando TODAS las plantas de la enredadera existen se pasa a
          los ramilletes de esquina (uno por cuadro), y cuando ESOS terminan
          —de ahí el callback— se prepara el estado de las flores, que
@@ -2189,7 +2218,7 @@
        si se encienden las animaciones con el botón, vuelven a mecerse en el
        acto, sin recargar. Se actualiza el reloj para que al reanudar no dé
        un salto por el tiempo acumulado. */
-    if (!hayAlgoQueMirar()) {
+    if (!hayAlgoQueMirar() || SIN_MENEO) {
       momentoAnterior = momentoActual;
       requestAnimationFrame(dibujarCuadro);
       return;
