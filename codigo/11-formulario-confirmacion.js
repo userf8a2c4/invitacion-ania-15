@@ -204,7 +204,13 @@
       campoNombre.tabIndex = -1;
       const etiquetaNombre = campoNombre.closest('.campo')
         ? campoNombre.closest('.campo').querySelector('label') : null;
-      if (etiquetaNombre) etiquetaNombre.textContent = 'Invitación para';
+      /* "Te" o "Les" según cuántos lugares tiene el grupo: hablarle de
+         usted a una sola persona, o en singular a una familia, se nota. */
+      if (etiquetaNombre) {
+        const cuantosLugares = (datos.personas && datos.personas.length) ||
+                               Number(datos.pases) || 1;
+        etiquetaNombre.textContent = cuantosLugares > 1 ? 'Les invitamos' : 'Te invitamos';
+      }
     }
     if (campoCorreo && datos.correo) {
       campoCorreo.value = datos.correo;
@@ -275,11 +281,20 @@
          nombre (destildarlos a todos equivale a "no viene nadie" — ver
          el submit), así que el checklist queda SIEMPRE visible, sin
          pasar por el desplegable ni por su lógica de visibilidad. */
-      if (campoAsistencia) {
-        const cajaAsistencia = campoAsistencia.closest('.campo');
-        if (cajaAsistencia) cajaAsistencia.style.display = 'none';
+      /* ⚡ EL DESPLEGABLE DE ASISTENCIA SE QUEDA (2026-09-02). Se había
+         ocultado en modo personas, con la idea de que destildar a todos
+         alcanzara para decir "no vamos". En la práctica eso obliga a
+         deducir: hay que darse cuenta de que NO marcar es una respuesta.
+         La pregunta directa —"¿confirmas tu asistencia?"— no se malentiende,
+         y deja la lista para lo único que la lista sabe contestar bien:
+         quiénes de la familia vienen. */
+      if (campoAsistencia && campoAsistencia.value === '') {
+        campoAsistencia.value = '';
       }
-      if (bloqueSiAsiste) bloqueSiAsiste.classList.add('visible');
+      if (bloqueSiAsiste && campoAsistencia &&
+          campoAsistencia.value === RESPUESTA_AFIRMATIVA) {
+        bloqueSiAsiste.classList.add('visible');
+      }
 
       if (cajaCantidad) cajaCantidad.style.display = 'none';
       if (bloqueMenuInfantil) bloqueMenuInfantil.classList.remove('visible');
@@ -335,7 +350,7 @@
     const cajaDelTitulo = contenedorMenusAdultos.closest('.campo');
     if (cajaDelTitulo) {
       const titulo = cajaDelTitulo.querySelector('.campo__titulo');
-      if (titulo) titulo.textContent = 'Quiénes nos acompañan';
+      if (titulo) titulo.textContent = 'Menú de invitados';
 
       /* Una línea que dice QUÉ HACER, no solo qué es esto. Las casillas
          arrancan vacías, así que sin esta frase alguien puede quedarse
@@ -345,7 +360,7 @@
         const instruccion = document.createElement('p');
         instruccion.id = 'instruccion-personas';
         instruccion.className = 'nota-campo';
-        instruccion.textContent = 'Marca a cada persona que va a acompañarnos.';
+        instruccion.textContent = 'Marca quiénes vienen y elige su plato.';
         titulo.insertAdjacentElement('afterend', instruccion);
       }
     }
@@ -372,14 +387,22 @@
       // cuál de los tildados era el alérgico. Con esto se sabe, por
       // nombre, quién tiene qué — la caja compartida queda oculta (ver
       // activarModoInvitacionPersonalizada()).
+      /* ⚡ LA ALERGIA VA EN LA MISMA FILA (2026-09-02), a la derecha del
+         menú, no debajo. Colgada abajo se leía como una nota suelta del
+         bloque entero; al lado del plato de esa persona queda claro de
+         quién es la alergia. La casilla es cuadrada, igual que la de
+         asistencia: las dos son preguntas de sí/no. */
       const alergiaEnHtml =
-        '<label class="fila-persona__alergia-check" style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:.85em">' +
-          '<input type="checkbox" data-persona-tiene-alergia' + (persona.tieneAlergia ? ' checked' : '') + '>' +
-          'Tiene alergia o restricción' +
-        '</label>' +
-        '<input type="text" data-persona-alergia-texto placeholder="¿Cuál? Ej. mariscos"' +
-          ' value="' + limpiarTexto(persona.alergia || '') + '"' +
-          (persona.tieneAlergia ? '' : ' style="display:none"') + '>';
+        '<div class="fila-persona__alergia">' +
+          '<label class="fila-persona__alergia-check">' +
+            '<input type="checkbox" data-persona-tiene-alergia' +
+              (persona.tieneAlergia ? ' checked' : '') + '>' +
+            '<span>Alergia</span>' +
+          '</label>' +
+          '<input type="text" data-persona-alergia-texto placeholder="¿Cuál? Ej. mariscos"' +
+            ' value="' + limpiarTexto(persona.alergia || '') + '"' +
+            (persona.tieneAlergia ? '' : ' style="display:none"') + '>' +
+        '</div>';
 
       return '<div class="fila-persona" data-persona-indice="' + indice + '">' +
         '<label class="fila-persona__nombre" style="display:flex;align-items:center;gap:8px">' +
@@ -388,7 +411,8 @@
         '</label>' +
         '<div class="fila-persona__opciones" data-persona-opciones' +
           (persona.marcado ? '' : ' style="display:none"') + '>' +
-          opcionesEnHtml + alergiaEnHtml +
+          '<div class="fila-persona__menus">' + opcionesEnHtml + '</div>' +
+          alergiaEnHtml +
         '</div>' +
       '</div>';
     }).join('');
@@ -595,7 +619,17 @@
     campoAsistencia.addEventListener('change', function alElegirSiViene() {
       const vieneALaFiesta = this.value === RESPUESTA_AFIRMATIVA;
       bloqueSiAsiste.classList.toggle('visible', vieneALaFiesta);
-      if (vieneALaFiesta && contenedorMenusAdultos &&
+
+      // Agradecimiento cuando avisan que no pueden venir.
+      const gracias = buscar('#gracias-por-avisar');
+      if (gracias) {
+        gracias.style.display =
+          this.value === RESPUESTA_NEGATIVA ? 'block' : 'none';
+      }
+      /* En modo personas la lista ya está dibujada con los nombres reales
+         del grupo: actualizarFilasDeAdultos() armaría las filas genéricas
+         por cantidad y las pisaría. */
+      if (!MODO_PERSONAS_ACTIVO && vieneALaFiesta && contenedorMenusAdultos &&
           contenedorMenusAdultos.children.length === 0) {
         actualizarFilasDeAdultos();
       }
@@ -632,15 +666,15 @@
        viene sale del panel y un correo mal escrito ahí tiene que avisarse
        en vez de fallar callado al mandar el pase. */
     if (correo && !pareceUnCorreoValido(correo)) {
-      return mostrarError('El correo que tenemos cargado no parece válido. Avisanos, por favor.');
+      return mostrarError('El correo que tenemos cargado no parece válido. Avísanos, por favor.');
     }
     // ⚡ (2026-08-28) Con personas nombradas no existe el desplegable de
     // asistencia (queda oculto desde que se activa el modo personas): "
     // ¿va a venir?" ya no se contesta ahí, se contesta tildando o
     // destildando cada nombre de la lista. Exigirle un valor a un campo
     // que ni siquiera se ve habría bloqueado el envío para siempre.
-    if (!MODO_PERSONAS_ACTIVO && !asistencia) {
-      return mostrarError('Cuéntanos si vas a poder acompañarnos.');
+    if (!asistencia) {
+      return mostrarError('Cuéntanos si van a poder acompañarnos.');
     }
 
     // Con personas nombradas, "viene" significa "al menos una tildada" —
@@ -650,9 +684,11 @@
       ? PERSONAS_INVITACION.filter(function (p) { return p.marcado; })
       : [];
 
-    const vieneALaFiesta = MODO_PERSONAS_ACTIVO
-      ? personasMarcadas.length > 0
-      : asistencia === RESPUESTA_AFIRMATIVA;
+    /* ⚡ QUIÉN CONTESTA QUÉ (2026-09-02): el desplegable dice SI VIENEN; la
+       lista dice QUIÉNES. Antes, en modo personas, venir se deducía de que
+       hubiera al menos una casilla marcada — o sea que "no vamos" se decía
+       no haciendo nada, que es justo lo que nadie adivina. */
+    const vieneALaFiesta = asistencia === RESPUESTA_AFIRMATIVA;
 
     /* ⚡ AVISO ANTES DE REGISTRAR UN "NO VAMOS" (2026-09-02). Desde que las
        casillas arrancan destildadas, mandar el formulario sin tocar nada es
@@ -660,12 +696,11 @@
        contrario de lo que casi todos quieren decir. Se pregunta una sola vez,
        y si dice que no, no se manda nada y puede seguir marcando. Declinar
        sigue siendo posible: alcanza con confirmar acá. */
-    if (MODO_PERSONAS_ACTIVO && personasMarcadas.length === 0) {
-      const seguro = window.confirm(
-        'No marcaste a nadie de tu familia. Si continúas, vamos a registrar ' +
-        'que NO pueden acompañarnos. ¿Es correcto?'
-      );
-      if (!seguro) return;
+    /* Dijeron que sí vienen pero no marcaron a nadie: es una contradicción,
+       y guardarla dejaría una confirmación de cero personas. Se pide el dato
+       que falta en vez de adivinarlo. */
+    if (vieneALaFiesta && MODO_PERSONAS_ACTIVO && personasMarcadas.length === 0) {
+      return mostrarError('Marca al menos a una persona que va a acompañarnos.');
     }
 
     const cantidadAdultos = !vieneALaFiesta ? 0
