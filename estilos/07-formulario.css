@@ -153,16 +153,50 @@
   letter-spacing: .05em;
 }
 
+/* ⚡ TRES ZONAS EN LA MISMA FILA (2026-09-02): el plato a la izquierda y
+   la alergia de esa misma persona a la derecha. Antes la alergia colgaba
+   debajo del bloque y se leía como una nota suelta, sin quedar claro de
+   quién era. */
 .fila-persona__opciones {
+  display: grid;
+  grid-template-columns: 1fr minmax(150px, .8fr);
+  align-items: center;
+  gap: .5rem;
+}
+
+.fila-persona__menus {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: .5rem;
 }
 
-/* En celular, el nombre se pone arriba y las opciones abajo */
+.fila-persona__alergia {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.fila-persona__alergia-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .85em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* La caja del "¿cuál?" no se estira más de lo que hace falta. */
+.fila-persona__alergia input[type="text"] {
+  min-width: 0;
+  padding: .45rem .6rem;
+  font-size: .85em;
+}
+
+/* En celular todo se apila: nombre, plato y alergia, uno debajo del otro. */
 @media (max-width: 560px) {
   .fila-persona { grid-template-columns: 1fr; gap: .5rem; }
   .fila-persona__opciones { grid-template-columns: 1fr; }
+  .fila-persona__menus { grid-template-columns: 1fr; }
 }
 
 
