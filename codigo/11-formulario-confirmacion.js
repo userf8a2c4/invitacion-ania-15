@@ -330,12 +330,20 @@
        forzara este código, la dirección que borra responde 404. */
     mostrarHerramientasDePrueba(datos);
 
-    if (datos.ya_respondio && campoAsistencia) {
-      campoAsistencia.value = datos.asiste ? RESPUESTA_AFIRMATIVA : RESPUESTA_NEGATIVA;
-      campoAsistencia.dispatchEvent(new Event('change'));
-      if (botonEnviar) {
-        botonEnviar.textContent = 'Actualizar mi respuesta ✦';
-      }
+    /* ⚡ SE ARRANCA SIEMPRE EN LA PREGUNTA, NO EN LA RESPUESTA DE ANTES
+       (2026-09-02). Antes, al reabrir un enlace ya contestado, el
+       desplegable venía puesto y la lista completa se desplegaba sola: la
+       página se abría en el medio de un formulario lleno, y no quedaba
+       claro si eso era algo por revisar, algo por completar, o algo ya
+       resuelto. Ahora se abre siempre igual — con la pregunta — y el
+       resto aparece cuando la persona contesta, como la primera vez.
+
+       Lo respondido NO se pierde: al elegir "sí", la lista reaparece con
+       cada plato y cada alergia tal como se habían guardado. Y el botón
+       dice "Actualizar mi respuesta" para que se entienda que esto es una
+       corrección de algo ya enviado, no un formulario en blanco. */
+    if (datos.ya_respondio && botonEnviar) {
+      botonEnviar.textContent = 'Actualizar mi respuesta ✦';
     }
 
     const introduccion = buscar('.formulario__introduccion');
@@ -407,13 +415,9 @@
          La pregunta directa —"¿confirmas tu asistencia?"— no se malentiende,
          y deja la lista para lo único que la lista sabe contestar bien:
          quiénes de la familia vienen. */
-      if (campoAsistencia && campoAsistencia.value === '') {
-        campoAsistencia.value = '';
-      }
-      if (bloqueSiAsiste && campoAsistencia &&
-          campoAsistencia.value === RESPUESTA_AFIRMATIVA) {
-        bloqueSiAsiste.classList.add('visible');
-      }
+      /* El bloque de datos arranca cerrado, siempre: lo abre la respuesta
+         de la persona, nunca la carga de la página. */
+      if (bloqueSiAsiste) bloqueSiAsiste.classList.remove('visible');
 
       if (cajaCantidad) cajaCantidad.style.display = 'none';
       if (bloqueMenuInfantil) bloqueMenuInfantil.classList.remove('visible');
