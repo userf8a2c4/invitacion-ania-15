@@ -169,6 +169,76 @@
     return yaEsFamilia ? nombre : nombre + ' y familia';
   }
 
+  /**
+   * El contador de respuestas y, solo en pruebas, el botón de reinicio.
+   *
+   * @param {Object} datos - La respuesta de invitacion.php.
+   * @returns {void}
+   */
+  function mostrarHerramientasDePrueba(datos) {
+    if (!formulario || buscar('#herramientas-de-prueba')) return;
+
+    const veces = Number(datos.veces_respondida) || 0;
+    if (!veces && !datos.es_pruebas) return;
+
+    const caja = document.createElement('p');
+    caja.id = 'herramientas-de-prueba';
+    caja.className = 'nota-campo';
+
+    if (veces > 0) {
+      caja.textContent = veces === 1
+        ? 'Respondida 1 vez.'
+        : 'Respondida ' + veces + ' veces.';
+    }
+
+    if (datos.es_pruebas) {
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.id = 'boton-reiniciar-prueba';
+      boton.className = 'boton boton--fantasma';
+      boton.style.marginLeft = veces > 0 ? '.6rem' : '0';
+      boton.textContent = 'Reiniciar esta invitación';
+
+      boton.addEventListener('click', async function alReiniciar() {
+        if (!window.confirm('Esto borra la respuesta de este grupo, acá y en el ' +
+                            'servidor, y la deja como si nunca hubieran contestado. ' +
+                            '¿Continuamos?')) return;
+
+        boton.disabled = true;
+        boton.textContent = 'Reiniciando…';
+        try {
+          const respuesta = await fetch('reiniciar-prueba.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            /* El token sale de la dirección, igual que al enviar la
+               confirmación (ver más abajo): es la única fuente segura. */
+            body: JSON.stringify({
+              token: new URLSearchParams(window.location.search).get('i') || '',
+            }),
+          });
+          const resultado = await respuesta.json();
+          if (!resultado || resultado.ok !== true) {
+            throw new Error((resultado && resultado.error) || 'No se pudo reiniciar.');
+          }
+          // Lo guardado en el navegador también se va: si no, al recargar
+          // se seguiría mostrando el pase de la respuesta que ya se borró.
+          try {
+            localStorage.removeItem('invitacion-ania:pase');
+          } catch (error) { /* modo incógnito: no importa */ }
+          location.reload();
+        } catch (error) {
+          boton.disabled = false;
+          boton.textContent = 'Reiniciar esta invitación';
+          mostrarError(error.message);
+        }
+      });
+
+      caja.appendChild(boton);
+    }
+
+    formulario.insertAdjacentElement('afterend', caja);
+  }
+
   function activarModoInvitacionPersonalizada(datos) {
     if (!formulario || !datos) return;
 
@@ -219,6 +289,14 @@
       campoCorreo.value = datos.correo;
       campoCorreo.readOnly = true;
     }
+
+    /* ⚡ CONTADOR DE RESPUESTAS Y BOTÓN DE REINICIO (2026-09-02).
+       El contador aparece solo si ya contestaron: sirve para notar que
+       algo se mandó dos veces sin querer. El botón de reinicio existe
+       ÚNICAMENTE en el entorno de pruebas, y eso lo decide el servidor
+       (invitacion.php mira el host): en el sitio real, aunque alguien
+       forzara este código, la dirección que borra responde 404. */
+    mostrarHerramientasDePrueba(datos);
 
     if (datos.ya_respondio && campoAsistencia) {
       campoAsistencia.value = datos.asiste ? RESPUESTA_AFIRMATIVA : RESPUESTA_NEGATIVA;

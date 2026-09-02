@@ -346,6 +346,17 @@ try {
         $codigoReal = $filaActual->fetch(PDO::FETCH_ASSOC)['codigo'] ?? '';
         if ($codigoReal !== '') $codigo = $codigoReal;
 
+        /* Se suma una respuesta. La columna se agrega desde el instalador
+           del panel; si esta base todavía no la tiene, el UPDATE fallaría
+           entero y se perdería la respuesta — por eso se intenta aparte y
+           su error no interrumpe nada. */
+        try {
+            $pdo->prepare('UPDATE invitaciones SET veces_respondida = veces_respondida + 1 WHERE id = :id')
+                ->execute([':id' => $invitacion['id']]);
+        } catch (PDOException $e) {
+            error_log('[Ania XV] veces_respondida no disponible: ' . $e->getMessage());
+        }
+
         $pdo->prepare("UPDATE invitaciones SET estado=:estado, respondida_en=NOW() WHERE id=:id")
             ->execute([
                 ':estado' => $asiste ? 'confirmada' : 'declinada',
