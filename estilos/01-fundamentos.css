@@ -364,6 +364,14 @@ h2 {
      tienen. La promoción se paga sola: cachear una textura compleja sale
      más barato que repintarla. */
   will-change: transform;
+
+  /* ⚡ NO SE TOCA CON EL PUNTERO (2026-09-02). Era la única capa grande
+     del sitio sin esto — las otras diez ya lo tenían, y sus hijos lo
+     heredan. Sin esta línea, el navegador tiene que considerarla en cada
+     movimiento del mouse para decidir sobre qué cayó el puntero, sobre una
+     superficie de 2466 × 1625. En un perfil real, ese trabajo aparecía como
+     204 ms de "Hit test". No hay nada que tocar acá: es el fondo. */
+  pointer-events: none;
 }
 
 

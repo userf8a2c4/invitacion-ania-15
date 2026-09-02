@@ -123,14 +123,15 @@ function bloqueEstadoDelDia(dia, textoConexion) {
             '<span class="hoy-estado__de">/' + seguro(dia.esperados || 0) + '</span></div>' +
           '<div class="hoy-estado__rotulo">Llegaron</div>' +
         '</div>' +
-        '<div class="hoy-estado__cifra" data-hoy-ir="mesas">' +
+        '<div class="hoy-estado__cifra hoy-estado__cifra--tocable" data-hoy-ir="mesas" ' +
+             'role="button" tabindex="0">' +
           '<div class="hoy-estado__numero">' + seguro(dia.mesas_ocupadas || 0) +
             '<span class="hoy-estado__de">/' + seguro(dia.mesas_total || 0) + '</span></div>' +
           '<div class="hoy-estado__rotulo">Mesas</div>' +
         '</div>' +
-        '<div class="hoy-estado__cifra' +
+        '<div class="hoy-estado__cifra hoy-estado__cifra--tocable' +
              (dia.alergias_activas > 0 ? ' hoy-estado__cifra--alerta' : '') + '" ' +
-             'data-hoy-ir="alergias">' +
+             'data-hoy-ir="alergias" role="button" tabindex="0">' +
           '<div class="hoy-estado__numero">' + seguro(dia.alergias_activas || 0) + '</div>' +
           '<div class="hoy-estado__rotulo">Alergias</div>' +
         '</div>' +
@@ -199,11 +200,32 @@ function engancharTresAcciones(vista, alertas) {
   buscar('#hoy-buscar', vista).addEventListener('click', () => abrirBuscadorGlobal());
   buscar('#hoy-plano', vista).addEventListener('click', () => verPlanoDeMesas());
 
-  const irAMesas = buscar('[data-hoy-ir="mesas"]', vista);
-  if (irAMesas) irAMesas.addEventListener('click', () => verPlanoDeMesas());
+  /* Con role="button" hay que atender el teclado también: si no, quien
+     navega con Tab llega a la cifra, aprieta Enter y no pasa nada. */
+  function alTocarOEnter(elemento, hacer) {
+    if (!elemento) return;
+    elemento.addEventListener('click', hacer);
+    elemento.addEventListener('keydown', evento => {
+      if (evento.key === 'Enter' || evento.key === ' ') {
+        evento.preventDefault();
+        hacer();
+      }
+    });
+  }
 
-  const irAAlergias = buscar('[data-hoy-ir="alergias"]', vista);
-  if (irAAlergias) irAAlergias.addEventListener('click', () => abrirBuscadorGlobal());
+  alTocarOEnter(buscar('[data-hoy-ir="mesas"]', vista), () => verPlanoDeMesas());
+
+  /* ⚡ "ALERGIAS" LLEVA A QUIÉNES TIENEN ALERGIA (2026-09-02).
+     Antes abría el buscador global: la pantalla decía "1 alergia", se la
+     tocaba, y aparecía un buscador vacío. O sea que el único camino para
+     responder "¿quién?" era acordarse de escribir algo, sin saber qué. Un
+     número que se puede tocar tiene que llevar a la lista de ESE número;
+     si no, es peor que no ser tocable. El filtro "Con alergias" ya existe
+     en Gente — solo había que usarlo. */
+  alTocarOEnter(buscar('[data-hoy-ir="alergias"]', vista), () => {
+    FILTRO_INVITADOS = 'alergias';
+    irA('invitados');
+  });
 
   buscarTodos('[data-hoy-alerta]', vista).forEach(boton => {
     const alerta = (alertas || [])[Number(boton.dataset.hoyAlerta)];

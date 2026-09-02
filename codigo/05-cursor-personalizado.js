@@ -62,7 +62,10 @@
    *  parado en el medio de la pantalla antes de que la persona lo mueva. */
   let elMouseYaSeMovio = false;
 
-  document.addEventListener('mousemove', function alMoverElMouse(evento) {
+  /* Declarada aparte, y no en línea, para poder soltarla después con
+     removeEventListener: el nombre de una función escrita dentro de la
+     propia llamada solo existe dentro de ella. */
+  function alMoverElMouse(evento) {
     posicionMouseX = evento.clientX;
     posicionMouseY = evento.clientY;
 
@@ -81,7 +84,8 @@
     despertarElBucle();
 
     actualizarBrilloSegunElElementoDebajo(evento.target);
-  }, { passive: true });
+  }
+  document.addEventListener('mousemove', alMoverElMouse, { passive: true });
 
 
   /* ─── 3. BUCLE DE ANIMACIÓN ────────────────────────────────────────
@@ -105,6 +109,10 @@
 
   let bucleEnMarcha = false;
 
+  /** Se pone en true cuando el gobernador baja a calidad BAJA y este
+   *  módulo se apaga de verdad (ver el final del archivo). */
+  let desmontado = false;
+
   function dibujarCuadro() {
     // El anillo recorta un 18 % de la distancia que le falta.
     const faltaX = posicionMouseX - posicionAnilloX;
@@ -127,6 +135,7 @@
       return;
     }
 
+    if (desmontado) { bucleEnMarcha = false; return; }
     requestAnimationFrame(dibujarCuadro);
   }
 
@@ -135,7 +144,7 @@
    * @returns {void}
    */
   function despertarElBucle() {
-    if (bucleEnMarcha) return;
+    if (bucleEnMarcha || desmontado) return;
     bucleEnMarcha = true;
     requestAnimationFrame(dibujarCuadro);
   }
@@ -207,11 +216,42 @@
      causa real de esa confusión no era esto: era que el anillo gira
      solo, siempre, aunque el mouse esté quieto (ver girar-anillo en
      estilos/10-cursor-y-petalos.css) — y ESO se corrigió aparte. */
+  /* ⚡ AHORA SE DESMONTA DE VERDAD (2026-09-02). ESTE ERA UN COSTO
+     INVISIBLE Y GRANDE.
+
+     Antes, al bajar a calidad BAJA, esto solo quitaba una clase de CSS y
+     escondía el anillo — pero **dejaba vivos los listeners**. El de
+     'mousemove' seguía corriendo para siempre y, en CADA movimiento del
+     mouse (~125 por segundo), llamaba a
+     actualizarBrilloSegunElElementoDebajo(evento.target): un .closest()
+     con ocho alternativas sobre un árbol de 4.000 nodos, para decidir el
+     brillo de un cursor que ya no se ve. Y el bucle de cuadro se despertaba
+     con cada movimiento para mover dos elementos invisibles.
+
+     El guard de arriba (línea 38) solo cubre a quien ARRANCA en baja. Un
+     equipo que arranca en media y lo degrada el gobernador —que es el caso
+     típico de una máquina modesta— nunca lo alcanzaba: pagaba el costo
+     completo, invisible, toda la visita. En un perfil real eso aparecía
+     como 204 ms de "Hit test", porque `evento.target` ES el resultado de un
+     hit test completo del navegador.
+
+     Ahora se sueltan los listeners y se corta el bucle. Es irreversible a
+     propósito: si el equipo bajó a calidad baja una vez, volver a montar
+     todo esto ante una mejora pasajera es justo lo que no conviene. */
   document.addEventListener('calidad-cambio', evento => {
-    if ((evento.detail && evento.detail.calidad) === CALIDAD_GRAFICA.BAJA) {
-      document.documentElement.classList.remove('con-cursor-propio');
-      ocultarCursor();
-    }
+    if ((evento.detail && evento.detail.calidad) !== CALIDAD_GRAFICA.BAJA) return;
+    if (desmontado) return;
+
+    desmontado = true;
+
+    document.removeEventListener('mousemove', alMoverElMouse);
+    document.removeEventListener('mouseleave', ocultarCursor);
+    document.removeEventListener('mouseenter', mostrarCursor);
+    window.removeEventListener('blur',  ocultarCursor);
+    window.removeEventListener('focus', mostrarCursor);
+
+    document.documentElement.classList.remove('con-cursor-propio');
+    ocultarCursor();
   });
 
 })();

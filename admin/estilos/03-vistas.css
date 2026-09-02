@@ -582,9 +582,27 @@
   min-width: 0;
   text-align: center;
   border-radius: var(--redondeo-chico);
-  /* Sin cursor visual en las que no llevan a nada: solo "Mesas" y
-     "Alergias" tienen data-hoy-ir y de verdad se pueden tocar. */
   padding: 4px;
+}
+
+/* ⚡ LAS QUE SE PUEDEN TOCAR TIENEN QUE PARECERLO (2026-09-02).
+   "Mesas" y "Alergias" llevan a otra pantalla desde hace tiempo, pero nada
+   lo indicaba: eran números idénticos a "Llegaron", que no lleva a ningún
+   lado. Un gesto que hay que descubrir no existe — menos todavía el día de
+   la fiesta, con las manos ocupadas y gente esperando en la puerta. */
+.hoy-estado__cifra--tocable {
+  cursor: pointer;
+  border: 1px solid var(--borde);
+  background: rgba(255, 255, 255, .03);
+  transition: border-color .2s, background .2s;
+}
+.hoy-estado__cifra--tocable:hover,
+.hoy-estado__cifra--tocable:focus-visible {
+  border-color: var(--oro);
+}
+.hoy-estado__cifra--tocable .hoy-estado__rotulo::after {
+  content: ' ›';
+  opacity: .7;
 }
 
 /* Neutro (var(--texto)), no dorado a propósito: son cifras

@@ -468,11 +468,30 @@
          toca el DOM, y es la última: así no queda ninguna lectura después de
          una escritura, que es lo que provoca el reflow forzado. El tamaño del
          documento sale del ResizeObserver, no de scrollWidth. */
+      /* ⚡ DOS DATOS QUE FALTABAN Y COSTARON DÍAS (2026-09-02).
+
+         1) "animación OFF" estaba en gris, entre paréntesis, pegado a la
+            calidad. Se midió durante días sin notarlo: con las animaciones
+            apagadas la escena está congelada, así que TODO da ~60 fps y no
+            cae un solo pétalo. Ninguna medición vale en ese estado, así que
+            ahora ocupa su propia línea y avisa que lo que sigue no sirve.
+
+         2) El TAMAÑO DE LA VENTANA. El costo de componer capas es por
+            píxel: la misma máquina con la ventana a la mitad cuesta menos
+            de la mitad. Sin ese dato, dos mediciones del mismo equipo no
+            son comparables — y no estaba en ningún lado. */
+      const anchoVentana = Math.round(window.innerWidth);
+      const altoVentana  = Math.round(window.innerHeight);
+      const megapixeles  = (anchoVentana * altoVentana / 1e6).toFixed(1);
+
       cartel.textContent =
-        `calidad: ${NOMBRE_DE_LA_CALIDAD[calidad]}` +
-        `${prefiereMenosMovimiento() ? '  (animación OFF)' : ''}\n` +
+        (prefiereMenosMovimiento()
+          ? '⚠ ANIMACIONES APAGADAS — estas cifras no sirven para medir\n'
+          : '') +
+        `calidad: ${NOMBRE_DE_LA_CALIDAD[calidad]}\n` +
         `~${fps} fps  (${promedioMs.toFixed(1)} ms/cuadro)` +
         `  ·  pantalla ~${hzPantalla} Hz\n` +
+        `ventana: ${anchoVentana}×${altoVentana}  (${megapixeles} Mpx)\n` +
         `peor cuadro: ${peorCuadroReciente.toFixed(0)} ms  (~${peorFps} fps)\n` +
         `tareas largas: ${cuantasTareasLargas}  ·  al cargar ${peorTareaAlCargar.toFixed(0)} ms` +
         `  ·  DESPUÉS ${peorTareaDespues.toFixed(0)} ms  ·  última ${reciente}\n` +
