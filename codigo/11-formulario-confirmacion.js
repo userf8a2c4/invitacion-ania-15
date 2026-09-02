@@ -140,6 +140,32 @@
    * @param {Object} datos - La respuesta de invitacion.php.
    * @returns {void}
    */
+  /**
+   * Cómo se saluda a este grupo arriba del formulario.
+   *
+   * El nombre lo escribe Lucila en el panel y es texto libre: puede ser una
+   * persona ("Monserrat Barrera") o ya una familia ("Familia Zelaya"). Si el
+   * grupo tiene más de un lugar, se agrega " y familia" — pero solo cuando
+   * el nombre no dice ya algo así, para no terminar en "Familia Zelaya y
+   * familia".
+   *
+   * @param {Object} datos - La respuesta de invitacion.php.
+   * @returns {string}
+   */
+  function nombreParaMostrar(datos) {
+    const nombre = (datos.nombre || '').trim();
+    if (!nombre) return nombre;
+
+    const cuantos = (datos.personas && datos.personas.length) || Number(datos.pases) || 1;
+    if (cuantos < 2) return nombre;
+
+    const enMinusculas = nombre.toLowerCase();
+    const yaEsFamilia = enMinusculas.indexOf('familia') !== -1 ||
+                        enMinusculas.indexOf('flia') !== -1 ||
+                        enMinusculas.indexOf(' y ') !== -1;
+    return yaEsFamilia ? nombre : nombre + ' y familia';
+  }
+
   function activarModoInvitacionPersonalizada(datos) {
     if (!formulario || !datos) return;
 
@@ -162,7 +188,7 @@
     }
 
     if (campoNombre) {
-      campoNombre.value = datos.nombre;
+      campoNombre.value = nombreParaMostrar(datos);
       campoNombre.readOnly = true;
 
       /* ⚡ (2026-08-28) Antes esto dejaba el input intacto (solo con
@@ -212,7 +238,14 @@
           id: p.id,
           nombre: p.nombre,
           tipo: esNino ? 'nino' : 'adulto',
-          marcado: datos.ya_respondio ? !!p.menu : true,
+          /* ⚡ DESTILDADAS AL ABRIR (2026-09-02). Antes una invitación nueva
+             llegaba con todos tildados y el contador decía "5 de 5
+             confirmados" sin que nadie hubiera elegido nada: la página
+             daba por hecha la respuesta y quien venía a decir que falta
+             uno tenía que DESmarcar. Ahora arranca en cero y confirmar es
+             un acto deliberado. Si ya había respondido, se respeta lo que
+             dejó guardado. */
+          marcado: datos.ya_respondio ? !!p.menu : false,
           menu: p.menu || (esNino ? 'Infantil' : 'Estándar'),
           tieneAlergia: alergiaPrevia !== '',
           alergia: alergiaPrevia,
@@ -302,7 +335,19 @@
     const cajaDelTitulo = contenedorMenusAdultos.closest('.campo');
     if (cajaDelTitulo) {
       const titulo = cajaDelTitulo.querySelector('.campo__titulo');
-      if (titulo) titulo.textContent = 'Personas del grupo';
+      if (titulo) titulo.textContent = 'Quiénes nos acompañan';
+
+      /* Una línea que dice QUÉ HACER, no solo qué es esto. Las casillas
+         arrancan vacías, así que sin esta frase alguien puede quedarse
+         mirando la lista sin darse cuenta de que tiene que marcar. Se
+         inserta una sola vez, justo debajo del título. */
+      if (titulo && !cajaDelTitulo.querySelector('#instruccion-personas')) {
+        const instruccion = document.createElement('p');
+        instruccion.id = 'instruccion-personas';
+        instruccion.className = 'nota-campo';
+        instruccion.textContent = 'Marca a cada persona que va a acompañarnos.';
+        titulo.insertAdjacentElement('afterend', instruccion);
+      }
     }
 
     contenedorMenusAdultos.innerHTML = PERSONAS_INVITACION.map(function (persona, indice) {
@@ -579,10 +624,15 @@
     const correo     = campoCorreo.value.trim();
     const asistencia = campoAsistencia.value;
 
-    if (!nombre)     return mostrarError('Por favor escribe tu nombre completo.');
-    if (!correo)     return mostrarError('Por favor escribe tu correo electrónico.');
-    if (!pareceUnCorreoValido(correo)) {
-      return mostrarError('Ese correo no parece válido. Revisa que tenga @ y un punto.');
+    if (!nombre) return mostrarError('Por favor escribe tu nombre completo.');
+
+    /* ⚡ EL CORREO YA NO SE EXIGE (2026-09-02). Dejó de pedirse: los datos
+       de contacto los administra Lucila desde el panel (ver la nota en el
+       campo oculto de index.html). Igual se valida SI viene, porque el que
+       viene sale del panel y un correo mal escrito ahí tiene que avisarse
+       en vez de fallar callado al mandar el pase. */
+    if (correo && !pareceUnCorreoValido(correo)) {
+      return mostrarError('El correo que tenemos cargado no parece válido. Avisanos, por favor.');
     }
     // ⚡ (2026-08-28) Con personas nombradas no existe el desplegable de
     // asistencia (queda oculto desde que se activa el modo personas): "
@@ -603,6 +653,20 @@
     const vieneALaFiesta = MODO_PERSONAS_ACTIVO
       ? personasMarcadas.length > 0
       : asistencia === RESPUESTA_AFIRMATIVA;
+
+    /* ⚡ AVISO ANTES DE REGISTRAR UN "NO VAMOS" (2026-09-02). Desde que las
+       casillas arrancan destildadas, mandar el formulario sin tocar nada es
+       un camino fácil de recorrer sin querer — y significa exactamente lo
+       contrario de lo que casi todos quieren decir. Se pregunta una sola vez,
+       y si dice que no, no se manda nada y puede seguir marcando. Declinar
+       sigue siendo posible: alcanza con confirmar acá. */
+    if (MODO_PERSONAS_ACTIVO && personasMarcadas.length === 0) {
+      const seguro = window.confirm(
+        'No marcaste a nadie de tu familia. Si continúas, vamos a registrar ' +
+        'que NO pueden acompañarnos. ¿Es correcto?'
+      );
+      if (!seguro) return;
+    }
 
     const cantidadAdultos = !vieneALaFiesta ? 0
       : MODO_PERSONAS_ACTIVO
