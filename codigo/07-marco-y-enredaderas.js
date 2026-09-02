@@ -84,6 +84,11 @@
   const SIN_PLANTAS    = apagadoParaMedir('plantas');
   const SIN_RAMILLETES = apagadoParaMedir('ramilletes');
   const SIN_MENEO      = apagadoParaMedir('meneo');
+  /* 'sin=capas' apaga la promoción a capa de las trepadoras que se están
+     meciendo (ver más abajo, en dibujarCuadro). Existe para poder medir el
+     antes y el después en la MISMA versión, en vez de comparar contra una
+     medición vieja hecha otro día con otra ventana. */
+  const SIN_CAPAS      = apagadoParaMedir('capas');
 
 
   const enredaderaIzquierda = buscar('.marco__enredadera--izquierda');
@@ -2263,6 +2268,42 @@
       const margen = MARGEN_DE_CERCANIA_POR_CALIDAD[calidad] ?? 500;
       const estaCerca = planta.alturaEnLaPagina > arribaDeLaVentana - margen &&
                         planta.alturaEnLaPagina < abajoDeLaVentana + margen;
+
+      /* ── CAPA PROPIA MIENTRAS SE MECE, Y SOLO MIENTRAS SE MECE ──────────
+         Esta es la mitad "animación" de lo que cuesta el marco floral:
+         14,5 ms de cada cuadro, medidos apagando el meneo con ?sin=meneo.
+
+         POR QUÉ CUESTA ESO. Más abajo se escribe style.transform sobre
+         planta.elemento, que es la RAÍZ del <svg>. Había un comentario acá
+         al lado afirmando que ese giro era "puro compositor" — es falso.
+         Un elemento sin capa propia no se compone: se REPINTA. Y como el
+         dibujo comparte los mosaicos de 256 px con el fondo, la penumbra y
+         el marco, cada grado de inclinación obliga a redibujar todo lo que
+         hay detrás de la planta. Las plantas además RESPIRAN (un seno que
+         nunca se detiene), así que eso pasa en todos los cuadros, para
+         siempre, aunque el invitado no toque nada.
+
+         POR QUÉ ESTO NO ES EL will-change QUE YA SE SACÓ. Aquel era una
+         regla de CSS fija que promovía las ~22 plantas MÁS los ramilletes,
+         todo el tiempo, y convivía con otras 157 promociones entre velas,
+         llamas, pétalos, motas y haces: 179 capas permanentes. Nada de eso
+         existe hoy. Acá se promueven solo las trepadoras que están de
+         verdad en la franja de cercanía —con el margen de calidad baja son
+         unas 7 de 24— y se les saca la capa al salir. Los ramilletes
+         quedan afuera a propósito: no se articulan (nudos vacíos), viven
+         en la portada y son los dibujos más pesados; darles textura propia
+         es justamente lo que salió mal la vez pasada.
+
+         La clase se toca SOLO en la transición, no en cada cuadro: crear y
+         destruir una capa es caro, y hacerlo 60 veces por segundo sería
+         peor que el problema que arregla. */
+      if (!SIN_CAPAS && estaCerca !== planta.seEstabaMeciendo) {
+        planta.seEstabaMeciendo = estaCerca;
+        if (planta.nudos.length > 0 && planta.elemento) {
+          planta.elemento.classList.toggle('racimo-de-rosas--meciendose', estaCerca);
+        }
+      }
+
       if (!estaCerca) continue;
 
       /* ── a) La planta entera se mece con el scroll ──
