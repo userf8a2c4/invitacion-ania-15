@@ -476,8 +476,17 @@ function abrirFormularioDeInvitacion(inv) {
       grupo_id: grupoId,
       personas: personasValidas,
     };
+    /* ⚡ SIN AL MENOS UN NOMBRE NO SE GUARDA (2026-09-02). Lo que el
+       invitado ve al abrir su enlace es la lista de su gente: marca quién
+       viene, elige el plato de cada uno y anota alergias por persona. Esa
+       lista sale de estos nombres. Sin ninguno, el enlace no tendría qué
+       mostrar — antes caía a un formulario viejo por cantidades, que ya no
+       existe. El servidor también lo rechaza; esto es para avisar acá
+       mismo, sin ir y volver. */
     if (!personasValidas.length) {
-      carga.pases = Math.max(1, Number(valorDe('inv-pases', cuerpo)) || 1);
+      avisar('Agrega al menos una persona con nombre: es lo que ve el ' +
+             'invitado al abrir su enlace.', true);
+      return;
     }
     if (inv) carga.id = inv.id;
 
