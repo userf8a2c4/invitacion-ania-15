@@ -97,6 +97,36 @@
    *  era chico (menos plantas en equipos flojos) y el riesgo visual, alto. */
   const SEPARACION_ENTRE_PLANTAS = 460;
 
+  /* ⚡ CUÁNTO RELLENO LLEVA CADA PLANTA, SEGÚN LA CALIDAD (2026-09-02).
+
+     QUÉ SE RECORTA Y QUÉ NO. No se quita ni una rosa, ni una planta: lo que
+     se aligera es el relleno — hojas, espinas y zarcillos— y la cantidad de
+     nudos del tallo. La silueta, la cantidad de flores y el ritmo de la
+     enredadera quedan idénticos; lo que baja es la densidad de detalle que,
+     a esa distancia y con la penumbra encima, casi no se lee.
+
+     POR QUÉ HACÍA FALTA. En un perfil real sobre un equipo modesto,
+     "Layerize" —el paso donde el navegador arma el árbol de capas— se
+     llevaba entre el 42 % y el 52 % del tiempo de cada cuadro. Ese costo lo
+     manda CUÁNTO hay que recorrer, y este archivo solo es la mitad de los
+     4.054 nodos del documento. Reducir el relleno saca ~700 elementos de
+     render sin tocar una sola flor.
+
+     ⚠️ SE DECIDE UNA SOLA VEZ, AL CONSTRUIR, Y NO SE VUELVE A TOCAR.
+     Acá está la lección del intento anterior que salió mal (ver la nota de
+     abajo): aquella vez la densidad se ataba al nivel de calidad Y se
+     reconstruía al cambiar de nivel — y el gobernador cambia de nivel a los
+     ~2,5 s, justo cuando la construcción todavía está en vuelo, así que dos
+     corridas se pisaban. Este archivo NO escucha 'calidad-cambio' para
+     geometría, y así debe seguir: el gobernador ajusta cadencias, nunca
+     cantidades. Por eso estos valores se leen una vez en
+     construirUnaSolaVez() y quedan fijos para toda la visita. */
+  const RELLENO_POR_CALIDAD = { 0: 1, 1: 0.6, 2: 0.45 };
+  const NUDOS_POR_CALIDAD   = { 0: 6, 1: 4,   2: 3    };
+
+  let rellenoDeEstaVisita = 1;
+  let nudosDeEstaVisita   = 6;
+
   /** Ancho del "lienzo" de cada planta, en unidades del dibujo. */
   const ANCHO_DEL_LIENZO = 120;
 
@@ -410,7 +440,7 @@
 
        Cada pieza que se dibuja se guarda en el nudo que le corresponde
        según a qué altura del tallo está enganchada. */
-    const CANTIDAD_DE_NUDOS = 6;
+    const CANTIDAD_DE_NUDOS = nudosDeEstaVisita;
     const ultimoIndice = recorrido.length - 1;
     const partesPorNudo = Array.from({ length: CANTIDAD_DE_NUDOS }, () => []);
 
@@ -451,7 +481,8 @@
     }
 
     // ── Espinas: solo en la mitad de abajo, que es la parte leñosa ──
-    const cuantasEspinas = azar.entero(4, 9);
+    const cuantasEspinas = Math.max(2,
+      Math.round(azar.entero(4, 9) * rellenoDeEstaVisita));
     for (let i = 0; i < cuantasEspinas; i++) {
       const indiceDeLaEspina = azar.entero(2, Math.floor(recorrido.length * 0.7));
       const punto = recorrido[indiceDeLaEspina];
@@ -559,7 +590,8 @@
        Repartidas sin regla: distinta cantidad, tamaño y giro en cada
        planta, y siempre apuntando hacia arriba y hacia afuera, como
        buscando la luz. */
-    const cuantasHojas = azar.entero(7, 13);
+    const cuantasHojas = Math.max(3,
+      Math.round(azar.entero(7, 13) * rellenoDeEstaVisita));
     for (let i = 0; i < cuantasHojas; i++) {
       const indiceDeLaHoja = azar.entero(2, recorrido.length - 2);
       const punto = recorrido[indiceDeLaHoja];
@@ -606,7 +638,8 @@
        Son la firma visual de una enredadera. Se dibujan como una espiral
        que va abriéndose, y se colocan cruzando la moldura, así parece que
        la planta se está trepando y sujetando al marco. */
-    const cuantosZarcillos = azar.entero(2, 4);
+    const cuantosZarcillos = Math.max(1,
+      Math.round(azar.entero(2, 4) * rellenoDeEstaVisita));
     for (let i = 0; i < cuantosZarcillos; i++) {
       const indiceDelZarcillo = azar.entero(4, recorrido.length - 2);
       const donde = recorrido[indiceDelZarcillo];
@@ -2003,6 +2036,15 @@
   function construirUnaSolaVez() {
     if (yaSeConstruyo) return;
     yaSeConstruyo = true;
+
+    /* El presupuesto de relleno se fija ACÍ y no se toca nunca más (ver la
+       nota de RELLENO_POR_CALIDAD, arriba). Se lee recién ahora —y no al
+       evaluar el archivo— porque en este momento el nivel de calidad ya
+       incorpora lo que haya decidido el <head>, que es la mejor información
+       disponible antes de empezar a dibujar. */
+    const calidadAlConstruir = nivelDeCalidad();
+    rellenoDeEstaVisita = RELLENO_POR_CALIDAD[calidadAlConstruir] ?? 1;
+    nudosDeEstaVisita   = NUDOS_POR_CALIDAD[calidadAlConstruir]   ?? 6;
     /* ⚡ EL SCROLL SE LEE ACÁ, NO AL EVALUAR EL SCRIPT (2026-08-30).
        Antes esta lectura vivía en la línea de abajo, corriendo apenas
        cargaba el archivo — con el sobre todavía cerrado y nadie mirando.
