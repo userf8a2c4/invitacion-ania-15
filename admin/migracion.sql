@@ -1097,6 +1097,9 @@ CREATE TABLE IF NOT EXISTS invitaciones (
   -- tocó enviar de verdad — mismo límite ya documentado para
   -- envios_proveedor más arriba en este archivo.
   veces_enviado   INT NOT NULL DEFAULT 0,
+  -- Cuántas veces el invitado contestó desde su enlace (distinto de
+  -- veces_enviado, que cuenta cuántas veces se MANDÓ la invitación).
+  veces_respondida INT NOT NULL DEFAULT 0,
   creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY token_unico (token),
   KEY por_estado (estado),

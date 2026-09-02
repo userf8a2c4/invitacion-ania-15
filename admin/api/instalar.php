@@ -116,6 +116,11 @@ $agregarColumna = function ($tabla, $columna, $definicion) use (&$columnasQueFal
     }
 };
 
+/* Cuántas veces contestó el invitado desde su enlace. No es lo mismo que
+   veces_enviado (cuántas veces se MANDÓ la invitación): esto cuenta las
+   respuestas, y sirve para notar envíos repetidos o pruebas. */
+$agregarColumna('invitaciones', 'veces_respondida', 'INT NOT NULL DEFAULT 0');
+
 // Fijar una asignación de mesa para que la autoasignación no la toque.
 $agregarColumna('asignacion_mesas', 'fijada', 'TINYINT(1) NOT NULL DEFAULT 0');
 

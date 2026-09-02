@@ -178,6 +178,16 @@ echo json_encode([
     'estado'            => $inv['estado'],
     'ya_respondio'      => $yaRespondio,
     'cerrado'           => $cerrado,
+    /* Cuántas veces contestó este grupo. Se muestra en la invitación solo
+       si ya contestó al menos una vez, para que se note si algo se mandó
+       dos veces sin querer. La columna se agrega desde el instalador del
+       panel; si esta base todavía no la tiene, viaja en 0 y no se muestra
+       nada — nunca rompe. */
+    'veces_respondida'  => (int) ($inv['veces_respondida'] ?? 0),
+    /* Solo en el entorno de pruebas: habilita el botón de reinicio. La
+       decisión la toma el SERVIDOR, no el navegador, para que en el sitio
+       real ese botón no pueda existir aunque alguien lo fuerce. */
+    'es_pruebas'        => (strpos((string) ($_SERVER['HTTP_HOST'] ?? ''), 'pbe.') === 0),
     'asiste'            => $inv['asiste'] !== null ? (int) $inv['asiste'] === 1 : true,
     'adultos'           => (int) ($inv['adultos'] ?? $inv['pases']),
     'ninos'             => (int) ($inv['ninos'] ?? 0),
