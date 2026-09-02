@@ -742,8 +742,35 @@ function trabajarPorTandas(cuantos, hacerUno, alTerminar, presupuestoMs = 8) {
     return;
   }
 
+  /* ⚡ EL PRESUPUESTO SE ADAPTA AL EQUIPO (v170).
+     Los 8 ms de por defecto están calibrados para una máquina que va a 60
+     fps: 8 de 16 ms es medio cuadro, un reparto sensato. Pero en un equipo
+     modesto con la ventana grande el cuadro dura 50-60 ms, y ahí esos
+     mismos 8 ms son el 14 % del tiempo: la construcción avanza a paso de
+     hormiga mientras el otro 86 % se va esperando que el navegador
+     devuelva el hilo. Cuanto más pesada la escena, más lento construye — y
+     más largo el desfile de capas apareciendo de a una, que ocurre
+     justamente en el único momento que hay para causar buena impresión.
+
+     Así que se mide cuánto tardó el navegador en devolver el hilo y el
+     presupuesto se ajusta a eso: si la espera fue larga, el cuadro ya es
+     largo, y quedarse en 8 ms no protege ninguna fluidez que exista. El
+     tope de 3× evita convertir la construcción en una tarea larga. En un
+     equipo rápido la espera es corta y el presupuesto se queda en 8: no
+     cambia nada de lo que ya andaba bien. */
+  let finDeLaTandaAnterior = 0;
+  let presupuestoVigente = presupuestoMs;
+
   function unaTanda() {
     const arranque = performance.now();
+
+    if (finDeLaTandaAnterior > 0) {
+      const esperaDelNavegador = arranque - finDeLaTandaAnterior;
+      presupuestoVigente = Math.max(
+        presupuestoMs,
+        Math.min(presupuestoMs * 3, esperaDelNavegador * 0.35)
+      );
+    }
 
     /* Se hace SIEMPRE al menos uno. Si un solo elemento ya se pasa del
        presupuesto no se puede partir por la mitad, pero sin esta garantía
@@ -751,7 +778,9 @@ function trabajarPorTandas(cuantos, hacerUno, alTerminar, presupuestoMs = 8) {
     do {
       const cual = indice++;
       intentar(() => hacerUno(cual));
-    } while (indice < cuantos && performance.now() - arranque < presupuestoMs);
+    } while (indice < cuantos && performance.now() - arranque < presupuestoVigente);
+
+    finDeLaTandaAnterior = performance.now();
 
     if (indice < cuantos) {
       cederElHilo(unaTanda);
@@ -1078,27 +1107,38 @@ function iniciarInyeccionDeLaEscena() {
   }
   if (!Array.isArray(urls) || urls.length === 0) return;
 
-  let indice = 0;
+  /* ⚡ SE BAJAN LOS 23 EN PARALELO, PERO SE EJECUTAN EN ORDEN (v170).
+     Antes esto era una CADENA: cada script se pedía recién en el onload
+     del anterior. El contrato que se quería sostener —que se ejecuten en
+     este orden exacto, como los <script defer> que eran antes— es real y
+     no se puede aflojar: 07 necesita que 02 ya exista, 21 escucha eventos
+     que disparan los de más arriba.
 
-  function pedirElSiguiente() {
-    if (indice >= urls.length) return;
-    const url = urls[indice++];
+     Pero encadenar la DESCARGA para garantizar el ORDEN de ejecución es
+     pagar de más. Son 23 saltos en serie, y cada salto cuesta al menos una
+     tarea del hilo principal: con el hilo a 50-60 ms por cuadro en un
+     equipo modesto, eso solo ya son segundos de espera antes de que se
+     construya nada. Y en la primera visita de un invitado, sin nada en la
+     caché, además son 23 viajes de red uno detrás del otro. Eso es, en
+     buena parte, lo que se ve como "las capas van apareciendo de a una".
 
+     script.async = false sobre un <script> insertado por JavaScript pide
+     exactamente lo que hace falta, y está en la especificación: el
+     navegador los baja TODOS a la vez y los ejecuta en el orden en que se
+     insertaron. Es el mismo comportamiento de <script defer> —que es lo
+     que estos archivos eran originalmente— solo que sin que Lighthouse los
+     vea en el HTML y los evalúe con el sobre cerrado, que era el motivo de
+     haberlos sacado de ahí.
+
+     Si uno falla, el navegador sigue con los demás, igual que con una
+     lista de defer. */
+  for (const url of urls) {
     const etiquetaScript = document.createElement('script');
     etiquetaScript.src = url;
-    // Nunca async ni type="module": tienen que ejecutarse en ESTE orden,
-    // exacto, uno después de que el anterior terminó — el mismo contrato
-    // que ya tenían como <script defer> seguidos.
-    etiquetaScript.onload = pedirElSiguiente;
-    // Si un archivo no carga (typo, 404, sin red), no se traba la cola:
-    // se sigue con el resto, igual que el navegador seguiría con el resto
-    // de una lista de <script defer> si uno fallara.
+    etiquetaScript.async = false;   // ⚠️ NO SACAR: es lo que garantiza el orden
     etiquetaScript.onerror = () => {
       console.error('No se pudo cargar un script de la escena:', url);
-      pedirElSiguiente();
     };
     document.body.appendChild(etiquetaScript);
   }
-
-  pedirElSiguiente();
 }

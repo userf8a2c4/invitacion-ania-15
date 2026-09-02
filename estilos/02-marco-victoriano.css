@@ -270,23 +270,17 @@ html.calidad-baja #marco-victoriano::after { display: none; }
   overflow: visible;
 }
 
-/* ── LA ÚNICA PROMOCIÓN A CAPA QUE QUEDA EN LAS PLANTAS ──────────────────
-   Se la pone y se la saca desde dibujarCuadro (07-marco-y-enredaderas.js),
-   y la lleva únicamente la trepadora que está dentro de la franja de
-   cercanía, o sea la que de verdad se está meciendo en este momento: con
-   el margen de calidad baja son unas 7 de 24, no las 24.
+/* ⚡ ACÁ ARRIBA NO HAY `will-change`, Y ES A PROPÓSITO — MEDIDO DOS VECES.
 
-   Sin esto, escribir el giro sobre la raíz del SVG no compone nada —
-   REPINTA—, y al repintar arrastra el fondo, la penumbra y el marco que
-   comparten los mismos mosaicos. Medido: 14,5 ms de cada cuadro.
+   La segunda vez fue en v169: se probó promover SOLO las ~7 trepadoras que
+   están de verdad dentro de la franja de cercanía (las que se mecen), sin
+   los ramilletes, poniendo y sacando la capa nada más que en la
+   transición. Con capas: 16-18 fps y Layerize en 47-55 %. Sin capas: 19-22
+   fps y Layerize en 20-43 %. Revertido en v170.
 
-   No confundir con la regla que se sacó (ver la nota de acá abajo): esa
-   promovía TODAS las plantas y los ramilletes, siempre, junto a otras 157
-   capas de velas, llamas, pétalos, motas y haces. Nada de eso existe hoy.
-   Los ramilletes siguen sin promoverse a propósito. */
-.racimo-de-rosas--meciendose { will-change: transform; }
-
-/* ⚡ ACÁ ARRIBA YA NO HAY UN `will-change` PARA TODAS, Y ES A PROPÓSITO.
+   O sea que no era cuestión de cuántas capas eran. En esta gráfica
+   integrada, con memoria compartida, una capa cuesta más de lo que ahorra
+   el repintado que evita — incluso cuando son siete.
    Antes esta regla pedía una capa de GPU propia para CADA .racimo-de-rosas,
    y esa clase la llevan las ~20 plantas de la enredadera MÁS los 2
    ramilletes de esquina: 22 SVG promovidos, uno de ellos con 341 nodos
