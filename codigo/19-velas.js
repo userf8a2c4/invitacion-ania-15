@@ -94,6 +94,21 @@
   let lienzoDeVelas = null, pincelDeVelas = null;
   let anchoLienzoVelas = 0, altoLienzoVelas = 0, densidadLienzoVelas = 1;
 
+  /** Dónde empieza el lienzo dentro del documento, en píxeles CSS. Ver la
+   *  nota grande de ajustarLienzoDeVelas(). */
+  let topLienzoVelas = 0;
+
+  /** La franja del documento que de verdad ocupan las luces, o null si
+   *  todavía no se colocó ninguna pieza. La calcula medirLaFranjaDeLuces()
+   *  DESPUÉS de acomodar, y se guarda acá — y no se lee `piezas` directo
+   *  desde ajustarLienzoDeVelas()— porque esa función corre al evaluar el
+   *  archivo, cuando `piezas` (declarado más abajo) todavía no existe. */
+  let franjaDeLuces = null;
+
+  /** Se enciende cuando ya hay piezas colocadas. Sirve para saber si es
+   *  seguro leer `piezas` (que se declara más abajo en el archivo). */
+  let hayPiezasColocadas = false;
+
   // Mismos valores que FACTOR_POR_CALIDAD en 23-lienzo-de-luz.js — ese
   // archivo no los expone, así que se repiten acá. Si se cambia uno, hay
   // que cambiar el otro: la luz de las velas y la de haces/motas deben
@@ -113,12 +128,80 @@
     densidadLienzoVelas = Math.min(window.devicePixelRatio || 1, MAXIMA_DENSIDAD_DE_VELAS) * factor;
 
     anchoLienzoVelas = capaLuz.clientWidth || window.innerWidth;
-    altoLienzoVelas  = capaLuz.offsetHeight || document.documentElement.scrollHeight;
+    const altoDelDocumento = capaLuz.offsetHeight || document.documentElement.scrollHeight;
+
+    /* ⚡ SOLO LA FRANJA DONDE HAY LUCES, NO EL DOCUMENTO ENTERO
+       (2026-09-02).
+
+       Este lienzo cubría el documento completo: 2466 × 5629 = casi 14
+       millones de píxeles, la capa más grande de la página por lejos. Pero
+       los candelabros solo viven en la mitad de abajo — sus anclajes (ver
+       ANCLAS) son #regalos, #ubicacion, #confirmacion y el pie. En la
+       portada y las primeras secciones no hay ni una vela, y esa mitad
+       vacía igual se reservaba, se subía a la GPU y se recomponía.
+
+       El tamaño era colateral, no un requisito: lo que hacía falta era
+       vivir en COORDENADAS DE DOCUMENTO, para que el scroll lo mueva el
+       compositor sin que ningún script lo sincronice (esa fue la solución
+       al desfase de la luz respecto de la llama). Esa propiedad se conserva
+       intacta: el lienzo sigue siendo `absolute` en el documento, solo que
+       ahora empieza donde empieza la primera luz.
+
+       El desplazamiento se compensa en el dibujo con setTransform (ver
+       dibujarCuadro), así que todo el resto del archivo sigue trabajando en
+       coordenadas de documento, sin enterarse. */
+    /* Se remide en cada ajuste: un resize puede haber movido las secciones
+       y con ellas las velas, y una franja vieja dejaría el resplandor
+       cortado. Solo cuando ya hay piezas — antes de eso, `piezas` ni
+       siquiera existe todavía. */
+    if (hayPiezasColocadas) medirLaFranjaDeLuces();
+
+    if (franjaDeLuces) {
+      const MARGEN = 48;   // aire para que el resplandor no quede cortado
+      topLienzoVelas  = Math.max(0, Math.floor(franjaDeLuces.arriba - MARGEN));
+      const abajo     = Math.min(altoDelDocumento, Math.ceil(franjaDeLuces.abajo + MARGEN));
+      altoLienzoVelas = Math.max(1, abajo - topLienzoVelas);
+    } else {
+      // Todavía no se colocó ninguna pieza: se cubre todo, como antes.
+      topLienzoVelas  = 0;
+      altoLienzoVelas = altoDelDocumento;
+    }
 
     lienzoDeVelas.width  = Math.max(1, Math.round(anchoLienzoVelas * densidadLienzoVelas));
     lienzoDeVelas.height = Math.max(1, Math.round(altoLienzoVelas  * densidadLienzoVelas));
     lienzoDeVelas.style.width  = anchoLienzoVelas + 'px';
     lienzoDeVelas.style.height = altoLienzoVelas  + 'px';
+    lienzoDeVelas.style.top    = topLienzoVelas   + 'px';
+
+    /* Para el cartel de ?fps=1: sin este dato no hay forma de confirmar que
+       el recorte de la franja hizo lo que dice que hace. */
+    window.EstadoDelLienzoDeVelas = {
+      ancho: anchoLienzoVelas,
+      alto:  altoLienzoVelas,
+      top:   topLienzoVelas,
+    };
+  }
+
+  /**
+   * Mide la franja del documento que ocupan todas las luces, con su radio
+   * de resplandor incluido. Se llama DESPUÉS de colocar las piezas, que es
+   * cuando fuego.cy y fuego.radioDerrame tienen su valor real.
+   * @returns {void}
+   */
+  function medirLaFranjaDeLuces() {
+    let arriba = Infinity;
+    let abajo  = -Infinity;
+
+    for (const pieza of piezas) {
+      for (const fuego of pieza.fuegos) {
+        if (typeof fuego.cy !== 'number') continue;
+        const radio = fuego.radioDerrame || fuego.radioNucleo || 0;
+        if (fuego.cy - radio < arriba) arriba = fuego.cy - radio;
+        if (fuego.cy + radio > abajo)  abajo  = fuego.cy + radio;
+      }
+    }
+
+    franjaDeLuces = (arriba < abajo) ? { arriba, abajo } : null;
   }
 
   /**
@@ -680,6 +763,10 @@
         rearmarLasFuentesDeLuz();
       },
       () => {
+        /* Recién acá las luces tienen su posición definitiva, así que recién
+           acá se sabe qué franja del documento hay que cubrir. */
+        hayPiezasColocadas = true;
+        ajustarLienzoDeVelas();
         if (typeof alTerminar === 'function') alTerminar();
       }
     );
@@ -1060,7 +1147,16 @@
        recalcularse"). setTransform, no scale: clearRect también tiene que
        respetar la densidad del lienzo. */
     if (usaElLienzo) {
-      pincelDeVelas.setTransform(densidadLienzoVelas, 0, 0, densidadLienzoVelas, 0, 0);
+      /* El último parámetro desplaza el origen: el lienzo ya no arranca en
+         el tope del documento sino en topLienzoVelas (ver
+         ajustarLienzoDeVelas), así que se le resta esa altura y todo lo que
+         sigue puede seguir dibujando en COORDENADAS DE DOCUMENTO, igual que
+         antes. Va multiplicado por la densidad porque setTransform trabaja
+         en píxeles del lienzo, no en píxeles CSS. */
+      pincelDeVelas.setTransform(
+        densidadLienzoVelas, 0, 0, densidadLienzoVelas,
+        0, -topLienzoVelas * densidadLienzoVelas
+      );
       pincelDeVelas.clearRect(0, arriba, anchoLienzoVelas, abajo - arriba);
       pincelDeVelas.globalCompositeOperation = 'lighter';
     }

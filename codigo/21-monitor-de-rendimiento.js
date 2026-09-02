@@ -433,6 +433,20 @@
       ).join('  ·  ') + '\n';
     }
 
+    /**
+     * El tamaño real del lienzo de velas. Era la capa más grande de la
+     * página (el documento entero) y se acotó a la franja donde de verdad
+     * hay candelabros: este renglón es la prueba de que el recorte ocurrió.
+     * @returns {string}
+     */
+    function lineaDeLienzoDeVelas() {
+      const e = window.EstadoDelLienzoDeVelas;
+      if (!e) return '';
+      const mpx = (e.ancho * e.alto / 1e6).toFixed(1);
+      return '\nlienzo velas: ' + e.ancho + '×' + e.alto +
+             ' desde y=' + e.top + '  (' + mpx + ' Mpx)';
+    }
+
     function actualizarCartel() {
       const ahora = performance.now();
       const fps = Math.round(1000 / promedioMs);
@@ -498,6 +512,7 @@
         `nodos DOM: ${conteos.nodos}  ·  flores: ${conteos.flores}\n` +
         `pétalos activos: ${conteos.petalos}  ·  velas: ${conteos.velas}\n` +
         lineaDeRamilletes() +
+        lineaDeLienzoDeVelas() +
         lineaDeMemoria +
         `\ndocumento: ${tamanoDelDocumento}` +
         /* ⚡ DIAGNÓSTICO DIRECTO EN EL CARTEL (2026-09-02): si algún script
