@@ -153,6 +153,37 @@ if ($inv['confirmacion_id']) {
     }
 }
 
+/* ⚡ SI EL GRUPO NO TIENE FILAS DE PERSONAS, SE ARMAN DESDE LA COMPOSICIÓN
+   (2026-09-02). Un grupo puede estar cargado como "2 adultos y 2 niños" sin
+   que nadie tenga nombre todavía — eso NO lo hace incompleto: ya se sabe
+   cuánta gente es y de qué tipo, que es todo lo que el formulario necesita
+   para preguntar quién viene y qué come cada uno.
+
+   Antes, sin filas, la invitación caía a un formulario viejo por cantidades
+   (y después, peor, a un cartel de "todavía no está lista"). Las dos cosas
+   estaban mal: el invitado tenía que ver siempre lo mismo. Ahora se generan
+   los lugares que falten y el nombre queda vacío; la invitación los muestra
+   como "Adulto 1", "Niño 2", y en cuanto Lucila escriba los nombres reales
+   en el panel, esos mismos lugares pasan a mostrarlos. */
+if (!$personas) {
+    $cuantosAdultos = (int) ($inv['adultos'] ?? 0);
+    $cuantosNinos   = (int) ($inv['ninos'] ?? 0);
+
+    // Sin composición cargada, los lugares apartados se tratan como adultos.
+    if ($cuantosAdultos + $cuantosNinos === 0) {
+        $cuantosAdultos = max(1, (int) $inv['pases']);
+    }
+
+    for ($i = 0; $i < $cuantosAdultos; $i++) {
+        $personas[] = ['id' => null, 'nombre' => '', 'tipo' => 'adulto',
+                       'menu' => '', 'alergias' => ''];
+    }
+    for ($i = 0; $i < $cuantosNinos; $i++) {
+        $personas[] = ['id' => null, 'nombre' => '', 'tipo' => 'nino',
+                       'menu' => '', 'alergias' => ''];
+    }
+}
+
 /* ─── FECHA LÍMITE (mismo ajuste que usa admin/api/invitaciones.php) ── */
 $fechaLimiteIso = '2026-10-01';
 try {

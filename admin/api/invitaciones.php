@@ -321,26 +321,20 @@ case 'guardar':
     $nombresValidos = array_filter($personas, function ($p) {
         return trim((string) ($p['nombre'] ?? '')) !== '';
     });
-    /* ⚡ SIN AL MENOS UN NOMBRE NO SE CREA LA INVITACIÓN (2026-09-02).
-       El formulario del invitado es uno solo: la lista de su gente, donde
-       marca quién viene, elige el plato de cada uno y declara alergias por
-       persona. Esa lista se arma con los nombres cargados acá. Sin ninguno,
-       el invitado abría su enlace y no tenía qué contestar.
+    /* ⚡ LO QUE HACE FALTA ES LA COMPOSICIÓN DEL GRUPO, NO LOS NOMBRES
+       (2026-09-02). El invitado ve una lista con un lugar por persona,
+       donde marca quién viene y elige su plato. Para armarla alcanza con
+       saber CUÁNTA gente es — los lugares sin nombre se muestran como
+       "Adulto 1", "Niño 2", y pasan a mostrar el nombre real en cuanto
+       Lucila lo escriba. Exigir los nombres para crear la invitación
+       habría frenado el trabajo sin ninguna ganancia: se puede repartir un
+       enlace perfectamente útil antes de tener cada nombre.
 
-       Antes eso se tapaba con un formulario alternativo por cantidades
-       ("¿cuántos adultos y niños?", una sola caja de alergias para todos).
-       Ese camino se eliminó: además de mostrar dos invitaciones distintas
-       según un dato que el invitado no controla, perdía justo el detalle que
-       hace falta para la cocina y para el acomodo.
-
-       Así que el nombre deja de ser opcional: se exige al crear y al editar,
-       y el error dice qué falta y por qué. */
-    if (count($nombresValidos) === 0) {
-        responderMal('Carga al menos el nombre de una persona del grupo: ' .
-                     'es lo que ve el invitado al abrir su enlace.', 400);
-    }
-
-    $pases = count($nombresValidos);
+       Los pases salen de la cantidad de nombres cuando los hay (así no se
+       pueden contradecir) y del número cargado a mano cuando no. */
+    $pases = count($nombresValidos) > 0
+        ? count($nombresValidos)
+        : max(1, campoEntero($datos, 'pases', 1, 500, 1));
 
     if ($id > 0) {
         /* ─── EDITAR ─── */

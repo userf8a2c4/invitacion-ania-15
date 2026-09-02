@@ -118,9 +118,6 @@
       'sin-conexion':
         'No pudimos cargar tu invitación. Revisa tu conexión y vuelve a ' +
         'cargar la página.',
-      'sin-personas':
-        'Estamos terminando de preparar tu invitación. Vuelve a abrir este ' +
-        'mismo enlace en un rato y vas a poder confirmar.',
     };
 
     formulario.style.display = 'none';
@@ -254,6 +251,26 @@
     contenedor.appendChild(caja);
   }
 
+  /**
+   * Cómo se llama un lugar que todavía no tiene nombre: "Adulto 1",
+   * "Niño 2"… Se numera por separado dentro de su tipo, que es como lo
+   * lee cualquiera: dos adultos y dos niños son 1 y 2 de cada uno, no 1
+   * a 4 corridos.
+   *
+   * @param {Object} persona
+   * @param {number} indice - Su posición en la lista completa.
+   * @param {Array} todas   - La lista completa, para poder contar.
+   * @returns {string}
+   */
+  function etiquetaDeLugar(persona, indice, todas) {
+    const esNino = persona.tipo === 'nino';
+    let numero = 0;
+    for (let i = 0; i <= indice; i++) {
+      if ((todas[i].tipo === 'nino') === esNino) numero++;
+    }
+    return (esNino ? 'Niño ' : 'Adulto ') + numero;
+  }
+
   function activarModoInvitacionPersonalizada(datos) {
     if (!formulario || !datos) return;
 
@@ -331,31 +348,20 @@
 
     const cajaCantidad = campoAdultos ? campoAdultos.closest('.campo') : null;
 
-    /* ⚡ SIN NOMBRES CARGADOS NO HAY FORMULARIO (2026-09-02).
-       Antes, si el grupo no tenía sus personas cargadas en el panel, el
-       invitado caía al formulario viejo por cantidades: se le preguntaba
-       cuántos adultos y niños vienen y había una sola caja de alergias
-       para todos. O sea que dos invitados podían ver formularios distintos
-       según un dato que ellos no controlan, y se perdía justamente el
-       detalle por persona (quién come qué, quién es alérgico a qué).
-
-       Ahora hay una sola forma de contestar. Si faltan los nombres, se
-       muestra un aviso amable en vez de un formulario distinto — y en el
-       panel esa invitación queda marcada como "faltan nombres", para que
-       Lucila lo vea ANTES de repartir el enlace. */
-    if (!datos.personas || !datos.personas.length) {
-      cerrarElFormularioSinLink('sin-personas');
-      return;
-    }
-
     if (datos.personas && datos.personas.length) {
       MODO_PERSONAS_ACTIVO = true;
-      PERSONAS_INVITACION = datos.personas.map(function (p) {
+      PERSONAS_INVITACION = datos.personas.map(function (p, indice) {
         const esNino = p.tipo === 'nino';
         const alergiaPrevia = (p.alergias || '').trim();
         return {
           id: p.id,
-          nombre: p.nombre,
+          /* ⚡ UN LUGAR SIN NOMBRE IGUAL SE MUESTRA (2026-09-02). Un grupo
+             puede estar cargado como "2 adultos y 2 niños" antes de que
+             Lucila escriba los nombres. Ese lugar no es un error ni una
+             invitación a medias: es una silla reservada, y el invitado
+             puede decir perfectamente si esa persona viene y qué come.
+             Cuando Lucila cargue el nombre real, aparece en su lugar. */
+          nombre: (p.nombre || '').trim() || etiquetaDeLugar(p, indice, datos.personas),
           tipo: esNino ? 'nino' : 'adulto',
           /* ⚡ DESTILDADAS AL ABRIR (2026-09-02). Antes una invitación nueva
              llegaba con todos tildados y el contador decía "5 de 5
