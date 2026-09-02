@@ -181,22 +181,35 @@
     const veces = Number(datos.veces_respondida) || 0;
     if (!veces && !datos.es_pruebas) return;
 
-    const caja = document.createElement('p');
+    /* ⚠️ SE DIBUJA CON LOS ESTILOS DE ESTA WEB, NO CON LOS DEL PANEL.
+       La primera versión usó las clases del panel de administración
+       ('boton boton--fantasma'), que acá no existen: el botón salía como
+       un control crudo del navegador, gris y fuera de lugar, encima de una
+       invitación que cuida cada detalle. Son dos hojas de estilo separadas
+       a propósito. */
+    const caja = document.createElement('div');
     caja.id = 'herramientas-de-prueba';
-    caja.className = 'nota-campo';
+    caja.className = 'herramientas-de-prueba';
 
     if (veces > 0) {
-      caja.textContent = veces === 1
-        ? 'Respondida 1 vez.'
-        : 'Respondida ' + veces + ' veces.';
+      const cuenta = document.createElement('p');
+      cuenta.className = 'herramientas-de-prueba__cuenta';
+      cuenta.textContent = veces === 1
+        ? 'Esta invitación se respondió 1 vez.'
+        : 'Esta invitación se respondió ' + veces + ' veces.';
+      caja.appendChild(cuenta);
     }
 
     if (datos.es_pruebas) {
+      const rotulo = document.createElement('p');
+      rotulo.className = 'herramientas-de-prueba__rotulo';
+      rotulo.textContent = 'Solo en el entorno de pruebas';
+      caja.appendChild(rotulo);
+
       const boton = document.createElement('button');
       boton.type = 'button';
       boton.id = 'boton-reiniciar-prueba';
-      boton.className = 'boton boton--fantasma';
-      boton.style.marginLeft = veces > 0 ? '.6rem' : '0';
+      boton.className = 'herramientas-de-prueba__boton';
       boton.textContent = 'Reiniciar esta invitación';
 
       boton.addEventListener('click', async function alReiniciar() {
@@ -220,8 +233,6 @@
           if (!resultado || resultado.ok !== true) {
             throw new Error((resultado && resultado.error) || 'No se pudo reiniciar.');
           }
-          // Lo guardado en el navegador también se va: si no, al recargar
-          // se seguiría mostrando el pase de la respuesta que ya se borró.
           try {
             localStorage.removeItem('invitacion-ania:pase');
           } catch (error) { /* modo incógnito: no importa */ }
@@ -229,14 +240,18 @@
         } catch (error) {
           boton.disabled = false;
           boton.textContent = 'Reiniciar esta invitación';
-          mostrarError(error.message);
+          window.alert(error.message);
         }
       });
 
       caja.appendChild(boton);
     }
 
-    formulario.insertAdjacentElement('afterend', caja);
+    /* Va al FINAL de la sección, después de todo lo demás — también
+       cuando el formulario está oculto y en su lugar hay un aviso, que es
+       justo el caso donde más falta hace poder reiniciar. */
+    const contenedor = formulario.parentElement || formulario;
+    contenedor.appendChild(caja);
   }
 
   function activarModoInvitacionPersonalizada(datos) {

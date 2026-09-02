@@ -461,3 +461,55 @@
 .fila-persona:has(input[data-persona-marcada]:checked) .fila-persona__nombre {
   color: var(--color-oro-claro);
 }
+
+
+/* ─── HERRAMIENTAS DE PRUEBA (solo en pbe.) ───────────────────────────
+   El contador de respuestas y el botón para reiniciar la invitación.
+   Se dibuja discreto y separado del formulario: no es parte de la
+   invitación, es andamio para poder probar. Va al final de la sección
+   y con el color apagado, para que nunca compita con lo que el invitado
+   tiene que leer.
+
+   ⚠️ Estas clases existen porque la primera versión reusó las del panel
+   de administración ('boton boton--fantasma'), que en esta web no están:
+   el botón salía como un control gris del navegador, en medio de una
+   página que cuida cada detalle. Son dos hojas de estilo distintas. */
+.herramientas-de-prueba {
+  margin-top: var(--esp-4, 2rem);
+  padding-top: 1rem;
+  border-top: 1px dashed rgba(201, 168, 76, .25);
+  text-align: center;
+}
+
+.herramientas-de-prueba__cuenta,
+.herramientas-de-prueba__rotulo {
+  margin: 0 0 .4rem;
+  font-family: var(--tipo-detalle);
+  font-size: .72rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--color-oro-texto);
+  opacity: .75;
+}
+
+.herramientas-de-prueba__boton {
+  font-family: var(--tipo-detalle);
+  font-size: .75rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--color-oro-claro);
+  background: transparent;
+  border: 1px solid var(--borde-oro-tenue);
+  border-radius: 4px;
+  padding: .5rem 1rem;
+  cursor: pointer;
+  transition: border-color .25s, color .25s;
+}
+.herramientas-de-prueba__boton:hover:not(:disabled) {
+  border-color: var(--color-oro);
+  color: var(--color-oro);
+}
+.herramientas-de-prueba__boton:disabled {
+  opacity: .5;
+  cursor: default;
+}
