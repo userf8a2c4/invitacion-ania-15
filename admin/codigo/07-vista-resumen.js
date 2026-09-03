@@ -215,7 +215,7 @@ function bloqueEjecutivo(datos, pendientes) {
         '<span class="rejilla-ejecutiva__numero">' +
           seguro(invitados.hay ? invitados.si_asisten : '—') +
         '</span>' +
-        '<span class="rejilla-ejecutiva__rotulo">Confirmados</span>' +
+        '<span class="rejilla-ejecutiva__rotulo">Confirmaron</span>' +
       '</button>' +
 
       '<button class="rejilla-ejecutiva__dato' +
@@ -317,8 +317,8 @@ function bloqueInvitados(invitados) {
       // SUM(mesas.capacidad) -140 hoy, pero calculado, no pisado a
       // mano-, no contra cantidad de invitaciones ni de filas RSVP.
       tarjetaDato(invitados.libres, 'Libres') +
-      tarjetaDato(invitados.si_asisten, 'Confirman') +
-      tarjetaDato(invitados.no_asisten, 'No pueden') +
+      tarjetaDato(invitados.si_asisten, 'Confirmaron') +
+      tarjetaDato(invitados.no_asisten, 'No vienen') +
       tarjetaDato(invitados.adultos, 'Adultos') +
       tarjetaDato(invitados.ninos, 'Niños') +
     '</div>' +

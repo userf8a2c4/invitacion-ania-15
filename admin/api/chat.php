@@ -46,7 +46,7 @@ require_once __DIR__ . '/_lib/responder.php';
 require_once __DIR__ . '/_lib/mesas.php';
 
 if (!existeTabla('chat_hilos') || !existeTabla('chat_mensajes') || !existeTabla('chat_propuestas')) {
-    responderMal('Falta correr la migración: no existen las tablas del chat.', 500);
+    responderMal('Falta una parte de la instalación del panel. Avísale a quien lo instaló.', 500);
 }
 
 /* ─── LA WHITELIST — la ÚNICA lista de acciones que una propuesta de

@@ -36,7 +36,7 @@ $accion = (string) ($_GET['accion'] ?? 'listar');
 /* ─── AVERIGUAR CÓMO ES LA TABLA ──────────────────────────────────────── */
 
 if (!existeTabla('confirmaciones')) {
-    responderMal('La tabla de confirmaciones no existe en esta base de datos.', 500);
+    responderMal('No encuentro la lista de invitados. Avísale a quien instaló el panel.', 500);
 }
 
 $COLUMNAS = columnasDe('confirmaciones');
@@ -236,7 +236,7 @@ case 'listar':
 
 case 'ver':
     exigirMetodo('GET');
-    if (!$TIENE_ID) responderMal('Esta tabla no tiene columna id.', 400);
+    if (!$TIENE_ID) responderMal('Esta lista es de solo lectura.', 400);
 
     $fila = consultarUno(
         'SELECT * FROM confirmaciones WHERE id = :id',
@@ -252,7 +252,7 @@ case 'ver':
 
 case 'editar':
     exigirMetodo('POST');
-    if (!$TIENE_ID) responderMal('Esta tabla no tiene columna id: no se puede editar.', 400);
+    if (!$TIENE_ID) responderMal('Esta lista es de solo lectura: no se puede editar.', 400);
 
     $datos = cuerpoJson();
     $id    = campoEntero($datos, 'id', 1);
@@ -314,7 +314,7 @@ case 'borrar':
        puerta el día del evento: puede consultar, no destruir. */
     exigirAdministrador();
 
-    if (!$TIENE_ID) responderMal('Esta tabla no tiene columna id: no se puede borrar.', 400);
+    if (!$TIENE_ID) responderMal('Esta lista es de solo lectura: no se puede borrar.', 400);
 
     $datos = cuerpoJson();
     $id    = campoEntero($datos, 'id', 1);

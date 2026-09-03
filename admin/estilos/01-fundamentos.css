@@ -78,12 +78,32 @@
      para cuando hace falta separar aún más (ej. debajo del encabezado
      antes del primer bloque, donde el brief pide "aire generoso"). */
   --gota:  4px;
+  /* ⚡ --gota-y-media EXISTÍA DE HECHO, SIN NOMBRE (2026-09-03). El valor
+     6px aparece 22 veces repartidas entre 02-componentes y 03-vistas —es la
+     separación entre filas de lista, el hueco de los filtros y el del
+     índice— pero no estaba en la escala, que salta de 4 a 8. Una medida que
+     se usa veintidós veces no es una excepción: es un escalón. Ahora tiene
+     nombre, y el que venga después lo va a encontrar en vez de volver a
+     escribir 6px a mano. */
+  --gota-y-media: 6px;
   --esp-1: 8px;
   --esp-2: 12px;
   --esp-3: 16px;
   --esp-4: 24px;
   --esp-5: 32px;
   --esp-6: 40px;
+
+  /* ⚡ LA ESCALA TIPOGRÁFICA, QUE NO EXISTÍA (2026-09-03). Los tamaños de
+     letra estaban sueltos en px por todo el CSS (15, 13, 12, 19, 17…), sin
+     un solo nombre: cambiar "el texto chico de la app" obligaba a buscar y
+     reemplazar a ojo, con el riesgo de pisar un 13px que era otra cosa.
+     Los valores son exactamente los que ya se estaban usando: esto nombra
+     lo que hay, no cambia nada de lo que se ve. */
+  --letra-titulo:   19px;   /* h1 */
+  --letra-seccion:  17px;   /* h2 */
+  --letra-bloque:   15px;   /* h3 y cuerpo */
+  --letra-chica:    13px;   /* botones chicos, filtros, pies de fila */
+  --letra-minima:   12px;   /* rótulos en mayúsculas */
 
   --redondeo:       12px;
   --redondeo-chico: 8px;
@@ -161,9 +181,12 @@ body {
      un poco por encima del borde superior, así el punto más intenso
      queda oculto detrás del encabezado y lo que se alcanza a ver ya es
      el borde suave del resplandor, nunca el centro. */
+  /* El halo de arriba sale del color principal vigente (2026-09-03): tenía
+     el morado de fábrica escrito en RGB, así que al cambiar de paleta el
+     fondo entero conservaba el tinte del color anterior. */
   background-image:
     radial-gradient(ellipse 1000px 580px at 50% -8%,
-                     rgba(107, 63, 160, .16), transparent 62%);
+                     color-mix(in srgb, var(--oro) 16%, transparent), transparent 62%);
   background-repeat: no-repeat;
   background-position: center top;
   background-attachment: fixed;
@@ -214,9 +237,9 @@ h1, h2, h3, h4 {
   line-height: 1.25;
 }
 
-h1 { font-size: 19px; }
-h2 { font-size: 17px; }
-h3 { font-size: 15px; }
+h1 { font-size: var(--letra-titulo); }
+h2 { font-size: var(--letra-seccion); }
+h3 { font-size: var(--letra-bloque); }
 
 p { margin: 0 0 var(--esp-2); }
 p:last-child { margin-bottom: 0; }

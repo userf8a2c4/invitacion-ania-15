@@ -35,10 +35,10 @@ if (in_array($accion, ['consultar', 'marcar'], true) && !tieneEspecial($yo, 'esc
 }
 
 if (!existeTabla('confirmaciones')) {
-    responderMal('La tabla de confirmaciones no existe en esta base de datos.', 500);
+    responderMal('No encuentro la lista de invitados. Avísale a quien instaló el panel.', 500);
 }
 if (!existeTabla('llegadas')) {
-    responderMal('Falta correr la migración: no existe la tabla llegadas.', 500);
+    responderMal('Falta una parte de la instalación del panel. Avísale a quien lo instaló.', 500);
 }
 
 

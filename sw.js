@@ -45,7 +45,7 @@
    antes de subir a producción.
    ══════════════════════════════════════════════════════════════════════ */
 
-const VERSION = 'ania-xv-v176';
+const VERSION = 'ania-xv-v177';
 
 /** Extensiones de assets pesados/estables: para esos, "primero la copia". */
 const ASSETS_ESTABLES = /\.(?:mp3|ogg|wav|png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf)$/i;

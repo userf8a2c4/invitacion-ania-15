@@ -217,7 +217,7 @@ case 'invitados':
 
     $columnas = existeTabla('confirmaciones') ? columnasDe('confirmaciones') : [];
     if (!in_array('nombre', $columnas, true)) {
-        responderMal('La tabla de confirmaciones no tiene columna nombre.', 500);
+        responderMal('La lista de invitados del panel no tiene dónde guardar el nombre, así que no puedo importar.', 500);
     }
 
     $tieneFecha = in_array('fecha_hora', $columnas, true);

@@ -57,8 +57,11 @@
      .boton:active siga leyéndose como la señal de toque principal. */
   box-shadow: var(--brillo-oro);
 }
+/* El resplandor al apretar sale del color principal vigente, no de un
+   morado escrito a mano: si no, con otra paleta el botón se apretaba y
+   soltaba un halo del color anterior (2026-09-03). */
 .boton--principal:active {
-  box-shadow: 0 0 10px rgba(107, 63, 160, .25);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--oro) 25%, transparent);
 }
 
 .boton--peligro {
@@ -75,8 +78,15 @@
 
 .boton--ancho { width: 100%; }
 
+/* ⚡ 44 Y NO 34, AUNQUE SE LLAME "CHICO" (2026-09-03). Lo chico es la letra
+   y el aire de los lados, no la zona que hay que acertar con el dedo. Este
+   botón vive en la barra flotante de selección múltiple —"Recordar",
+   "Asignar mesa", "Marcar llegada"— y esa barra se usa con la lista llena de
+   filas tocables debajo: fallar el toque ahí no es incómodo, es abrir a la
+   persona equivocada. La regla de los 44 px está escrita al principio de
+   este archivo; esto la incumplía. */
 .boton--chico {
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 var(--esp-2);
   font-size: 13px;
 }
@@ -118,9 +128,16 @@
  * terminaba de recorrerla y quería usarlo. Ahora, al desplazarse hacia
  * abajo se aparta solo, y reaparece apenas se sube: sigue estando a un
  * gesto de distancia sin estorbar nunca. */
+/* ⚡ El botón queda pegado a la app, no al borde de la pantalla
+   (2026-09-03). Con la app centrada y un techo de 640 px, un `right` suelto
+   lo dejaba flotando solo en el vacío de la derecha del monitor, a un palmo
+   de la interfaz a la que pertenece. La cuenta lo apoya contra el borde
+   derecho del contenido: la mitad de lo que sobra a cada lado, más el
+   margen de siempre. En teléfono no sobra nada, así que se comporta
+   exactamente como antes. */
 .boton-flotante {
   position: fixed;
-  right: var(--esp-3);
+  right: max(var(--esp-3), calc((100% - 640px) / 2 + var(--esp-3)));
   bottom: calc(var(--alto-navegacion) + var(--seguro-abajo) + var(--esp-3));
   width: 48px;
   height: 48px;
@@ -191,6 +208,11 @@
    hace lugar con padding-right; el botón se ancla encima. */
 .campo__con-boton { position: relative; display: block; }
 .campo__con-boton .campo__control { padding-right: 42px; }
+/* ⚡ Se ve de 34 px pero se toca en 44 (2026-09-03), con el mismo truco que
+   ya usa .ayuda más abajo: la zona sensible se agranda con un ::after
+   invisible, sin que el botón crezca y desborde el alto del campo. Es la
+   forma de cumplir la regla de los 44 px cuando el dibujo tiene que seguir
+   siendo chico. */
 .campo__boton-ojo {
   position: absolute;
   top: 50%;
@@ -207,6 +229,12 @@
   border-radius: 50%;
   transition: background var(--transicion);
 }
+/* La zona sensible, invisible: 5 px más por lado llevan los 34 a 44. */
+.campo__boton-ojo::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+}
 .campo__boton-ojo:active {
   background: color-mix(in srgb, var(--oro) 12%, transparent);
 }
@@ -220,11 +248,29 @@ textarea.campo__control {
 
 select.campo__control {
   appearance: none;
-  /* La flechita, dibujada como fondo para no depender de otro archivo. */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23a07830' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  /* ⚡ LA FLECHA SE DIBUJA CON CSS, NO CON UN SVG DE COLOR QUEMADO
+     (2026-09-03). Antes era un `data:` URI con `stroke='%23a07830'` adentro:
+     un dorado que no correspondía a NINGÚN token del panel —ni a --oro ni a
+     --acento-victoriano—, resto de una paleta anterior. Y por estar dentro
+     de una URL no podía seguir a var(--oro) de ninguna manera: cuando Lucila
+     elegía otra paleta desde Colores del panel, todo cambiaba menos esta
+     flechita, que se quedaba dorada en un panel morado o ciruela.
+
+     Dos bordes de un cuadrado girado 45° dan la misma flecha, en color
+     heredado, y de paso el archivo pierde una URL ilegible. */
+     Se dibuja con dos degradados en lugar de un pseudo-elemento: `.campo`
+     no tiene `position: relative`, así que un ::after se habría posicionado
+     contra cualquier ancestro y aparecido en un lugar cualquiera de la
+     pantalla. Los degradados van sobre el propio <select>, aceptan
+     var(--oro), y no dependen de :has() ni de ningún envoltorio. */
+  background-image:
+    linear-gradient(45deg,  transparent 50%, var(--oro) 50%),
+    linear-gradient(135deg, var(--oro) 50%, transparent 50%);
+  background-position:
+    right calc(var(--esp-2) + 5px) center,
+    right var(--esp-2) center;
+  background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
-  background-position: right var(--esp-2) center;
-  background-size: 12px;
   padding-right: var(--esp-4);
 }
 

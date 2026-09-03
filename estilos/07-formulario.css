@@ -475,7 +475,14 @@
    el botón salía como un control gris del navegador, en medio de una
    página que cuida cada detalle. Son dos hojas de estilo distintas. */
 .herramientas-de-prueba {
-  margin-top: var(--esp-4, 2rem);
+  /* ⚠️ ACÁ HABÍA UN TOKEN DEL PANEL (corregido 2026-09-03): decía
+     `var(--esp-4, 2rem)`, y --esp-4 es una variable de admin/estilos/, que
+     esta web no declara en ningún lado — era la única aparición de --esp- en
+     todo estilos/. Siempre caía al respaldo de 2rem, así que no se veía roto,
+     pero es exactamente el mismo error que este bloque documenta arriba:
+     escribir una pieza de la invitación con el vocabulario del panel. Se deja
+     el valor literal que de hecho se estaba usando. */
+  margin-top: 2rem;
   padding-top: 1rem;
   border-top: 1px dashed rgba(201, 168, 76, .25);
   text-align: center;

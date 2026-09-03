@@ -40,6 +40,11 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--esp-2);
+  /* Mismo techo y mismo centrado que el contenido y la barra de abajo: si
+     no, en pantalla grande el título quedaría en un extremo del monitor y
+     la app en el medio. */
+  max-width: 640px;
+  margin: 0 auto;
   height: calc(var(--alto-encabezado) + var(--seguro-arriba));
   padding: var(--seguro-arriba) var(--esp-1) 0 var(--esp-3);
   background: var(--fondo-elevado);
@@ -94,6 +99,20 @@
   padding: calc(var(--alto-encabezado) + var(--seguro-arriba) + var(--esp-2))
            var(--esp-2)
            calc(var(--alto-navegacion) + var(--seguro-abajo) + var(--esp-5));
+
+  /* ⚡ UN TECHO DE ANCHO (2026-09-03). El panel está pensado para teléfono y
+     no tiene ni una media query de ancho, así que en una pantalla grande
+     —donde de hecho se cargan los invitados y se importa la lista— no se
+     adaptaba: simplemente se estiraba. Una fila de lista quedaba como una
+     banda de 1200 px con el nombre pegado a la izquierda y su etiqueta a la
+     derecha, separados por medio metro de nada, y el ojo tenía que cruzar
+     todo eso para relacionar dos datos de la misma persona.
+
+     No es un diseño de escritorio —eso sería otro trabajo— sino el mínimo
+     honesto: la misma app de teléfono, centrada y sin deformarse. */
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 .vista { display: none; }
@@ -113,6 +132,11 @@
   right: 0;
   z-index: 30;
   display: flex;
+  /* Mismo techo que el contenido, y centrada: en pantalla grande, cuatro
+     botones repartidos a lo ancho de un monitor no son una barra, son
+     cuatro botones perdidos. */
+  max-width: 640px;
+  margin: 0 auto;
   height: calc(var(--alto-navegacion) + var(--seguro-abajo));
   padding-bottom: var(--seguro-abajo);
   background: var(--fondo-elevado);
@@ -206,8 +230,18 @@
   margin-bottom: var(--esp-2);
 }
 
+/* ⚡ 44 PX, COMO MANDA LA REGLA DE LA CASA (2026-09-03). Esto medía 34 y era
+   el peor caso de todo el panel por pura frecuencia: con estos chips se
+   cambia de sección dentro de Gente y se filtra la lista de invitados, o
+   sea que son el control que más se toca de la app.
+
+   El propio proyecto ya sabía que 34 no alcanza: más abajo existe
+   .filtro--grande con 44 px y el comentario "ese día se usa la app de pie,
+   con ruido y con una mano: 34 px se falla". La conclusión valía para todos
+   los días, no solo para el del evento — que Lucila esté sentada no vuelve
+   más gordo su dedo. */
 .filtro {
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 var(--esp-2);
   border: 1px solid var(--borde);
   border-radius: 999px;
@@ -247,8 +281,12 @@
   border-radius: var(--redondeo-chico);
   width: fit-content;
 }
+/* El selector Ver/Editar del plano. Tenía solo padding —unos 30 px de
+   alto— y es el interruptor que decide si tocar una mesa la abre o la
+   arrastra: conviene no fallarlo. */
 .modo-plano__opcion {
-  padding: 6px 14px;
+  min-height: 44px;
+  padding: 0 14px;
   border: 0;
   border-radius: var(--redondeo-chico);
   background: none;
@@ -277,18 +315,24 @@
      no animado — una transición metería un retraso perceptible. */
 }
 
+/* ⚡ 44 PX Y MÁS SEPARADOS (2026-09-03). Eran 34×34 con 4 px entre medio, y
+   es el sitio del panel donde equivocar un toque sale más caro: viven
+   encima del plano del salón, que tiene `touch-action: none` y arrastra
+   personas de mesa. Un dedo que apunta al "−" del zoom y cae 6 px al lado
+   agarra una mesa y la mueve, el día de la fiesta, de pie y con prisa.
+   El gap sube a 8 para que los dos botones no se toquen entre sí. */
 .plano-controles {
   position: absolute;
   right: var(--esp-2);
   bottom: var(--esp-2);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   z-index: 2;
 }
 .plano-controles .boton-icono {
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   background: var(--fondo-elevado);
   border: 1px solid var(--borde);
   box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
@@ -721,10 +765,14 @@
 .rejilla-accesos__boton:active { background: var(--fondo-elevado); }
 
 /* Cada aviso del Resumen: un pago que vence, una tarea atrasada. */
+/* Misma altura mínima que el resto de las filas (2026-09-03). Estas se
+   tocan —llevan a la pantalla del problema que anuncian— así que además
+   entran en la regla de los 44 px con holgura. */
 .alerta-fila {
   display: flex;
   align-items: center;
   gap: var(--esp-2);
+  min-height: 56px;
   padding: var(--esp-2);
   border-radius: var(--redondeo-chico);
   background: var(--fondo-tarjeta);
@@ -761,15 +809,20 @@
   background: var(--borde);
 }
 
+/* ⚡ 56 px y 6 px de separación, como todas las demás filas (2026-09-03).
+   Tenía 52 y 4, sin ninguna razón anotada — a diferencia de .indice__fila,
+   que documenta por qué usa 60 (lleva dos renglones de texto). Un hito se
+   toca igual que cualquier otra fila de una lista: que mida distinto solo
+   hacía que el ojo notara el salto al pasar de una pantalla a otra. */
 .hito {
   position: relative;
   display: flex;
   align-items: center;
   gap: var(--esp-2);
   width: 100%;
-  min-height: 52px;
+  min-height: 56px;
   padding: var(--esp-1) var(--esp-2);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   background: var(--fondo-tarjeta);
   border: 1px solid var(--borde);
   border-radius: var(--redondeo-chico);
@@ -1017,10 +1070,14 @@
 
 /* ─── 4e. ALARMAS ──────────────────────────────────────────────────── */
 
+/* Misma altura mínima que el resto de las filas (2026-09-03): no la tenía,
+   así que una alarma de una línea quedaba más baja que cualquier otra fila
+   de la app. El borde izquierdo de color es lo suyo y se queda. */
 .alarma {
   display: flex;
   align-items: center;
   gap: var(--esp-2);
+  min-height: 56px;
   padding: var(--esp-2);
   background: var(--fondo-tarjeta);
   border: 1px solid var(--borde);
@@ -1170,8 +1227,13 @@
      así queda siempre a mano del pulgar sin importar cuánto se haya
      desplazado la lista, igual que el FAB. */
   position: fixed;
+  /* Centrada y con el mismo techo que la app, para que en pantalla grande
+     no se estire de borde a borde del monitor con el contador en una punta
+     y los botones en la otra (2026-09-03). */
   left: var(--esp-2);
   right: var(--esp-2);
+  max-width: calc(640px - var(--esp-2) * 2);
+  margin: 0 auto;
   /* Más arriba que el FAB (48px + su propio margen), para que la
      selección en lote no quede tapada por el botón flotante que vive
      en esa misma esquina. */
