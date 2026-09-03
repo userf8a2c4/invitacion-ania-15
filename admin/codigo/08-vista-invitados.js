@@ -912,14 +912,23 @@ function abrirDetalleDeInvitado(id) {
            sección se fusionó con Gente. Mandar una invitación por correo
            era, de hecho, imposible. */
         (fila.invitacion_correo
-          ? '<button class="boton" id="inv-correo">Mandar por correo</button>'
+          ? '<button class="boton" id="inv-mandar-correo">Mandar por correo</button>'
           : '') +
         '<button class="boton" id="copiar-link-invitacion">Copiar link</button>' +
       '</div>' +
-      (!sirveParaWhatsApp(fila.invitacion_telefono) && !fila.invitacion_correo
-        ? '<p class="vacio__texto">Sin teléfono ni correo cargados: por ahora, ' +
-          'copia el link y mándaselo por donde lo tengas.</p>'
-        : '')
+
+      /* ⚡ POR QUÉ FALTA EL BOTÓN DE WHATSAPP (2026-09-03)
+         Antes, cuando el número no servía, el botón simplemente no
+         estaba y el único mensaje era "Sin teléfono ni correo
+         cargados" — que es falso si el teléfono SÍ está y lo que le
+         falta es la clave de país. Un botón que no aparece sin decir
+         por qué se lee como que la app está rota.
+
+         Y hay una segunda trampa, la que más confunde: el teléfono que
+         cuenta acá es el de la INVITACIÓN, no el de la ficha de la
+         persona ni el de Contactos. Son campos distintos, y tener uno
+         cargado no llena el otro. Se dice dónde se carga. */
+      avisoDePorQueNoHayWhatsApp(fila)
     : '<button type="button" class="boton boton--ancho" style="margin-top:var(--esp-3)" ' +
               'id="generar-link-invitado">Generar link personal</button>';
 
@@ -995,7 +1004,7 @@ function abrirDetalleDeInvitado(id) {
       });
     }
 
-    const botonCorreo = buscar('#inv-correo', cuerpo);
+    const botonCorreo = buscar('#inv-mandar-correo', cuerpo);
     if (botonCorreo) {
       botonCorreo.addEventListener('click', async () => {
         if (!await confirmarAccion(
@@ -1140,7 +1149,15 @@ function abrirDetalleDeInvitado(id) {
       id: fila.invitacion_id,
       nombre: fila.nombre,
       telefono: fila.invitacion_telefono,
-      correo: fila.correo,
+      /* ⚡ EL CORREO DE LA INVITACIÓN, NO EL DE LA CONFIRMACIÓN
+         (2026-09-03). Acá se precargaba `fila.correo`, que es el correo
+         que dejó la persona AL CONFIRMAR — otro campo, otra tabla. Este
+         formulario guarda sobre `invitaciones.correo`, así que abrir
+         "Editar" y guardar sin tocar nada pisaba el correo al que se
+         manda la invitación con el que dejó al contestar. Cuando eran
+         distintos, el de la invitación se perdía sin que nadie lo
+         hubiera cambiado a propósito. */
+      correo: fila.invitacion_correo,
       grupo_id: fila.invitacion_grupo_id,
       pases: fila.invitacion_pases,
       personas: personas,
@@ -1476,6 +1493,45 @@ function abrirFormularioDeInvitado(fila) {
 }
 
 
+/**
+ * Explica por qué no está el botón de "Mandar por WhatsApp", si no está.
+ *
+ * LAS TRES SITUACIONES, QUE SE VEÍAN TODAS IGUAL
+ *   1. No hay teléfono cargado en la invitación → se dice dónde se carga.
+ *   2. Hay teléfono, pero no sirve para WhatsApp (le falta la clave de
+ *      país) → se dice qué le falta, con el número a la vista para que
+ *      se note. Este es el caso que más desconcierta: el número ESTÁ,
+ *      se ve en la ficha, y el botón no aparece.
+ *   3. Está todo bien → no se dice nada.
+ *
+ * @param {Object} fila
+ * @returns {string} HTML, o '' si el botón sí se pintó.
+ */
+function avisoDePorQueNoHayWhatsApp(fila) {
+  if (sirveParaWhatsApp(fila.invitacion_telefono)) return '';
+
+  const tieneAlgo = String(fila.invitacion_telefono || '').trim() !== '';
+
+  const porque = tieneAlgo
+    ? 'El teléfono cargado (<strong>' + seguro(fila.invitacion_telefono) + '</strong>) ' +
+      'no sirve para WhatsApp: le falta la clave de país. Un número ' +
+      'mexicano de 10 dígitos se completa solo; si es de otro país, ' +
+      'escríbelo con su clave (por ejemplo +54…).'
+    : 'Esta invitación no tiene teléfono cargado.';
+
+  /* El "dónde" es la mitad útil del aviso: el teléfono de la invitación
+     es un campo aparte del de la ficha de la persona y del de
+     Contactos, y no es evidente que sean tres cosas distintas. */
+  return '<p class="aviso-error" style="margin-top:var(--esp-1)">' +
+    porque + '<br>Se carga en <strong>Editar</strong>, en el campo ' +
+    '«Teléfono (para WhatsApp)».' +
+    (fila.invitacion_correo
+      ? ''
+      : ' Mientras tanto, puedes copiar el link y mandárselo por donde lo tengas.') +
+  '</p>';
+}
+
+
 /* ─── 5. LOS NOMBRES DE CADA ACOMPAÑANTE ───────────────────────────── */
 
 /**
@@ -1507,6 +1563,29 @@ async function dibujarAcompanantes(confirmacionId, cupo, contenedor) {
 }
 
 /**
+ * ⚡ "EDITAR" Y "QUITAR" NO DECÍAN QUÉ HACÍAN (2026-09-03)
+ *
+ * Los dos botones se llamaban igual que los de borrar un gasto o un
+ * proveedor, y en esta pantalla significan algo completamente distinto.
+ * La pregunta que llegó, textual: "¿editar el nombre? ¿quitar a ese
+ * invitado? ¿resetear su información? ¿puedo quitarlo de la lista?".
+ * Si quien construyó la app duda, Lucila también.
+ *
+ * LO QUE HAY QUE ENTENDER, Y QUE LA PANTALLA NO DECÍA
+ * El CUPO y los NOMBRES son dos cosas separadas:
+ *   · El cupo son los lugares que tiene la familia. Sale de lo que
+ *     contestaron al confirmar, y solo se cambia editando la invitación.
+ *   · Los nombres son quiénes ocupan esos lugares. Se pueden llenar,
+ *     corregir y vaciar sin que el cupo se mueva ni un poco.
+ *
+ * "Adulto 2" no es una persona: es un lugar reservado todavía sin
+ * nombre. Por eso "Quitar" no saca a nadie del evento — deja ese lugar
+ * sin nombre, que es exactamente el "resetear" que se estaba buscando.
+ *
+ * Ahora los botones se llaman por lo que hacen ("Cambiar nombre",
+ * "Dejar sin nombre"), hay una línea que explica la diferencia, y la
+ * confirmación dice qué pasa con el lugar.
+ *
  * @param {number} confirmacionId
  * @param {number} cupo
  * @param {Object[]} filas
@@ -1515,11 +1594,27 @@ async function dibujarAcompanantes(confirmacionId, cupo, contenedor) {
  */
 function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
   const puedeAgregarMas = filas.length < cupo;
+  const sinNombre = Math.max(0, cupo - filas.length);
 
   contenedor.innerHTML =
     '<p class="detalle__rotulo" style="margin-top:var(--esp-2)">' +
-      'Con nombre (' + filas.length + ' de ' + cupo + ')' +
+      'Quién ocupa cada lugar (' + filas.length + ' de ' + cupo + ')' +
     '</p>' +
+
+    /* La explicación va acá arriba y no en un tooltip: es la idea que
+       ordena toda la sección, y un tooltip es algo que hay que descubrir
+       antes de poder leerlo. Dos renglones, una sola vez. */
+    '<p class="vacio__texto" style="margin:2px 0 var(--esp-1)">' +
+      'Esta familia tiene <strong>' + cupo + '</strong> ' +
+      (cupo === 1 ? 'lugar reservado' : 'lugares reservados') + '. Aquí pones ' +
+      'el nombre de quién ocupa cada uno' +
+      (sinNombre > 0
+        ? ' — ' + (sinNombre === 1 ? 'falta 1' : 'faltan ' + sinNombre) + '.'
+        : '.') +
+      '<br>Cambiar los nombres no cambia cuántos lugares tienen: eso se ' +
+      'edita en la invitación.' +
+    '</p>' +
+
     (filas.length
       ? filas.map(a =>
           '<div class="fila-adjunto" style="padding:var(--esp-1) 0;' +
@@ -1530,8 +1625,14 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
                   seguro(a.alergias) + '</span>' : '') +
               '</span>' +
               '<span style="display:flex;gap:6px;flex-shrink:0">' +
-                '<button class="boton boton--chico" data-editar-acomp="' + a.id + '">Editar</button>' +
-                '<button class="boton boton--chico" data-quitar-acomp="' + a.id + '">Quitar</button>' +
+                /* Los rótulos dicen la acción, no la categoría. "Editar"
+                   y "Quitar" podían leerse como "editar al invitado" y
+                   "sacarlo del evento", que es lo que NO hacen. */
+                '<button class="boton boton--chico" data-editar-acomp="' + a.id + '" ' +
+                        'title="Corregir cómo se escribe su nombre">Cambiar nombre</button>' +
+                '<button class="boton boton--chico" data-quitar-acomp="' + a.id + '" ' +
+                        'title="El lugar sigue reservado, pero queda sin nombre">' +
+                  'Dejar sin nombre</button>' +
               '</span>' +
             '</div>' +
             /* ⚡ (2026-08-28) A pedido: las etiquetas de cada persona se
@@ -1541,11 +1642,20 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
             '<div id="etiquetas-acomp-' + a.id + '" style="margin-top:4px"></div>' +
           '</div>'
         ).join('')
-      : '<p class="vacio__texto" style="padding:var(--esp-1) 0">Todavía nadie tiene nombre.</p>') +
+      : '<p class="vacio__texto" style="padding:var(--esp-1) 0">' +
+        'Todavía nadie tiene nombre. Los lugares están reservados igual.</p>') +
+
     (puedeAgregarMas
       ? '<button class="boton boton--ancho" style="margin-top:var(--esp-1)" ' +
-               'id="agregar-acompanante">Agregar</button>'
-      : '');
+               'id="agregar-acompanante">' +
+          'Ponerle nombre a ' + (sinNombre === 1 ? 'el lugar que falta'
+                                                 : 'uno de los ' + sinNombre + ' que faltan') +
+        '</button>'
+      // Todos nombrados: se dice por qué no hay botón, en vez de que
+      // simplemente no esté y parezca que falta algo.
+      : '<p class="vacio__texto" style="margin-top:var(--esp-1)">' +
+        'Ya están nombrados los ' + cupo + ' lugares. Para agregar a ' +
+        'alguien más, primero súbele los pases a la invitación.</p>');
 
   filas.forEach(a => {
     pintarEtiquetasDe('acompanante', a.id, buscar('#etiquetas-acomp-' + a.id, contenedor));
@@ -1562,7 +1672,20 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
 
   buscarTodos('[data-quitar-acomp]', contenedor).forEach(boton => {
     boton.addEventListener('click', async () => {
-      if (!await confirmarAccion('¿Quitar a esta persona de la lista de nombrados?')) return;
+      const persona = filas.find(a => Number(a.id) === Number(boton.dataset.quitarAcomp));
+      const comoSeLlama = persona ? persona.nombre : 'esta persona';
+
+      /* La pregunta dice qué se pierde y qué NO se pierde. La de antes
+         —"¿Quitar a esta persona de la lista de nombrados?"— usaba
+         "lista de nombrados", que es vocabulario del programa, no de
+         quien lo usa. */
+      if (!await confirmarAccion(
+        '¿Dejar sin nombre el lugar de ' + comoSeLlama + '?\n\n' +
+        'El lugar sigue reservado para esta familia: solo se borra el ' +
+        'nombre, y puedes ponerle otro cuando quieras.\n\n' +
+        'Se pierden sus etiquetas y lo que tenga cargado de menú y alergias.',
+        { confirmar: 'Dejar sin nombre', peligro: true })) return;
+
       try {
         await mandar('acompanantes.php?accion=borrar', { id: Number(boton.dataset.quitarAcomp) });
         dibujarAcompanantes(confirmacionId, cupo, contenedor);
@@ -1581,6 +1704,7 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
     });
   }
 }
+
 
 /**
  * Formulario para nombrar a un acompañante, o para corregir a uno que

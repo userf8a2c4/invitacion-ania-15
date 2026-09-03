@@ -251,7 +251,11 @@
   /* El texto de un filtro no se parte nunca: "No asisten" en dos
      renglones se lee como dos filtros distintos. */
   white-space: nowrap;
-  transition: all var(--transicion);
+  /* Solo lo que de verdad cambia: `all` anima también el ancho y el
+     alto, y en una lista de filtros eso hace que el contenedor se
+     acomode con un salto cada vez que se toca uno. */
+  transition: background var(--transicion), color var(--transicion),
+              border-color var(--transicion);
 }
 
 /* ─── EL PLANO DEL SALÓN ───────────────────────────────────────────── */
@@ -335,7 +339,7 @@
   height: 44px;
   background: var(--fondo-elevado);
   border: 1px solid var(--borde);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+  box-shadow: var(--elevacion-1);
   font-size: 16px;
   font-weight: 700;
 }
@@ -363,7 +367,7 @@
   font-weight: 700;
   white-space: nowrap;
   pointer-events: none;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, .4);
+  box-shadow: var(--elevacion-1);
 }
 
 /* Todo lo que no es una mesa: tarima, pista, bufet, baños, barra. Van
@@ -638,7 +642,7 @@
   cursor: pointer;
   border: 1px solid var(--borde);
   background: rgba(255, 255, 255, .03);
-  transition: border-color .2s, background .2s;
+  transition: border-color var(--transicion), background var(--transicion);
 }
 .hoy-estado__cifra--tocable:hover,
 .hoy-estado__cifra--tocable:focus-visible {
@@ -1248,7 +1252,7 @@
   background: var(--fondo-elevado);
   border: 1px solid var(--borde);
   border-radius: var(--redondeo);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+  box-shadow: var(--elevacion-1);
 }
 .barra-seleccion__cuantos {
   font-weight: 600;
@@ -1344,7 +1348,7 @@
   /* La transición se apaga desde JavaScript mientras el dedo arrastra,
      para que siga al dedo sin retraso, y se vuelve a encender al soltar
      para que el rebote sea suave. */
-  transition: transform 200ms ease;
+  transition: transform var(--entrada);
 }
 
 .correo__cuerpo { flex: 1; min-width: 0; }

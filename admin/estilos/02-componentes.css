@@ -150,7 +150,7 @@
   justify-content: center;
   box-shadow: var(--sombra);
   z-index: 40;
-  transition: transform 220ms ease, opacity 220ms ease;
+  transition: transform var(--entrada), opacity var(--entrada);
 }
 .boton-flotante:active { transform: scale(.92); }
 
@@ -414,7 +414,7 @@ select.campo__control {
   height: 100%;
   background: var(--oro);
   border-radius: 999px;
-  transition: width 300ms ease;
+  transition: width var(--entrada);
 }
 
 /* Pasado el techo, la barra se pone roja. Es el aviso de sobregiro. */
@@ -669,6 +669,11 @@ select.campo__control {
 
 .lista__lado {
   text-align: right;
+  /* Cifras de ancho fijo: es la columna donde viven los montos y las
+     cuentas, y con cifras proporcionales los números bailan de renglón
+     a renglón y al actualizarse. Es el detalle que separa una app de
+     una herramienta contable. */
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
   /* El lado nunca se encoge, pero tampoco puede comerse la pantalla: un
      código de pase largo se corta en vez de invadir el nombre. */
@@ -1121,7 +1126,7 @@ select.campo__control {
   font-size: 13px;
   font-family: inherit;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition: background var(--rapido), color var(--rapido), border-color var(--rapido);
 }
 
 /* El único acento: la etiqueta puesta. Si todas se vieran marcadas,

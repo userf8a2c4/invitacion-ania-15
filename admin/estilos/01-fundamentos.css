@@ -125,10 +125,36 @@
   --seguro-arriba: env(safe-area-inset-top, 0px);
   --seguro-abajo:  env(safe-area-inset-bottom, 0px);
 
-  --sombra:       0 4px 16px rgba(0, 0, 0, .45);
-  --sombra-alta:  0 -6px 28px rgba(0, 0, 0, .6);
+  /* ─── PROFUNDIDAD: TRES NIVELES Y NO MÁS ─────────────────────────
+     Cada uno significa una cosa, y esa es toda la escala:
+       0 · el fondo de la app          (--fondo)
+       1 · una tarjeta sobre el fondo  (--fondo-tarjeta, --elevacion-1)
+       2 · una hoja sobre todo         (--fondo-elevado, --elevacion-2)
+     Un cuarto nivel no agrega información: agrega ruido. Cuando algo
+     necesita destacarse dentro de su nivel, se destaca con el acento,
+     no con una sombra nueva inventada para ese caso. */
+  --elevacion-1:  0 4px 16px rgba(0, 0, 0, .45);
+  --elevacion-2:  0 -6px 28px rgba(0, 0, 0, .6);
 
-  --transicion: 160ms ease;
+  /* Los nombres viejos siguen andando: son los mismos valores, y hay
+     medio panel escrito con ellos. */
+  --sombra:       var(--elevacion-1);
+  --sombra-alta:  var(--elevacion-2);
+
+  /* ─── MOVIMIENTO: UNA CURVA Y DOS DURACIONES ─────────────────────
+     El movimiento sirve para dos cosas —decir que algo es lo mismo que
+     se movió (continuidad) o que algo apareció (jerarquía)— y para
+     nada más. Con una sola curva y dos duraciones, toda la app se
+     mueve como una sola cosa; con ocho valores distintos repartidos,
+     cada pantalla parece de otra app.
+       --curva          la misma para todo: sale rápido, frena suave.
+       --rapido   120ms un cambio de estado (un botón que responde).
+       --transicion 160ms el valor de siempre, para todo lo demás.
+       --entrada  220ms algo que aparece y hay que seguir con la vista. */
+  --curva:      cubic-bezier(.2, .8, .3, 1);
+  --rapido:     120ms var(--curva);
+  --transicion: 160ms var(--curva);
+  --entrada:    220ms var(--curva);
 }
 
 
