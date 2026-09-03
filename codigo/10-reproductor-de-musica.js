@@ -187,20 +187,44 @@
       });
   }
 
-  /* Cuándo fue la última vez que la persona pausó a propósito (con el
-     botón). La red de seguridad de más abajo la respeta por un rato: ver
-     la nota ahí. */
-  let momentoDeLaUltimaPausaManual = -Infinity;
+  /* ─── LA INTENCIÓN MANDA ────────────────────────────────────────────
+   *
+   * `quiereMusica` es lo que la PERSONA quiere, no lo que el elemento
+   * <audio> está haciendo en este instante. Son dos cosas distintas y
+   * confundirlas es lo que producía el "disco rallado":
+   *
+   *   · El navegador pausa solo cuando se bloquea la pantalla. El audio
+   *     queda `paused` sin que nadie lo haya pedido.
+   *   · La red de seguridad del clic miraba `paused` para decidir si
+   *     reproducir. Entonces alguien pausaba a propósito, tocaba
+   *     cualquier lado de la página, y la música volvía sola: desde
+   *     afuera, el botón de pausa "no funcionaba".
+   *   · Al bloquear el teléfono el orden de los eventos no está
+   *     garantizado: el navegador puede pausar ANTES de avisar que la
+   *     página se ocultó. Leyendo `paused` en ese momento se anotaba
+   *     "no estaba sonando" y al desbloquear no se retomaba nada. De ahí
+   *     el "a veces vuelve, a veces no".
+   *
+   * Con una sola variable de intención, las tres cosas se resuelven a la
+   * vez: se pausa y se retoma alrededor del bloqueo SOLO si la persona
+   * quería música, y si la pausó ella, nada la revive salvo que la pida
+   * de nuevo.
+   */
+  let quiereMusica = false;
 
   /**
-   * Alterna entre reproducir y pausar.
+   * Alterna entre reproducir y pausar. ES EL ÚNICO LUGAR donde cambia
+   * la intención de la persona: todo lo demás —el bloqueo de pantalla,
+   * volver a la pestaña, la red del clic— la lee, nunca la escribe.
+   *
    * @returns {void}
    */
   function alternarPlayPausa() {
     if (audioDeFondo.paused) {
+      quiereMusica = true;
       reproducirLaCancion();
     } else {
-      momentoDeLaUltimaPausaManual = performance.now();
+      quiereMusica = false;
       audioDeFondo.pause();
     }
   }
@@ -242,65 +266,84 @@
      gama baja la música no sonaba hasta que la persona hacía otro clic
      al azar más de un minuto después (por la red de seguridad de abajo,
      no por este evento). Esta función se entera igual, tarde o no. */
-  escucharEventoQueQuizasYaPaso('sobre-abierto', () => reproducirLaCancion(true));
+  escucharEventoQueQuizasYaPaso('sobre-abierto', () => {
+    // Abrir el sobre ES pedir la música: a partir de acá hay intención,
+    // y todo lo demás la respeta.
+    quiereMusica = true;
+    reproducirLaCancion(true);
+  });
 
-  /* Red de seguridad: si por lo que sea la música no arrancó (o quedó
-     pausada por el navegador y no se pudo retomar sola, ver más abajo),
-     cualquier clic la intenta de nuevo.
+  /* Red de seguridad: si la persona QUIERE música y por lo que sea no
+     está sonando —el navegador bloqueó el autoplay, el intento de
+     retomar tras desbloquear no prendió—, cualquier toque la reintenta.
 
-     ⚡ YA NO ES { once: true }. Antes se borraba sola después del primer
-     clic de toda la sesión —normalmente el de abrir el sobre— y a partir
-     de ahí no quedaba ninguna red para el resto de la visita. Si el
-     intento automático de retomar tras desbloquear el teléfono (ver el
-     bloque de visibilitychange, abajo) fallara por la política de
-     autoplay del navegador, no había forma de reintentarlo sin encontrar
-     el botón de play exacto. Ahora CUALQUIER toque, en cualquier momento,
-     sirve de red — sin bucles ni temporizadores, solo reacciona a un
-     click real de la persona. */
+     ⚡ AHORA MIRA LA INTENCIÓN, NO `paused` (2026-09-03). Antes bastaba
+     con que el audio estuviera pausado para revivirlo en el próximo
+     clic en cualquier parte de la página. O sea: pausabas a propósito,
+     tocabas cualquier cosa, y la música volvía. Desde afuera se veía
+     exactamente como que el botón de pausa no funcionaba — el "disco
+     rallado". Se intentó tapar con una ventana de 600 ms de gracia
+     después de la pausa manual, pero eso solo achicaba la ventana del
+     problema: pasado medio segundo, volvía a pasar.
+
+     Con la intención de por medio no hace falta ninguna ventana: si la
+     pausó ella, no revive con nada que no sea el botón. */
   document.addEventListener('click', evento => {
-    // Sin este guard, el click en el propio botón de pausa burbujea hasta
-    // acá, ve audioDeFondo.paused === true (recién puesto por pause()) y
-    // vuelve a reproducir en el mismo click — la música nunca se pausaba.
+    if (!quiereMusica) return;
+
+    // El clic en el propio botón ya lo maneja alternarPlayPausa: sin
+    // este guard, burbujearía hasta acá y volvería a reproducir en el
+    // mismo clic con el que se acaba de pausar.
     if (panel.contains(evento.target)) return;
     if (botonMusica && botonMusica.contains(evento.target)) return;
-
-    /* ⚡ Y SI ACABA DE PAUSAR A PROPÓSITO, TAMPOCO (2026-09-03). El guard de
-       arriba cubre el clic en el botón mismo, pero no cubre el caso del
-       equipo lento: con el hilo trabado por la construcción de la escena,
-       el clic de pausa y el toque siguiente de la persona —impaciente,
-       tocando de nuevo porque "no pasó nada"— llegan casi pegados, y ese
-       segundo toque, en cualquier otro lado de la página, revivía la música
-       recién pausada. Desde afuera se ve como si la pausa no funcionara
-       nunca. Medio segundo de respeto alcanza: si de verdad la quiere de
-       vuelta, vuelve a tocar. */
-    if (performance.now() - momentoDeLaUltimaPausaManual < 600) return;
 
     if (audioDeFondo.paused) reproducirLaCancion();
   });
 
 
-  /* ─── LA PANTALLA SE BLOQUEA Y SE DESBLOQUEA ───────────────────────
-     Cuando el teléfono apaga la pantalla por inactividad, el navegador
-     pausa el <audio> solo (no lo hacemos nosotros). Sin este bloque, al
-     desbloquear la música se queda pausada para siempre —el evento
-     'pause' ya pintó el botón en ▶, así que ni siquiera se ve como un
-     error, solo se quedó ahí—.
+  /* ─── LA PANTALLA SE BLOQUEA, O LA PÁGINA SE VA A SEGUNDO PLANO ────
+   *
+   * QUÉ PASABA
+   * El navegador pausa el <audio> por su cuenta al apagarse la
+   * pantalla, y suspende el AudioContext. Al volver, esto intentaba
+   * retomar solo si `sonabaAntesDeOcultarse` era verdadero — un valor
+   * que se leía de `audioDeFondo.paused` EN el visibilitychange. Pero
+   * el orden de esos dos hechos no está garantizado: en varios
+   * teléfonos el navegador pausa ANTES de avisar que la página se
+   * ocultó, y entonces se anotaba "no estaba sonando" y al desbloquear
+   * no volvía nada. De ahí que a veces volviera y a veces no, sin
+   * ningún patrón visible.
+   *
+   * QUÉ HACE AHORA
+   * No se adivina nada: se mira `quiereMusica`, que solo cambia cuando
+   * la persona toca el botón. Al irse, se pausa (nosotros, explícito,
+   * sin depender de que el navegador lo haga); al volver, se retoma. Y
+   * como el <audio> conserva su posición, sigue donde se quedó — nunca
+   * arranca de nuevo.
+   *
+   * `pagehide`/`pageshow` van además de `visibilitychange` porque iOS
+   * usa la caché de ida y vuelta: al volver con el gesto de "atrás", la
+   * página se restaura entera sin disparar visibilitychange, y sin esto
+   * quedaba muda.
+   */
+  function alIrseLaPagina() {
+    if (quiereMusica && !audioDeFondo.paused) audioDeFondo.pause();
+  }
 
-     Se retoma sola, UNA sola vez por cada regreso, y solo si sonaba
-     antes de que la pantalla se apagara (si la persona la había pausado
-     a propósito, tiene que seguir pausada). Como el <audio> no pierde su
-     posición al pausarse, retoma justo donde se quedó — no arranca de
-     nuevo ni hace ningún bucle. */
-  let sonabaAntesDeOcultarse = false;
+  function alVolverLaPagina() {
+    // reproducirLaCancion() ya despierta el AudioContext suspendido: sin
+    // eso el <audio> se pone "sonando" pero no sale sonido, porque va
+    // enrutado por el grafo (ver la nota en esa función).
+    if (quiereMusica && audioDeFondo.paused) reproducirLaCancion();
+  }
+
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      sonabaAntesDeOcultarse = !audioDeFondo.paused;
-      return;
-    }
-    if (sonabaAntesDeOcultarse && audioDeFondo.paused) {
-      reproducirLaCancion();
-    }
+    if (document.hidden) alIrseLaPagina();
+    else alVolverLaPagina();
   });
+
+  window.addEventListener('pagehide', alIrseLaPagina);
+  window.addEventListener('pageshow', alVolverLaPagina);
 
 
   /* ─── 3. VOLUMEN Y SILENCIO ────────────────────────────────────── */

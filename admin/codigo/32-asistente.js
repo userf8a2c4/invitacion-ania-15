@@ -722,6 +722,18 @@ function engancharHiloDeMegaBot(hilo) {
         return;
       }
 
+      /* ⚡ AUTOASIGNAR PASA POR LA VISTA PREVIA REAL (2026-09-03).
+         Es la única acción de la whitelist que MUEVE gente ya sentada, y
+         lo único que se veía antes de aceptarla era el texto que había
+         redactado el modelo — que el panel no verifica contra nada. Una
+         propuesta que dijera "acomodo a los que faltan" podía en
+         realidad mudar a treinta personas que ya estaban ubicadas a
+         mano. mesas.php?accion=vista_previa dice qué va a pasar de
+         verdad, y es la misma que el agente de mesas ya usa. */
+      if (filaPropuesta.accion.indexOf('autoasignar') !== -1) {
+        if (!await confirmarAcomodoConVistaPrevia()) return;
+      }
+
       botonConfirmar.disabled = true;
       try {
         const cuerpo = JSON.parse(filaPropuesta.cuerpo_json || '{}');
@@ -740,6 +752,62 @@ function engancharHiloDeMegaBot(hilo) {
       return;
     }
   });
+}
+
+/**
+ * Pregunta por el acomodo automático diciendo qué va a pasar de verdad.
+ *
+ * POR QUÉ NO ALCANZA CON EL TEXTO DE LA PROPUESTA
+ * El título y el detalle de una propuesta de MegaBot los redacta el
+ * modelo, y el panel no los verifica contra nada. `autoasignar` es la
+ * única acción de la whitelist que mueve gente YA SENTADA: aceptar eso
+ * confiando en una frase generada es exactamente lo que este plan
+ * intenta sacar de la app. La vista previa la calcula el servidor con
+ * el mismo repartidor que va a correr después, así que dice lo que va
+ * a pasar, no lo que alguien cree que va a pasar.
+ *
+ * Si la vista previa falla, se pregunta igual pero diciendo que no se
+ * pudo calcular: es peor bloquear una acción legítima que preguntar sin
+ * el detalle.
+ *
+ * @returns {Promise<boolean>}
+ */
+async function confirmarAcomodoConVistaPrevia() {
+  let vista = null;
+  try {
+    vista = await mandar('mesas.php?accion=vista_previa', {});
+  } catch (error) {
+    vista = null;
+  }
+
+  if (!vista || vista.ok === false) {
+    return confirmarAccion(
+      '¿Acomodar automáticamente?\n\n' +
+      'No pude calcular de antemano a quién mueve. Lo que ya fijaste con ' +
+      'candado no se toca, y podrás volver atrás desde Reglas → Volver al ' +
+      'acomodo anterior.',
+      { confirmar: 'Acomodar', peligro: true });
+  }
+
+  const movimientos = vista.movimientos || [];
+  const sentados = movimientos.filter(m => m.que_pasa === 'se_sienta').length;
+  const mudados  = movimientos.filter(m => m.que_pasa === 'se_muda').length;
+  const sinLugar = (vista.sin_lugar || []).length;
+
+  const detalle =
+    'Se sientan ' + pluralizar(sentados, 'persona', 'personas') + '.' +
+    (mudados
+      ? '\nSe MUDAN ' + pluralizar(mudados, 'persona', 'personas') +
+        ' que ya estaban sentadas.'
+      : '') +
+    (sinLugar
+      ? '\nQuedan sin lugar ' + pluralizar(sinLugar, 'persona', 'personas') + '.'
+      : '') +
+    '\n\nLo que fijaste con candado no se toca, y puedes volver atrás ' +
+    'desde Reglas → Volver al acomodo anterior.';
+
+  return confirmarAccion('¿Acomodar automáticamente?\n\n' + detalle,
+    { confirmar: 'Acomodar', peligro: mudados > 0 });
 }
 
 /**

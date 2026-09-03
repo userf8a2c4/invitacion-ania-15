@@ -1140,3 +1140,55 @@ select.campo__control {
    leer el número. Ver pintarUsoDeMegaBot() en 32-asistente.js. */
 .hoja__uso--ojo    { color: var(--ojo); }
 .hoja__uso--alerta { color: var(--alerta); font-weight: 600; }
+
+
+/* ─── 16. MEGABOT: "ESTÁ ESCRIBIENDO" Y EL CAMPO QUE CRECE ──────────── */
+/*
+ * MegaBot tarda decenas de segundos en contestar, y en ese rato la
+ * pantalla se quedaba exactamente igual que si el mensaje no se hubiera
+ * mandado. Sin nada que mirar, la reacción natural es volver a escribir
+ * o dar por hecho que se colgó. Ver mostrarEscribiendoDeMegaBot().
+ */
+.megabot-puntitos {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+}
+.megabot-puntitos span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--texto-tenue);
+  animation: megabot-latido 1.4s ease-in-out infinite;
+}
+/* Desfasados: tres puntos latiendo al unísono se leen como un error de
+   carga, escalonados se leen como alguien tecleando. */
+.megabot-puntitos span:nth-child(2) { animation-delay: .2s; }
+.megabot-puntitos span:nth-child(3) { animation-delay: .4s; }
+
+@keyframes megabot-latido {
+  0%, 60%, 100% { opacity: .25; transform: translateY(0); }
+  30%           { opacity: 1;   transform: translateY(-3px); }
+}
+
+/* Quien pidió menos movimiento en su teléfono no debería recibir tres
+   puntos saltando. Se quedan quietos y a media opacidad: se sigue
+   entendiendo que algo está en curso. */
+@media (prefers-reduced-motion: reduce) {
+  .megabot-puntitos span { animation: none; opacity: .5; }
+}
+
+/* El campo de escribir es un <textarea> que crece hasta cuatro
+   renglones (el alto lo pone el JS, que es quien puede medir el
+   contenido). Sin resize a mano: en un teléfono no sirve y deja una
+   esquina rara. */
+.megabot-entrada {
+  resize: none;
+  overflow-y: auto;
+  min-height: 44px;
+  max-height: 96px;
+  line-height: 1.4;
+  padding-top: 11px;
+  padding-bottom: 11px;
+}
