@@ -107,6 +107,17 @@
    */
   function cuadrosNecesariosParaMejorar() {
     const fallos = intentosFallidos[calidad - 1] || 0;
+
+    /* ⚡ A LA TERCERA NO SE INTENTA MÁS (2026-09-03). La penalidad creciente
+       alcanza para un equipo que tuvo un mal momento, pero no para uno que
+       sencillamente no da abasto: ese sube, no aguanta, baja, y vuelve a
+       intentarlo cada vez más lejos, pero SIEMPRE de nuevo — y cada intento
+       es un parpadeo visible de efectos que se prenden y se apagan. Si este
+       equipo ya probó este nivel dos veces y las dos veces tuvo que bajar,
+       la respuesta ya está: no lo aguanta. Se queda donde está por el resto
+       de la visita, quieto y fluido. Infinity = nunca junta esa racha. */
+    if (fallos >= 2) return Infinity;
+
     return Math.min(CUADROS_PARA_MEJORAR * Math.pow(2, fallos), 1800);
   }
 
@@ -234,8 +245,29 @@
       calidad++;
       /* Si este equipo YA tuvo que bajar de este nivel antes, la próxima vez
          se le va a exigir mucha más paciencia antes de volver a subir: evita
-         el ping-pong de prender y apagar efectos una y otra vez. */
-      intentosFallidos[calidad] = (intentosFallidos[calidad] || 0) + 1;
+         el ping-pong de prender y apagar efectos una y otra vez.
+
+         ⚠️ EL ÍNDICE ESTABA CORRIDO EN UNO, Y POR ESO EL ANTI-PING-PONG
+         NUNCA FUNCIONÓ (2026-09-03). Esta línea anotaba el fallo DESPUÉS del
+         `calidad++`, o sea contra el nivel al que se estaba BAJANDO, mientras
+         que cuadrosNecesariosParaMejorar() lee `intentosFallidos[calidad - 1]`
+         — el nivel al que se quiere SUBIR. Los dos índices nunca coincidían:
+         al bajar de MEDIA(1) a BAJA(2) se anotaba en [2], y al querer volver
+         a MEDIA se consultaba [1], que seguía en cero. Resultado: la penalidad
+         creciente (2,5 s → 5 s → 10 s) no se aplicaba NUNCA y siempre bastaban
+         los 150 cuadros base para reintentar.
+
+         Eso es exactamente el ping-pong que este bloque decía evitar, y se veía
+         en un teléfono real: en la portada, de noche, el haz de luz y los
+         pétalos grandes aparecían y desaparecían cada ~2 segundos. Cada subida
+         a MEDIA reencendía esos efectos, el equipo no los aguantaba, y volvía a
+         bajar — un diente de sierra permanente, además del costo en fps de
+         estar prendiendo y apagando sistemas todo el tiempo.
+
+         Ahora se anota contra el nivel que NO se aguantó (`calidad - 1`, que
+         es el nivel del que se viene), que es justo el que consulta la otra
+         función. */
+      intentosFallidos[calidad - 1] = (intentosFallidos[calidad - 1] || 0) + 1;
       cuadrosDegrada = cuadrosMejora = 0;
       aplicarNivel();
     } else if (cuadrosMejora >= cuadrosNecesariosParaMejorar()) {
