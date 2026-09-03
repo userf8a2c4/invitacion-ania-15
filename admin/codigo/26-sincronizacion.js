@@ -758,39 +758,171 @@ async function precalentarCopias() {
 }
 
 
-/* ─── 7. REFRESCO PERIÓDICO (Fase 1 del rediseño, F1) ──────────────── */
+/* ─── 7. REFRESCO EN SEGUNDO PLANO ─────────────────────────────────── */
 
 /* Con señal, lo que se está mirando puede quedar viejo sin que nadie
    toque nada: otra persona confirma, marca un pago, escanea un pase.
-   Los listeners de abajo (online / visibilitychange) ya cubren "volver
-   a la app", pero no "quedarse quieto mirando Hoy durante diez
-   minutos". Esto cubre ese hueco sin pisar nada de lo que ya hace la
-   cola: se salta solo si no hay señal, si la pestaña está oculta, o si
-   ya hay una sincronización en curso. */
 
-/** Entre 60 y 120s pide el mega-prompt; 90 es el punto medio. */
-const INTERVALO_REFRESCO_MS = 90000;
+   ⚡ ANTES ESTO SE NOTABA (2026-09-03). El refresco periódico llamaba a
+   `irA(VISTA_ACTUAL, true)`, que vuelve a dibujar la vista entera: cada
+   noventa segundos aparecía el esqueleto de carga, la lista parpadeaba
+   y el scroll saltaba al principio. Estabas leyendo la mesa 7 y la
+   pantalla te devolvía arriba de todo, sin que hubieras tocado nada.
+
+   Ahora se traen los datos primero y se repinta SOLO si de verdad
+   cambiaron, sin esqueleto y devolviendo el scroll a donde estaba. Si
+   nada cambió —el caso normal— no se toca un solo píxel. */
+
+/** Cada minuto. Bajó de 90s porque ahora el refresco no se ve. */
+const INTERVALO_REFRESCO_MS = 60000;
 
 let _temporizadorRefresco = null;
 
+/** Si ya hay un refresco silencioso en curso, para no encimar dos. */
+let _refrescando = false;
+
 /**
- * Arranca el refresco periódico de la vista actual. Se llama una sola
- * vez, desde arrancarLaApp() (20-arranque.js).
+ * Verdadero mientras se repinta por un refresco de fondo.
+ *
+ * Lo lee pintarCargando() (06-piezas.js) para NO borrar la pantalla y
+ * poner el esqueleto: en un refresco silencioso ya hay contenido bueno
+ * a la vista, y hacerlo parpadear es justo lo que se quiere evitar.
+ *
+ * Es una bandera global y no un parámetro porque tendría que viajar por
+ * dibujarX() → pintarSeccionY() → pintarCargando(), tres niveles y
+ * ocho vistas, para decir una sola cosa.
+ */
+let REPINTADO_SILENCIOSO = false;
+
+/**
+ * Qué ruta trae los datos de cada vista.
+ *
+ * Solo están las vistas cuyo contenido cambia porque otra persona hizo
+ * algo. "Más" y "Planificar" son índices de botones: no tienen datos
+ * que envejecer.
+ */
+const RUTA_DE_LA_VISTA = {
+  hoy:       'hoy.php',
+  resumen:   'estadisticas.php',
+  invitados: 'confirmaciones.php?accion=listar',
+  dinero:    'presupuesto.php?accion=todo',
+  evento:    'evento.php?accion=todo',
+  correo:    null,   // IMAP es lento y caro: se refresca a mano.
+};
+
+/** La huella de lo último que se pintó en cada vista. */
+const _huellaDeLaVista = {};
+
+/**
+ * Una huella barata de un objeto de datos, para saber si cambió.
+ *
+ * No es un hash criptográfico ni hace falta: solo tiene que cambiar
+ * cuando los datos cambian. JSON.stringify sobre la respuesta entera
+ * alcanza y cuesta menos que repintar de más.
+ *
+ * @param {*} datos
+ * @returns {string}
+ */
+function huellaDeDatos(datos) {
+  try {
+    return JSON.stringify(datos);
+  } catch (error) {
+    // Con una estructura circular (no debería haberla) se prefiere
+    // repintar de más antes que romper el refresco.
+    return String(Date.now());
+  }
+}
+
+/**
+ * Trae los datos de la vista actual y la repinta solo si cambiaron.
+ *
+ * NUNCA MUESTRA NADA MIENTRAS TRABAJA. Si falla, se calla: es un
+ * refresco de fondo, no una acción que alguien pidió.
+ *
+ * @returns {Promise<void>}
+ */
+async function refrescarEnSegundoPlano() {
+  if (_refrescando || SIN_LLEGADA || document.hidden) return;
+  if (_sincronizando) return;          // no competir con la cola
+
+  const ruta = RUTA_DE_LA_VISTA[VISTA_ACTUAL];
+  if (!ruta) return;
+
+  /* Con una hoja abierta no se toca nada: se está llenando un
+     formulario o mirando una ficha, y repintar la lista de atrás puede
+     mover el suelo bajo los pies (y, con el detalle abierto, dejarlo
+     mostrando datos de una fila que ya no está donde estaba). */
+  const hoja = buscar('#hoja');
+  if (hoja && !hoja.classList.contains('oculto')) return;
+
+  _refrescando = true;
+  try {
+    const datos = await traer(ruta);
+    const huella = huellaDeDatos(datos);
+
+    // Nada cambió: no se toca un píxel. Es el caso normal.
+    if (_huellaDeLaVista[VISTA_ACTUAL] === huella) return;
+
+    const primeraVez = !_huellaDeLaVista[VISTA_ACTUAL];
+    _huellaDeLaVista[VISTA_ACTUAL] = huella;
+
+    /* La primera vez solo se anota la huella: la vista ya está pintada
+       con estos mismos datos, repintarla sería trabajo para nada. */
+    if (primeraVez) return;
+
+    await repintarConservandoElLugar(VISTA_ACTUAL);
+  } catch (error) {
+    /* Sin señal, permiso, o la sección todavía sin datos: no se avisa.
+       El refresco de fondo que grita cada minuto es peor que no
+       tenerlo. */
+  } finally {
+    _refrescando = false;
+  }
+}
+
+/**
+ * Vuelve a dibujar una vista dejando el scroll donde estaba.
+ *
+ * POR QUÉ IMPORTA EL SCROLL
+ * Es la diferencia entre "se actualizó sola" y "la pantalla se movió".
+ * Con la lista de ciento diez invitados a media altura, volver arriba
+ * obliga a buscar de nuevo dónde se estaba leyendo.
+ *
+ * @param {string} cual
+ * @returns {Promise<void>}
+ */
+async function repintarConservandoElLugar(cual) {
+  const contenido = buscar('#contenido');
+  const donde = contenido ? contenido.scrollTop : 0;
+
+  const vista = VISTAS[cual];
+  if (!vista) return;
+
+  REPINTADO_SILENCIOSO = true;
+  try {
+    const resultado = vista.dibujar();
+    if (resultado && typeof resultado.then === 'function') await resultado;
+  } finally {
+    // En `finally` a propósito: si el dibujado falla, la bandera no
+    // puede quedar encendida — dejaría a la app entera sin esqueletos
+    // de carga hasta la próxima recarga.
+    REPINTADO_SILENCIOSO = false;
+  }
+
+  // Después del repintado, no antes: el contenido nuevo tiene que
+  // existir para que el scroll pueda llegar hasta ahí.
+  if (contenido) contenido.scrollTop = donde;
+}
+
+/**
+ * Arranca el refresco de fondo. Se llama una sola vez, desde
+ * arrancarLaApp() (20-arranque.js).
  *
  * @returns {void}
  */
 function arrancarRefrescoPeriodico() {
   if (_temporizadorRefresco) return;
-
-  _temporizadorRefresco = setInterval(() => {
-    if (SIN_LLEGADA) return;
-    if (document.hidden) return;
-    if (_sincronizando) return; // no competir con la cola al reconectar
-    if (!VISTAS[VISTA_ACTUAL]) return;
-
-    ensuciarVistas(VISTA_ACTUAL);
-    irA(VISTA_ACTUAL, true);
-  }, INTERVALO_REFRESCO_MS);
+  _temporizadorRefresco = setInterval(refrescarEnSegundoPlano, INTERVALO_REFRESCO_MS);
 }
 
 
@@ -800,10 +932,14 @@ window.addEventListener('offline', () => actualizarBannerConexion());
 /* Volver a la app después de un rato también dispara el reintento.
    En Android el evento 'online' no siempre salta al recuperar señal
    móvil, así que sin esto la cola podía quedarse esperando para
-   siempre en el teléfono de alguien que nunca cierra la app. */
+   siempre en el teléfono de alguien que nunca cierra la app.
+
+   Y se refresca la vista de fondo: volver a la app después de veinte
+   minutos es justo cuando lo que hay en pantalla está más viejo. */
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     actualizarBannerConexion();
     sincronizarCola();
+    refrescarEnSegundoPlano();
   }
 });

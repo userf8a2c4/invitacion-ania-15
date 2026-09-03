@@ -1086,3 +1086,57 @@ select.campo__control {
 @keyframes confirmar-entrar {
   from { opacity: 0; transform: scale(.96); }
 }
+
+
+/* ─── 15. ELEGIR ETIQUETAS DE UN TOQUE ──────────────────────────────── */
+/*
+ * POR QUÉ
+ * Poner etiquetas era escribir cada nombre en un campo y tocar
+ * "Agregar", con un viaje al servidor entre una y otra. Ponerle cuatro
+ * a alguien eran cuatro tipeos, cuatro esperas — y cualquier diferencia
+ * de mayúsculas creaba una etiqueta nueva ("Familia materna" y "familia
+ * materna" convivían como dos cosas distintas).
+ *
+ * Ahora están todas a la vista y se alternan con un toque. Ver
+ * pintarEtiquetasDe() en 06-piezas.js.
+ */
+.etiquetas-elegir {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.etiqueta-chip {
+  /* 32px de alto es menos que los 44 del mínimo táctil, y es a
+     propósito: son quince objetivos juntos en una hoja que ya scrollea,
+     y a 44 ocuparían media pantalla. El área efectiva la da el padding
+     lateral generoso, y equivocarse acá no destruye nada — se toca de
+     nuevo y se apaga. */
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--borde);
+  background: transparent;
+  color: var(--texto-tenue);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+/* El único acento: la etiqueta puesta. Si todas se vieran marcadas,
+   ninguna lo estaría. */
+.etiqueta-chip--activa {
+  background: var(--oro);
+  border-color: var(--oro);
+  color: var(--fondo);
+  font-weight: 600;
+}
+
+.etiqueta-chip:disabled { opacity: .5; }
+
+/* El contador de cuota de MegaBot cambia de color según cuánto margen
+   queda: es lo que se mira de reojo mientras se escribe, sin llegar a
+   leer el número. Ver pintarUsoDeMegaBot() en 32-asistente.js. */
+.hoja__uso--ojo    { color: var(--ojo); }
+.hoja__uso--alerta { color: var(--alerta); font-weight: 600; }

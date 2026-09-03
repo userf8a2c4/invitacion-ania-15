@@ -46,21 +46,11 @@ case 'todo':
 
     $activo = $tienePresupuestos ? presupuestoActivo() : null;
 
-    /* Categorías con lo gastado de cada una. El LEFT JOIN es a propósito:
-       una categoría sin gastos todavía tiene que aparecer igual, con su
-       techo, para poder cargarle el primero. */
-    $categorias = consultarTodo(
-        'SELECT c.id, c.nombre, c.techo, c.orden,
-                COALESCE(SUM(g.monto_real), 0)     AS gastado,
-                COALESCE(SUM(g.presupuestado), 0)  AS planeado,
-                COUNT(g.id)                        AS cuantos_gastos
-         FROM categorias_gasto c
-         LEFT JOIN gastos g ON g.categoria_id = c.id' .
-        ($tienePresupuestos ? ' WHERE c.presupuesto_id = :activo' : '') .
-        ' GROUP BY c.id, c.nombre, c.techo, c.orden
-         ORDER BY c.orden, c.nombre',
-        $tienePresupuestos ? [':activo' => $activo] : []
-    );
+    /* Categorías con lo gastado de cada una, con el MISMO criterio de
+       costo que el total de arriba y con el renglón "Sin categoría"
+       para que todo gasto aparezca en alguna fila. Ver
+       categoriasConGasto() en _lib/dinero.php. */
+    $categorias = categoriasConGasto($activo, $tienePresupuestos);
 
     /* Gastos con el nombre de su categoría, proveedor y padrino ya
        resueltos, para que la app no tenga que cruzarlos a mano. Filtrados
@@ -102,10 +92,14 @@ case 'todo':
        cubrir varios gastos, así que `monto` (lo prometido) y `cubre` (lo
        efectivamente asignado) pueden no coincidir — y ver esa diferencia
        es justamente lo útil. */
+    /* `cubre` usa la misma regla de costo que todo lo demás
+       (COALESCE(NULLIF(monto_real,0), presupuestado)): con SUM(monto_real)
+       a secas, un padrino que cubre un gasto de $12,000 todavía sin
+       costo real cargado aparecía cubriendo $0. */
     $padrinos = consultarTodo(
         'SELECT pa.*,
-                COALESCE(SUM(g.monto_real), 0) AS cubre,
-                COUNT(g.id)                    AS cuantos_gastos
+                COALESCE(SUM(' . sqlCostoDeUnGasto('g.') . '), 0) AS cubre,
+                COUNT(g.id)                                       AS cuantos_gastos
          FROM padrinos pa
          LEFT JOIN gastos g ON g.padrino_id = pa.id
          GROUP BY pa.id
@@ -167,123 +161,33 @@ case 'todo':
     $cotizaciones = $decodificarDetalle($cotizaciones);
 
     /* ─── Los totales ─────────────────────────────────────────────────
-       Se calculan en SQL y no sumando en PHP porque MySQL lo hace sobre
-       la tabla entera de una sola pasada. Filtrados por presupuesto
-       activo, igual que la lista de gastos de arriba. */
-    /* ⚡ "CUESTA $0" CON GASTOS DE VERDAD CARGADOS (2026-08-27). Antes
-       estas tres cifras sumaban SOLO `monto_real` — un campo que ningún
-       flujo automático llena (guardar_pago, recibos.php y cotizador.php
-       crean el gasto con `monto_real=0` la mayoría de las veces). Un
-       proveedor de $10,000 con un pago de $5,000 ya cargado podía
-       mostrar "Cuesta $0" porque nadie había tocado ESE campo puntual.
-       COALESCE(NULLIF(monto_real,0), presupuestado) usa el costo real
-       en cuanto se conoce, y mientras tanto cae al estimado — que es
-       exactamente lo que ya se le pide a Lucila al crear el gasto o el
-       proveedor, no un dato nuevo. */
-    $totales = consultarUno(
-        'SELECT
-           COALESCE(SUM(presupuestado), 0) AS planeado,
-           COALESCE(SUM(COALESCE(NULLIF(monto_real, 0), presupuestado)), 0) AS costo,
-           COALESCE(SUM(CASE WHEN padrino_id IS NULL
-                             THEN COALESCE(NULLIF(monto_real, 0), presupuestado)
-                             ELSE 0 END), 0) AS propio,
-           COALESCE(SUM(CASE WHEN padrino_id IS NOT NULL
-                             THEN COALESCE(NULLIF(monto_real, 0), presupuestado)
-                             ELSE 0 END), 0) AS de_padrinos
-         FROM gastos' .
-        ($tienePresupuestos ? ' WHERE presupuesto_id = :activo' : ''),
-        $tienePresupuestos ? [':activo' => $activo] : []
-    );
-
-    $porPagar = consultarUno(
-        "SELECT COALESCE(SUM(p.monto), 0) AS monto, COUNT(*) AS cuantos
-         FROM pagos p LEFT JOIN gastos g ON g.id = p.gasto_id
-         WHERE p.estado = 'pendiente'" .
-        ($tienePresupuestos ? ' AND (p.gasto_id IS NULL OR g.presupuesto_id = :activo)' : ''),
-        $tienePresupuestos ? [':activo' => $activo] : []
-    );
-
-    $pagado = consultarUno(
-        "SELECT COALESCE(SUM(p.monto), 0) AS monto
-         FROM pagos p LEFT JOIN gastos g ON g.id = p.gasto_id
-         WHERE p.estado = 'pagado'" .
-        ($tienePresupuestos ? ' AND (p.gasto_id IS NULL OR g.presupuesto_id = :activo)' : ''),
-        $tienePresupuestos ? [':activo' => $activo] : []
-    );
-
-    // Los padrinos son globales (no cuelgan de un presupuesto): apadrinan
-    // a la boda entera, no a un plan en particular.
-    $padrinosPendientes = consultarUno(
-        "SELECT COALESCE(SUM(monto), 0) AS monto, COUNT(*) AS cuantos
-         FROM padrinos WHERE estado <> 'entregado' AND tipo_aporte = 'dinero'"
-    );
-
-    /* `de_padrinos` (arriba, en $totales) suma TODO gasto con padrino
-       asignado, sin importar si ese padrino ya entregó o nomás lo
-       habló. Eso alcanza para el desglose de categorías, pero para
-       decir "cuánto sale de tu bolsillo DE VERDAD" hay que ser más
-       estrictos: un padrino que "lo habló" no es plata seguro (principio
-       del módulo). Acá se suma solo lo de padrinos con estado
-       'entregado' — lo único que ya está, de verdad, cubierto. */
-    $deEntregado = consultarUno(
-        "SELECT COALESCE(SUM(COALESCE(NULLIF(g.monto_real, 0), g.presupuestado)), 0) AS monto
-         FROM gastos g JOIN padrinos pa ON pa.id = g.padrino_id
-         WHERE pa.estado = 'entregado'" .
-        ($tienePresupuestos ? ' AND g.presupuesto_id = :activo' : ''),
-        $tienePresupuestos ? [':activo' => $activo] : []
-    );
-    $dePadrinosEntregado = (float) $deEntregado['monto'];
+       UNA sola definición de cada cifra, en _lib/dinero.php. Este
+       archivo pasó a ser la única fuente: la pantalla de inicio
+       (estadisticas.php) consume estas mismas cifras en vez de
+       recalcularlas con otro criterio, que es lo que hacía que "¿cuánto
+       llevamos?" tuviera dos respuestas distintas en dos pantallas
+       seguidas. Ver la nota grande de cifrasDelPresupuesto(). */
+    $cifras = cifrasDelPresupuesto($activo, $tienePresupuestos);
 
     $presupuestos = $tienePresupuestos
         ? consultarTodo('SELECT * FROM presupuestos ORDER BY creado_en')
         : [];
 
-    /* Cuánto sale la fiesta POR CADA INVITADO QUE DE VERDAD VA. No se
-       usa el total de confirmaciones (grupos), sino la gente real
-       (adultos + niños) — un costo/invitado que contara "familia
-       López" como una sola persona diría un número falso. Si todavía
-       no hay nadie confirmado, se deja explícitamente vacío (null) en
-       vez de dividir por cero o mostrar un $0 que parecería un error. */
-    $confirmados = existeTabla('confirmaciones')
-        ? consultarUno(
-            "SELECT COALESCE(SUM(adultos), 0) + COALESCE(SUM(ninos), 0) AS personas
-             FROM confirmaciones WHERE asiste = 1"
-          )
-        : ['personas' => 0];
-    $personasConfirmadas = (int) $confirmados['personas'];
-    $costoPorInvitado = $personasConfirmadas > 0
-        ? round(((float) $totales['costo']) / $personasConfirmadas, 2)
-        : null;
-
     responderBien([
         'presupuestos'       => $presupuestos,
         'presupuesto_activo' => $activo,
-        'totales' => [
-            'planeado'      => (float) $totales['planeado'],
-            'costo'         => (float) $totales['costo'],
-            'propio'        => (float) $totales['propio'],
-            'de_padrinos'   => (float) $totales['de_padrinos'],
-            // Ver comentario arriba: solo padrinos con estado 'entregado'.
-            'de_padrinos_entregado' => $dePadrinosEntregado,
-            'bolsillo_si_nadie_mas_entrega' =>
-                round(((float) $totales['costo']) - $dePadrinosEntregado, 2),
-            'por_pagar'     => (float) $porPagar['monto'],
-            'por_pagar_cuantos' => (int) $porPagar['cuantos'],
-            'pagado'        => (float) $pagado['monto'],
-            'padrinos_pendientes'         => (float) $padrinosPendientes['monto'],
-            'padrinos_pendientes_cuantos' => (int) $padrinosPendientes['cuantos'],
-            'confirmados'         => $personasConfirmadas,
-            'costo_por_invitado'  => $costoPorInvitado,
-        ],
+        'totales' => $cifras,
+
         /* Los montos van como NÚMEROS, no como el texto que devuelve
            PDO para las columnas DECIMAL. Ver conMontosNumericos() en
            _lib/dinero.php: con `"0.00"` de por medio, un gasto de
            $50.000 se mostraba como $0. */
-        'categorias'   => conMontosNumericos($categorias,
-                            ['techo', 'gastado', 'planeado']),
+        // (categoriasConGasto ya las devuelve casteadas.)
+        'categorias'   => $categorias,
         'gastos'       => conMontosNumericos($gastos, ['presupuestado', 'monto_real']),
         'pagos'        => conMontosNumericos($pagos, ['monto']),
-        'padrinos'     => conMontosNumericos($padrinos, ['monto', 'cubre']),
+        'padrinos'     => conMontosNumericos($padrinos,
+                            ['monto', 'monto_entregado', 'cubre']),
         'proveedores'  => conMontosNumericos($proveedores,
                             ['monto_total', 'anticipo', 'pagado_real']),
         'cotizaciones' => conMontosNumericos($cotizaciones, ['monto', 'precio_pp']),
@@ -524,6 +428,21 @@ case 'guardar_padrino':
                            : campoFecha($datos, 'fecha_entrega'),
     ];
     if ($valores['nombre'] === '') responderMal('El padrino necesita un nombre.', 400);
+
+    /* Cuánto entregó DE VERDAD, que no es lo mismo que en qué estado
+       está. Solo si la instalación ya tiene la columna.
+
+       Marcar 'entregado' sin decir cuánto significa que entregó todo lo
+       prometido, que es lo que esa marca quería decir hasta ahora; y
+       destildar 'entregado' no borra lo que ya había entregado, porque
+       una entrega parcial sigue siendo una entrega. */
+    if (in_array('monto_entregado', columnasDe('padrinos'), true)) {
+        if (array_key_exists('monto_entregado', $datos)) {
+            $valores['monto_entregado'] = campoMonto($datos, 'monto_entregado');
+        } elseif ($estado === 'entregado') {
+            $valores['monto_entregado'] = $valores['monto'];
+        }
+    }
 
     responderBien(guardarFila('padrinos', $datos, $valores, $yo, 'padrino'));
     break;

@@ -1528,3 +1528,90 @@
 }
 .megabot-propuesta--resuelta { opacity: .7; }
 .megabot-propuesta__titulo { font-weight: 600; }
+
+
+/* ─── LA CUENTA: UNA SOLA CIFRA MANDA ───────────────────────────────── */
+/*
+ * POR QUÉ
+ * La primera pantalla de Dinero mostraba entre veinte y veinticinco
+ * números antes del primer scroll: dos grandes del mismo peso —aunque
+ * "De tu bolsillo" sea un subconjunto optimista de "Cuesta"— y el resto
+ * en gris chico, apilados. El ojo no sabía dónde caer, y con todo
+ * gritando lo mismo no había forma de saber qué mirar primero.
+ *
+ * Ahora hay UNA cifra dominante: lo que falta pagar de verdad. Es la
+ * que contesta la pregunta con la que se abre esta pantalla. El resto
+ * baja de tamaño y se agrupa por pregunta, no por fórmula.
+ */
+
+.cuenta__estado {
+  font-size: 15px;
+  line-height: 1.35;
+  margin-bottom: var(--esp-2);
+  padding-bottom: var(--esp-2);
+  border-bottom: 1px solid var(--borde);
+}
+.cuenta__estado--bien  { color: var(--bien); }
+.cuenta__estado--ojo   { color: var(--ojo); }
+.cuenta__estado--alerta{ color: var(--alerta); }
+
+.cuenta__rotulo {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--texto-tenue);
+}
+
+/* La cifra dominante. Más grande que las dos de antes (30px) porque
+   ahora es UNA: si dos cifras compiten por ser la principal, ninguna
+   lo es. */
+.cuenta__cifra {
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto);
+  line-height: 1.1;
+}
+.cuenta__cifra--alerta { color: var(--alerta); }
+.cuenta__cifra--bien   { color: var(--bien); }
+
+.cuenta__pie {
+  font-size: 13px;
+  color: var(--texto-tenue);
+  margin-top: 2px;
+}
+
+/* Las lecturas que antes solo existían dentro del PDF. Una línea cada
+   una: si necesitaran dos, no estarían dichas con la claridad
+   suficiente. */
+.cuenta__lecturas {
+  margin-top: var(--esp-3);
+  padding-top: var(--esp-2);
+  border-top: 1px solid var(--borde);
+}
+.cuenta__lectura {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--texto-tenue);
+  margin-bottom: 4px;
+}
+.cuenta__lectura strong { color: var(--texto); }
+
+/* Las cifras de apoyo, agrupadas por pregunta. Alineadas a la derecha y
+   tabulares: es lo que separa una app de una herramienta contable. */
+.cuenta__renglon {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--esp-2);
+  padding: 6px 0;
+  font-size: 14px;
+}
+.cuenta__renglon + .cuenta__renglon { border-top: 1px solid var(--borde); }
+.cuenta__renglon span:first-child { color: var(--texto-tenue); }
+.cuenta__renglon .cifra {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}

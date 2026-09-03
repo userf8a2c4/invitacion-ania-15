@@ -476,6 +476,16 @@ function avisar(texto, esMalo) {
  * @returns {void}
  */
 function pintarCargando(donde, cuantos) {
+  /* En un refresco de fondo NO se vacía nada. El esqueleto existe para
+     que una pantalla en blanco no parezca rota mientras llegan los
+     datos; en un repintado silencioso ya hay contenido bueno en
+     pantalla, y borrarlo para poner cuatro barras grises que laten es
+     exactamente lo contrario de "se actualiza sin que me entere".
+     La declara 26-sincronizacion.js, que se carga DESPUÉS que este
+     archivo — no importa: para cuando algo llama a pintarCargando ya
+     está todo cargado. Ver refrescarEnSegundoPlano() allá. */
+  if (REPINTADO_SILENCIOSO) return;
+
   const n = cuantos || 4;
   donde.innerHTML = '<div class="esqueleto"></div>'.repeat(n);
 }
@@ -1692,77 +1702,178 @@ async function repintarListaDeEtiquetasAcomodo(cuerpo) {
   });
 }
 
+/**
+ * Etiquetas que se ofrecen aunque nadie las haya creado todavía.
+ *
+ * POR QUÉ EXISTEN
+ * El catálogo arrancaba vacío: para ponerle "Familia materna" a alguien
+ * había que escribirlo entero, bien, la primera vez — y volver a
+ * escribirlo cada vez que uno no se acordaba de cómo lo había escrito
+ * ("familia materna", "Familia Materna", "fam. materna" eran tres
+ * etiquetas distintas). Con una lista de arranque, poner cuatro
+ * etiquetas son cuatro toques y ninguna se escribe dos veces distinto.
+ *
+ * No se crean en la base hasta que alguien toca una: el catálogo real
+ * sigue siendo el de siempre y sigue creciendo con lo que se escriba a
+ * mano.
+ */
+const ETIQUETAS_SUGERIDAS = [
+  'Joven', 'Adulto', 'Niños',
+  'Familia materna', 'Familia paterna',
+  'Compañero de baile', 'Compañero de preparatoria',
+  'Amigos de Ania', 'Trabajo de papá', 'Trabajo de mamá',
+  'Vecinos', 'Padrinos', 'Corte de honor',
+  'Mesa ruidosa', 'Mesa tranquila',
+];
+
+/**
+ * El bloque de etiquetas de una persona o una mesa: todas a la vista,
+ * un toque para poner y otro para quitar.
+ *
+ * ⚡ ANTES ERA DE A UNA Y ESCRIBIÉNDOLAS (2026-09-03)
+ * Se podían poner varias —la base siempre lo permitió— pero había que
+ * escribir cada nombre en un campo de texto y tocar "Agregar", con un
+ * viaje al servidor y un repintado completo entre una y otra. Ponerle
+ * cuatro etiquetas a alguien eran cuatro tipeos y cuatro esperas, y
+ * cualquier diferencia de mayúsculas creaba una etiqueta nueva.
+ *
+ * Ahora se ven TODAS las disponibles como chips: las puestas encendidas,
+ * las demás apagadas. Tocar una la pone o la saca, y el chip cambia al
+ * instante sin esperar al servidor (si falla, vuelve y se avisa). El
+ * campo de texto queda para inventar una que no esté.
+ *
+ * @param {string} tipo - 'acompanante' | 'mesa' | 'confirmacion'
+ * @param {number} id
+ * @param {Element} contenedor
+ * @returns {Promise<void>}
+ */
 async function pintarEtiquetasDe(tipo, id, contenedor) {
   if (!contenedor) return;
 
-  let puestas;
+  let puestas = [];
+  let catalogo = [];
   try {
-    const r = await traer('etiquetas_acomodo.php?accion=por_objeto&tipo=' + tipo + '&id=' + id);
-    puestas = r.filas || [];
+    /* Las dos en paralelo: son independientes y esto se pinta dentro de
+       una ficha que ya está abierta esperando. */
+    const [r, c] = await Promise.all([
+      traer('etiquetas_acomodo.php?accion=por_objeto&tipo=' + tipo + '&id=' + id),
+      traer('etiquetas_acomodo.php?accion=listar').catch(() => ({ filas: [] })),
+    ]);
+    puestas  = r.filas || [];
+    catalogo = c.filas || [];
   } catch (error) {
     contenedor.innerHTML = '';
     return; // No es crítico: la ficha se puede ver igual sin esto.
   }
 
+  const nombresPuestos = puestas.map(e => e.nombre);
+
+  /* El orden es el que se usa: primero lo que ya tiene, después lo que
+     más se usa en el evento, y al final las sugerencias que nadie creó
+     todavía. Sin repetir, comparando sin distinguir mayúsculas para no
+     ofrecer "Joven" cuando ya existe "joven". */
+  const vistos = new Set();
+  const disponibles = [];
+  const agregarSiEsNueva = nombre => {
+    const clave = nombre.toLocaleLowerCase('es');
+    if (vistos.has(clave)) return;
+    vistos.add(clave);
+    disponibles.push(nombre);
+  };
+
+  nombresPuestos.forEach(agregarSiEsNueva);
+  catalogo
+    .slice()
+    .sort((a, b) => (Number(b.usos) || 0) - (Number(a.usos) || 0))
+    .forEach(e => agregarSiEsNueva(e.nombre));
+  ETIQUETAS_SUGERIDAS.forEach(agregarSiEsNueva);
+
+  const puestasEnMinuscula = new Set(
+    nombresPuestos.map(n => n.toLocaleLowerCase('es')));
+
   contenedor.innerHTML =
     '<span class="campo__rotulo">Etiquetas</span>' +
-    '<div class="menus-mini" style="margin-bottom:var(--esp-1)">' +
-      (puestas.length
-        ? puestas.map(e =>
-            '<span class="etiqueta" data-etiqueta-puesta="' + seguro(e.id) + '" ' +
-                  'style="cursor:pointer" title="Tocar para quitar">' +
-              seguro(e.nombre) + ' ✕' +
-            '</span>'
-          ).join('')
-        : '<span class="vacio__texto" style="margin:0">Ninguna todavía.</span>') +
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-1)">' +
+      'Puedes poner todas las que quieras. Toca para poner o quitar.</p>' +
+
+    '<div class="etiquetas-elegir">' +
+      disponibles.map(nombre => {
+        const activa = puestasEnMinuscula.has(nombre.toLocaleLowerCase('es'));
+        return '<button type="button" class="etiqueta-chip' +
+               (activa ? ' etiqueta-chip--activa' : '') + '" ' +
+               'data-etiqueta-alternar="' + seguro(nombre) + '" ' +
+               'aria-pressed="' + (activa ? 'true' : 'false') + '">' +
+                 seguro(nombre) +
+               '</button>';
+      }).join('') +
     '</div>' +
-    '<div style="display:flex;gap:6px">' +
+
+    '<div style="display:flex;gap:6px;margin-top:var(--esp-2)">' +
       '<input type="text" id="etiqueta-nueva-' + tipo + id + '" class="campo__control" ' +
-             'placeholder="Escribe o elige una etiqueta" list="etiquetas-existentes" ' +
-             'style="flex:1">' +
+             'placeholder="Crear otra etiqueta" style="flex:1">' +
       '<button type="button" class="boton boton--chico" id="etiqueta-agregar-' + tipo + id + '">' +
-        'Agregar</button>' +
-    '</div>' +
-    '<datalist id="etiquetas-existentes"></datalist>';
+        'Crear</button>' +
+    '</div>';
 
-  // La lista completa, para el autocompletar del <input list="…">. No
-  // es crítico si falla: el campo sigue funcionando como texto libre.
-  try {
-    const catalogo = await traer('etiquetas_acomodo.php?accion=listar');
-    const datalist = buscar('#etiquetas-existentes', contenedor);
-    if (datalist) {
-      datalist.innerHTML = (catalogo.filas || [])
-        .map(e => '<option value="' + seguro(e.nombre) + '">').join('');
-    }
-  } catch (error) { /* sin autocompletar, se sigue igual */ }
-
-  buscarTodos('[data-etiqueta-puesta]', contenedor).forEach(chip => {
+  /* Poner y quitar con un toque, sin repintar todo el bloque: repintar
+     perdía el lugar del scroll y hacía parpadear los quince chips para
+     cambiar uno. El chip cambia primero y se corrige solo si el
+     servidor dice que no. */
+  buscarTodos('[data-etiqueta-alternar]', contenedor).forEach(chip => {
     chip.addEventListener('click', async () => {
+      const nombre  = chip.dataset.etiquetaAlternar;
+      const estaba  = chip.classList.contains('etiqueta-chip--activa');
+      const puesta  = puestas.find(e =>
+        e.nombre.toLocaleLowerCase('es') === nombre.toLocaleLowerCase('es'));
+
+      // Sin id no se puede quitar: hay que saber cuál etiqueta es.
+      if (estaba && !puesta) return;
+
+      chip.classList.toggle('etiqueta-chip--activa', !estaba);
+      chip.setAttribute('aria-pressed', String(!estaba));
+      chip.disabled = true;
+
       try {
-        await mandar('etiquetas_acomodo.php?accion=quitar', {
-          etiqueta_id: Number(chip.dataset.etiquetaPuesta), tipo: tipo, id: id,
-        });
-        pintarEtiquetasDe(tipo, id, contenedor);
+        if (estaba) {
+          await mandar('etiquetas_acomodo.php?accion=quitar',
+            { etiqueta_id: puesta.id, tipo: tipo, id: id });
+          puestas = puestas.filter(e => e.id !== puesta.id);
+        } else {
+          const r = await mandar('etiquetas_acomodo.php?accion=asignar',
+            { nombre: nombre, tipo: tipo, id: id });
+          // El servidor devuelve el id de la etiqueta (la creó o la
+          // reusó): hace falta para poder quitarla después sin recargar.
+          puestas.push({ id: (r && r.etiqueta_id) || (r && r.id), nombre: nombre });
+        }
       } catch (error) {
+        // Se deshace el cambio optimista: el chip vuelve a como estaba.
+        chip.classList.toggle('etiqueta-chip--activa', estaba);
+        chip.setAttribute('aria-pressed', String(estaba));
         avisar(error.message, true);
+      } finally {
+        chip.disabled = false;
       }
     });
   });
 
   const campoNueva = buscar('#etiqueta-nueva-' + tipo + id, contenedor);
-  const agregar = async () => {
+  const crear = async () => {
     const nombre = campoNueva.value.trim();
     if (!nombre) return;
+
     try {
-      await mandar('etiquetas_acomodo.php?accion=asignar', { nombre: nombre, tipo: tipo, id: id });
+      await mandar('etiquetas_acomodo.php?accion=asignar',
+        { nombre: nombre, tipo: tipo, id: id });
+      campoNueva.value = '';
+      // Acá sí se repinta: hay un chip nuevo que no existía en la lista.
       pintarEtiquetasDe(tipo, id, contenedor);
     } catch (error) {
       avisar(error.message, true);
     }
   };
 
-  buscar('#etiqueta-agregar-' + tipo + id, contenedor).addEventListener('click', agregar);
+  buscar('#etiqueta-agregar-' + tipo + id, contenedor).addEventListener('click', crear);
   campoNueva.addEventListener('keydown', evento => {
-    if (evento.key === 'Enter') { evento.preventDefault(); agregar(); }
+    if (evento.key === 'Enter') { evento.preventDefault(); crear(); }
   });
 }

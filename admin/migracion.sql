@@ -243,7 +243,15 @@ CREATE TABLE IF NOT EXISTS padrinos (
   apadrina     VARCHAR(120) NOT NULL DEFAULT '',
   -- 'dinero' = aporta una cantidad. 'especie' = aporta la cosa en sí.
   tipo_aporte  ENUM('dinero','especie') NOT NULL DEFAULT 'dinero',
+  -- Cuánto PROMETIÓ poner.
   monto        DECIMAL(12,2) NOT NULL DEFAULT 0,
+  -- Y cuánto ENTREGÓ de verdad. Son dos cosas distintas: `estado` es un
+  -- sí/no, así que una entrega parcial —"de los $30,000 me dio $10,000
+  -- y el resto en octubre", que es lo más común— era irrepresentable:
+  -- había que elegir entre mentir diciendo que ya entregó todo o mentir
+  -- diciendo que no entregó nada. instalar.php rellena esta columna con
+  -- `monto` para los que ya estaban marcados 'entregado'.
+  monto_entregado DECIMAL(12,2) NOT NULL DEFAULT 0,
   -- 'hablado'   = dijo que sí, nada firme todavía
   -- 'confirmado'= comprometido en firme
   -- 'entregado' = ya puso el dinero o la cosa

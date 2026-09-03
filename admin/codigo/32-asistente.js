@@ -76,10 +76,17 @@ const FRASES_DE_FABRICA = {
                        'quiero un recibo', 'recibo de pago'],
   'contrato-rapido': ['nuevo contrato', 'generar contrato', 'hacer un contrato',
                        'quiero un contrato', 'contrato de servicio'],
+  /* ⚡ "BORRAR RECIBO" Y "BORRAR CONTRATO" SE SACARON (2026-09-03).
+     Eran frases de fábrica: decirle "borrar recibo" al asistente abría
+     la lista y dejaba a dos toques de destruir un documento numerado y
+     ya entregado. Contradice la regla del módulo —MegaBot ejecuta
+     confirmando, NUNCA borra— y ninguna otra frase de la lista lleva a
+     un borrado. Buscar y editar siguen; para borrar hay que ir a la
+     ficha, que es donde la pregunta explica qué se pierde. */
   'ver-recibos':     ['ver recibos', 'mis recibos', 'buscar recibo', 'editar recibo',
-                       'borrar recibo', 'recibos de un proveedor'],
+                       'recibos de un proveedor'],
   'ver-contratos':   ['ver contratos', 'mis contratos', 'buscar contrato', 'editar contrato',
-                       'borrar contrato', 'contratos de un proveedor'],
+                       'contratos de un proveedor'],
 };
 
 /** A qué pestaña lleva cada frase de navegación. */
@@ -537,8 +544,20 @@ const ACCIONES_PERMITIDAS_PARA_MEGABOT = [
 
 /** El id del último mensaje ya pintado, para pedir solo los nuevos. */
 let MEGABOT_ULTIMO_ID = 0;
-/** El intervalo de polling activo, o null si la hoja está cerrada. */
+/** El temporizador de polling activo, o null si está apagado. */
 let MEGABOT_INTERVALO = null;
+
+/**
+ * Le avisa al polling que hay una respuesta en camino, para que vuelva
+ * al ritmo rápido. La define abrirMegaBot() mientras la hoja vive; en
+ * null significa que no hay chat abierto.
+ *
+ * Existe porque el poll adaptativo se apaga solo tras un rato en
+ * silencio (ver la nota grande allá abajo): sin esta señal, escribir
+ * después de cinco minutos quietos dejaría el mensaje mandado y el hilo
+ * mudo hasta reabrir la hoja.
+ */
+let MEGABOT_ESPERAR_RESPUESTA = null;
 
 /**
  * Qué pantallas hay que refrescar después de que una propuesta de
@@ -692,11 +711,16 @@ function engancharHiloDeMegaBot(hilo) {
       const filaPropuesta = ESTADO_PROPUESTAS_MEGABOT[id];
       if (!filaPropuesta) return;
 
-      // Cinturón además del tirante: el servidor (chat.php?accion=
-      // responder) ya descarta cualquier propuesta fuera de la
-      // whitelist antes de guardarla — esto es solo para no confiar
-      // ciegamente en lo que haya quedado pintado en pantalla.
-      if (!ACCIONES_PERMITIDAS_PARA_MEGABOT.includes(filaPropuesta.accion)) return;
+      /* ⚡ UNA PROPUESTA QUE NO SE PUEDE HACER LO DICE (2026-09-03).
+         Acá se hacía `return` a secas cuando la acción no estaba en la
+         whitelist: el botón quedaba ahí, tocarlo no hacía absolutamente
+         nada, y la burbuja seguía diciendo "voy a hacer X". Ahora se
+         dice la verdad y se anota el estado `fallida`, que existe en la
+         base desde el principio y nadie escribía nunca. */
+      if (!ACCIONES_PERMITIDAS_PARA_MEGABOT.includes(filaPropuesta.accion)) {
+        marcarPropuestaFallida(tarjeta, id, 'Esto no lo puedo hacer desde aquí.');
+        return;
+      }
 
       botonConfirmar.disabled = true;
       try {
@@ -716,6 +740,85 @@ function engancharHiloDeMegaBot(hilo) {
       return;
     }
   });
+}
+
+/**
+ * Pinta la burbuja de "está escribiendo" al final del hilo.
+ *
+ * Una sola a la vez: si se manda otro mensaje antes de que llegue la
+ * respuesta del anterior, se reusa la que ya está en vez de apilar dos.
+ *
+ * @param {Element} hilo
+ * @returns {void}
+ */
+function mostrarEscribiendoDeMegaBot(hilo) {
+  if (!hilo || hilo.querySelector('.megabot-escribiendo')) return;
+
+  const fila = document.createElement('div');
+  fila.className = 'megabot-fila megabot-fila--megabot megabot-escribiendo';
+  fila.innerHTML =
+    '<div class="megabot-burbuja megabot-burbuja--megabot megabot-puntitos" ' +
+         'role="status" aria-label="MegaBot está escribiendo">' +
+      '<span></span><span></span><span></span>' +
+    '</div>';
+
+  hilo.appendChild(fila);
+  hilo.scrollTop = hilo.scrollHeight;
+
+  /* Tope de seguridad. Si MegaBot no contesta nunca —el webhook se cayó
+     después de aceptar el mensaje, por ejemplo— los puntitos quedarían
+     latiendo para siempre, que es la misma mentira que el silencio pero
+     al revés: diría "está por llegar" cuando ya no viene nada. Al
+     minuto y medio se rinden y lo dicen. */
+  setTimeout(() => {
+    if (!document.body.contains(fila)) return;
+    fila.classList.remove('megabot-escribiendo');
+    fila.innerHTML =
+      '<div class="megabot-burbuja megabot-burbuja--megabot">' +
+        'Está tardando más de lo normal. Si no llega nada, vuelve a ' +
+        'preguntarme o revisa la conexión.' +
+      '</div>';
+  }, 90000);
+}
+
+/**
+ * Saca la burbuja de "está escribiendo", si estaba.
+ *
+ * @param {Element} hilo
+ * @returns {void}
+ */
+function quitarEscribiendoDeMegaBot(hilo) {
+  if (!hilo) return;
+  const fila = hilo.querySelector('.megabot-escribiendo');
+  if (fila) fila.remove();
+}
+
+/**
+ * Deja una propuesta como "no se pudo", en pantalla y en la base.
+ *
+ * POR QUÉ EXISTE
+ * Cuando MegaBot proponía una acción fuera de la whitelist, el botón
+ * "Confirmar" no hacía nada: ni se ejecutaba, ni fallaba, ni se
+ * apagaba. La burbuja seguía diciendo "voy a hacer X" y el botón seguía
+ * invitando a tocarlo. Una línea honesta cierra el asunto — y el estado
+ * `fallida`, que la tabla tiene desde el primer día y nadie escribía,
+ * deja el rastro de qué propuso MegaBot que el panel no pudo hacer.
+ *
+ * @param {Element} tarjeta
+ * @param {number} id
+ * @param {string} porque
+ * @returns {void}
+ */
+function marcarPropuestaFallida(tarjeta, id, porque) {
+  if (tarjeta) {
+    tarjeta.className = 'megabot-propuesta megabot-propuesta--resuelta';
+    tarjeta.innerHTML = tarjeta.querySelector('.megabot-propuesta__titulo').outerHTML +
+      '<div class="vacio__texto">' + seguro(porque) + '</div>';
+  }
+
+  // Que no se pueda anotar no cambia lo que se le dijo a la persona.
+  mandar('chat.php?accion=propuesta_estado', { id: id, estado: 'fallida' })
+    .catch(() => {});
 }
 
 /** Las propuestas ya pintadas, por id — para leer su `accion`/
@@ -773,47 +876,235 @@ function adoptarIdRealDeBurbuja(hilo, idLocal, idReal) {
 }
 
 /**
+ * Preguntas de lectura que se contestan con la copia guardada en el
+ * teléfono, sin internet.
+ *
+ * POR QUÉ ESTO ES LA MITAD DE LO QUE FALTABA
+ * Sin señal, "¿cuánto debo?" o "¿quién falta por confirmar?" caían en
+ * "No tengo eso a mano" — y son la mitad de lo que se le pregunta a un
+ * asistente. No hacía falta ningún dato nuevo: DINERO, INVITADOS y
+ * MESAS ya están cargados en memoria, y 26-sincronizacion.js guarda una
+ * copia de todo. Lo único que faltaba era mirarlos.
+ *
+ * Cada entrada tiene las palabras que la disparan y una función que
+ * arma la respuesta con lo que haya. Devolver null significa "no tengo
+ * ese dato cargado", y la cascada sigue al paso siguiente.
+ */
+const PREGUNTAS_QUE_SE_LEEN = [
+  {
+    palabras: ['cuanto debo', 'cuánto debo', 'cuanto falta pagar', 'cuánto falta pagar',
+               'cuanto falta', 'cuánto falta', 'que debo', 'qué debo'],
+    responder: () => {
+      if (!DINERO || !DINERO.totales) return null;
+      const t = DINERO.totales;
+      if (!(t.falta > 0.01)) return 'Estás al día: no queda nada por pagar de lo cargado.';
+
+      return 'Faltan ' + comoDinero(t.falta, false) + '. De ' +
+             comoDinero(t.costo, false) + ' que cuesta, llevas ' +
+             comoDinero(t.pagado, false) + ' pagados.';
+    },
+  },
+  {
+    palabras: ['cuanto cuesta', 'cuánto cuesta', 'cuanto sale', 'cuánto sale',
+               'cuanto llevamos', 'cuánto llevamos', 'cuanto va', 'cuánto va'],
+    responder: () => {
+      if (!DINERO || !DINERO.totales) return null;
+      const t = DINERO.totales;
+      return 'La fiesta cuesta ' + comoDinero(t.costo, false) + '. De tu bolsillo, ' +
+             comoDinero(t.propio, false) + '.' +
+             (t.costo_por_invitado
+               ? ' Son ' + comoDinero(t.costo_por_invitado, false) + ' por invitado.'
+               : '');
+    },
+  },
+  {
+    palabras: ['que pago este mes', 'qué pago este mes', 'que vence', 'qué vence',
+               'proximos pagos', 'próximos pagos', 'que hay que pagar', 'qué hay que pagar'],
+    responder: () => {
+      if (!DINERO || !DINERO.pagos) return null;
+
+      const pendientes = DINERO.pagos.filter(p => p.estado !== 'pagado');
+      if (!pendientes.length) return 'No hay ningún pago pendiente cargado.';
+
+      const mesAhora = new Date().toISOString().slice(0, 7);
+      const deEsteMes = pendientes.filter(p =>
+        p.fecha_limite && String(p.fecha_limite).slice(0, 7) === mesAhora);
+      const atrasados = pendientes.filter(p =>
+        p.fecha_limite && diasHasta(p.fecha_limite) < 0);
+      const sinFecha  = pendientes.filter(p => !p.fecha_limite);
+
+      const suma = l => l.reduce((s, p) => s + (Number(p.monto) || 0), 0);
+      const partes = [];
+
+      if (atrasados.length) {
+        partes.push('⚠️ ' + pluralizar(atrasados.length, 'pago atrasado', 'pagos atrasados') +
+                    ' por ' + comoDinero(suma(atrasados), false));
+      }
+      partes.push('Este mes: ' + comoDinero(suma(deEsteMes), false) +
+                  ' en ' + pluralizar(deEsteMes.length, 'pago', 'pagos'));
+      if (sinFecha.length) {
+        partes.push(pluralizar(sinFecha.length, 'pago', 'pagos') + ' sin fecha (' +
+                    comoDinero(suma(sinFecha), false) + ')');
+      }
+
+      return partes.join('.\n') + '.';
+    },
+  },
+  {
+    palabras: ['quien falta', 'quién falta', 'cuantos confirmaron', 'cuántos confirmaron',
+               'quien no ha confirmado', 'quién no ha confirmado', 'cuantos vienen',
+               'cuántos vienen', 'cuanta gente', 'cuánta gente'],
+    responder: () => {
+      if (!INVITADOS || !INVITADOS.length) return null;
+
+      /* ⚠️ "APARTADOS" NO ES "CONFIRMADOS", y acá es donde más fácil se
+         confunden. En el modelo sustractivo una confirmación NACE con
+         asiste=1 —el cupo está reservado desde el día uno—, así que
+         contar por `asiste` diría que confirmaron todos desde antes de
+         mandar la primera invitación. Quien de verdad CONTESTÓ lo dice
+         yaRespondio() (08-vista-invitados.js), que es el mismo criterio
+         que usa la lista y el contador de la pestaña. */
+      const contestaron = INVITADOS.filter(f => yaRespondio(f));
+      const vienen = contestaron.filter(f => Number(f.asiste) === 1);
+      const gente = vienen.reduce((s, f) =>
+        s + (Number(f.adultos) || 0) + (Number(f.ninos) || 0), 0);
+      const faltan = INVITADOS.length - contestaron.length;
+
+      return 'Contestaron ' + pluralizar(contestaron.length, 'grupo', 'grupos') +
+             ': vienen ' + vienen.length + ' (' + gente + ' personas).' +
+             (faltan > 0
+               ? '\nTodavía no contestan ' +
+                 pluralizar(faltan, 'grupo', 'grupos') + '.'
+               : '\nYa contestaron todos.');
+    },
+  },
+  {
+    palabras: ['quien sin mesa', 'quién sin mesa', 'falta sentar', 'sin mesa',
+               'como van las mesas', 'cómo van las mesas'],
+    responder: () => {
+      if (!MESAS || !MESAS.resumen) return null;
+      const r = MESAS.resumen;
+
+      return 'Hay ' + pluralizar(r.mesas, 'mesa', 'mesas') + ' para ' + r.capacidad +
+             ' lugares. Sentados: ' + r.sentados + ' de ' + r.gente + '.' +
+             (r.sin_sentar > 0
+               ? '\nQuedan ' + pluralizar(r.sin_sentar, 'grupo', 'grupos') + ' sin mesa.'
+               : '\nNo queda nadie sin mesa.') +
+             (r.faltan_lugares > 0
+               ? '\n⚠️ Faltan ' + r.faltan_lugares + ' lugares.'
+               : '');
+    },
+  },
+];
+
+/**
+ * Contesta una pregunta de lectura con los datos que ya están cargados.
+ *
+ * @param {string} texto
+ * @returns {string|null} La respuesta, o null si no era una de estas.
+ */
+function responderPreguntaDeLectura(texto) {
+  const limpio = texto.toLocaleLowerCase('es').trim();
+
+  for (const pregunta of PREGUNTAS_QUE_SE_LEEN) {
+    if (!pregunta.palabras.some(p => limpio.includes(p))) continue;
+
+    try {
+      const respuesta = pregunta.responder();
+      if (respuesta) return respuesta;
+    } catch (error) {
+      /* Un dato a medio cargar no puede tumbar el asistente: se sigue
+         al paso siguiente de la cascada como si no hubiera matcheado. */
+    }
+  }
+
+  return null;
+}
+
+/**
  * MegaBot offline (sin URL guardada, webhook caído, o timeout — ver
  * chat.php?accion=enviar): resuelve EN EL TELÉFONO con lo que ya existía
  * antes de este chat. Nunca cae a esto el servidor — lo decide esta
- * función, cliente, cuando `enviar`/`reenviar` vuelven con
- * `offline: true`.
+ * función, cliente, cuando `enviar`/`reenviar` vuelven con `offline` o
+ * `_offline`.
  *
- *   1. El matcher de siempre (sección 3 de este archivo): frases de
- *      fábrica + las que cada cuenta enseñó. Si hay una coincidencia
- *      fuerte, se abre directo — son las mismas herramientas que el
- *      sandwich del FAB ya ejecuta con un toque, nunca escrituras
- *      silenciosas.
- *   2. Si no hay frase, las sugerencias que ya arma la campana para
- *      esta pantalla (40-agentes.js y sus agentes 41-44/46, que volvieron
- *      a cargarse). Si una escribe, se pinta con Confirmar/Cancelar —
- *      nunca se ejecuta a ciegas.
- *   3. Una palabra cariñosa (46), si el texto la dispara.
- *   4. Si nada de lo anterior tuvo algo: una línea corta. Nunca "pedile
- *      a Carlos que configure MegaBot" como respuesta principal — el
- *      sandwich del toque largo sigue ahí para lo que haga falta.
+ * LA CASCADA, en orden:
  *
- * Pinta todo en el MISMO hilo, como burbuja de MegaBot — Lucila nunca ve
- * "agente dinero" ni "agente mesas" como quien le contesta.
+ *   1. ENTIDADES — hace la tarea, confirmando. "sienta a Juan en la
+ *      mesa 5", "ya se pagó el DJ", "busca a Marta", "crea una tarea…".
+ *      Extrae el nombre, lo busca en la copia local (funciona sin
+ *      señal), desambigua mostrando hasta seis opciones, pide
+ *      confirmación y recién ahí escribe.
+ *
+ *      ⚡ ESTE PASO NO EXISTÍA (2026-09-03). `intentarConEntidad()`
+ *      estaba escrito, probado y completo — y NO SE LLAMABA DESDE
+ *      NINGÚN LADO: había quedado como "camino de rollback" al pasar a
+ *      MegaBot. Engancharlo cambia el asistente sin internet de "te
+ *      abro una pantalla" a "hago lo que pediste".
+ *
+ *   2. PREGUNTAS DE LECTURA — "¿cuánto debo?", "¿quién falta?". Se
+ *      contestan con los mismos datos cacheados. Era la mitad de lo que
+ *      se pregunta y caía en "No tengo eso a mano".
+ *
+ *   3. FRASES (el matcher de siempre) — abre pantallas. Son las mismas
+ *      herramientas que el sandwich del FAB ya ejecuta con un toque,
+ *      nunca escrituras silenciosas.
+ *
+ *   4. SUGERENCIAS de los agentes — anunciadas COMO LO QUE SON. Antes
+ *      se pintaban como si fueran una respuesta, ignorando lo que ella
+ *      había escrito.
+ *
+ *   5. Una palabra cariñosa (46), si el texto la dispara.
+ *
+ *   6. Una línea corta y honesta. Nunca "pedile a Carlos que configure
+ *      MegaBot" como respuesta principal.
+ *
+ * Todo se pinta en el MISMO hilo, como burbuja de MegaBot — Lucila
+ * nunca ve "agente dinero" ni "agente mesas" como quien le contesta.
  *
  * @param {Element} hilo
  * @param {string} texto
  * @returns {Promise<void>}
  */
 async function resolverMegaBotOffline(hilo, texto) {
+  // Contesta el teléfono: la espera terminó, aunque no haya llegado
+  // nada de afuera.
+  quitarEscribiendoDeMegaBot(hilo);
+
+  const decir = mensaje => pintarMensajesNuevosDeMegaBot(hilo, [{
+    id: 'local-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+    rol: 'megabot', texto: mensaje, estado: 'enviado', propuestas: [],
+  }]);
+
+  /* ─── 1. Entidades: hacer la tarea ─────────────────────────────── */
+  const cajaDeEntidad = crearBurbujaDeTrabajoDeMegaBot(hilo);
+  let seHizoCargo = false;
+  try {
+    seHizoCargo = await intentarConEntidad(texto, cajaDeEntidad);
+  } catch (error) {
+    seHizoCargo = false;
+  }
+  if (seHizoCargo) return;
+
+  // No era una entidad: la burbuja de trabajo se saca sin dejar rastro.
+  cajaDeEntidad.closest('.megabot-fila').remove();
+
+  /* ─── 2. Preguntas de lectura ──────────────────────────────────── */
+  const respuesta = responderPreguntaDeLectura(texto);
+  if (respuesta) { decir(respuesta); return; }
+
+  /* ─── 3. Frases de siempre: abrir una pantalla ─────────────────── */
   const coincidencias = buscarCoincidencias(texto);
   const mejor = coincidencias[0];
 
   if (mejor && mejor.puntaje >= 60) {
-    pintarMensajesNuevosDeMegaBot(hilo, [{
-      id: 'local-' + Date.now(), rol: 'megabot',
-      texto: 'Abriendo: ' + mejor.intencion.nombre + '.', estado: 'enviado', propuestas: [],
-    }]);
+    decir('Abriendo: ' + mejor.intencion.nombre + '.');
     cerrarHoja(true);
     mejor.intencion.ejecutar();
     return;
   }
 
+  /* ─── 4. Sugerencias, dichas como lo que son ───────────────────── */
   if (typeof recogerSugerencias === 'function') {
     try {
       const sugerencias = await recogerSugerencias(VISTA_ACTUAL);
@@ -826,23 +1117,45 @@ async function resolverMegaBotOffline(hilo, texto) {
     }
   }
 
+  /* ─── 5. Una palabra cariñosa ──────────────────────────────────── */
   if (typeof respuestaCarinosaPara === 'function') {
     const carinosa = respuestaCarinosaPara(texto);
-    if (carinosa) {
-      pintarMensajesNuevosDeMegaBot(hilo, [{
-        id: 'local-' + Date.now(), rol: 'megabot', texto: carinosa, estado: 'enviado', propuestas: [],
-      }]);
-      return;
-    }
+    if (carinosa) { decir(carinosa); return; }
   }
 
-  pintarMensajesNuevosDeMegaBot(hilo, [{
-    id: 'local-' + Date.now(), rol: 'megabot',
-    texto: 'No tengo eso a mano. Prueba el menú largo del botón.',
-    estado: 'enviado', propuestas: [],
-  }]);
+  /* ─── 6. La verdad, corta ──────────────────────────────────────── */
+  decir('No entendí eso, y ahora mismo no tengo conexión para preguntar. ' +
+        'Puedes pedirme cosas como «cuánto debo», «quién falta» o ' +
+        '«sienta a Juan en la mesa 5».');
 }
 
+/**
+ * Una burbuja de MegaBot vacía donde intentarConEntidad() puede pintar.
+ *
+ * POR QUÉ HACE FALTA
+ * `intentarConEntidad()` fue escrita para la hoja del asistente viejo:
+ * recibe un elemento y escribe adentro ("Buscando…", las opciones para
+ * desambiguar, la confirmación). Para reusarla tal cual —sin tocar una
+ * función que ya funciona— se le da una burbuja del hilo como si fuera
+ * ese elemento.
+ *
+ * @param {Element} hilo
+ * @returns {Element} El contenedor donde pintar.
+ */
+function crearBurbujaDeTrabajoDeMegaBot(hilo) {
+  const fila = document.createElement('div');
+  fila.className = 'megabot-fila megabot-fila--megabot';
+  fila.dataset.mensajeId = 'local-trabajo-' + Date.now();
+
+  const caja = document.createElement('div');
+  caja.className = 'megabot-burbuja megabot-burbuja--megabot';
+
+  fila.appendChild(caja);
+  hilo.appendChild(fila);
+  hilo.scrollTop = hilo.scrollHeight;
+
+  return caja;
+}
 /**
  * La versión mínima —solo lectura + confirmar— de la caja de
  * sugerencias (40-agentes.js), pensada para vivir DENTRO de una burbuja
@@ -928,9 +1241,59 @@ function compactarTiempoDeUsoDeMegaBot(segundos) {
   const horas = Math.floor(minutosTotales / 60);
   const minutos = minutosTotales % 60;
 
+  // Menos de un minuto: se dice en segundos, no "0 min", que se lee
+  // como que ya pasó.
+  if (minutosTotales <= 0) return Math.max(0, Math.round(segundos)) + ' s';
   if (horas <= 0) return minutos + ' min';
   if (minutos <= 0) return horas + ' h';
   return horas + ' h ' + minutos + ' min';
+}
+
+/** El último uso conocido y el reloj que lo hace bajar en pantalla. */
+let MEGABOT_USO = null;
+let MEGABOT_RELOJ_DE_USO = null;
+
+/**
+ * Arranca la cuenta regresiva del reinicio de cuota.
+ *
+ * POR QUÉ HACE FALTA
+ * El servidor ya descuenta el tiempo transcurrido, pero solo se le
+ * pregunta cada vez que hay un poll. Sin esto, el número se quedaba
+ * quieto entre viaje y viaje y no se leía como un reloj. Se descuenta
+ * en el teléfono cada diez segundos —suficiente para que se note que
+ * corre, sin repintar de más— y cualquier respuesta del servidor lo
+ * corrige.
+ *
+ * @returns {void}
+ */
+function arrancarRelojDeUsoDeMegaBot() {
+  if (MEGABOT_RELOJ_DE_USO) clearInterval(MEGABOT_RELOJ_DE_USO);
+
+  MEGABOT_RELOJ_DE_USO = setInterval(() => {
+    const span = document.getElementById('hoja-uso');
+
+    // La hoja se cerró: no hay nada que actualizar y el reloj se apaga
+    // solo, sin dejar un intervalo vivo por cada vez que se abrió.
+    if (!span || span.hidden || !MEGABOT_USO) {
+      clearInterval(MEGABOT_RELOJ_DE_USO);
+      MEGABOT_RELOJ_DE_USO = null;
+      return;
+    }
+
+    if (!(MEGABOT_USO.reinicia_en > 0)) return;
+
+    MEGABOT_USO.reinicia_en = Math.max(0, MEGABOT_USO.reinicia_en - 10);
+
+    /* Llegó a cero: la cuota se reinició. Se refleja al toque en vez de
+       esperar a que MegaBot lo confirme — es lo que significa que el
+       reloj termine. */
+    if (MEGABOT_USO.reinicia_en === 0) {
+      MEGABOT_USO.porcentaje = 0;
+      MEGABOT_USO.agotado = false;
+    }
+
+    pintarUsoDeMegaBot(MEGABOT_USO, true);
+  }, 10000);
 }
 
 /**
@@ -943,7 +1306,7 @@ function compactarTiempoDeUsoDeMegaBot(segundos) {
  * @param {{porcentaje:?number, reinicia_en:number, agotado:boolean}|null} uso
  * @returns {void}
  */
-function pintarUsoDeMegaBot(uso) {
+function pintarUsoDeMegaBot(uso, esDelReloj) {
   const span = document.getElementById('hoja-uso');
   if (!span) return;
 
@@ -951,20 +1314,36 @@ function pintarUsoDeMegaBot(uso) {
   if (!uso || (!tienePorcentaje && !uso.agotado)) {
     span.textContent = '';
     span.hidden = true;
+    span.className = 'hoja__uso';
     return;
   }
+
+  // Lo que viene del servidor pisa lo que venía contando el reloj; lo
+  // que viene del reloj es ese mismo objeto, ya descontado.
+  if (!esDelReloj) MEGABOT_USO = uso;
 
   const tiempo = uso.reinicia_en > 0 ? compactarTiempoDeUsoDeMegaBot(uso.reinicia_en) : '';
   let texto = '';
 
   if (uso.agotado) {
-    texto = tiempo || 'Agotado';
+    // Agotado: lo único que importa es cuándo vuelve.
+    texto = tiempo ? 'Sin cuota · vuelve en ' + tiempo : 'Sin cuota';
   } else if (tienePorcentaje) {
-    texto = tiempo ? uso.porcentaje + '% · ' + tiempo : uso.porcentaje + '%';
+    texto = tiempo
+      ? uso.porcentaje + '% usado · se reinicia en ' + tiempo
+      : uso.porcentaje + '% usado';
   }
+
+  /* El color dice de un vistazo si hay margen o no, sin tener que leer
+     el número: es lo que se mira de reojo mientras se escribe. */
+  span.className = 'hoja__uso' +
+    (uso.agotado || uso.porcentaje >= 90 ? ' hoja__uso--alerta'
+     : uso.porcentaje >= 70 ? ' hoja__uso--ojo' : '');
 
   span.textContent = texto;
   span.hidden = !texto;
+
+  if (texto && !esDelReloj) arrancarRelojDeUsoDeMegaBot();
 }
 
 /**
@@ -976,7 +1355,15 @@ function pintarUsoDeMegaBot(uso) {
  * @returns {void}
  */
 function abrirAsistente() {
-  const chips = ['¿Cómo vamos de cupo?', '¿Qué mesas faltan?', '¿Qué vence hoy?', 'Pagos pendientes'];
+  /* ⚡ LOS CHIPS AHORA SON DE LA PANTALLA EN LA QUE ESTÁS (2026-09-03).
+     `CONTEXTO_DEL_ASISTENTE` estaba escrito desde el principio y no lo
+     usaba nadie: los cuatro chips eran los mismos en todas partes.
+     Estando en Dinero, ofrecer "¿Qué mesas faltan?" es ofrecer lo que
+     no se está mirando. Los generales quedan al final, para lo que se
+     pregunta desde cualquier lado. */
+  const delContexto = CONTEXTO_DEL_ASISTENTE[VISTA_ACTUAL] || [];
+  const generales = ['¿Cuánto debo?', '¿Quién falta?'];
+  const chips = delContexto.concat(generales).slice(0, 5);
 
   const cuerpo = abrirHoja('MegaBot',
     '<div id="megabot-hilo" class="megabot-hilo"></div>' +
@@ -986,9 +1373,15 @@ function abrirAsistente() {
                        seguro(c) + '</button>').join('') +
     '</div>' +
 
-    '<div style="display:flex;gap:var(--esp-1)">' +
-      '<input type="text" id="asistente-entrada" class="campo__control" ' +
-             'placeholder="Escribile a MegaBot…" autocomplete="off">' +
+    /* Un <textarea> y no un <input>: se le escriben frases largas
+       ("sienta a la familia Zelaya en la mesa 5 con los de la
+       preparatoria") y en un input de una línea eso se escribe a
+       ciegas, viendo solo el final. Crece hasta cuatro renglones y ahí
+       scrollea. Enter manda; Shift+Enter hace renglón nuevo. */
+    '<div style="display:flex;gap:var(--esp-1);align-items:flex-end">' +
+      '<textarea id="asistente-entrada" class="campo__control megabot-entrada" ' +
+                'placeholder="Escríbele a MegaBot…" rows="1" ' +
+                'autocomplete="off"></textarea>' +
       '<button class="boton boton--principal" id="asistente-mandar" ' +
               'style="flex-shrink:0">Enviar</button>' +
     '</div>'
@@ -1030,6 +1423,18 @@ function abrirAsistente() {
       id: idLocal, rol: 'lucila', texto: texto, estado: 'enviado', propuestas: [],
     }]);
 
+    // Hay respuesta en camino: el poll pasa al ritmo rápido (y se
+    // enciende si estaba apagado por inactividad).
+    if (MEGABOT_ESPERAR_RESPUESTA) MEGABOT_ESPERAR_RESPUESTA();
+
+    /* ⚡ "ESCRIBIENDO…" (2026-09-03). MegaBot tarda decenas de segundos
+       en contestar, y en ese rato la pantalla se quedaba EXACTAMENTE
+       igual que si el mensaje no se hubiera mandado: sin nada que
+       mirar, la reacción natural es volver a escribir o dar por hecho
+       que se colgó. Tres puntos que laten alcanzan para que se note la
+       diferencia entre "está pensando" y "no pasó nada". */
+    mostrarEscribiendoDeMegaBot(hilo);
+
     try {
       /* Sin cola a propósito: un mensaje de chat no es un pago, y
          encolarlo dejaba el hilo mudo esperando una señal que podía
@@ -1050,38 +1455,131 @@ function abrirAsistente() {
       avisar(error.message, true);
       await resolverMegaBotOffline(hilo, texto);
     }
+
+    /* Los puntitos NO se quitan acá. `enviar` termina cuando el
+       servidor confirma que RECIBIÓ el mensaje; la respuesta de MegaBot
+       llega después, por el poll. Quitarlos ahora sería apagar la señal
+       justo cuando empieza la espera de verdad.
+       Los quita: el poll al traer algo nuevo, resolverMegaBotOffline()
+       al contestar en el teléfono, o el tope de seguridad de la propia
+       burbuja si no llega nada. */
   };
 
   buscar('#asistente-mandar', cuerpo).addEventListener('click', () => enviar(entrada.value));
+
+  /* Enter manda, Shift+Enter hace renglón nuevo — lo que ya hace
+     cualquier chat. Sin la excepción del Shift, un textarea de varias
+     líneas no serviría para escribir varias líneas. */
   entrada.addEventListener('keydown', evento => {
-    if (evento.key === 'Enter') enviar(entrada.value);
+    if (evento.key === 'Enter' && !evento.shiftKey) {
+      evento.preventDefault();
+      enviar(entrada.value);
+    }
+  });
+
+  /* El campo crece con lo escrito, hasta cuatro renglones. Se hace acá
+     y no con CSS porque un textarea no sabe medirse solo: hay que
+     bajarlo a 'auto' antes de leer scrollHeight, o al borrar texto se
+     queda con el alto que llegó a tener. */
+  const ALTO_MAXIMO_ENTRADA = 96;
+  entrada.addEventListener('input', () => {
+    entrada.style.height = 'auto';
+    entrada.style.height = Math.min(entrada.scrollHeight, ALTO_MAXIMO_ENTRADA) + 'px';
   });
   buscarTodos('[data-megabot-chip]', cuerpo).forEach(chip => {
     chip.addEventListener('click', () => enviar(chip.dataset.megabotChip));
   });
 
-  // Poll cada 2s mientras la hoja exista. Un solo intervalo activo a la
-  // vez: si se abre el chat dos veces sin que el anterior se cerrara
-  // del todo, el viejo se corta acá, nunca quedan dos corriendo juntos.
-  if (MEGABOT_INTERVALO) clearInterval(MEGABOT_INTERVALO);
-  MEGABOT_INTERVALO = setInterval(async () => {
+  /* ⚡ POLLING ADAPTATIVO (2026-09-03)
+   *
+   * EL PROBLEMA
+   * Preguntar cada 2 segundos son 30 peticiones por minuto. El tope del
+   * panel es de 300 cada 5 minutos por IP: diez minutos con el chat
+   * abierto —que es lo normal mientras se resuelve algo— agotaban la
+   * cuota, y a partir de ahí TODA la app (no solo el chat) recibía 429.
+   * El chat podía tumbar el panel entero.
+   *
+   * LA IDEA
+   * Los 2 segundos hacen falta en un solo momento: mientras se espera
+   * una respuesta que está por llegar. El resto del tiempo el hilo no
+   * cambia solo, y preguntar tan seguido es tirar cuota a la basura.
+   *
+   *   · 2 s   mientras hay una respuesta pendiente.
+   *   · 15 s  en reposo.
+   *   · se apaga tras 5 minutos sin novedad, y vuelve al escribir.
+   *
+   * Con eso, esos mismos diez minutos pasan de ~300 peticiones a ~40. */
+  const POLL_RAPIDO_MS   = 2000;
+  const POLL_REPOSO_MS   = 15000;
+  const APAGAR_TRAS_MS   = 300000;   // 5 minutos sin nada nuevo
+
+  let esperandoRespuesta = false;
+  let ultimaNovedad = Date.now();
+
+  /** Lo llama `enviar` al mandar: hay respuesta en camino. */
+  MEGABOT_ESPERAR_RESPUESTA = () => {
+    esperandoRespuesta = true;
+    ultimaNovedad = Date.now();
+    programarPoll(POLL_RAPIDO_MS);
+  };
+
+  const consultar = async () => {
     if (!document.body.contains(hilo)) {
-      clearInterval(MEGABOT_INTERVALO);
+      // La hoja se cerró: el poll se apaga solo, sin dejar nada vivo.
+      if (MEGABOT_INTERVALO) clearTimeout(MEGABOT_INTERVALO);
+      MEGABOT_INTERVALO = null;
+      MEGABOT_ESPERAR_RESPUESTA = null;
+      return;
+    }
+
+    /* Con la pestaña en segundo plano no se pregunta nada: el chat no se
+       está mirando, y gastar cuota ahí es exactamente lo que dejaba sin
+       peticiones al resto del panel. */
+    if (document.hidden) { programarPoll(POLL_REPOSO_MS); return; }
+
+    let huboNovedad = false;
+    try {
+      const r = await traer('chat.php?accion=listar&despues_de=' + MEGABOT_ULTIMO_ID);
+
+      const cuantos = (r.mensajes || []).length;
+      huboNovedad = cuantos > 0;
+
+      // Llegó la respuesta: los puntitos se van justo antes de que
+      // aparezca la burbuja de verdad, no después.
+      if (huboNovedad) quitarEscribiendoDeMegaBot(hilo);
+
+      pintarMensajesNuevosDeMegaBot(hilo, r.mensajes || []);
+      pintarUsoDeMegaBot(r.uso);
+
+      // Llegó lo que se esperaba: se vuelve al ritmo de reposo.
+      if (huboNovedad) {
+        esperandoRespuesta = false;
+        ultimaNovedad = Date.now();
+      }
+    } catch (error) {
+      // Sin red: se reintenta en el próximo tick, sin avisar cada vez
+      // que algo falló.
+    }
+
+    /* Cinco minutos sin una sola novedad: el chat está abierto pero
+       nadie lo está usando. Se apaga y vuelve solo al escribir. */
+    if (!huboNovedad && Date.now() - ultimaNovedad > APAGAR_TRAS_MS) {
       MEGABOT_INTERVALO = null;
       return;
     }
-    try {
-      const r = await traer('chat.php?accion=listar&despues_de=' + MEGABOT_ULTIMO_ID);
-      // Los locales (optimistas, sin llegar todavía por el servidor) no
-      // tienen id numérico — no hace falta sacarlos, la fila real de
-      // Lucila llega con OTRO id y simplemente se agrega al lado.
-      pintarMensajesNuevosDeMegaBot(hilo, r.mensajes || []);
-      pintarUsoDeMegaBot(r.uso);
-    } catch (error) {
-      // Sin red: se reintenta solo en el próximo tick, sin avisar cada
-      // 2 segundos que algo falló.
-    }
-  }, 2000);
+
+    programarPoll(esperandoRespuesta ? POLL_RAPIDO_MS : POLL_REPOSO_MS);
+  };
+
+  /* setTimeout encadenado y no setInterval: con setInterval, una
+     consulta que tarda más que el intervalo hace que se encimen dos, y
+     con mala señal eso multiplica el problema en vez de aliviarlo. */
+  const programarPoll = ms => {
+    if (MEGABOT_INTERVALO) clearTimeout(MEGABOT_INTERVALO);
+    MEGABOT_INTERVALO = setTimeout(consultar, ms);
+  };
+
+  programarPoll(POLL_REPOSO_MS);
 }
 
 
