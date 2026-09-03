@@ -166,16 +166,35 @@
      así que el resorte en sí es barato. Lo único con un costo real es la
      RAÍZ CUADRADA de "¿está el mouse cerca?" en envionExterno. En calidad
      media/baja esa cuenta se recalcula cada 2 o 3 cuadros —el mouse no
-     teletransporta— y se reusa el último valor en los cuadros de en medio;
-     el resorte (lo que de verdad se ve) se sigue integrando siempre,
-     cuadro a cuadro, así que nunca se ve a los saltos. */
+     teletransporta— y se reusa el último valor en los cuadros de en medio.
+
+     ⚡ EN CALIDAD BAJA TAMBIÉN SE CONGELA EL RESORTE, Y NO SOLO EL MOUSE
+     (2026-09-03). Antes solo se frenaba el recálculo del mouse: el resorte
+     en sí —respiración de reposo incluida— se seguía integrando SIEMPRE,
+     cuadro a cuadro, sin importar la calidad. El detalle que lo delata es
+     `respiracion`/`brisa`: un seno que nunca da el mismo valor dos cuadros
+     seguidos, así que el `if` de aplicarRotacion() —pensado para no
+     escribir cuando el ángulo no cambió— casi nunca frenaba nada: SIEMPRE
+     había algo nuevo que escribir, en cada borla y en cada eslabón.
+
+     El mapa de costos (ver memoria del proyecto) midió este módulo en
+     15,2 ms por cuadro, el segundo más caro de la portada después del
+     vaivén de las enredaderas —y ESE ya se congela en baja (07). Este no
+     tenía el mismo tratamiento: mismo patrón que ahí (SE_MECE_POR_CALIDAD,
+     se congela donde está, sin volver a cero), misma razón (un equipo que
+     no da abasto prefiere joyas quietas a joyas que se mecen a los
+     tirones). En alta y media el relicario se sigue meciendo igual que
+     siempre. */
   let calidad = nivelDeCalidad();
   const SALTO_DEL_MOUSE_POR_CALIDAD = { 0: 1, 1: 2, 2: 3 };
   let saltoDelMouse = SALTO_DEL_MOUSE_POR_CALIDAD[calidad] ?? 1;
+  const SE_MECE_POR_CALIDAD = { 0: true, 1: true, 2: false };
+  let seMece = SE_MECE_POR_CALIDAD[calidad] ?? true;
   let contadorDeCuadro = 0;
   document.addEventListener('calidad-cambio', evento => {
     calidad = (evento.detail && evento.detail.calidad) ?? 0;
     saltoDelMouse = SALTO_DEL_MOUSE_POR_CALIDAD[calidad] ?? 1;
+    seMece = SE_MECE_POR_CALIDAD[calidad] ?? true;
   });
 
 
@@ -342,6 +361,14 @@
        "apagan"—, y retoman solas en cuanto el relicario vuelve a
        acercarse a la pantalla. */
     if (caja.top + caja.height < -150 || caja.top > window.innerHeight + 150) {
+      requestAnimationFrame(dibujarCuadro);
+      return;
+    }
+
+    /* Calidad baja: ni resorte ni escritura, mismo trato que el culling de
+       arriba. Ver la nota "EN CALIDAD BAJA TAMBIÉN SE CONGELA EL RESORTE"
+       más arriba. */
+    if (!seMece) {
       requestAnimationFrame(dibujarCuadro);
       return;
     }
