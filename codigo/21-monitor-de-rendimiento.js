@@ -126,8 +126,31 @@
 
     /* Saltos enormes = la pestaña estuvo en segundo plano (el navegador
        congela el rAF). No es lentitud real: se ignora ese cuadro. Tampoco se
-       mide durante el calentamiento inicial. */
-    if (delta > 100 || momentoActual - arranque < CALENTAMIENTO_MS) {
+       mide durante el calentamiento inicial.
+
+       ⚠️ ESTE UMBRAL ESTABA EN 100 ms Y DEJABA CIEGO AL GOBERNADOR JUSTO
+       EN LOS EQUIPOS QUE MÁS LO NECESITAN (2026-09-02).
+
+       Un cuadro de más de 100 ms se descartaba por considerarlo "pestaña
+       en segundo plano". Pero 100 ms POR CUADRO son 10 fps: cualquier
+       equipo que fuera más lento que eso tenía TODOS sus cuadros
+       descartados, el promedio se quedaba clavado en el 16,7 ms del
+       arranque, y el gobernador no degradaba nunca. Medido con
+       herramientas/medir.mjs: la escena a 7 fps sostenidos y la calidad
+       seguía en "media" indefinidamente, sin un solo intento de bajar.
+
+       Es decir: la protección pensada para no leer mal una pestaña oculta
+       terminaba protegiendo de la medición a los equipos que se estaban
+       ahogando. Cuanto peor iba el equipo, más invisible era para el
+       único sistema que podía ayudarlo.
+
+       La pregunta correcta no es "¿este cuadro tardó mucho?" sino "¿la
+       pestaña estaba oculta?", y eso el navegador lo dice directamente
+       con document.hidden. El umbral de tiempo queda como red de
+       seguridad para saltos absurdos (una suspensión del equipo, un
+       punto de interrupción del depurador), no para lentitud real. */
+    if (document.hidden || delta > 2000 ||
+        momentoActual - arranque < CALENTAMIENTO_MS) {
       requestAnimationFrame(medir);
       return;
     }
@@ -179,12 +202,35 @@
         promedioMs > intervaloIdeal * FACTOR_DEGRADAR[calidad + 1]) cuadrosDegrada++;
     else cuadrosDegrada = 0;
 
+    /* ⚡ CUANDO EL EQUIPO ESTÁ CLARAMENTE SOBREPASADO, NO SE ESPERAN LOS
+       45 CUADROS (2026-09-02).
+
+       Los 45 cuadros de confirmación existen para no bajar la calidad por
+       un tropezón pasajero, y para eso están bien. Pero se cuentan en
+       CUADROS, no en segundos, y ahí estaba el problema: en un equipo que
+       va a 5 fps, 45 cuadros son NUEVE SEGUNDOS. O sea que justamente el
+       equipo que más necesita ayuda es el que más tarda en recibirla, y el
+       invitado se come nueve segundos de tirones antes de que el
+       gobernador mueva un dedo.
+
+       Cuando el promedio pasa de TRES VECES el ritmo ideal (menos de 20
+       fps en una pantalla de 60 Hz) no hay nada que confirmar: eso no es
+       un tropezón, es un equipo que no da abasto. Con un cuarto de la
+       racha alcanza y sobra.
+
+       La histéresis para MEJORAR no se toca: subir sigue siendo lento y
+       cauto, que es lo que evita el ping-pong de efectos. */
+    const estaMuySobrepasado = promedioMs > intervaloIdeal * 3;
+    const cuadrosQueHacenFalta = estaMuySobrepasado
+      ? Math.ceil(CUADROS_PARA_DEGRADAR / 4)
+      : CUADROS_PARA_DEGRADAR;
+
     // ¿Conviene MEJORAR un nivel (el equipo va sobrado)?
     if (calidad > CALIDAD_GRAFICA.ALTA &&
         promedioMs < intervaloIdeal * FACTOR_MEJORAR[calidad]) cuadrosMejora++;
     else cuadrosMejora = 0;
 
-    if (cuadrosDegrada >= CUADROS_PARA_DEGRADAR) {
+    if (cuadrosDegrada >= cuadrosQueHacenFalta) {
       calidad++;
       /* Si este equipo YA tuvo que bajar de este nivel antes, la próxima vez
          se le va a exigir mucha más paciencia antes de volver a subir: evita

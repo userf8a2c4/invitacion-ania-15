@@ -2200,9 +2200,47 @@
   let saltoDelResorte = SALTO_DEL_RESORTE_POR_CALIDAD[calidad] ?? 1;
   let contadorDeCuadro = 0;
   let dtAcumulado = 0;
+
+  /* ⚡ EN CALIDAD BAJA LAS PLANTAS DEJAN DE MECERSE, Y ES LA DECISIÓN MÁS
+     IMPORTANTE DE TODO ESTE ARCHIVO (2026-09-02).
+
+     LA MEDICIÓN QUE LA OBLIGA. Con el banco de herramientas/medir.mjs,
+     misma escena, mismas 234 flores en pantalla, mismo recorrido de
+     scroll:
+
+         con vaivén    7 fps
+         sin vaivén   60 fps
+
+     No es un ajuste del 10 %: es la diferencia entre una web rota y una
+     fluida, y todo el resto del dibujo queda EXACTAMENTE igual. El costo
+     no está en tener 234 rosas —eso se rasteriza una vez y se compone—,
+     está en ROTAR por cuadro unos SVG de cientos de `<path>`, cada uno
+     relleno con un `linearGradient` por url(): cada grado de giro obliga
+     a rasterizar todo ese vector otra vez.
+
+     POR QUÉ SOLO EN BAJA Y NO SIEMPRE. El vaivén es parte del encanto de
+     la invitación y en un equipo que lo aguanta no hay ningún motivo para
+     quitarlo. Quien decide es el gobernador de calidad
+     (codigo/21-monitor-de-rendimiento.js), que ya mide la actuación real:
+     si el equipo sostiene el ritmo, se mece; si no da abasto y cae a
+     BAJA, se congela. Un equipo modesto prefiere una escena quieta y
+     fluida a una que se mece a los tirones.
+
+     SE CONGELA DONDE ESTÁ, SIN VOLVER A CERO. Escribir un rotate(0) al
+     entrar en baja daría un salto visible de todas las plantas a la vez.
+     Como la inclinación en reposo es de pocos grados, dejarlas quietas en
+     la última posición no se nota — y además no cuesta ni una escritura.
+
+     ⚠️ NO CONFUNDIR CON `?sin=meneo`: aquel es un interruptor de
+     diagnóstico que apaga el vaivén siempre; esto es comportamiento
+     normal de la web, y solo en el nivel más bajo. */
+  const SE_MECE_POR_CALIDAD = { 0: true, 1: true, 2: false };
+  let seMece = SE_MECE_POR_CALIDAD[calidad] ?? true;
+
   document.addEventListener('calidad-cambio', evento => {
     calidad = (evento.detail && evento.detail.calidad) ?? 0;
     saltoDelResorte = SALTO_DEL_RESORTE_POR_CALIDAD[calidad] ?? 1;
+    seMece = SE_MECE_POR_CALIDAD[calidad] ?? true;
   });
 
   /**
@@ -2218,7 +2256,7 @@
        si se encienden las animaciones con el botón, vuelven a mecerse en el
        acto, sin recargar. Se actualiza el reloj para que al reanudar no dé
        un salto por el tiempo acumulado. */
-    if (!hayAlgoQueMirar() || SIN_MENEO) {
+    if (!hayAlgoQueMirar() || SIN_MENEO || !seMece) {
       momentoAnterior = momentoActual;
       requestAnimationFrame(dibujarCuadro);
       return;
