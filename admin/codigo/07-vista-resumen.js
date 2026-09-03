@@ -250,14 +250,37 @@ function bloqueEjecutivo(datos, pendientes) {
  * solo lugar donde agregar un acceso nuevo, no dos que se puedan
  * desincronizar.
  */
+/* ⚡ SIN "GENTE" NI "DINERO" DESDE QUE ESTÁN EN LA BARRA (2026-09-03).
+   Los dos tienen ahora su propio botón abajo, así que repetirlos acá era
+   ofrecer dos caminos al mismo sitio en la misma pantalla — ruido, y una
+   decisión de más para alguien que solo quiere llegar. En su lugar entran
+   Evento y Notas, que se quedaron sin casa cuando "Planificar" dejó de ser
+   una parada obligatoria. */
 const ACCESOS_RAPIDOS = [
-  { clave: 'gente',     nombre: 'Gente',     ir: () => irA('invitados') },
   { clave: 'mesas',     nombre: 'Mesas',     ir: () => verPlanoDeMesas() },
-  { clave: 'dinero',    nombre: 'Dinero',    ir: () => irA('dinero') },
-  { clave: 'correo',    nombre: 'Correo',    ir: () => irA('correo') },
   { clave: 'tareas',    nombre: 'Tareas',    ir: () => { SECCION_EVENTO = 'tareas'; irA('evento', true); } },
+  { clave: 'evento',    nombre: 'Evento',    ir: () => irA('evento') },
+  { clave: 'correo',    nombre: 'Correo',    ir: () => irA('correo') },
   { clave: 'contactos', nombre: 'Contactos', ir: () => { SECCION_GENTE = 'contactos'; irA('invitados', true); } },
+  { clave: 'notas',     nombre: 'Notas',     ir: () => abrirHojaDeNota() },
 ];
+
+/**
+ * Engancha los accesos rápidos dentro de un contenedor cualquiera.
+ *
+ * Existe suelta porque ahora la misma rejilla se pinta en dos pantallas —
+ * Resumen y Hoy—, y tener el enganche en un solo sitio evita el clásico de
+ * agregar un acceso nuevo y que funcione en una pantalla y en la otra no.
+ *
+ * @param {HTMLElement} donde
+ * @returns {void}
+ */
+function engancharAccesosRapidos(donde) {
+  buscarTodos('[data-acceso]', donde).forEach(boton => {
+    const acceso = ACCESOS_RAPIDOS.find(a => a.clave === boton.dataset.acceso);
+    if (acceso) boton.addEventListener('click', () => acceso.ir());
+  });
+}
 
 /**
  * El HTML de la rejilla de accesos rápidos.
@@ -384,7 +407,7 @@ function bloqueDinero(dinero) {
   if (!dinero.costo && !dinero.presupuestado) {
     return '' +
       '<div class="tarjeta">' +
-        '<div class="tarjeta__titulo">Presupuesto</div>' +
+        '<div class="tarjeta__titulo">Dinero</div>' +
         '<p class="vacio__texto">Todavía no cargaste ningún gasto. ' +
         'Empieza desde la pestaña Dinero.</p>' +
       '</div>';
@@ -409,7 +432,7 @@ function bloqueDinero(dinero) {
 
   return '' +
     '<div class="tarjeta">' +
-      '<div class="tarjeta__titulo">Presupuesto</div>' +
+      '<div class="tarjeta__titulo">Dinero</div>' +
       '<div class="dinero-resumen">' +
         '<div class="dinero-resumen__mitad">' +
           '<div class="dinero-resumen__rotulo">Cuesta</div>' +
@@ -588,11 +611,9 @@ function engancharResumen(vista) {
   });
 
   // Los accesos rápidos, algunos con sub-sección propia (ver
-  // ACCESOS_RAPIDOS más arriba).
-  buscarTodos('[data-acceso]', vista).forEach(boton => {
-    const acceso = ACCESOS_RAPIDOS.find(a => a.clave === boton.dataset.acceso);
-    if (acceso) boton.addEventListener('click', () => acceso.ir());
-  });
+  // ACCESOS_RAPIDOS más arriba). El enganche está suelto porque Hoy pinta
+  // la misma rejilla.
+  engancharAccesosRapidos(vista);
 
   // Los hitos de la línea de tiempo llevan además a su sub-sección.
   buscarTodos('[data-hito]', vista).forEach(fila => {

@@ -56,7 +56,24 @@ const DONDE_BUSCAR = [
     datos: () => INVITADOS,
     campos: ['nombre', 'correo', 'codigo', 'alergias', 'notas'],
     titulo: r => r.nombre,
-    pie: r => [r.correo, r.codigo].filter(Boolean).join(' · '),
+    /* ⚡ ACÁ IBA EL CORREO Y EL CÓDIGO, Y LO QUE SE PREGUNTA ES LA MESA
+       (2026-09-03). Buscar a alguien para decirle dónde se sienta es LA
+       tarea de la puerta el día de la fiesta, y era de las peores: el
+       resultado mostraba correo y código —dos datos que nadie pide de
+       pie— y para ver la mesa había que tocar el resultado, esperar a
+       que se recargara la lista entera de Gente, y bajar hasta el último
+       renglón de la ficha, que es donde estaba.
+
+       El dato ya viajaba: confirmaciones.php hace el LEFT JOIN a
+       asignacion_mesas y mesas, y `fila.mesa` llega en cada invitado.
+       Solo no se pintaba. Ahora la respuesta se lee en el resultado, sin
+       abrir nada, y la alergia va al lado porque es lo segundo que se
+       pregunta cuando alguien se sienta. */
+    pie: r => [
+      r.mesa ? 'Mesa ' + r.mesa : 'Sin mesa',
+      r.alergias ? '⚠ ' + r.alergias : '',
+      r.codigo,
+    ].filter(Boolean).join(' · '),
     ir: r => { SECCION_GENTE = 'invitados'; irA('invitados', true);
                setTimeout(() => abrirDetalleDeInvitado(r.id), 400); },
   },

@@ -236,24 +236,35 @@
       <span>Hoy</span>
     </button>
 
-    <button class="navegacion__boton" data-ir="resumen">
+    <!-- ⚡ "Gente" y "Dinero" reemplazan a "Resumen" y "Planificar"
+         (2026-09-03). Ver la nota grande en codigo/05-navegacion.js: los dos
+         destinos donde de verdad se trabaja todos los días estaban detrás de
+         un submenú, y la barra gastaba dos de sus cuatro lugares en una
+         pantalla que se fundió con Hoy y en un índice que solo servía para
+         llegar a otro lado. -->
+    <button class="navegacion__boton" data-ir="invitados">
       <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
-        <rect x="3" y="3" width="7" height="9" rx="1.5"/>
-        <rect x="14" y="3" width="7" height="5" rx="1.5"/>
-        <rect x="14" y="10" width="7" height="11" rx="1.5"/>
-        <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+        <circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M3.5 19.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5" fill="none"
+              stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="17" cy="9.5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M16 15c2.6 0 4.5 1.8 4.5 4.5" fill="none"
+              stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
-      <span>Resumen</span>
-      <em id="burbuja-resumen" class="burbuja burbuja--alerta oculto"></em>
+      <span>Gente</span>
+      <em id="burbuja-gente" class="burbuja oculto"></em>
     </button>
 
-    <button class="navegacion__boton" data-ir="planificar">
+    <button class="navegacion__boton" data-ir="dinero">
       <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
-        <path d="M4 5h16M4 12h16M4 19h10" fill="none" stroke="currentColor"
+        <rect x="2.5" y="6" width="19" height="12" rx="2" fill="none"
+              stroke="currentColor" stroke-width="1.5"/>
+        <circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M6 9.5v5M18 9.5v5" fill="none" stroke="currentColor"
               stroke-width="1.5" stroke-linecap="round"/>
       </svg>
-      <span>Planificar</span>
-      <em id="burbuja-correo" class="burbuja oculto"></em>
+      <span>Dinero</span>
+      <em id="burbuja-resumen" class="burbuja burbuja--alerta oculto"></em>
     </button>
 
     <button class="navegacion__boton" data-ir="mas">
@@ -261,6 +272,7 @@
         <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
       </svg>
       <span>Más</span>
+      <em id="burbuja-correo" class="burbuja oculto"></em>
     </button>
   </nav>
 </div>

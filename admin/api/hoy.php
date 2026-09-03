@@ -290,7 +290,8 @@ if ($diasQueFaltan >= 0 && $diasQueFaltan <= 14) {
    siga siendo UNA sola petición y sirva con mala señal (ver la nota
    grande al principio del archivo sobre por qué todo va junto). */
 $dia = [
-    'llegaron'   => 0,
+    'llegaron'   => 0,   // PERSONAS que ya entraron (no familias: ver abajo)
+    'grupos_llegaron' => 0,
     'esperados'  => 0,
     'mesas_ocupadas' => 0,
     'mesas_total'     => 0,
@@ -299,8 +300,21 @@ $dia = [
 ];
 
 if (existeTabla('llegadas') && existeTabla('confirmaciones')) {
+    /* ⚠️ ESTE COUNT(*) CONTABA FAMILIAS Y SE MOSTRABA CONTRA PERSONAS
+       (corregido 2026-09-03). Es la cifra más grande de la pantalla del día
+       del evento —"llegaron X de Y", con barra de progreso— y comparaba
+       unidades distintas: familias marcadas contra personas esperadas. Con
+       120 personas en 40 familias no podía pasar nunca de 40/120, y la barra
+       marcaba 33 % con el salón lleno. Ver la misma corrección en
+       api/llegadas.php, acción 'resumen'.
+
+       Marcar el pase de una familia significa que la familia entró: se suman
+       sus adultos + niños. Los grupos se guardan aparte porque son otra cosa
+       —cuántas veces se escaneó— y sirven para el detalle. */
     $filaLlegaron = consultarUno(
-        'SELECT COUNT(*) AS n FROM llegadas l
+        'SELECT COALESCE(SUM(c.adultos + c.ninos), 0) AS personas,
+                COUNT(*) AS grupos
+         FROM llegadas l
          JOIN confirmaciones c ON c.id = l.confirmacion_id
          WHERE c.asiste = 1'
     );
@@ -309,7 +323,8 @@ if (existeTabla('llegadas') && existeTabla('confirmaciones')) {
     );
     $filaReintentos = consultarUno('SELECT COUNT(*) AS n FROM llegadas WHERE intentos > 0');
 
-    $dia['llegaron']  = (int) ($filaLlegaron['n'] ?? 0);
+    $dia['llegaron']  = (int) ($filaLlegaron['personas'] ?? 0);
+    $dia['grupos_llegaron'] = (int) ($filaLlegaron['grupos'] ?? 0);
     $dia['esperados']  = (int) ($filaEsperados['n'] ?? 0);
     $dia['pases_reintentados'] = (int) ($filaReintentos['n'] ?? 0);
 }
@@ -342,6 +357,30 @@ if (existeTabla('confirmaciones')) {
 }
 
 
+/* ─── CUÁNTA GENTE RESPONDIÓ LA INVITACIÓN ────────────────────────────
+   ⚡ ESTO NO EXISTÍA, Y ERA EL AGUJERO ENTRE LA INVITACIÓN Y EL PANEL
+   (2026-09-03). Cuando alguien contestaba su invitación, el panel no lo
+   decía por ningún lado: el único aviso real llegaba por correo. En
+   pantalla, la respuesta aparecía hasta 90 segundos después (el refresco
+   de fondo), en silencio, como un punto que cambiaba de color en una
+   lista de decenas de filas — y solo si Lucila estaba mirando esa lista
+   justo en ese momento.
+
+   El dato ya estaba: `invitaciones.respondida_en` se llena en confirmar.php
+   y viaja hasta el panel, pero se usaba únicamente como sí/no. Basta con
+   contar cuántas respondieron para que el teléfono pueda decir "hay tres
+   nuevas": el panel guarda cuántas había la última vez que Lucila abrió
+   Gente y compara. La cuenta se hace acá, en una petición que ya se hace
+   igual al abrir la app, sin agregar ni un viaje. */
+$respondidas = 0;
+if (existeTabla('invitaciones')) {
+    $filaRespondidas = consultarUno(
+        'SELECT COUNT(*) AS n FROM invitaciones WHERE respondida_en IS NOT NULL'
+    );
+    $respondidas = (int) ($filaRespondidas['n'] ?? 0);
+}
+
+
 /* ─── RESPONDER ───────────────────────────────────────────────────────── */
 
 // Primero lo atrasado, después lo de hoy, después la semana.
@@ -362,4 +401,7 @@ responderBien([
     'a_quien_llamar' => $aQuienLlamar,
     'lista_final'  => $listaFinal,
     'es_el_dia'    => $diasQueFaltan === 0,
+    // Cuántas invitaciones fueron respondidas en total. El panel lo compara
+    // con lo que vio la última vez para avisar las nuevas (ver arriba).
+    'respondidas'  => $respondidas,
 ]);

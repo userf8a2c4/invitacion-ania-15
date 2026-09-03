@@ -106,10 +106,21 @@ function abrirEscaner() {
       return;
     }
 
+    /* ⚡ EL RESULTADO DICE LA MESA (2026-09-03). Este buscador solo pintaba
+       el nombre, igual que los otros dos de la puerta. Pero en la puerta,
+       después de "¿llegaste?", la pregunta siempre es "¿dónde me siento?", y
+       la respuesta obligaba a salir de esta pantalla e ir a buscarla a otra.
+       El dato viene en la misma lista que ya se está filtrando. */
     caja.innerHTML = encontrados.map(f =>
       '<button class="lista__fila" data-escaner-elegir="' + seguro(f.codigo || '') + '">' +
         '<span class="lista__cuerpo">' +
           '<span class="lista__titulo">' + seguro(f.nombre) + '</span>' +
+          '<span class="lista__pie">' +
+            (f.mesa ? 'Mesa ' + seguro(f.mesa) : 'Sin mesa') +
+            (f.alergias && !/^(ninguna|ninguno|no|-)$/i.test(f.alergias)
+              ? ' · ⚠ ' + seguro(f.alergias)
+              : '') +
+          '</span>' +
         '</span>' +
       '</button>'
     ).join('');

@@ -149,7 +149,7 @@ async function abrirElegirProveedorPara(titulo, alElegir) {
   if (!proveedores.length) {
     cuerpo.innerHTML = '';
     pintarVacio(cuerpo, 'Todavía no hay proveedores',
-      'Da de alta uno primero, desde Presupuesto › Proveedores.');
+      'Da de alta uno primero, desde Dinero › Proveedores.');
     return;
   }
 

@@ -66,6 +66,8 @@ async function dibujarHoy() {
   const dia = datosDeHoy.dia || {};
   const alertas = alertasDelDia(datosDeHoy);
 
+  actualizarBurbujasDeLaBarra(datosDeHoy);
+
   // La hora de la última copia necesita leer IndexedDB (async); todo lo
   // demás de acá es síncrono, así que se resuelve antes de armar el HTML.
   const textoConexion = await textoDeConexionConHora();
@@ -75,14 +77,26 @@ async function dibujarHoy() {
      en todas las pantallas (ver actualizarContadorDeDias(),
      05-navegacion.js) — repetirla acá sería la misma cifra dos veces
      en la misma pantalla. */
+  /* ⚡ LOS ACCESOS RÁPIDOS TAMBIÉN VIVEN ACÁ (2026-09-03). Hoy pasó a ser la
+     pantalla de arranque de verdad (antes la app abría en Resumen aunque
+     tres comentarios dijeran lo contrario), y en la barra de abajo entraron
+     Gente y Dinero en lugar de Resumen y Planificar.
+
+     Esa rejilla es lo que sostiene el resto: Mesas, Tareas, Evento, Correo,
+     Contactos y Notas quedan a UN toque desde la pantalla que se abre sola,
+     en vez de a dos pasando por un índice. Es HTML sin datos —no agrega ni
+     un viaje al servidor— así que no rompe la regla de esta pantalla de
+     resolverse en una sola petición. */
   vista.innerHTML =
-    bloqueEstadoDelDia(dia, textoConexion) +
+    bloqueEstadoDelDia(dia, textoConexion, datosDeHoy.dias_para_la_fiesta) +
     bloqueTresAcciones() +
     bloqueAlertasDelDia(alertas) +
     '<div id="hoy-ultimas-llegadas"></div>' +
-    '<div id="hoy-pendientes"></div>';
+    '<div id="hoy-pendientes"></div>' +
+    bloqueAccesosRapidos();
 
   engancharTresAcciones(vista, alertas);
+  engancharAccesosRapidos(vista);
 
   pedidoUltimas.then(r =>
     pintarBloqueDeUltimasLlegadas(buscar('#hoy-ultimas-llegadas', vista), r.ultimas || [])
@@ -109,19 +123,50 @@ async function dibujarHoy() {
  *   (26-sincronizacion.js), ya resuelto antes de armar este HTML.
  * @returns {string} HTML
  */
-function bloqueEstadoDelDia(dia, textoConexion) {
+function bloqueEstadoDelDia(dia, textoConexion, diasParaLaFiesta) {
   const faltaAforo = dia.esperados > 0
     ? Math.min(100, Math.round((dia.llegaron / dia.esperados) * 100)) : 0;
+
+  /* ⚡ ANTES DEL DÍA, ESTA CIFRA NO ES "LLEGARON" (2026-09-03). Desde que la
+     app abre en Hoy, esta tarjeta es lo primero que se ve TODOS los días, no
+     solo el 24 de octubre. Y encabezar siete semanas seguidas con
+     "Llegaron 0/120" es dedicarle el lugar más visible de la app a un cero
+     que no significa nada todavía —y peor, que parece un error.
+
+     El mismo número, leído desde antes, sí dice algo: cuánta gente confirmó.
+     Es el dato que se le pasa al salón y al banquete, y el que Lucila mira a
+     diario. La cifra es exactamente la misma (`esperados` es la suma de
+     adultos + niños de quienes dijeron que sí); lo que cambia es el rótulo,
+     que pasa a decir la verdad de cada momento.
+
+     El corte es "falta más de un día y todavía no entró nadie": en cuanto
+     alguien cruza la puerta, o ya es la víspera, manda el conteo de
+     llegadas. */
+  const esDiaDeFiesta = !(Number(diasParaLaFiesta) > 1) || Number(dia.llegaron) > 0;
 
   return '' +
     '<div class="tarjeta hoy-estado">' +
       estadoDeConexionHTML(textoConexion) +
 
       '<div class="hoy-estado__cifras">' +
+        /* ⚡ "Llegaron" son PERSONAS, y el rótulo lo dice (2026-09-03).
+           El número venía contando familias marcadas contra personas
+           esperadas —ver la corrección en api/hoy.php—, así que con el salón
+           lleno podía mostrar 40/120. Ahora las dos mitades son personas, y
+           debajo va, en chico, cuántos grupos cruzaron la puerta: es el dato
+           que explica el número grande sin competir con él. */
         '<div class="hoy-estado__cifra">' +
-          '<div class="hoy-estado__numero">' + seguro(dia.llegaron || 0) +
-            '<span class="hoy-estado__de">/' + seguro(dia.esperados || 0) + '</span></div>' +
-          '<div class="hoy-estado__rotulo">Llegaron</div>' +
+          (esDiaDeFiesta
+            ? '<div class="hoy-estado__numero">' + seguro(dia.llegaron || 0) +
+                '<span class="hoy-estado__de">/' + seguro(dia.esperados || 0) +
+                '</span></div>' +
+              '<div class="hoy-estado__rotulo">Llegaron' +
+                (dia.grupos_llegaron
+                  ? ' · ' + seguro(dia.grupos_llegaron) + ' grupos'
+                  : '') +
+              '</div>'
+            : '<div class="hoy-estado__numero">' + seguro(dia.esperados || 0) + '</div>' +
+              '<div class="hoy-estado__rotulo">Confirmaron</div>') +
         '</div>' +
         '<div class="hoy-estado__cifra hoy-estado__cifra--tocable" data-hoy-ir="mesas" ' +
              'role="button" tabindex="0">' +
@@ -137,10 +182,59 @@ function bloqueEstadoDelDia(dia, textoConexion) {
         '</div>' +
       '</div>' +
 
-      '<div class="barra" style="margin-top:var(--esp-1)">' +
-        '<div class="barra__relleno" style="width:' + faltaAforo + '%"></div>' +
-      '</div>' +
+      /* La barra de progreso solo tiene sentido cuando hay algo que
+         progresar: antes del día llenaría un 0 % permanente. */
+      (esDiaDeFiesta
+        ? '<div class="barra" style="margin-top:var(--esp-1)">' +
+            '<div class="barra__relleno" style="width:' + faltaAforo + '%"></div>' +
+          '</div>'
+        : '') +
     '</div>';
+}
+
+/**
+ * Pone los números de las pestañas Gente y Dinero.
+ *
+ * ⚡ POR QUÉ SE HACE DESDE ACÁ (2026-09-03).
+ * Las burbujas de la barra las llenaba dibujarResumen(), y Resumen era la
+ * pantalla de arranque. Ahora la de arranque es Hoy, y Resumen quedó a dos
+ * toques dentro de Más: si el número siguiera colgando de ahí, no se
+ * actualizaría casi nunca — un aviso que solo aparece cuando ya fuiste a
+ * mirar no avisa nada.
+ *
+ * Hoy pide hoy.php cada vez que se abre la app, así que es el sitio natural.
+ * No agrega ni una petición: son dos cuentas sobre datos que ya llegaron.
+ *
+ * @param {Object} datosDeHoy - La respuesta de hoy.php.
+ * @returns {void}
+ */
+function actualizarBurbujasDeLaBarra(datosDeHoy) {
+  if (typeof ponerBurbuja !== 'function') return;
+
+  /* GENTE: cuántas respuestas nuevas hay desde la última vez que Lucila
+     entró a mirar. Es el aviso que faltaba: hasta ahora, que alguien
+     confirmara no se notaba en ninguna parte de la app. */
+  const respondidas = Number(datosDeHoy.respondidas) || 0;
+  const vistas = recordado('gente-respuestas-vistas', null);
+
+  /* La primera vez no hay con qué comparar: se guarda el número de ahora y
+     no se avisa de nada. Si no, la primera apertura de la app diría "38
+     respuestas nuevas", que es cierto y a la vez inútil. */
+  if (vistas === null) {
+    recordar('gente-respuestas-vistas', respondidas);
+    ponerBurbuja('#burbuja-gente', 0);
+  } else {
+    ponerBurbuja('#burbuja-gente', Math.max(0, respondidas - (Number(vistas) || 0)));
+  }
+
+  /* DINERO: solo lo de dinero atrasado o de hoy. Los pendientes traen su
+     tipo ('pago', 'tarea', 'agenda'), así que la burbuja de la pestaña de
+     dinero cuenta pagos y nada más — un número en una pestaña tiene que
+     hablar de lo que hay adentro de esa pestaña. */
+  const pagosUrgentes = (datosDeHoy.pendientes || [])
+    .filter(p => p.tipo === 'pago' && Number(p.urgencia) <= 1)
+    .length;
+  ponerBurbuja('#burbuja-resumen', pagosUrgentes);
 }
 
 /**

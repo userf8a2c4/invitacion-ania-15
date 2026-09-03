@@ -229,6 +229,23 @@ const CONFIGURACION = {
      del Bloque 1 llegue al menú, esto se puede afinar por permiso real
      de cada sección en vez de por rol. */
   indiceDelMenu: [
+    /* ⚡ ESTE GRUPO ES NUEVO (2026-09-03). Cuando la barra de abajo pasó a
+       ser Hoy · Gente · Dinero · Más, "Resumen" y "Planificar" se quedaron
+       sin botón. Lo esencial de Resumen (los accesos rápidos) vive ahora en
+       Hoy, pero el resto —la tarjeta ejecutiva, "Necesita tu atención", los
+       números de invitados y la línea de tiempo de lo que viene— sigue
+       siendo información que Lucila mira, y dejarla sin ninguna puerta
+       habría sido perderla sin decírselo a nadie.
+
+       Van acá, a dos toques: son pantallas de mirar cada tanto, no de todos
+       los días. Lo de todos los días está abajo, en la barra. */
+    {
+      titulo: 'Ver todo',
+      filas: [
+        ['resumen',    'La foto completa: invitados, dinero y lo que viene'],
+        ['planificar', 'El índice de todas las herramientas del panel'],
+      ],
+    },
     {
       titulo: 'Del día',
       filas: [

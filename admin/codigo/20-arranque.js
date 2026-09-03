@@ -144,18 +144,33 @@ function arrancarLaApp() {
   const parametros = new URLSearchParams(location.search);
   const atajo = parametros.get('ir');
 
+  /* ⚡ LA APP ABRE EN "HOY" (2026-09-03). Abría en Resumen, aunque el HTML
+     marcaba Hoy como la vista activa y tres comentarios distintos del código
+     afirmaban que "Hoy es la puerta de entrada". Nadie lo había notado
+     porque la contradicción estaba repartida en dos archivos.
+
+     No es un detalle: el día de la fiesta, TODA tarea empezaba pagando un
+     toque para llegar a la pantalla que se hizo justamente para ese día
+     —marcar llegadas, buscar a alguien, ver el plano—, y el objetivo ahí son
+     dos toques en total. Ese peaje se lo comía uno de los dos. */
   if (atajo === 'nota') {
-    irA('resumen');
+    irA('hoy');
     abrirHojaDeNota();
   } else if (atajo && VISTAS[atajo]) {
     irA(atajo);
   } else {
-    irA('resumen');
+    irA('hoy');
   }
 
-  // Se limpia el parámetro de la barra de direcciones para que al
-  // recargar no vuelva a abrirse el atajo.
-  if (atajo) history.replaceState(null, '', location.pathname);
+  /* Se limpia el parámetro de la barra de direcciones para que al recargar
+     no vuelva a abrirse el atajo.
+
+     ⚠️ SE CONSERVA history.state (2026-09-03). Acá se pasaba `null` como
+     estado, lo que borraba la marca de vista que deja irA() para que el
+     gesto de "atrás" de Android funcione (ver la nota en 05-navegacion.js).
+     El resultado era que el atrás quedaba roto justamente al entrar por un
+     atajo del icono, que es la forma más rápida de abrir el panel. */
+  if (atajo) history.replaceState(history.state, '', location.pathname);
 }
 
 

@@ -280,12 +280,24 @@ async function pintarBuscadorDePases(donde) {
           (asiste ? 'var(--bien)' : 'var(--alerta)') + ';font-weight:700">' +
           (asiste ? gente + (gente === 1 ? ' persona' : ' personas') : 'NO ASISTE') +
         '</div>' +
-        (f.codigo
-          ? '<div class="codigo-pase" style="font-size:14px">' +
-            seguro(f.codigo) + '</div>' : '') +
+        /* ⚡ LA MESA, EN GRANDE Y ANTES QUE EL CÓDIGO (2026-09-03). Esta
+           tarjeta se mira de pie, en la puerta, mientras alguien espera que
+           le digan dónde sentarse — y mostraba el código del pase pero no la
+           mesa. Había que salir de acá, ir a Gente, buscar de nuevo, abrir la
+           ficha y bajar hasta el final. El dato ya venía en la respuesta. */
+        (asiste
+          ? '<div class="etiqueta ' +
+              (f.mesa ? 'etiqueta--bien' : 'etiqueta--alerta') +
+              '" style="margin-top:6px;font-size:16px">' +
+              (f.mesa ? 'Mesa ' + seguro(f.mesa) : 'Sin mesa asignada') +
+            '</div>'
+          : '') +
         (f.alergias && !/^(ninguna|ninguno|no|-)$/i.test(f.alergias)
           ? '<div class="etiqueta etiqueta--ojo" style="margin-top:6px">⚠ ' +
             seguro(f.alergias) + '</div>' : '') +
+        (f.codigo
+          ? '<div class="codigo-pase" style="font-size:14px;margin-top:6px">' +
+            seguro(f.codigo) + '</div>' : '') +
       '</div>';
     }).join('');
   });
