@@ -108,15 +108,23 @@
   function cuadrosNecesariosParaMejorar() {
     const fallos = intentosFallidos[calidad - 1] || 0;
 
-    /* ⚡ A LA TERCERA NO SE INTENTA MÁS (2026-09-03). La penalidad creciente
-       alcanza para un equipo que tuvo un mal momento, pero no para uno que
-       sencillamente no da abasto: ese sube, no aguanta, baja, y vuelve a
-       intentarlo cada vez más lejos, pero SIEMPRE de nuevo — y cada intento
-       es un parpadeo visible de efectos que se prenden y se apagan. Si este
-       equipo ya probó este nivel dos veces y las dos veces tuvo que bajar,
-       la respuesta ya está: no lo aguanta. Se queda donde está por el resto
-       de la visita, quieto y fluido. Infinity = nunca junta esa racha. */
-    if (fallos >= 2) return Infinity;
+    /* ⚡ SE BAJA UNA VEZ Y NO SE SUBE NUNCA MÁS EN TODA LA VISITA
+       (2026-09-03). Primero esto fue "a la tercera no se intenta más", y no
+       alcanzó: en un teléfono real seguía viéndose el parpadeo, porque hasta
+       llegar a ese tope todavía quedaban dos ciclos de subir-y-caer, y cada
+       ciclo son varios segundos de haces prendiéndose y apagándose.
+
+       Y el parpadeo no es un detalle estético: el CSS esconde haces enteros
+       por nivel (estilos/12-haces-de-luz.css:557-561) y los pétalos cambian
+       de cantidad, así que cada cambio de calidad es un cambio VISIBLE en la
+       portada. Un invitado no ve "el gobernador ajustando": ve la web
+       fallando.
+
+       La calidad de más se puede recuperar en la próxima visita (esto se
+       reinicia al recargar). El parpadeo, en cambio, arruina ESTA. Entre las
+       dos, se elige la escena quieta: un solo cambio, temprano, y después
+       nada se mueve nunca más. Infinity = jamás se junta la racha. */
+    if (fallos >= 1) return Infinity;
 
     return Math.min(CUADROS_PARA_MEJORAR * Math.pow(2, fallos), 1800);
   }
