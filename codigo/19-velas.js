@@ -1035,7 +1035,17 @@
   // escucharEventoQueQuizasYaPaso() (02-utilidades.js): este script se
   // inyecta encadenado detrás de otros — el evento puede haber pasado
   // antes de que cargara.
-  escucharEventoQueQuizasYaPaso('invitacion-visible', construirYAcomodarUnaSolaVez);
+  /* ⚡ 300 ms DE DEMORA, A PROPÓSITO (2026-09-03). Desde que los 23 scripts
+     de la escena bajan en paralelo (44f54c9), este archivo y
+     07-marco-y-enredaderas.js —los dos más caros de construir— arrancaban
+     su construcción en el MISMO instante, compitiendo por el mismo hilo.
+     22-luz-de-la-hora.js y 27-fauna-nocturna.js ya usaban este mismo
+     escalonamiento (300 y 600 ms); acá faltaba. Dejar que 07 arranque solo
+     y que las velas entren 300 ms después reduce las chances de que dos
+     pasos indivisibles (el cierre de un ramillete acá, colocarPieza allá)
+     caigan en la misma tanda de cuadros. */
+  escucharEventoQueQuizasYaPaso('invitacion-visible',
+    () => setTimeout(construirYAcomodarUnaSolaVez, 300));
 
   /* Rehacer si cambia el tamaño de la ventana (con un respiro).
      Si todavía no se construyó nada, no hay nada que acomodar. */

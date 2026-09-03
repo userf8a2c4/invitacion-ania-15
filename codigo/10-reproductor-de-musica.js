@@ -187,6 +187,11 @@
       });
   }
 
+  /* Cuándo fue la última vez que la persona pausó a propósito (con el
+     botón). La red de seguridad de más abajo la respeta por un rato: ver
+     la nota ahí. */
+  let momentoDeLaUltimaPausaManual = -Infinity;
+
   /**
    * Alterna entre reproducir y pausar.
    * @returns {void}
@@ -195,6 +200,7 @@
     if (audioDeFondo.paused) {
       reproducirLaCancion();
     } else {
+      momentoDeLaUltimaPausaManual = performance.now();
       audioDeFondo.pause();
     }
   }
@@ -257,6 +263,18 @@
     // vuelve a reproducir en el mismo click — la música nunca se pausaba.
     if (panel.contains(evento.target)) return;
     if (botonMusica && botonMusica.contains(evento.target)) return;
+
+    /* ⚡ Y SI ACABA DE PAUSAR A PROPÓSITO, TAMPOCO (2026-09-03). El guard de
+       arriba cubre el clic en el botón mismo, pero no cubre el caso del
+       equipo lento: con el hilo trabado por la construcción de la escena,
+       el clic de pausa y el toque siguiente de la persona —impaciente,
+       tocando de nuevo porque "no pasó nada"— llegan casi pegados, y ese
+       segundo toque, en cualquier otro lado de la página, revivía la música
+       recién pausada. Desde afuera se ve como si la pausa no funcionara
+       nunca. Medio segundo de respeto alcanza: si de verdad la quiere de
+       vuelta, vuelve a tocar. */
+    if (performance.now() - momentoDeLaUltimaPausaManual < 600) return;
+
     if (audioDeFondo.paused) reproducirLaCancion();
   });
 
