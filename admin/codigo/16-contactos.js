@@ -203,13 +203,23 @@ async function abrirFichaDeContacto(contacto) {
      teléfono abre en la app correspondiente. */
   const soloDigitos = String(contacto.telefono || '').replace(/[^\d+]/g, '');
 
+  /* paraWhatsApp() y no un replace a mano: le pone la clave de país a
+     los diez dígitos mexicanos y devuelve vacío cuando el número no
+     sirve. Quitar los no-dígitos a secas mandaba "9611234567" tal cual
+     a wa.me, que lo interpreta como de otro país y abre el chat de un
+     desconocido — o ninguno— sin decir nada. */
+  const paraChat = paraWhatsApp(contacto.telefono);
+
   const acciones = [];
   if (soloDigitos) {
     acciones.push(
-      '<a class="boton" style="flex:1" href="tel:' + seguro(soloDigitos) + '">Llamar</a>',
-      // wa.me no acepta el +, solo dígitos.
+      '<a class="boton" style="flex:1" href="tel:' + seguro(soloDigitos) + '">Llamar</a>'
+    );
+  }
+  if (paraChat) {
+    acciones.push(
       '<a class="boton" style="flex:1" target="_blank" rel="noopener" ' +
-         'href="https://wa.me/' + seguro(soloDigitos.replace(/\D/g, '')) + '">WhatsApp</a>'
+         'href="https://wa.me/' + seguro(paraChat) + '">WhatsApp</a>'
     );
   }
   if (contacto.correo) {
@@ -237,6 +247,12 @@ async function abrirFichaDeContacto(contacto) {
         acciones.join('') + '</div>'
       : '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
         'No tiene teléfono ni correo cargado.</p>') +
+
+    // Por qué falta WhatsApp teniendo teléfono. Ver paraWhatsApp().
+    (soloDigitos && !paraChat
+      ? '<p class="aviso-error" style="margin-bottom:var(--esp-3)">' +
+        'Ese teléfono no sirve para WhatsApp: le falta la clave de país.</p>'
+      : '') +
 
     '<button class="boton boton--ancho" id="ficha-editar" ' +
             'style="margin-bottom:var(--esp-3)">Editar</button>' +

@@ -90,7 +90,7 @@ const DONDE_BUSCAR = [
     datos: () => (DINERO ? DINERO.gastos : []),
     campos: ['concepto', 'notas'],
     titulo: r => r.concepto,
-    pie: r => comoDinero(r.monto_real || r.presupuestado),
+    pie: r => comoDinero(costoDelGasto(r)),
     ir: () => { SECCION_DINERO = 'gastos'; irA('dinero', true); },
   },
   {

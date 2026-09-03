@@ -278,7 +278,7 @@ function formularioDeAlarma(alarma, despues, precargado) {
   const borrar = buscar('#pie-borrar', cuerpo);
   if (borrar) {
     borrar.addEventListener('click', async () => {
-      if (!confirmarAccion('¿Borrar esta alarma?')) return;
+      if (!await confirmarAccion('¿Borrar esta alarma?')) return;
       try {
         await mandar('alarmas.php?accion=borrar', { id: alarma.id });
         cerrarHoja(true);

@@ -256,7 +256,10 @@ const CONFIGURACION = {
     {
       titulo: 'Herramientas',
       filas: [
-        ['compartir', 'Mandar los datos del evento a un proveedor por WhatsApp'],
+        /* Solo admin: compartir.php exige rol admin y una cuenta de
+           entrada recibía un 403 al abrirlo, después de haberlo visto
+           en su menú como cualquier otra herramienta. */
+        ['compartir', 'Mandar los datos del evento a un proveedor por WhatsApp', true],
         ['importar',  'Cargar invitados o gastos desde una hoja de cálculo'],
         // ⚡ (2026-08-28) Antes las etiquetas de acomodo (Entrega 2) solo
         // se podían crear o ver desde adentro de la ficha de una persona

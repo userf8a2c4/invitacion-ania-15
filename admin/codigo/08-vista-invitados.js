@@ -372,16 +372,22 @@ async function dibujarInvitados() {
     throw error;
   }
 
-  // ⚡ (2026-08-28) FECHA_LIMITE_TEXTO (global de 48-invitaciones.js, la
-  // usa textoDeInvitacion() en el mensaje de WhatsApp) antes se cargaba
-  // sola al abrir la extinta pestaña Envíos. Con esa pestaña fusionada
-  // acá, se pide una sola vez al entrar a Invitados. No es crítico si
-  // falla: el mensaje de WhatsApp queda sin la fecha límite, nada más.
-  if (!FECHA_LIMITE_TEXTO) {
-    traer('ajustes.php?accion=obtener&clave=fecha_limite_confirmar')
-      .then(r => { if (r.valor) FECHA_LIMITE_TEXTO = formatearFechaLimiteLarga(r.valor); })
-      .catch(() => {});
-  }
+  /* ⚡ (2026-08-28) FECHA_LIMITE_TEXTO (global de 48-invitaciones.js, la
+     usa textoDeInvitacion() en el mensaje de WhatsApp) antes se cargaba
+     sola al abrir la extinta pestaña Envíos. Con esa pestaña fusionada
+     acá, se pide al entrar a Invitados.
+
+     Se ESPERA (2026-09-03): era un `.then()` suelto y mandar rápido
+     armaba el texto sin la fecha, o sea sin el párrafo que pide
+     confirmar. Ver asegurarFechaLimiteDeConfirmacion().
+
+     El texto base viaja al lado por la misma razón: se edita desde
+     Invitaciones → configuración y tiene que estar cargado antes de que
+     haya un botón de "Mandar por WhatsApp" que tocar. */
+  await Promise.all([
+    asegurarFechaLimiteDeConfirmacion(),
+    asegurarTextoDeInvitacion(),
+  ]);
 
   // Si la tabla no tiene id, el panel no puede editar ni borrar filas.
   // Se avisa una vez, en lugar de mostrar botones que fallarían.
@@ -899,8 +905,21 @@ function abrirDetalleDeInvitado(id) {
         (sirveParaWhatsApp(fila.invitacion_telefono)
           ? '<button class="boton boton--principal" id="inv-whatsapp">Mandar por WhatsApp</button>'
           : '') +
+        /* ⚡ EL CORREO VUELVE (2026-09-03). El endpoint
+           invitaciones.php?accion=enviar_correo existía y funcionaba, y
+           no tenía UN SOLO BOTÓN en toda la app: quedó dentro de
+           dibujarInvitaciones(), que es código inalcanzable desde que la
+           sección se fusionó con Gente. Mandar una invitación por correo
+           era, de hecho, imposible. */
+        (fila.invitacion_correo
+          ? '<button class="boton" id="inv-correo">Mandar por correo</button>'
+          : '') +
         '<button class="boton" id="copiar-link-invitacion">Copiar link</button>' +
-      '</div>'
+      '</div>' +
+      (!sirveParaWhatsApp(fila.invitacion_telefono) && !fila.invitacion_correo
+        ? '<p class="vacio__texto">Sin teléfono ni correo cargados: por ahora, ' +
+          'copia el link y mándaselo por donde lo tengas.</p>'
+        : '')
     : '<button type="button" class="boton boton--ancho" style="margin-top:var(--esp-3)" ' +
               'id="generar-link-invitado">Generar link personal</button>';
 
@@ -973,6 +992,41 @@ function abrirDetalleDeInvitado(id) {
         const numero = paraWhatsApp(fila.invitacion_telefono);
         window.open('https://wa.me/' + numero + '?text=' + encodeURIComponent(texto), '_blank');
         mandar('invitaciones.php?accion=marcar_enviada', { id: fila.invitacion_id }).catch(() => {});
+      });
+    }
+
+    const botonCorreo = buscar('#inv-correo', cuerpo);
+    if (botonCorreo) {
+      botonCorreo.addEventListener('click', async () => {
+        if (!await confirmarAccion(
+          '¿Mandarle la invitación por correo a ' + fila.nombre + '?\n\n' +
+          'Va a ' + fila.invitacion_correo + ', con el mismo texto que ' +
+          'manda WhatsApp.',
+          { confirmar: 'Mandar el correo' })) return;
+
+        botonCorreo.disabled = true;
+        botonCorreo.textContent = 'Mandando…';
+
+        try {
+          const r = await mandar('invitaciones.php?accion=enviar_correo',
+                                 { ids: [fila.invitacion_id] });
+
+          /* El endpoint contesta cuántos salieron, cuántos no tenían
+             correo y cuántos fallaron. Acá es siempre uno solo, así que
+             se dice qué pasó con ESE en vez de un "Listo" que no
+             distingue haber mandado de no haber mandado nada. */
+          if (r && r.mandados) avisar('Invitación mandada por correo.');
+          else if (r && r.fallidos) avisar('No se pudo mandar el correo. Revisa la dirección.', true);
+          else avisar('No tiene correo cargado.', true);
+
+          ensuciarVistas('invitados');
+          await dibujarGente();
+        } catch (error) {
+          avisar(error.message, true);
+        } finally {
+          botonCorreo.disabled = false;
+          botonCorreo.textContent = 'Mandar por correo';
+        }
       });
     }
 
@@ -1094,7 +1148,7 @@ function abrirDetalleDeInvitado(id) {
   });
 
   buscar('#borrar-invitado', cuerpo).addEventListener('click', async () => {
-    if (!confirmarAccion(
+    if (!await confirmarAccion(
       '¿Borrar la confirmación de ' + (fila.nombre || 'esta persona') + '?\n\n' +
       'No se puede deshacer.'
     )) return;
@@ -1508,7 +1562,7 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
 
   buscarTodos('[data-quitar-acomp]', contenedor).forEach(boton => {
     boton.addEventListener('click', async () => {
-      if (!confirmarAccion('¿Quitar a esta persona de la lista de nombrados?')) return;
+      if (!await confirmarAccion('¿Quitar a esta persona de la lista de nombrados?')) return;
       try {
         await mandar('acompanantes.php?accion=borrar', { id: Number(boton.dataset.quitarAcomp) });
         dibujarAcompanantes(confirmacionId, cupo, contenedor);

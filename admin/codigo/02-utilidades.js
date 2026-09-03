@@ -147,6 +147,36 @@ function comoDinero(cantidad, conDecimales) {
 }
 
 /**
+ * Cuánto cuesta un gasto. UNA sola definición, para toda la app.
+ *
+ * LA REGLA
+ * Si se cargó el costo real, ese es el costo. Si todavía no, lo
+ * presupuestado. Un gasto tiene UN costo, no dos.
+ *
+ * POR QUÉ ES UNA FUNCIÓN Y NO UNA LÍNEA REPETIDA
+ * Estaba escrita como `monto_real || presupuestado` en tres lugares. En
+ * JavaScript la cadena `"0.00"` —que es como PDO devuelve un DECIMAL en
+ * cero— es verdadera, así que un gasto de $50.000 sin costo real
+ * cargado se mostraba como **$0** en la lista y en el buscador,
+ * mientras el total de arriba lo contaba bien. Dos números para lo
+ * mismo, en la misma pantalla.
+ *
+ * El servidor ahora manda números de verdad (conMontosNumericos en
+ * _lib/dinero.php), y acá se compara como número igual: es la clase de
+ * dato que llega de tres endpoints distintos y basta uno sin castear
+ * para que vuelva el problema.
+ *
+ * @param {Object} gasto
+ * @returns {number} En pesos.
+ */
+function costoDelGasto(gasto) {
+  if (!gasto) return 0;
+
+  const real = Number(gasto.monto_real) || 0;
+  return real !== 0 ? real : (Number(gasto.presupuestado) || 0);
+}
+
+/**
  * Convierte a pesos lo que se escribió en un campo de monto.
  *
  * Es el camino inverso de comoDinero(): si se están viendo dólares, lo

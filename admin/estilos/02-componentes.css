@@ -1006,3 +1006,83 @@ select.campo__control {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+
+/* ─── 14. CONFIRMAR (hoja propia, no el confirm() del navegador) ────── */
+/*
+ * POR QUÉ EXISTE
+ * Chrome en Android agrega "No volver a mostrar más diálogos" al
+ * segundo confirm() seguido. Con veinte confirmaciones en la app es
+ * cuestión de tiempo que se toque — y desde ese momento TODAS devuelven
+ * false en silencio. No solo se rompen los borrados: se rompe el
+ * guardarraíl de "escribiste cosas sin guardar", que es justamente el
+ * que evita perder media hora de trabajo.
+ *
+ * Va por encima de todo (z-index 100) porque casi siempre se pregunta
+ * con una hoja ya abierta debajo, y #hoja es una sola: reusarla se
+ * comería el formulario que se está por confirmar.
+ */
+.confirmar {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--esp-3);
+}
+
+.confirmar__fondo {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, .7);
+  animation: aparecer 140ms ease;
+}
+
+.confirmar__panel {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  max-height: 80dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--esp-4) var(--esp-3) var(--esp-3);
+  background: var(--fondo-elevado);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo);
+  box-shadow: var(--sombra-alta);
+  animation: confirmar-entrar 180ms cubic-bezier(.2, .8, .3, 1);
+}
+
+/* El borde de alerta solo cuando lo que se pregunta destruye algo. Si
+   todas las preguntas se vieran iguales de graves, ninguna lo sería. */
+.confirmar__panel--peligro { border-color: var(--alerta); }
+
+.confirmar__titulo {
+  font-size: 16px;
+  line-height: 1.35;
+  margin-bottom: var(--esp-2);
+}
+
+/* Qué se pierde exactamente. Es la mitad que un "¿estás seguro?" no
+   tiene, y la única que permite decidir sin adivinar. */
+.confirmar__detalle {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--texto-tenue);
+  margin-bottom: var(--esp-3);
+  white-space: pre-line;
+}
+
+.confirmar__acciones {
+  display: flex;
+  gap: var(--esp-2);
+}
+.confirmar__acciones .boton {
+  flex: 1;
+  min-height: 44px;
+}
+
+@keyframes confirmar-entrar {
+  from { opacity: 0; transform: scale(.96); }
+}

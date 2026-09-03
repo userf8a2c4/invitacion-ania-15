@@ -121,6 +121,101 @@ function fechaLimiteConfigurada() {
 }
 
 /**
+ * El texto con el que se manda la invitación, tal como quedó guardado
+ * desde el panel (Gente → Invitaciones → configuración).
+ *
+ * TIENE QUE SER IDÉNTICO AL DE admin/codigo/48-invitaciones.js
+ * (TEXTO_INVITACION_ORIGINAL). Son los dos canales de la misma
+ * invitación: si el correo dijera algo distinto de lo que dice
+ * WhatsApp, serían dos voces para la misma familia.
+ *
+ * @return string La plantilla, con sus huecos sin rellenar.
+ */
+function textoDeInvitacionConfigurado() {
+    $original =
+        "✦ Ania cumple quince años ✦\n\n" .
+        "{nombre}:\n\n" .
+        "Hay fechas que uno quiere recordar acompañado, y esta es una de ellas. " .
+        "Nos dará mucha alegría contar con ustedes.\n\n" .
+        "Hemos reservado {lugares} lugares a su nombre.\n\n" .
+        "Aquí está su invitación. Ahí mismo pueden confirmar y elegir su menú:\n" .
+        "{link}\n\n" .
+        "Les pedimos confirmar antes del {fecha_limite}. " .
+        "Pueden modificar su respuesta cuantas veces gusten hasta esa fecha.";
+
+    if (!existeTabla('ajustes')) return $original;
+
+    $fila  = consultarUno("SELECT valor FROM ajustes WHERE clave = 'texto_invitacion' LIMIT 1");
+    $valor = trim((string) ($fila['valor'] ?? ''));
+
+    return $valor !== '' ? $valor : $original;
+}
+
+/**
+ * Rellena los huecos de la plantilla y devuelve el texto en HTML.
+ *
+ * Misma regla que rellenarHuecosDeInvitacion() en el panel: si todavía
+ * no hay fecha límite, el RENGLÓN entero donde va `{fecha_limite}`
+ * desaparece — reemplazarla por vacío dejaría "confirmar antes del ."
+ * en la invitación de alguien.
+ *
+ * Cada renglón en blanco separa párrafos, que es como se escribió el
+ * texto en el editor y como se ve en WhatsApp.
+ *
+ * @param string $plantilla
+ * @param array  $inv     Fila de `invitaciones`.
+ * @param string $link
+ * @param string $fechaLimite  En texto, o '' si no hay.
+ * @return string HTML ya escapado.
+ */
+function invitacionComoHtml($plantilla, $inv, $link, $fechaLimite) {
+    $texto = (string) $plantilla;
+
+    if ($fechaLimite === '') {
+        $renglones = array_filter(
+            explode("\n", $texto),
+            function ($renglon) { return strpos($renglon, '{fecha_limite}') === false; }
+        );
+        $texto = implode("\n", $renglones);
+    }
+
+    $texto = strtr($texto, [
+        '{nombre}'       => $inv['nombre'],
+        '{lugares}'      => (string) (int) $inv['pases'],
+        '{link}'         => $link,
+        '{fecha_limite}' => $fechaLimite,
+    ]);
+
+    $texto = preg_replace("/\n{3,}/", "\n\n", trim($texto));
+
+    /* Se escapa TODO y recién después se arman los párrafos: así un
+       nombre con `<` o un `&` en el link no pueden romper el HTML del
+       correo ni inyectar nada. El link se vuelve enlace aparte, ya
+       escapado, comparando contra el texto escapado. */
+    $seguro = htmlspecialchars($texto, ENT_QUOTES, 'UTF-8');
+
+    // La guarda del vacío no es teórica: str_replace('', …) inserta la
+    // etiqueta entre CADA carácter del mensaje.
+    if ($link !== '') {
+        $linkSeguro = htmlspecialchars($link, ENT_QUOTES, 'UTF-8');
+        $seguro = str_replace(
+            $linkSeguro,
+            '<a href="' . $linkSeguro . '">' . $linkSeguro . '</a>',
+            $seguro
+        );
+    }
+
+    $parrafos = preg_split("/\n\n/", $seguro);
+    $html = '';
+    foreach ($parrafos as $parrafo) {
+        if (trim($parrafo) === '') continue;
+        $html .= '<p>' . nl2br($parrafo) . '</p>';
+    }
+
+    return $html;
+}
+
+/**
  * Arma la fila de `confirmaciones` con SOLO las columnas que la tabla
  * realmente tiene — mismo cuidado que confirmaciones.php, porque esta
  * tabla se creó a mano y su esquema no es de fiar.
@@ -488,6 +583,9 @@ case 'enviar_correo':
     // texto es el mismo sin importar desde qué pantalla se dispare el
     // envío, y cambiarlo en un solo lugar (Ajustes) alcanza.
     $fechaLimite = fechaLimiteConfigurada();
+    // La MISMA plantilla que usa WhatsApp desde el panel: una sola voz
+    // por los dos canales. Ver textoDeInvitacionConfigurado().
+    $plantilla   = textoDeInvitacionConfigurado();
 
     $mandados = 0;
     $sinCorreo = 0;
@@ -505,17 +603,7 @@ case 'enviar_correo':
 
         $link = linkDeInvitacion($inv['token']);
         $asunto = 'Ania cumple quince años — su invitación';
-        $cuerpoHtml = '<p>✦ Ania cumple quince años ✦</p>'
-            . '<p>' . htmlspecialchars($inv['nombre'], ENT_QUOTES, 'UTF-8') . ':</p>'
-            . '<p>Hay fechas que uno quiere recordar acompañado, y esta es una de ellas. '
-            . 'Nos dará mucha alegría contar con ustedes.</p>'
-            . '<p>Hemos reservado <strong>' . (int) $inv['pases'] . ' lugares</strong> a su nombre.</p>'
-            . '<p>Aquí está su invitación. Ahí mismo pueden confirmar y elegir su menú:<br>'
-            . '<a href="' . htmlspecialchars($link, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($link, ENT_QUOTES, 'UTF-8') . '</a></p>'
-            . ($fechaLimite !== ''
-                ? '<p>Les pedimos confirmar antes del ' . htmlspecialchars($fechaLimite, ENT_QUOTES, 'UTF-8')
-                  . '. Pueden modificar su respuesta cuantas veces gusten hasta esa fecha.</p>'
-                : '');
+        $cuerpoHtml = invitacionComoHtml($plantilla, $inv, $link, $fechaLimite);
 
         // enviarCorreo() (no smtpEnviar() directo) ya arma los datos SMTP
         // desde env() — es el mismo wrapper que usa admin/api/correo.php.

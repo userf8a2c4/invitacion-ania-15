@@ -85,6 +85,24 @@ if ($accion === 'que_hay') {
          'que' => 'Las pruebas de vestido, con fecha y lugar'],
         ['clave' => 'invitados', 'nombre' => 'Lista de invitados',
          'que' => 'Quiénes confirmaron, con sus códigos de pase'],
+
+        /* ⚡ CINCO PAQUETES MÁS (2026-09-03). Los datos ya estaban
+           cargados y no tenían salida: había que dictarlos por teléfono
+           o mandar una foto de la pantalla. Cada uno es una rama más
+           abajo — agregar un destino es un renglón acá y un bloque
+           allá, no una pantalla nueva. */
+        ['clave' => 'mesa',       'nombre' => 'Una mesa',
+         'que' => 'Quién se sienta, qué come cada uno y sus alergias',
+         'pide_mesa' => true],
+        ['clave' => 'cronograma', 'nombre' => 'El cronograma',
+         'que' => 'La hora de cada momento del día'],
+        ['clave' => 'cuenta',     'nombre' => 'Estado de cuenta',
+         'que' => 'Cuánto se le pagó a un proveedor y cuánto queda',
+         'pide_proveedor' => true],
+        ['clave' => 'foraneos',   'nombre' => 'Los que vienen de fuera',
+         'que' => 'Quién llega cuándo, dónde se queda y su teléfono'],
+        ['clave' => 'tallas',     'nombre' => 'Tallas de la corte',
+         'que' => 'La talla de cada chambelán y cada dama'],
     ]);
 }
 
@@ -480,6 +498,278 @@ if ($cual === 'invitados') {
 
         $texto .= "\n*TOTAL: " . count($filas) . " confirmaciones · " .
                   $total . " personas*\n";
+    }
+}
+
+
+/* ═══ UNA MESA ═══ */
+/*
+   Para el mesero y para la coordinadora: quién se sienta ahí, qué come
+   cada uno y quién tiene alergia. Ese cruce ya lo hacía la pantalla de
+   Mesas (mesas.php?accion=detalle_mesa) y no tenía forma de salir del
+   teléfono: había que dictarlo o mandar una foto de la pantalla.
+
+   La alergia va marcada y al final de cada renglón, no escondida entre
+   paréntesis: es el dato por el que alguien puede terminar en un
+   hospital.
+*/
+if ($cual === 'mesa') {
+    $mesaId = (int) ($_GET['mesa'] ?? 0);
+    if ($mesaId <= 0) responderMal('Falta decir qué mesa.', 400);
+
+    $mesa = existeTabla('mesas')
+        ? consultarUno('SELECT nombre, ubicacion FROM mesas WHERE id = :m', [':m' => $mesaId])
+        : null;
+    if (!$mesa) responderMal('Esa mesa no existe.', 404);
+
+    $texto = encabezado('Mesa ' . $mesa['nombre'] .
+                        ($mesa['ubicacion'] ? ' · ' . $mesa['ubicacion'] : ''));
+
+    /* Los dos caminos por los que alguien llega a una mesa: con su
+       familia entera, o sentado aparte. Mismo criterio (y mismo
+       descarte de repetidos) que mesas.php?accion=detalle_mesa. */
+    $porFamilia = existeTabla('acompanantes')
+        ? consultarTodo(
+            'SELECT a.id, a.nombre, a.tipo, a.menu, a.alergias, c.nombre AS familia
+             FROM asignacion_mesas am
+             JOIN confirmaciones c ON c.id = am.confirmacion_id
+             JOIN acompanantes a   ON a.confirmacion_id = c.id
+             WHERE am.mesa_id = :m
+             ORDER BY c.nombre, a.id',
+            [':m' => $mesaId])
+        : [];
+
+    $porPersona = existeTabla('asignacion_mesas_persona')
+        ? consultarTodo(
+            'SELECT a.id, a.nombre, a.tipo, a.menu, a.alergias, c.nombre AS familia
+             FROM asignacion_mesas_persona ap
+             JOIN acompanantes a        ON a.id = ap.acompanante_id
+             LEFT JOIN confirmaciones c ON c.id = a.confirmacion_id
+             WHERE ap.mesa_id = :m
+             ORDER BY a.id',
+            [':m' => $mesaId])
+        : [];
+
+    $vistos = [];
+    $conAlergia = 0;
+    $cuerpoMesa = '';
+
+    foreach (array_merge($porFamilia, $porPersona) as $f) {
+        $id = (int) $f['id'];
+        if (isset($vistos[$id])) continue;
+        $vistos[$id] = true;
+
+        $alergia = trim((string) ($f['alergias'] ?? ''));
+        $sinAlergia = $alergia === '' ||
+                      preg_match('/^(ninguna|ninguno|no|n\/a|-)$/i', $alergia) === 1;
+
+        $cuerpoMesa .= "· " . $f['nombre'] .
+            ((string) $f['tipo'] === 'nino' ? ' (niño)' : '') .
+            ($f['menu'] ? " — " . $f['menu'] : '') . "\n";
+
+        if (!$sinAlergia) {
+            $conAlergia++;
+            $cuerpoMesa .= "  ⚠️ *ALERGIA: " . $alergia . "*\n";
+        }
+    }
+
+    if ($cuerpoMesa === '') {
+        $texto .= "_Todavía no hay nadie sentado en esta mesa._\n";
+    } else {
+        $texto .= $cuerpoMesa;
+        $texto .= "\n*" . count($vistos) . " personas en la mesa";
+        if ($conAlergia) $texto .= " · " . $conAlergia . " con alergia";
+        $texto .= "*\n";
+    }
+}
+
+
+/* ═══ CRONOGRAMA ═══ */
+/*
+   El cronograma solo. Existía únicamente adentro del paquete del
+   fotógrafo, así que mandárselo al DJ, a quien maneja el corte o a la
+   familia obligaba a mandarles también la lista de tomas de foto.
+*/
+if ($cual === 'cronograma') {
+    $texto = encabezado('Cómo va el día');
+
+    if (existeTabla('cronograma')) {
+        $momentos = consultarTodo(
+            'SELECT hora, momento, responsable, detalle FROM cronograma ORDER BY hora'
+        );
+
+        if ($momentos) {
+            foreach ($momentos as $m) {
+                $texto .= "*" . substr((string) $m['hora'], 0, 5) . "* — " . $m['momento'] . "\n";
+                if ($m['responsable']) $texto .= "  👤 " . $m['responsable'] . "\n";
+                if ($m['detalle'])     $texto .= "  _" . $m['detalle'] . "_\n";
+            }
+        } else {
+            $texto .= "_Todavía no cargamos el cronograma._\n";
+        }
+    }
+}
+
+
+/* ═══ ESTADO DE CUENTA DE UN PROVEEDOR ═══ */
+/*
+   "Van $X, queda $Y." Es la conversación que se tiene con cada
+   proveedor antes de cada pago, y el dato estaba entero en el panel sin
+   forma de mandarlo.
+
+   Solo se listan los pagos MARCADOS COMO PAGADOS: un pago pendiente es
+   una intención nuestra, no algo que el proveedor haya recibido, y
+   mandárselo como si fuera plata entregada sería mentirle.
+*/
+if ($cual === 'cuenta') {
+    $paraId = (int) ($_GET['proveedor'] ?? 0);
+    if ($paraId <= 0) responderMal('Falta decir de qué proveedor.', 400);
+
+    $prov = existeTabla('proveedores')
+        ? consultarUno('SELECT nombre, servicio, monto_total FROM proveedores WHERE id = :i',
+                       [':i' => $paraId])
+        : null;
+    if (!$prov) responderMal('Ese proveedor no existe.', 404);
+
+    $texto = encabezado('Estado de cuenta · ' . $prov['nombre']);
+
+    $pagos = (existeTabla('pagos') && existeTabla('gastos'))
+        ? consultarTodo(
+            "SELECT p.concepto, p.monto, p.fecha_pagado, p.metodo
+             FROM pagos p
+             JOIN gastos g ON g.id = p.gasto_id
+             WHERE g.proveedor_id = :i AND p.estado = 'pagado'
+             ORDER BY p.fecha_pagado, p.id",
+            [':i' => $paraId])
+        : [];
+
+    $pagado = 0.0;
+    if ($pagos) {
+        $texto .= "*LO QUE YA SE PAGÓ*\n";
+        foreach ($pagos as $p) {
+            $pagado += (float) $p['monto'];
+            $texto .= "· " . ($p['fecha_pagado']
+                        ? date('d/m/Y', strtotime($p['fecha_pagado'])) : 'sin fecha') .
+                      " — $" . number_format((float) $p['monto'], 2) .
+                      ($p['concepto'] ? " (" . $p['concepto'] . ")" : '') . "\n";
+        }
+        $texto .= "\n";
+    } else {
+        $texto .= "_Todavía no hay pagos registrados._\n\n";
+    }
+
+    $total = (float) $prov['monto_total'];
+    $texto .= str_repeat('—', 24) . "\n";
+    $texto .= "*Total acordado:* $" . number_format($total, 2) . "\n";
+    $texto .= "*Pagado:* $" . number_format($pagado, 2) . "\n";
+    $texto .= "*Queda:* $" . number_format(max(0, $total - $pagado), 2) . "\n";
+
+    /* El próximo vencimiento es la otra mitad de la conversación: no
+       solo cuánto falta, sino para cuándo. */
+    $proximo = existeTabla('pagos')
+        ? consultarUno(
+            "SELECT p.fecha_limite, p.monto
+             FROM pagos p
+             JOIN gastos g ON g.id = p.gasto_id
+             WHERE g.proveedor_id = :i AND p.estado <> 'pagado'
+               AND p.fecha_limite IS NOT NULL
+             ORDER BY p.fecha_limite LIMIT 1",
+            [':i' => $paraId])
+        : null;
+
+    if ($proximo) {
+        $texto .= "\n_Próximo vencimiento: $" . number_format((float) $proximo['monto'], 2) .
+                  " el " . date('d/m/Y', strtotime($proximo['fecha_limite'])) . "._\n";
+    }
+}
+
+
+/* ═══ LOS QUE VIENEN DE FUERA ═══ */
+/*
+   Para quien va al aeropuerto o a la central. Ordenado por cuándo
+   llega, que es el orden en que hace falta.
+*/
+if ($cual === 'foraneos') {
+    $texto = encabezado('Los que vienen de fuera');
+
+    if (existeTabla('foraneos')) {
+        $filas = consultarTodo(
+            'SELECT nombre, telefono, ciudad, hospedaje, llega, se_va, transporte, notas
+             FROM foraneos ORDER BY llega IS NULL, llega, nombre'
+        );
+
+        if ($filas) {
+            foreach ($filas as $f) {
+                $texto .= "*" . $f['nombre'] . "*" .
+                          ($f['ciudad'] ? " — " . $f['ciudad'] : '') . "\n";
+                if ($f['llega']) {
+                    $texto .= "Llega el " . date('d/m/Y', strtotime($f['llega']));
+                    if ($f['se_va']) $texto .= ", se va el " . date('d/m/Y', strtotime($f['se_va']));
+                    $texto .= "\n";
+                }
+                if ($f['transporte']) $texto .= "🚌 " . $f['transporte'] . "\n";
+                if ($f['hospedaje'])  $texto .= "🏨 " . $f['hospedaje'] . "\n";
+                if ($f['telefono'])   $texto .= "📞 " . $f['telefono'] . "\n";
+                if ($f['notas'])      $texto .= "_" . $f['notas'] . "_\n";
+                $texto .= "\n";
+            }
+            $texto .= "*" . count($filas) . " personas de fuera.*\n";
+        } else {
+            $texto .= "_Todavía no hay nadie cargado de fuera._\n";
+        }
+    }
+}
+
+
+/* ═══ TALLAS DE LA CORTE ═══ */
+/*
+   Para la modista. Hasta ahora solo recibía las CITAS (el paquete
+   'modista'), nunca las tallas — que están cargadas una por una en la
+   corte de honor desde el primer día.
+*/
+if ($cual === 'tallas') {
+    $texto = encabezado('Tallas de la corte');
+
+    if (existeTabla('corte_honor')) {
+        $comoSeLlama = [
+            'chambelan'   => 'CHAMBELANES',
+            'dama'        => 'DAMAS',
+            'pareja_vals' => 'PAREJA DEL VALS',
+            'otro'        => 'OTROS',
+        ];
+
+        $filas = consultarTodo(
+            "SELECT nombre, rol, talla, vestuario FROM corte_honor
+             ORDER BY FIELD(rol, 'chambelan', 'dama', 'pareja_vals', 'otro'), nombre"
+        );
+
+        if ($filas) {
+            $sinTalla = 0;
+            $rolActual = '';
+
+            foreach ($filas as $f) {
+                if ($f['rol'] !== $rolActual) {
+                    $rolActual = $f['rol'];
+                    $texto .= "\n*" . ($comoSeLlama[$rolActual] ?? 'OTROS') . "*\n";
+                }
+
+                $texto .= "· " . $f['nombre'] . " — " .
+                          ($f['talla'] !== '' ? 'talla ' . $f['talla'] : '_sin talla_');
+
+                // El estado del vestuario le dice qué le falta hacer.
+                if ($f['vestuario'] === 'listo')      $texto .= " ✅";
+                elseif ($f['vestuario'] === 'medido') $texto .= " (ya se midió)";
+
+                $texto .= "\n";
+                if ($f['talla'] === '') $sinTalla++;
+            }
+
+            if ($sinTalla) {
+                $texto .= "\n_Faltan " . $sinTalla . " tallas por tomar._\n";
+            }
+        } else {
+            $texto .= "_Todavía no hay corte de honor cargada._\n";
+        }
     }
 }
 

@@ -20,6 +20,23 @@
 let USUARIO = null;
 
 /**
+ * Si esta cuenta puede borrar cosas.
+ *
+ * POR QUÉ EXISTE
+ * Borrar es de administradora: una cuenta de entrada trabaja en la
+ * puerta el día del evento y puede consultar, no destruir (eso lo
+ * decide `exigirAdministrador()` en el servidor, que sigue siendo la
+ * única autoridad). Pero la app pintaba el botón "Borrar" igual para
+ * todos, y quien no podía se enteraba recién al tocarlo y recibir un
+ * 403. Un botón que existe y no funciona es peor que uno que no está.
+ *
+ * @returns {boolean}
+ */
+function puedeBorrar() {
+  return !!(USUARIO && USUARIO.rol === 'admin');
+}
+
+/**
  * Las mismas cinco preguntas de seguridad de _lib/sesion.php
  * (PREGUNTAS_DE_SEGURIDAD) — si se cambia una lista, hay que cambiar la
  * otra. Se usan acá (login) y en 20-arranque.js (Ajustes → Mi cuenta).
@@ -282,7 +299,7 @@ async function salir() {
       ? 'Queda 1 cambio sin mandar al servidor.'
       : 'Quedan ' + pendientes + ' cambios sin mandar al servidor.';
 
-    if (!confirmarAccion(aviso + '\n\nSe van a mandar cuando vuelvas a ' +
+    if (!await confirmarAccion(aviso + '\n\nSe van a mandar cuando vuelvas a ' +
                          'entrar con esta cuenta y haya señal.\n\n¿Salir igual?')) {
       return;
     }

@@ -192,8 +192,13 @@ case 'listar':
     $selectRespondidaEn = in_array('respondida_en', $columnasInv, true)
         ? 'inv.respondida_en' : 'NULL';
     $selectInv = $conInvitacion
+        /* `invitacion_correo` es el correo de la INVITACIÓN, que no es
+           el mismo campo que confirmaciones.correo: es a donde se manda
+           el link. Sin él, la ficha no podía saber si ofrecer "Mandar
+           por correo" (ver invitaciones.php?accion=enviar_correo). */
         ? ', inv.id AS invitacion_id, inv.token AS invitacion_token,
             inv.telefono AS invitacion_telefono, inv.pases AS invitacion_pases,
+            inv.correo AS invitacion_correo,
             inv.estado AS invitacion_estado, inv.grupo_id AS invitacion_grupo_id,
             ' . $selectVecesEnviado . ' AS invitacion_veces_enviado,
             ' . $selectRespondidaEn . ' AS invitacion_respondida_en,

@@ -490,7 +490,7 @@ async function accionDeCorreo(accion, correo, lista) {
     // para siempre, así que la confirmación tiene que decirlo clarito.
     const definitivo = viendoLaPapelera();
 
-    if (!confirmarAccion(
+    if (!await confirmarAccion(
       (definitivo
         ? '¿Borrar este correo para siempre? No se puede deshacer.\n\n'
         : '¿Mover este correo a la papelera?\n\n') +
@@ -620,6 +620,23 @@ async function abrirCorreo(uid) {
     cuerpo.innerHTML = '';
     pintarError(cuerpo, error.message, () => abrirCorreo(uid));
     return;
+  }
+
+  /* Abrirlo lo marca leído EN EL SERVIDOR: la orden IMAP es
+     `UID FETCH (BODY[])`, sin PEEK, y eso pone la marca \Seen (ver
+     BuzonImap::leer en _lib/imap.php). La app no se enteraba: al volver
+     atrás el correo seguía en negrita, seguía apareciendo en "No
+     leídos" y la burbuja seguía contándolo, hasta recargar la bandeja
+     entera. Se anota en memoria y se baja el contador acá mismo. */
+  const enLaLista = CORREOS.find(c => Number(c.uid) === Number(uid));
+  if (enLaLista && !enLaLista.leido) {
+    enLaLista.leido = true;
+    ponerBurbuja('#burbuja-correo', CORREOS.filter(c => !c.leido).length);
+
+    // Y la fila de atrás deja la negrita, para que al cerrar la hoja la
+    // lista concuerde con lo que se acaba de leer.
+    const listaDeAtras = buscar('#lista-correo');
+    if (listaDeAtras) pintarBandeja(listaDeAtras);
   }
 
   buscar('#hoja-titulo').textContent = m.asunto || '(sin asunto)';
@@ -974,6 +991,12 @@ function formularioCorreo(previo) {
           ? ' (no se pudo guardar una copia en Enviados, pero sí se mandó)'
           : '')
       );
+
+      /* Se vuelve a pedir la bandeja. Estando parada en Enviados, mandar
+         un correo dejaba la carpeta exactamente igual que antes: el que
+         se acababa de mandar no aparecía hasta actualizar a mano, y la
+         conclusión natural —"no se mandó"— era la equivocada. */
+      dibujarCorreo();
     } catch (error) {
       avisar(error.message, true);
       boton.disabled = false;

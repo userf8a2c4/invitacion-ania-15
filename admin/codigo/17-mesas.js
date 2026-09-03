@@ -625,9 +625,9 @@ function engancharMesas(cuerpo) {
 
   buscarTodos('[data-editar-mesa]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
-      const mesa = (EVENTO.mesas || []).find(m =>
-        String(m.id) === boton.dataset.editarMesa);
+      const mesa = mesaParaEditar(boton.dataset.editarMesa);
       if (mesa) formularioEvento('mesas', mesa);
+      else avisar('Esa mesa ya no está. Actualiza la pantalla.', true);
     });
   });
 
@@ -885,7 +885,7 @@ async function armarElSalon(refrescar) {
     prioridad: salon.prioridadPorFila[m.fila] || 50,
   }));
 
-  if (!confirmarAccion(
+  if (!await confirmarAccion(
     'Se van a crear ' + mesas.length + ' mesas de ' + salon.capacidad +
     ' lugares, cada una en su sitio del plano.\n\n' +
     'Las que ya existan con ese nombre no se duplican: solo se les ' +
@@ -1031,8 +1031,15 @@ function abrirLaMesa(mesaId, refrescar) {
     // preferir sentarla acá (ver mejorMesaPara() en _lib/mesas.php).
     '<div class="campo" id="mesa-etiquetas" style="margin-top:var(--esp-3)"></div>' +
 
+    /* La hoja de la mesa para el mesero y la coordinadora: quién se
+       sienta, qué come cada uno y las alergias. El cruce ya estaba
+       hecho en esta misma pantalla y no tenía forma de salir del
+       teléfono — había que dictarlo o mandar una foto. */
+    '<button class="boton boton--ancho" id="mesa-compartir" ' +
+            'style="margin-top:var(--esp-2)">Mandar esta mesa por WhatsApp</button>' +
+
     '<button class="boton boton--ancho" id="mesa-editar" ' +
-            'style="margin-top:var(--esp-2)">Cambiar nombre o capacidad</button>'
+            'style="margin-top:var(--esp-1)">Cambiar nombre o capacidad</button>'
   );
 
   pintarEtiquetasDe('mesa', mesaId, buscar('#mesa-etiquetas', cuerpo));
@@ -1043,11 +1050,36 @@ function abrirLaMesa(mesaId, refrescar) {
       elegirMesaPara(Number(boton.dataset.moverDeMesa), refrescar));
   });
 
-  buscar('#mesa-editar', cuerpo).addEventListener('click', () => {
-    const cruda = (EVENTO && EVENTO.mesas || []).find(m => Number(m.id) === mesaId);
-    if (cruda) formularioEvento('mesas', cruda);
-    else avisar('Abre la sección Mesas de Evento para editarla.', true);
+  buscar('#mesa-compartir', cuerpo).addEventListener('click', () => {
+    // armarParaCompartir abre su propia hoja encima de esta.
+    armarParaCompartir('mesa', null, mesaId);
   });
+
+  buscar('#mesa-editar', cuerpo).addEventListener('click', () => {
+    const cruda = mesaParaEditar(mesaId);
+    if (cruda) formularioEvento('mesas', cruda);
+    else avisar('Esa mesa ya no está. Actualiza la pantalla.', true);
+  });
+}
+
+/**
+ * La mesa con la que hay que abrir el formulario de edición.
+ *
+ * POR QUÉ EXISTE
+ * Esto buscaba en `EVENTO.mesas`, que es la lista de la pestaña Evento
+ * y en esta pantalla está vacía desde que Mesas se fusionó con Gente:
+ * tocar una mesa recién creada no hacía absolutamente nada por un
+ * camino, y por el otro mandaba a "abre la sección Mesas de Evento",
+ * que ya no existe. Se busca en `MESAS`, que es lo que se está viendo,
+ * y que además trae `fila` y `columna` — los dos campos que el
+ * formulario necesita para poder ubicarla en el plano.
+ *
+ * @param {number|string} mesaId
+ * @returns {Object|null}
+ */
+function mesaParaEditar(mesaId) {
+  return (MESAS && MESAS.mesas || []).find(m =>
+    String(m.id) === String(mesaId)) || null;
 }
 
 
@@ -1161,6 +1193,19 @@ function elegirMesaPara(confirmacionId, refrescar) {
   const quitar = buscar('#mesa-quitar', cuerpo);
   if (quitar) {
     quitar.addEventListener('click', async () => {
+      /* Se pregunta, y quitar una regla de "no sentar juntos" también:
+         antes esto no preguntaba nada y quitar la regla sí, o sea que
+         la app protegía lo leve y no lo grave. Sacar a alguien de su
+         mesa deshace un acomodo hecho a mano y no tiene deshacer
+         propio. */
+      const nombreMesa = (MESAS.mesas || []).find(m => m.id === mesaActual);
+      if (!await confirmarAccion(
+        '¿Sacar a ' + quien.nombre + ' de la mesa?\n\n' +
+        'Vuelve a «sin mesa»' +
+        (nombreMesa ? ' y deja ' + pluralizar(quien.lugares, 'lugar libre', 'lugares libres') +
+                      ' en ' + nombreMesa.nombre : '') + '.',
+        { confirmar: 'Sacar de la mesa', peligro: true })) return;
+
       try {
         await mandar('mesas.php?accion=sentar',
                      { confirmacion_id: confirmacionId, mesa_id: 0 });
@@ -1301,7 +1346,7 @@ function abrirPreferenciasDe(quien, refrescar) {
          abajo. Y es peor equivocarse acá: el motivo por el que dos
          personas no se pueden sentar juntas rara vez se vuelve a
          escribir, y el error recién se descubre en la fiesta. */
-      if (!confirmarAccion('¿Quitar esta regla?\n\n' +
+      if (!await confirmarAccion('¿Quitar esta regla?\n\n' +
                            'Estas dos personas van a poder quedar en la ' +
                            'misma mesa.')) return;
       try {
@@ -1484,8 +1529,8 @@ function abrirReglasDeAcomodo(refrescar) {
       'Volver al acomodo anterior' +
     '</button>' +
     '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
-      'Antes de cada acomodo automático se guarda cómo estaba. Esto ' +
-      'devuelve todo a la última foto.</p>' +
+      'Antes de cada acomodo automático, y antes de borrar una mesa, se ' +
+      'guarda cómo estaba. Esto devuelve todo a la última foto.</p>' +
 
     '<button class="boton boton--ancho boton--peligro" id="mesa-vaciar" ' +
             'style="margin-bottom:var(--esp-1)">' +
@@ -1513,7 +1558,7 @@ function abrirReglasDeAcomodo(refrescar) {
 
   buscarTodos('[data-borrar-grupo]', cuerpo).forEach(boton => {
     boton.addEventListener('click', async () => {
-      if (!confirmarAccion('¿Borrar este grupo? Sus invitados quedan sin grupo.')) return;
+      if (!await confirmarAccion('¿Borrar este grupo? Sus invitados quedan sin grupo.')) return;
       try {
         await mandar('mesas.php?accion=borrar_grupo', { id: boton.dataset.borrarGrupo });
         cerrarHoja(true);
@@ -1556,7 +1601,7 @@ function abrirReglasDeAcomodo(refrescar) {
 
   buscarTodos('[data-quitar-pelea-hub]', cuerpo).forEach(boton => {
     boton.addEventListener('click', async () => {
-      if (!confirmarAccion('¿Quitar esta regla?\n\n' +
+      if (!await confirmarAccion('¿Quitar esta regla?\n\n' +
                            'Estas dos personas van a poder quedar en la misma mesa.')) return;
       try {
         await mandar('mesas.php?accion=borrar_pelea', { id: boton.dataset.quitarPeleaHub });
@@ -1588,6 +1633,20 @@ function abrirReglasDeAcomodo(refrescar) {
   });
 
   buscar('#mesa-deshacer', cuerpo).addEventListener('click', async () => {
+    /* Esto no preguntaba nada, y es de lo más destructivo que hay acá:
+       vuelve a la última foto y con eso pisa TODO lo que se acomodó a
+       mano después de ella. La pregunta dice de cuándo es la foto —el
+       dato con el que se decide— en vez de un "¿estás seguro?". */
+    const foto = MESAS.ultimo_respaldo;
+    if (!await confirmarAccion(
+      '¿Volver al acomodo anterior?\n\n' +
+      (foto
+        ? 'Se vuelve a como estaba el ' + comoFecha(String(foto.cuando).slice(0, 10)) +
+          (foto.motivo ? ' (' + foto.motivo + ')' : '') + '. '
+        : '') +
+      'Todo lo que hayas acomodado a mano después de esa foto se pierde.',
+      { confirmar: 'Volver atrás', peligro: true })) return;
+
     try {
       const r = await mandar('mesas.php?accion=deshacer', {});
       cerrarHoja(true);
@@ -1597,7 +1656,7 @@ function abrirReglasDeAcomodo(refrescar) {
   });
 
   buscar('#mesa-vaciar', cuerpo).addEventListener('click', async () => {
-    if (!confirmarAccion('¿Sacar a todos de las mesas?\n\n' +
+    if (!await confirmarAccion('¿Sacar a todos de las mesas?\n\n' +
                          'Lo que fijaste con el candado queda como está.')) return;
     try {
       const r = await mandar('mesas.php?accion=vaciar', {});
@@ -1608,7 +1667,7 @@ function abrirReglasDeAcomodo(refrescar) {
   });
 
   buscar('#mesa-vaciar-todo', cuerpo).addEventListener('click', async () => {
-    if (!confirmarAccion('¿Vaciar TODO, incluso lo que fijaste a mano?\n\n' +
+    if (!await confirmarAccion('¿Vaciar TODO, incluso lo que fijaste a mano?\n\n' +
                          'Esto no se puede deshacer.')) return;
     try {
       const r = await mandar('mesas.php?accion=vaciar', { todo: true });
@@ -1729,7 +1788,7 @@ function pintarFormularioDeReglaDePersona(cuerpo, persona, refrescar) {
   const devolver = buscar('#rp-devolver', cuerpo);
   if (devolver) {
     devolver.addEventListener('click', async () => {
-      if (!confirmarAccion(persona.nombre + ' vuelve a viajar con su familia. ¿Seguro?')) return;
+      if (!await confirmarAccion(persona.nombre + ' vuelve a viajar con su familia. ¿Seguro?')) return;
       try {
         await mandar('mesas.php?accion=regla_persona', {
           acompanante_id: persona.id, grupo_id: 0, mesa_preferida: 0, notas: '',

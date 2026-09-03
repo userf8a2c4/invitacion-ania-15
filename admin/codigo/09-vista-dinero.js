@@ -780,6 +780,42 @@ function engancharTareasDeLaFicha(cuerpo, tipo, id, tituloParaLaTarea) {
 }
 
 /**
+ * Cuánto falta pagar de un gasto, y en qué estado está.
+ *
+ * POR QUÉ EXISTE
+ * La ficha del gasto listaba sus pagos SIN SUMARLOS: contestar "¿cuánto
+ * falta pagar de esto?" —la pregunta más frecuente sobre un gasto—
+ * había que hacerlo de cabeza mirando una lista. Y elegir a cuál de los
+ * gastos de un proveedor va un pago nuevo es imposible de decidir sin
+ * este número.
+ *
+ * Solo cuentan los pagos MARCADOS COMO PAGADOS: un pago pendiente es
+ * una intención, no plata que salió.
+ *
+ * @param {Object} gasto
+ * @returns {{costo:number, pagado:number, saldo:number, estado:string}}
+ */
+function saldoDelGasto(gasto) {
+  const costo = costoDelGasto(gasto);
+
+  const pagado = (DINERO.pagos || [])
+    .filter(p => p.gasto_id === gasto.id && p.estado === 'pagado')
+    .reduce((suma, p) => suma + (Number(p.monto) || 0), 0);
+
+  const saldo = costo - pagado;
+
+  /* El medio centavo de holgura es para que un redondeo no convierta un
+     gasto liquidado en "faltan $0.00". */
+  const estado =
+    pagado === 0   ? 'sin pagar' :
+    saldo >  0.005 ? 'abonado'   :
+    saldo < -0.005 ? 'pagado de más' :
+                     'liquidado';
+
+  return { costo: costo, pagado: pagado, saldo: saldo, estado: estado };
+}
+
+/**
  * Ficha de solo lectura de un gasto, antes de editar.
  *
  * @param {Object} gasto
@@ -1186,7 +1222,7 @@ function abrirDetalleDePadrino(padrino) {
           '<span class="lista__cuerpo">' +
             '<span class="lista__titulo">' + seguro(g.concepto) + '</span>' +
           '</span>' +
-          '<span class="lista__lado cifra">' + seguro(comoDinero(g.monto_real || g.presupuestado, false)) + '</span>' +
+          '<span class="lista__lado cifra">' + seguro(comoDinero(costoDelGasto(g), false)) + '</span>' +
         '</button>'
       ).join('')
     : '';
@@ -1220,8 +1256,8 @@ function abrirDetalleDePadrino(padrino) {
 
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioPadrino(padrino));
 
-  buscar('#detalle-borrar', cuerpo).addEventListener('click', () => {
-    if (!confirmarAccion('¿Borrar esto? No se puede deshacer.')) return;
+  buscar('#detalle-borrar', cuerpo).addEventListener('click', async () => {
+    if (!await confirmarAccion('¿Borrar esto? No se puede deshacer.')) return;
     guardarDinero('borrar_padrino', { id: padrino.id }, 'Eliminado.');
   });
 }
@@ -1510,7 +1546,7 @@ async function ofrecerGenerarReciboDeEstePago(carga, resultado) {
   // ofrecerle un recibo — no es un error, es la conducta esperada.
   if (carga.estado !== 'pagado' || !resultado || !resultado.id) return;
 
-  if (!confirmarAccion('Este pago quedó marcado como pagado. ¿Generar su recibo ahora?')) return;
+  if (!await confirmarAccion('Este pago quedó marcado como pagado. ¿Generar su recibo ahora?')) return;
 
   try {
     const doc = await mandar('recibos.php?accion=generar', { pago_id: resultado.id });
@@ -1637,8 +1673,8 @@ function engancharFormularioDinero(cuerpo, armarCarga, nombreAccion, existente) 
 
   const borrar = buscar('#pie-borrar', cuerpo);
   if (borrar && existente) {
-    borrar.addEventListener('click', () => {
-      if (!confirmarAccion('¿Borrar esto? No se puede deshacer.')) return;
+    borrar.addEventListener('click', async () => {
+      if (!await confirmarAccion('¿Borrar esto? No se puede deshacer.')) return;
       guardarDinero('borrar_' + nombreAccion, { id: existente.id }, 'Eliminado.');
     });
   }
@@ -1860,6 +1896,11 @@ function formularioPago(pago) {
         .concat(DINERO.proveedores.map(p => ({ valor: String(p.id), texto: p.nombre }))),
     }) +
 
+    /* A cuál de sus gastos va. Aparece solo cuando el proveedor elegido
+       tiene más de uno — ver refrescarGastosDelProveedor(). Con uno
+       solo no hay nada que preguntar. */
+    '<div id="pag-gasto-envoltura" class="oculto"></div>' +
+
     '<div class="campo-par">' +
       campoDinero({ id: 'pag-monto', rotulo: 'Monto en ' + moneda.nombre.toLowerCase(),
                     valor: d.monto ? desdePesos(d.monto) : '' }) +
@@ -1885,6 +1926,16 @@ function formularioPago(pago) {
   activarFormatoDeMiles('pag-monto', cuerpo);
   engancharListaAmpliable('pag-metodo', cuerpo);
   engancharListaAmpliable('pag-proveedor', cuerpo);
+
+  /* El selector de gasto se rearma cada vez que cambia el proveedor, y
+     una vez al abrir para el caso de estar editando un pago que ya
+     tiene proveedor. */
+  const campoProveedor = buscar('#pag-proveedor', cuerpo);
+  if (campoProveedor) {
+    campoProveedor.addEventListener('change', () =>
+      refrescarGastosDelProveedor(cuerpo, d.gasto_id));
+  }
+  refrescarGastosDelProveedor(cuerpo, d.gasto_id);
 
   engancharFormularioDinero(cuerpo, () => {
     const concepto = valorDe('pag-concepto', cuerpo);
@@ -1912,9 +1963,16 @@ function formularioPago(pago) {
     // que corresponda al nuevo proveedor (o deja el pago suelto).
     const proveedorNoCambio = proveedorElegido === (proveedorActualId ? String(proveedorActualId) : '');
 
+    /* A cuál de los gastos del proveedor va. Si el selector está a la
+       vista (el proveedor tiene más de uno), manda lo elegido; si no,
+       vale la regla de siempre: conservar el gasto actual mientras el
+       proveedor no cambie, y dejar que el servidor resuelva el resto. */
+    const gastoElegido = valorDe('pag-gasto', cuerpo);
+
     const carga = {
       concepto:     concepto,
-      gasto_id:     (proveedorNoCambio && d.gasto_id) ? d.gasto_id : '',
+      gasto_id:     gastoElegido ||
+                    ((proveedorNoCambio && d.gasto_id) ? d.gasto_id : ''),
       // El campo está en la moneda que se está mirando; la base guarda pesos.
       monto:        monto,
       fecha_limite: valorDe('pag-fecha', cuerpo),
@@ -1938,6 +1996,58 @@ function formularioPago(pago) {
 
     return carga;
   }, 'pago', pago);
+}
+
+/**
+ * Muestra u oculta "¿A cuál de sus gastos?" según el proveedor elegido.
+ *
+ * POR QUÉ EXISTE
+ * Sin preguntar, TODOS los pagos a un proveedor caían en su gasto más
+ * viejo: el servidor tomaba el primero por id (`ORDER BY id ASC LIMIT
+ * 1`). Con un salón que tiene el paquete y la barra libre como dos
+ * gastos separados, cada pago de la barra se anotaba contra el paquete
+ * — y los dos saldos quedaban mal, sin que nada lo dijera.
+ *
+ * Se pregunta SOLO cuando hay más de un gasto, que es cuando la
+ * pregunta tiene sentido. Y con el saldo de cada uno a la vista, que es
+ * el dato que hace obvia la respuesta.
+ *
+ * @param {Element} cuerpo
+ * @param {number} [gastoActualId] - El del pago que se está editando.
+ * @returns {void}
+ */
+function refrescarGastosDelProveedor(cuerpo, gastoActualId) {
+  const envoltura = buscar('#pag-gasto-envoltura', cuerpo);
+  if (!envoltura) return;
+
+  const proveedorId = valorDe('pag-proveedor', cuerpo);
+  const suyos = proveedorId && proveedorId !== '__nuevo__'
+    ? (DINERO.gastos || []).filter(g => String(g.proveedor_id) === String(proveedorId))
+    : [];
+
+  if (suyos.length < 2) {
+    envoltura.innerHTML = '';
+    envoltura.classList.add('oculto');
+    return;
+  }
+
+  envoltura.classList.remove('oculto');
+  envoltura.innerHTML = campoLista({
+    id: 'pag-gasto',
+    rotulo: '¿A cuál de sus gastos?',
+    valor: gastoActualId ? String(gastoActualId) : String(suyos[0].id),
+    opciones: suyos.map(g => {
+      const s = saldoDelGasto(g);
+      return {
+        valor: String(g.id),
+        // El saldo va en el propio rótulo: es lo que decide, y en un
+        // desplegable no hay lugar para una segunda línea.
+        texto: g.concepto + ' — ' + (s.saldo > 0
+          ? 'faltan ' + comoDinero(s.saldo, false)
+          : s.estado),
+      };
+    }),
+  });
 }
 
 
@@ -2098,8 +2208,8 @@ function abrirDetalleDeProveedor(proveedor) {
 
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioProveedor(proveedor));
 
-  buscar('#detalle-borrar', cuerpo).addEventListener('click', () => {
-    if (!confirmarAccion('¿Borrar esto? No se puede deshacer.')) return;
+  buscar('#detalle-borrar', cuerpo).addEventListener('click', async () => {
+    if (!await confirmarAccion('¿Borrar esto? No se puede deshacer.')) return;
     guardarDinero('borrar_proveedor', { id: proveedor.id }, 'Eliminado.');
   });
 }
@@ -2572,29 +2682,52 @@ function abrirDetalleDeDocumentoGuardado(tipo, documento, proveedor) {
   // ⚡ FRICCIÓN INTENCIONAL: ni Editar ni Borrar hacen nada al primer
   // toque. Los dos piden confirmación explícita antes de seguir —un
   // documento ya generado no se toca con el mismo descuido que una nota.
-  buscar('#doc-editar', cuerpo).addEventListener('click', () => {
-    if (!confirmarAccion(
+  buscar('#doc-editar', cuerpo).addEventListener('click', async () => {
+    if (!await confirmarAccion(
       'Esto corrige solo los datos guardados; el PDF ya generado no cambia. ¿Seguro que quieres editar?'
     )) return;
     abrirEdicionDeDocumento(tipo, documento, proveedor);
   });
 
-  buscar('#doc-borrar', cuerpo).addEventListener('click', () => {
-    if (!confirmarAccion(
-      '¿Borrar este ' + config.tituloSingular.toLowerCase() + ' y su PDF? No se puede deshacer.'
+  buscar('#doc-borrar', cuerpo).addEventListener('click', async () => {
+    if (!await confirmarAccion(
+      '¿Borrar este ' + config.tituloSingular.toLowerCase() + ' y su PDF?\n\n' +
+      'No se puede deshacer.',
+      { confirmar: 'Borrar ' + config.tituloSingular.toLowerCase(), peligro: true }
     )) return;
 
-    mandar(config.endpoint + '?accion=borrar', { id: documento.id })
-      .then(() => {
-        cerrarHoja(true);
-        avisar(config.tituloSingular + ' eliminado.');
-        // Sin proveedor (recibo a un padrino o a alguien sin ficha, o
-        // se venía navegando desde la lista sin filtrar) no hay a qué
-        // ficha volver — se vuelve a la lista general.
-        if (proveedor) abrirDetalleDeProveedor(proveedor);
-        else abrirListaDeDocumentos(tipo, null);
-      })
-      .catch(error => avisar(error.message, true));
+    try {
+      const r = await mandar(config.endpoint + '?accion=borrar', { id: documento.id });
+
+      /* Un recibo generado con "también registrarlo como pago" deja ese
+         pago vivo al borrarse: el dinero seguía contando como pagado
+         sin ningún papel detrás. El servidor dice cuál quedó y se
+         ofrece borrarlo, nombrándolo — no se borra solo porque el pago
+         pudo existir antes o haberse cargado a mano. */
+      if (r && r.pago_sin_respaldo) {
+        const p = r.pago_sin_respaldo;
+        if (await confirmarAccion(
+          'Queda un pago sin respaldo.\n\n' +
+          '«' + p.concepto + '» por ' + comoDinero(p.monto) + ' se cargó junto ' +
+          'con este recibo y sigue contando como pagado. ¿Lo borras también?',
+          { confirmar: 'Borrar el pago', cancelar: 'Dejarlo', peligro: true }
+        )) {
+          await mandar('presupuesto.php?accion=borrar_pago', { id: p.id })
+            .catch(error => avisar(error.message, true));
+          ensuciarVistas('resumen', 'dinero');
+        }
+      }
+
+      cerrarHoja(true);
+      avisar(config.tituloSingular + ' eliminado.');
+      // Sin proveedor (recibo a un padrino o a alguien sin ficha, o
+      // se venía navegando desde la lista sin filtrar) no hay a qué
+      // ficha volver — se vuelve a la lista general.
+      if (proveedor) abrirDetalleDeProveedor(proveedor);
+      else abrirListaDeDocumentos(tipo, null);
+    } catch (error) {
+      avisar(error.message, true);
+    }
   });
 }
 
@@ -2614,8 +2747,19 @@ function abrirEdicionDeDocumento(tipo, documento, proveedor) {
 
   const cuerpo = abrirHoja('Editar ' + config.tituloSingular.toLowerCase(),
     esRecibo
-      ? campoTexto({ id: 'ed-monto', rotulo: 'Monto', tipo: 'number', paso: '0.01',
-                     valor: desdePesos(documento.monto) }) +
+      /* El monto se muestra pero NO se edita: el PDF ya está numerado y
+         entregado, y no se puede reescribir. Dejar cambiarlo hacía que
+         el papel del proveedor y los libros dijeran cifras distintas.
+         Se dice qué hacer en su lugar, en vez de ofrecer un campo que
+         miente. */
+      ? '<div class="tarjeta" style="margin-bottom:var(--esp-2)">' +
+          '<span class="detalle__rotulo">Monto</span> ' +
+          '<span class="cifra">' + seguro(comoDinero(documento.monto)) + '</span>' +
+          '<p class="vacio__texto" style="margin-top:var(--esp-1)">' +
+            'El monto no se puede cambiar: el PDF ya entregado no se ' +
+            'reescribe. Si el monto está mal, borra este recibo y haz ' +
+            'uno nuevo.</p>' +
+        '</div>' +
         campoLargo({ id: 'ed-concepto', rotulo: 'Concepto', valor: documento.concepto }) +
         campoTexto({ id: 'ed-forma', rotulo: 'Forma de pago', valor: documento.forma_pago }) +
         campoTexto({ id: 'ed-fecha', rotulo: 'Fecha', tipo: 'date', valor: documento.fecha })
@@ -2629,8 +2773,8 @@ function abrirEdicionDeDocumento(tipo, documento, proveedor) {
 
   buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
     const cambios = esRecibo
+      // Sin `monto`: ver arriba, y el case 'editar' de recibos.php.
       ? {
-          monto:      aPesos(valorDe('ed-monto', cuerpo)),
           concepto:   valorDe('ed-concepto', cuerpo),
           forma_pago: valorDe('ed-forma', cuerpo),
           fecha:      valorDe('ed-fecha', cuerpo),
@@ -2893,24 +3037,48 @@ function botonesDeContacto(p) {
   }
 
   /* Un teléfono cargado que no sirve para WhatsApp se avisa acá y no
-     cuando el chat abre vacío. */
-  const problema = (p.telefono && !numero)
-    ? '<p class="aviso-error" style="margin-top:var(--esp-1)">' +
-      'Ese teléfono no sirve para WhatsApp: le falta la clave de país.</p>'
+     cuando el chat abre vacío. Y si además tiene un paquete que
+     mandarle, se dice por qué no aparece el botón de mandárselo: un
+     botón que desaparece sin explicación se lee como que la app está
+     rota, no como que falta un dato. */
+  const problema =
+      (p.telefono && !numero)
+        ? '<p class="aviso-error" style="margin-top:var(--esp-1)">' +
+          'Ese teléfono no sirve para WhatsApp: le falta la clave de país.' +
+          (p.paquete ? ' Corrígelo y podrás mandarle lo suyo.' : '') + '</p>'
+    : (p.paquete && !p.telefono)
+        ? '<p class="aviso-error" style="margin-top:var(--esp-1)">' +
+          'Tiene un paquete para mandarle, pero no tiene teléfono cargado.</p>'
     : '';
 
-  const mandarle = p.paquete
+  /* El mismo criterio que el botón de WhatsApp de arriba: sin un número
+     que sirva no se ofrece "mandarle", porque el enlace abría el
+     selector de contactos vacío y —peor— al tocarlo se anotaba que ya
+     se le había mandado. Un proveedor que nunca recibió nada quedaba
+     marcado como avisado. Con teléfono cargado pero inservible, el
+     aviso de abajo ya explica qué le falta. */
+  const mandarle = (p.paquete && numero)
     ? '<button class="boton boton--ancho" id="pro-mandarle" ' +
               'style="margin-top:var(--esp-1)">Mandarle lo suyo por WhatsApp</button>'
     : '';
 
-  if (!acciones.length && !mandarle) return problema;
+  /* "Van $X, queda $Y para el 10 de octubre." Es la conversación que se
+     tiene con cada proveedor antes de cada pago, y el dato estaba
+     entero en esta misma ficha sin forma de mandárselo. No depende del
+     paquete: cualquier proveedor con teléfono tiene una cuenta. */
+  const estadoDeCuenta = numero
+    ? '<button class="boton boton--ancho" id="pro-cuenta" ' +
+              'style="margin-top:var(--esp-1)">Mandarle su estado de cuenta</button>'
+    : '';
+
+  if (!acciones.length && !mandarle && !estadoDeCuenta) return problema;
 
   return '' +
     '<div class="acciones" style="margin-top:var(--esp-2)">' +
       acciones.join('') +
     '</div>' +
     mandarle +
+    estadoDeCuenta +
     problema;
 }
 
@@ -2922,12 +3090,34 @@ function botonesDeContacto(p) {
  * @returns {void}
  */
 function engancharBotonesDeContacto(cuerpo, p) {
+  const cuenta = buscar('#pro-cuenta', cuerpo);
+  if (cuenta) {
+    cuenta.addEventListener('click', () => {
+      /* Sin `enviado_en`/`huella`: el aviso de "esto cambió desde que se
+         lo mandaste" es del PAQUETE del proveedor, y un estado de cuenta
+         cambia con cada pago — avisar de eso sería ruido, no protección.
+         El envío igual queda anotado con paquete 'cuenta', que no se
+         mezcla con el del paquete real (la comparación filtra por
+         paquete; ver la subconsulta de enviado_en en presupuesto.php). */
+      armarParaCompartir('cuenta', { id: p.id, nombre: p.nombre });
+    });
+  }
+
   const boton = buscar('#pro-mandarle', cuerpo);
   if (!boton) return;
 
   boton.addEventListener('click', () => {
-    // armarParaCompartir abre su propia hoja encima de esta.
-    armarParaCompartir(p.paquete, { id: p.id, nombre: p.nombre });
+    /* armarParaCompartir abre su propia hoja encima de esta.
+       `enviado_en` y `huella` son lo que le permite avisar "esto cambió
+       desde que se lo mandaste": sin pasarlos, ese aviso solo salía
+       entrando por Menú → Compartir, y por acá —que es la puerta que se
+       usa a diario— se mandaba una lista vieja sin una sola palabra. */
+    armarParaCompartir(p.paquete, {
+      id:         p.id,
+      nombre:     p.nombre,
+      enviado_en: p.enviado_en,
+      huella:     p.huella,
+    });
   });
 }
 

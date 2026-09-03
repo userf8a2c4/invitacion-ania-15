@@ -39,6 +39,7 @@
 require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
+require_once __DIR__ . '/_lib/dinero.php';
 
 $yo     = exigirAdministrador();
 $accion = (string) ($_GET['accion'] ?? 'servicios');
@@ -371,7 +372,11 @@ case 'a_presupuesto':
               ]);
     }
 
-    $gastoId = insertar('gastos', [
+    /* conPresupuestoActivo: el gasto nace en el plan que se está
+       mirando. Sin eso, pasar una cotización al presupuesto teniendo
+       abierto un segundo escenario la mandaba al Plan 1 y no aparecía
+       en el que se estaba armando. */
+    $gastoId = insertar('gastos', conPresupuestoActivo([
         'concepto'      => $cotizacion['servicio'] . ' · ' . $cotizacion['proveedor'],
         'proveedor_id'  => $proveedorId,
         'presupuestado' => $calculo['total'],
@@ -379,7 +384,7 @@ case 'a_presupuesto':
         'notas'         => 'Desde la cotización, calculado para ' . $personas .
                            ' personas. Base ' . number_format($calculo['base'], 2) .
                            ', extras ' . number_format($calculo['extras'], 2) . '.',
-    ]);
+    ]));
 
     // Y queda marcada como la elegida, desmarcando las otras del rubro.
     ejecutar('UPDATE cotizaciones SET elegida = 0 WHERE servicio = :s',
