@@ -259,6 +259,29 @@ function mandar(ruta, cuerpo) {
   return pedir(ruta, { metodo: 'POST', cuerpo: cuerpo });
 }
 
+/**
+ * Igual que mandar(), pero sin la cola de escrituras pendientes.
+ *
+ * POR QUÉ EXISTE
+ * La cola está pensada para escrituras de negocio: un pago, un
+ * invitado, una tarea. Ahí, guardar y mandar más tarde es exactamente
+ * lo que se quiere. Un mensaje de chat no funciona así: contestar
+ * dentro de veinte minutos, cuando vuelva la señal y ya no venga a
+ * cuento, no le sirve a nadie — y mientras tanto el hilo se queda mudo,
+ * porque el mensaje "se mandó" y nunca falló, así que el relevo sin
+ * internet no llegaba a activarse nunca.
+ *
+ * Sin cola, la falta de señal falla de verdad, y ese error es la señal
+ * que hace entrar a los agentes que resuelven en el teléfono.
+ *
+ * @param {string} ruta
+ * @param {Object} cuerpo
+ * @returns {Promise<Object>}
+ */
+function mandarSinCola(ruta, cuerpo) {
+  return pedir(ruta, { metodo: 'POST', cuerpo: cuerpo, noEncolar: true });
+}
+
 
 /* ─── CUANDO LA SESIÓN VENCE ───────────────────────────────────────── */
 

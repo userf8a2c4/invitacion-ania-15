@@ -251,8 +251,8 @@ function prepararLienzo(cuerpo, opciones) {
     imagen.src = anterior;
   });
 
-  buscar('#lienzo-limpiar', cuerpo).addEventListener('click', () => {
-    if (!confirmarAccion('¿Borrar todo el dibujo?')) return;
+  buscar('#lienzo-limpiar', cuerpo).addEventListener('click', async () => {
+    if (!await confirmarAccion('¿Borrar todo el dibujo?')) return;
     guardarEnHistorial();
     const caja = lienzo.getBoundingClientRect();
     pincel.clearRect(0, 0, caja.width, caja.height);

@@ -24,6 +24,7 @@
 require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
+require_once __DIR__ . '/_lib/dinero.php';
 
 $yo     = exigirAdministrador();   // el rol 'entrada' no ve el dinero
 $accion = (string) ($_GET['accion'] ?? 'todo');
@@ -119,9 +120,26 @@ case 'todo':
        podía subir de $0 aunque se le pagara). Acá se calcula de verdad,
        igual que `cubre` en padrinos arriba: sumando los pagos reales de
        sus gastos. Mismo criterio que "Pagado" en el resumen general. */
+    /* `enviado_en` y `huella` son del último envío de SU paquete —los
+       mismos dos datos que ya devolvía compartir.php?accion=a_quien, y
+       que son los que permiten avisar "esto cambió desde que se lo
+       mandaste". Sin ellos acá, ese aviso solo aparecía entrando por
+       Menú → Compartir y no desde la ficha del proveedor, que es la
+       puerta que se usa todos los días: la protección estrella del
+       sistema no protegía por el camino más transitado. */
+    $hayEnvios = existeTabla('envios_proveedor');
+
     $proveedores = consultarTodo(
         'SELECT pr.*,
-                COALESCE(SUM(CASE WHEN p.estado = \'pagado\' THEN p.monto ELSE 0 END), 0) AS pagado_real
+                COALESCE(SUM(CASE WHEN p.estado = \'pagado\' THEN p.monto ELSE 0 END), 0) AS pagado_real' .
+        ($hayEnvios
+            ? ", (SELECT e.enviado_en FROM envios_proveedor e
+                   WHERE e.proveedor_id = pr.id AND e.paquete = pr.paquete
+                   ORDER BY e.enviado_en DESC LIMIT 1) AS enviado_en,
+                 (SELECT e.huella FROM envios_proveedor e
+                   WHERE e.proveedor_id = pr.id AND e.paquete = pr.paquete
+                   ORDER BY e.enviado_en DESC LIMIT 1) AS huella"
+            : ', NULL AS enviado_en, NULL AS huella') . '
          FROM proveedores pr
          LEFT JOIN gastos g ON g.proveedor_id = pr.id
          LEFT JOIN pagos p  ON p.gasto_id = g.id
@@ -257,12 +275,18 @@ case 'todo':
             'confirmados'         => $personasConfirmadas,
             'costo_por_invitado'  => $costoPorInvitado,
         ],
-        'categorias'   => $categorias,
-        'gastos'       => $gastos,
-        'pagos'        => $pagos,
-        'padrinos'     => $padrinos,
-        'proveedores'  => $proveedores,
-        'cotizaciones' => $cotizaciones,
+        /* Los montos van como NÚMEROS, no como el texto que devuelve
+           PDO para las columnas DECIMAL. Ver conMontosNumericos() en
+           _lib/dinero.php: con `"0.00"` de por medio, un gasto de
+           $50.000 se mostraba como $0. */
+        'categorias'   => conMontosNumericos($categorias,
+                            ['techo', 'gastado', 'planeado']),
+        'gastos'       => conMontosNumericos($gastos, ['presupuestado', 'monto_real']),
+        'pagos'        => conMontosNumericos($pagos, ['monto']),
+        'padrinos'     => conMontosNumericos($padrinos, ['monto', 'cubre']),
+        'proveedores'  => conMontosNumericos($proveedores,
+                            ['monto_total', 'anticipo', 'pagado_real']),
+        'cotizaciones' => conMontosNumericos($cotizaciones, ['monto', 'precio_pp']),
     ]);
     break;
 
@@ -383,6 +407,15 @@ case 'guardar_pago':
     }
 
     if (!$gastoId && $proveedorId > 0) {
+        /* RESPALDO, NO LA REGLA.
+           Cuando el proveedor tiene más de un gasto —el salón con el
+           paquete y la barra libre por separado— quién decide es el
+           formulario, que ahora pregunta a cuál va y muestra el saldo
+           de cada uno (ver refrescarGastosDelProveedor en
+           09-vista-dinero.js). Esto es lo que queda para quien no
+           pregunta: el asistente, o una escritura que viene de la cola.
+           Toma el más viejo, que es arbitrario pero estable — y ya no
+           es el camino por el que pasan los pagos de todos los días. */
         $gastoExistente = consultarUno(
             'SELECT id FROM gastos WHERE proveedor_id = :p ORDER BY id ASC LIMIT 1',
             [':p' => $proveedorId]
@@ -392,13 +425,17 @@ case 'guardar_pago':
         } else {
             $proveedor = consultarUno('SELECT * FROM proveedores WHERE id = :i', [':i' => $proveedorId]);
             $conceptoDelPago = campoTexto($datos, 'concepto', 200);
-            $gastoId = (int) insertar('gastos', [
+            /* Nace en el plan activo. Sin esto caía en el Plan 1 por el
+               valor por defecto de la columna, y con un segundo
+               escenario abierto el pago se guardaba fuera de la vista
+               que se estaba mirando: desaparecía sin decir nada. */
+            $gastoId = (int) insertar('gastos', conPresupuestoActivo([
                 'concepto'      => $conceptoDelPago !== '' ? $conceptoDelPago
                                     : ($proveedor['servicio'] !== '' ? $proveedor['servicio'] : $proveedor['nombre']),
                 'proveedor_id'  => $proveedorId,
                 'presupuestado' => (float) $proveedor['monto_total'],
                 'monto_real'    => 0,
-            ]);
+            ]));
         }
     }
 
@@ -435,10 +472,20 @@ case 'marcar_pagado':
     // deshacer un toque por error sin tener que abrir el formulario.
     $nuevo = $pago['estado'] === 'pagado' ? 'pendiente' : 'pagado';
 
-    actualizar('pagos', $id, [
-        'estado'       => $nuevo,
-        'fecha_pagado' => $nuevo === 'pagado' ? date('Y-m-d') : null,
-    ]);
+    /* LA FECHA REAL NO SE TOCA.
+       Antes, destildar la ponía en NULL y volver a tildar la ponía en
+       HOY. Un pago hecho el 12 de agosto, destildado por error y vuelto
+       a tildar en septiembre, quedaba fechado en septiembre: el dato de
+       cuándo se pagó de verdad se perdía sin aviso, y con él el orden
+       real de los pagos. Se conserva la que ya había; solo se estrena
+       una fecha cuando no existía ninguna, y se cambia a mano desde el
+       formulario del pago. */
+    $valores = ['estado' => $nuevo];
+    if ($nuevo === 'pagado' && empty($pago['fecha_pagado'])) {
+        $valores['fecha_pagado'] = date('Y-m-d');
+    }
+
+    actualizar('pagos', $id, $valores);
 
     anotarEnBitacora($yo, 'marcó un pago como ' . $nuevo, 'pagos', $id,
                      (string) $pago['concepto']);
@@ -692,18 +739,9 @@ function guardarFila($tabla, $datos, $valores, $yo, $comoSeLlama) {
     return ['id' => $nuevo, 'creado' => true];
 }
 
-/**
- * El id del presupuesto activo, o 1 (el principal) si por lo que sea
- * ninguno está marcado —no debería pasar, pero un dato así de central
- * no puede devolver null y romper todo lo que cuelga de él.
- *
- * @return int
- */
-function presupuestoActivo() {
-    if (!existeTabla('presupuestos')) return 1;
-    $fila = consultarUno("SELECT id FROM presupuestos WHERE activo = 1 LIMIT 1");
-    return $fila ? (int) $fila['id'] : 1;
-}
+/* presupuestoActivo() se mudó a _lib/dinero.php: recibos.php y
+   cotizador.php también crean gastos y necesitaban la misma regla. Ver
+   la nota de por qué en ese archivo. */
 
 /**
  * Lee un id de relación, devolviendo null cuando no hay ninguno.

@@ -351,7 +351,7 @@ async function pintarArchivosDe(donde, tipo, id) {
 
   buscarTodos('[data-borrar-archivo]', donde).forEach(boton => {
     boton.addEventListener('click', async () => {
-      if (!confirmarAccion('¿Borrar este archivo?')) return;
+      if (!await confirmarAccion('¿Borrar este archivo?')) return;
       try {
         await mandar('archivos.php?accion=borrar', { id: boton.dataset.borrarArchivo });
         avisar('Archivo eliminado.');

@@ -30,6 +30,133 @@ let FILTRO_INVITACIONES = 'todas';
 let FECHA_LIMITE_TEXTO = '';
 
 /**
+ * Los huecos que se pueden poner en el texto de la invitación.
+ *
+ * Se insertan con botones, nunca escribiendo las llaves a mano: escribir
+ * `{lugares}` bien, con la llave y sin acento y sin plural equivocado,
+ * es exactamente la clase de detalle que no se puede pedir. El botón lo
+ * pone bien siempre.
+ */
+const HUECOS_DE_LA_INVITACION = [
+  { marca: '{nombre}',       rotulo: 'el nombre',       ejemplo: 'Familia Zelaya' },
+  { marca: '{lugares}',      rotulo: 'los lugares',     ejemplo: '4' },
+  { marca: '{link}',         rotulo: 'el link',         ejemplo: 'https://aniaxv.com/?i=…' },
+  { marca: '{fecha_limite}', rotulo: 'la fecha límite', ejemplo: '10 de octubre' },
+];
+
+/**
+ * El texto con el que se manda la invitación si nadie lo cambió.
+ *
+ * Tuteo mexicano, igual palabra por palabra en WhatsApp y en correo (ver
+ * la nota grande del plan sobre la voz). Es el que devuelve el botón
+ * "Volver al texto original" del editor.
+ */
+const TEXTO_INVITACION_ORIGINAL =
+  '✦ Ania cumple quince años ✦\n\n' +
+  '{nombre}:\n\n' +
+  'Hay fechas que uno quiere recordar acompañado, y esta es una de ellas. ' +
+  'Nos dará mucha alegría contar con ustedes.\n\n' +
+  'Hemos reservado {lugares} lugares a su nombre.\n\n' +
+  'Aquí está su invitación. Ahí mismo pueden confirmar y elegir su menú:\n' +
+  '{link}\n\n' +
+  'Les pedimos confirmar antes del {fecha_limite}. ' +
+  'Pueden modificar su respuesta cuantas veces gusten hasta esa fecha.';
+
+/** El texto que se está usando: el guardado en ajustes, o el original. */
+let TEXTO_INVITACION = TEXTO_INVITACION_ORIGINAL;
+
+/**
+ * Deja `FECHA_LIMITE_TEXTO` cargada antes de que haga falta.
+ *
+ * POR QUÉ SE ESPERA Y NO SE PIDE "DE PASO"
+ * Esto era un `.then()` suelto disparado al entrar a Gente. Entrar y
+ * tocar "Mandar por WhatsApp" enseguida —con mala señal, lo más
+ * probable— armaba el texto antes de que la respuesta llegara, y la
+ * invitación salía SIN el párrafo que pide confirmar. No fallaba nada
+ * ni se veía distinto: simplemente faltaba el pedido.
+ *
+ * Se espera acá, mientras se pinta la lista, y no en el toque del
+ * botón: un `await` dentro del click le haría perder el gesto del
+ * usuario y el navegador bloquearía la ventana de WhatsApp.
+ *
+ * @param {boolean} [forzar] - Volver a pedirla aunque ya esté cargada.
+ * @returns {Promise<void>}
+ */
+async function asegurarFechaLimiteDeConfirmacion(forzar) {
+  if (FECHA_LIMITE_TEXTO && !forzar) return;
+
+  try {
+    const r = await traer('ajustes.php?accion=obtener&clave=fecha_limite_confirmar');
+    if (r && r.valor) FECHA_LIMITE_TEXTO = formatearFechaLimiteLarga(r.valor);
+  } catch (error) {
+    /* No es crítico: el mensaje sale sin la fecha límite, que es
+       exactamente lo que pasaba antes de que esto existiera. */
+  }
+}
+
+/** Si ya se pidió el texto guardado en esta sesión. */
+let TEXTO_INVITACION_CARGADO = false;
+
+/**
+ * Deja `TEXTO_INVITACION` cargado desde ajustes.
+ *
+ * Igual que la fecha límite, se ESPERA mientras se pinta la lista y no
+ * en el toque del botón: un `await` dentro del click le haría perder el
+ * gesto del usuario y el navegador bloquearía la ventana de WhatsApp.
+ *
+ * Si falla, se usa el texto original: mandar la invitación de siempre es
+ * infinitamente mejor que no poder mandar ninguna.
+ *
+ * @param {boolean} [forzar]
+ * @returns {Promise<void>}
+ */
+async function asegurarTextoDeInvitacion(forzar) {
+  if (TEXTO_INVITACION_CARGADO && !forzar) return;
+
+  try {
+    const r = await traer('ajustes.php?accion=obtener&clave=texto_invitacion');
+    TEXTO_INVITACION = (r && r.valor) ? r.valor : TEXTO_INVITACION_ORIGINAL;
+    TEXTO_INVITACION_CARGADO = true;
+  } catch (error) {
+    TEXTO_INVITACION = TEXTO_INVITACION_ORIGINAL;
+  }
+}
+
+/**
+ * Rellena los huecos de una plantilla con los datos de una invitación.
+ *
+ * LA REGLA DE LA FECHA LÍMITE
+ * Si todavía no hay fecha límite cargada, el RENGLÓN ENTERO donde va
+ * `{fecha_limite}` desaparece. Reemplazarla por vacío dejaría "Les
+ * pedimos confirmar antes del ." en la invitación de alguien, que es
+ * peor que no pedirlo. Es la única regla de este tipo, y el editor la
+ * explica.
+ *
+ * @param {string} plantilla
+ * @param {Object} inv - { nombre, pases, link }
+ * @returns {string}
+ */
+function rellenarHuecosDeInvitacion(plantilla, inv) {
+  let texto = String(plantilla);
+
+  if (!FECHA_LIMITE_TEXTO) {
+    texto = texto
+      .split('\n')
+      .filter(renglon => !renglon.includes('{fecha_limite}'))
+      .join('\n');
+  }
+
+  return texto
+    .split('{nombre}').join(inv.nombre || '')
+    .split('{lugares}').join(String(inv.pases == null ? '' : inv.pases))
+    .split('{link}').join(inv.link || '')
+    .split('{fecha_limite}').join(FECHA_LIMITE_TEXTO)
+    // Un hueco quitado puede dejar tres saltos seguidos donde había dos.
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
  * Pinta la sección "Invitaciones".
  *
  * @param {Element} cuerpo
@@ -257,7 +384,7 @@ function abrirDetalleDeInvitacion(inv) {
   const botonCorreo = buscar('#inv-correo', cuerpo);
   if (botonCorreo) {
     botonCorreo.addEventListener('click', async () => {
-      if (!confirmarAccion('¿Mandar la invitación por correo a ' + inv.nombre + '?')) return;
+      if (!await confirmarAccion('¿Mandar la invitación por correo a ' + inv.nombre + '?')) return;
       try {
         const r = await mandar('invitaciones.php?accion=enviar_correo', {
           ids: [inv.id],
@@ -273,8 +400,8 @@ function abrirDetalleDeInvitacion(inv) {
 
   buscar('#inv-editar', cuerpo).addEventListener('click', () => abrirFormularioDeInvitacion(inv));
 
-  buscar('#inv-borrar', cuerpo).addEventListener('click', () => {
-    if (!confirmarAccion('¿Borrar esta invitación y su confirmación? No se puede deshacer.')) return;
+  buscar('#inv-borrar', cuerpo).addEventListener('click', async () => {
+    if (!await confirmarAccion('¿Borrar esta invitación y su confirmación? No se puede deshacer.')) return;
     mandar('invitaciones.php?accion=borrar', { id: inv.id })
       .then(() => { cerrarHoja(true); avisar('Invitación eliminada.'); dibujarGente(); })
       .catch(error => avisar(error.message, true));
@@ -289,18 +416,7 @@ function abrirDetalleDeInvitacion(inv) {
  * @returns {string}
  */
 function textoDeInvitacion(inv) {
-  const fechaLimite = FECHA_LIMITE_TEXTO;
-  return '✦ Ania cumple quince años ✦\n\n' +
-    inv.nombre + ':\n\n' +
-    'Hay fechas que uno quiere recordar acompañado, y esta es una de ellas. ' +
-    'Nos dará mucha alegría contar con ustedes.\n\n' +
-    'Hemos reservado ' + inv.pases + ' lugares a su nombre.\n\n' +
-    'Aquí está su invitación. Ahí mismo pueden confirmar y elegir su menú:\n' +
-    inv.link + '\n\n' +
-    (fechaLimite
-      ? 'Les pedimos confirmar antes del ' + fechaLimite + '. ' +
-        'Pueden modificar su respuesta cuantas veces gusten hasta esa fecha.'
-      : 'Pueden modificar su respuesta cuantas veces gusten.');
+  return rellenarHuecosDeInvitacion(TEXTO_INVITACION, inv);
 }
 
 
@@ -502,15 +618,24 @@ function abrirFormularioDeInvitacion(inv) {
 }
 
 
-/* ─── CONFIGURACIÓN: FECHA LÍMITE PARA CONFIRMAR ─────────────────────── */
+/* ─── CONFIGURACIÓN: FECHA LÍMITE Y TEXTO DE LA INVITACIÓN ───────────── */
 
 /**
  * Cuándo se cierran las ediciones (?i=TOKEN deja de poder cambiarse
  * después de esta fecha; una primera respuesta tardía sigue
- * aceptándose — ver la nota grande en confirmar.php). Se guarda en
- * `ajustes` (mismo patrón que admin/codigo/47-config-documentos.js),
- * en formato AAAA-MM-DD para poder compararla contra la fecha de hoy
- * del lado del servidor — nunca como texto libre en español.
+ * aceptándose — ver la nota grande en confirmar.php), y con qué texto
+ * se manda la invitación.
+ *
+ * Las dos cosas se guardan en `ajustes` (mismo patrón que
+ * admin/codigo/47-config-documentos.js). La fecha va en formato
+ * AAAA-MM-DD para poder compararla contra la de hoy del lado del
+ * servidor — nunca como texto libre en español.
+ *
+ * POR QUÉ EL TEXTO SE EDITA ACÁ
+ * Vivía fijo en el código. Cambiar una palabra —"lugares" por "pases",
+ * agregar el código de vestimenta, corregir un tuteo— era pedirle a
+ * Carlos que tocara un archivo y volviera a subir la web. El texto de
+ * la invitación es de Lucila, no del programa.
  *
  * @returns {Promise<void>}
  */
@@ -521,7 +646,26 @@ async function abrirConfiguracionDeInvitaciones() {
     if (r && r.valor) valorActual = r.valor;
   } catch (error) { /* se usa el respaldo */ }
 
-  const cuerpo = abrirHoja('Fecha límite para confirmar',
+  await asegurarTextoDeInvitacion(true);
+
+  /* La vista previa se arma con un invitado REAL de la lista: con datos
+     de mentira no se ve si el texto queda bien con un nombre largo de
+     verdad, ni se puede tocar el link para comprobar que abre.
+
+     Sale de INVITADOS (08-vista-invitados.js) y no de INVITACIONES:
+     esta última la llena dibujarInvitaciones(), que quedó inalcanzable
+     cuando la sección se fusionó con Gente, así que siempre está vacía.
+     Si todavía no hay ninguno con link, se usa uno de muestra. */
+  const real = (typeof INVITADOS !== 'undefined' ? INVITADOS : [])
+    .find(f => f.invitacion_link);
+
+  const muestra = real
+    ? { nombre: real.nombre, pases: real.invitacion_pases, link: real.invitacion_link }
+    : { nombre: 'Familia Zelaya', pases: 4,
+        link: 'https://aniaxv.com/?i=EJEMPLO' };
+
+  const cuerpo = abrirHoja('Invitaciones',
+    '<div class="tarjeta__titulo">Fecha límite para confirmar</div>' +
     '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
       'Hasta esta fecha, cada grupo puede entrar a su link y cambiar su ' +
       'respuesta cuantas veces quiera. Después de esa fecha, ya no se ' +
@@ -530,16 +674,121 @@ async function abrirConfiguracionDeInvitaciones() {
     '</p>' +
     campoTexto({ id: 'cfg-inv-fecha-limite', rotulo: 'Fecha límite', tipo: 'date',
                  valor: valorActual }) +
+
+    '<div style="border-top:1px solid var(--borde);margin:var(--esp-4) 0 var(--esp-3)"></div>' +
+
+    '<div class="tarjeta__titulo">El texto de la invitación</div>' +
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+      'Es el mismo por WhatsApp y por correo. Toca un botón para poner ' +
+      'un dato que cambia en cada invitación — no escribas las llaves a ' +
+      'mano.' +
+    '</p>' +
+
+    '<div class="acciones" style="flex-wrap:wrap;margin-bottom:var(--esp-2)">' +
+      HUECOS_DE_LA_INVITACION.map(h =>
+        '<button type="button" class="boton" data-hueco="' + seguro(h.marca) + '">' +
+          '+ ' + seguro(h.rotulo) +
+        '</button>'
+      ).join('') +
+    '</div>' +
+
+    campoLargo({ id: 'cfg-inv-texto', rotulo: 'Texto', valor: TEXTO_INVITACION }) +
+
+    '<div class="tarjeta__titulo" style="margin-top:var(--esp-2)">' +
+      'Así le va a llegar a ' + seguro(muestra.nombre) +
+    '</div>' +
+    '<div class="tarjeta" id="cfg-inv-previa" ' +
+         'style="white-space:pre-wrap;font-size:13px;line-height:1.5"></div>' +
+
+    '<button class="boton boton--ancho" id="cfg-inv-original" ' +
+            'style="margin-top:var(--esp-2)">Volver al texto original</button>' +
+
     pieDeFormulario('Guardar')
   );
+
+  const campoTextoInv = buscar('#cfg-inv-texto', cuerpo);
+  const previa        = buscar('#cfg-inv-previa', cuerpo);
+
+  /* La vista previa se rehace con cada tecla: es lo que convierte
+     "{lugares}" de una fórmula que hay que imaginar en una frase que se
+     lee. Sin ella, el editor pide entender el mecanismo. */
+  const repintarPrevia = () => {
+    previa.textContent = rellenarHuecosDeInvitacion(campoTextoInv.value, muestra);
+  };
+  campoTextoInv.addEventListener('input', repintarPrevia);
+  repintarPrevia();
+
+  buscarTodos('[data-hueco]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', () => {
+      insertarEnElCursor(campoTextoInv, boton.dataset.hueco);
+      repintarPrevia();
+    });
+  });
+
+  buscar('#cfg-inv-original', cuerpo).addEventListener('click', async () => {
+    if (!await confirmarAccion(
+      '¿Volver al texto original?\n\nSe pierde lo que hayas escrito acá.',
+      { confirmar: 'Volver al original', peligro: true })) return;
+
+    campoTextoInv.value = TEXTO_INVITACION_ORIGINAL;
+    repintarPrevia();
+  });
 
   buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
     const valor = valorDe('cfg-inv-fecha-limite', cuerpo);
     if (!valor) { avisar('Elige una fecha.', true); return; }
+
+    const texto = campoTextoInv.value.trim();
+    if (!texto) { avisar('El texto no puede quedar vacío.', true); return; }
+
+    /* Sin el link, la invitación no invita a nada: es un mensaje lindo
+       sin forma de confirmar. Se impide y se explica, en vez de dejar
+       mandar cien mensajes inútiles. */
+    if (!texto.includes('{link}')) {
+      avisar('Falta el link: sin él nadie puede confirmar. ' +
+             'Toca "+ el link" para ponerlo.', true);
+      return;
+    }
+
     try {
-      await mandar('ajustes.php?accion=guardar', { clave: 'fecha_limite_confirmar', valor: valor });
+      await mandar('ajustes.php?accion=guardar',
+        { clave: 'fecha_limite_confirmar', valor: valor });
+      await mandar('ajustes.php?accion=guardar',
+        { clave: 'texto_invitacion', valor: texto });
+
+      /* Sin esto, las globales se quedaban con lo viejo hasta la próxima
+         recarga completa de la app: se cambiaba la fecha límite, se
+         mandaban las invitaciones, y salían todas pidiendo confirmar
+         antes de la fecha anterior. */
+      FECHA_LIMITE_TEXTO = formatearFechaLimiteLarga(valor);
+      TEXTO_INVITACION   = texto;
+
       cerrarHoja(true);
       avisar('Guardado.');
     } catch (error) { avisar(error.message, true); }
   });
+}
+
+/**
+ * Mete un texto donde está el cursor de un campo, sin pisar lo escrito.
+ *
+ * POR QUÉ NO ES UN `valor += marca`
+ * Agregar siempre al final obliga a escribir el texto en el orden en
+ * que van los huecos, o a cortar y pegar. Insertando en el cursor, se
+ * escribe la frase y se pone el hueco donde va.
+ *
+ * @param {HTMLTextAreaElement|HTMLInputElement} campo
+ * @param {string} texto
+ * @returns {void}
+ */
+function insertarEnElCursor(campo, texto) {
+  const desde = campo.selectionStart != null ? campo.selectionStart : campo.value.length;
+  const hasta = campo.selectionEnd   != null ? campo.selectionEnd   : campo.value.length;
+
+  campo.value = campo.value.slice(0, desde) + texto + campo.value.slice(hasta);
+
+  // El cursor queda después de lo insertado, listo para seguir escribiendo.
+  const nuevo = desde + texto.length;
+  campo.focus();
+  campo.setSelectionRange(nuevo, nuevo);
 }

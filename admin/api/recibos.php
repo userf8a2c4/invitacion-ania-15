@@ -47,6 +47,7 @@ require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
 require_once __DIR__ . '/_lib/pdf_simple.php';
+require_once __DIR__ . '/_lib/dinero.php';
 
 $yo     = exigirAdministrador();
 $accion = (string) ($_GET['accion'] ?? 'listar');
@@ -487,14 +488,18 @@ case 'generar':
            `monto_real = monto_total` de una, distinto del criterio de
            `guardar_pago` (que lo deja en 0) — dos caminos, dos números
            para lo mismo. */
+        /* conPresupuestoActivo: el gasto nace en el plan que se está
+           mirando. Sin eso caía siempre en el Plan 1 y, con un segundo
+           escenario abierto, el recibo generaba un pago que no aparecía
+           en ninguna pantalla. */
         $gastoId = $gasto
             ? (int) $gasto['id']
-            : insertar('gastos', [
+            : insertar('gastos', conPresupuestoActivo([
                 'concepto'      => $proveedor['servicio'] !== '' ? $proveedor['servicio'] : $proveedor['nombre'],
                 'proveedor_id'  => $proveedorId,
                 'presupuestado' => (float) $proveedor['monto_total'],
                 'monto_real'    => 0,
-              ]);
+              ]));
 
         $pagoId = insertar('pagos', [
             'gasto_id'     => $gastoId,
@@ -621,8 +626,16 @@ case 'editar':
     $existente = consultarUno('SELECT id FROM recibos WHERE id = :i', [':i' => $id]);
     if (!$existente) responderMal('Ese recibo no existe.', 404);
 
+    /* EL MONTO NO SE EDITA, Y ES A PROPÓSITO.
+       El PDF ya está generado, numerado y probablemente entregado: no
+       se puede reescribir. Dejar cambiar el monto hacía que el papel
+       que tiene el proveedor y lo que dicen los libros fueran dos
+       cifras distintas — y la de los libros, la que suma en los
+       totales, sin ningún respaldo. La propia pantalla ya avisaba que
+       "el PDF ya generado no cambia" y aun así ofrecía el campo.
+       Para cambiar un monto hay que borrar el recibo y hacer otro, que
+       es lo que se hace también fuera de la app. */
     $cambios = [];
-    if (isset($datos['monto']))      $cambios['monto']      = campoMonto($datos, 'monto');
     if (isset($datos['concepto']))   $cambios['concepto']   = campoTexto($datos, 'concepto', 300);
     if (isset($datos['forma_pago'])) $cambios['forma_pago'] = campoTexto($datos, 'forma_pago', 60);
     if (isset($datos['fecha']))      $cambios['fecha']      = campoFecha($datos, 'fecha') ?? date('Y-m-d');
@@ -679,10 +692,33 @@ case 'borrar':
         }
     }
 
+    /* El pago que este recibo respaldaba.
+       Un recibo generado con `tambien_registrar_pago` crea el pago; al
+       borrar el recibo, ese pago quedaba vivo y sin respaldo — el
+       dinero seguía contando como pagado sin ningún papel detrás, que
+       es exactamente lo que un recibo existe para evitar.
+
+       No se borra desde acá: el pago pudo existir antes que el recibo o
+       haberse cargado a mano, y borrar dinero de oficio nunca es la
+       respuesta correcta. Se DICE cuál quedó, con su concepto y su
+       monto, y la app ofrece borrarlo nombrándolo
+       (presupuesto.php?accion=borrar_pago, que ya existe para eso). */
+    $pagoDelRecibo = !empty($recibo['pago_id'])
+        ? consultarUno('SELECT id, concepto, monto FROM pagos WHERE id = :i',
+                       [':i' => (int) $recibo['pago_id']])
+        : null;
+
     borrar('recibos', $id);
 
     anotarEnBitacora($yo, 'borró un recibo', 'recibos', $id, $recibo['numero']);
-    responderBien(['mensaje' => 'Recibo eliminado.']);
+    responderBien([
+        'mensaje' => 'Recibo eliminado.',
+        'pago_sin_respaldo' => $pagoDelRecibo ? [
+            'id'       => (int) $pagoDelRecibo['id'],
+            'concepto' => $pagoDelRecibo['concepto'],
+            'monto'    => (float) $pagoDelRecibo['monto'],
+        ] : null,
+    ]);
     break;
 
 

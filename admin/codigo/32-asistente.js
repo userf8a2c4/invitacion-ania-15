@@ -566,7 +566,12 @@ function htmlDeBurbujaMegaBot(m) {
   const esSistema = m.rol === 'sistema';
 
   return '' +
-    '<div class="megabot-fila megabot-fila--' + m.rol + '" data-mensaje-id="' + seguro(m.id) + '">' +
+    /* El texto viaja también en un atributo. "Reintentar" lo leía del
+       `firstChild.textContent` de la burbuja: cualquier cambio en cómo
+       se arma —un ícono adelante, un `<span>` de envoltura— lo dejaba
+       reenviando una cadena vacía, en silencio y sin fallar. */
+    '<div class="megabot-fila megabot-fila--' + m.rol + '" data-mensaje-id="' + seguro(m.id) + '"' +
+         ' data-mensaje-texto="' + seguro(m.texto) + '">' +
       '<div class="megabot-burbuja megabot-burbuja--' + m.rol + '">' +
         seguro(m.texto) +
         (m.estado === 'error'
@@ -635,17 +640,23 @@ function engancharHiloDeMegaBot(hilo) {
   hilo.addEventListener('click', async evento => {
     const botonReenviar = evento.target.closest('[data-megabot-reenviar]');
     if (botonReenviar) {
-      // El texto original vive en la burbuja de Lucila, no en el botón
-      // — hace falta para resolverMegaBotOffline() si esto sigue sin
-      // señal.
+      // El texto original vive en la fila de Lucila, en un atributo
+      // propio — hace falta para resolverMegaBotOffline() si esto sigue
+      // sin señal.
       const filaOriginal = botonReenviar.closest('[data-mensaje-id]');
-      const textoOriginal = filaOriginal
-        ? filaOriginal.querySelector('.megabot-burbuja').firstChild.textContent
-        : '';
+      const textoOriginal = (filaOriginal && filaOriginal.dataset.mensajeTexto) || '';
 
       try {
-        const r = await mandar('chat.php?accion=reenviar', { mensaje_id: Number(botonReenviar.dataset.megabotReenviar) });
-        if (r && r.offline) {
+        const r = await mandarSinCola('chat.php?accion=reenviar',
+          { mensaje_id: Number(botonReenviar.dataset.megabotReenviar) });
+
+        /* Las DOS formas de "no llegó": `offline` lo manda chat.php
+           cuando el servidor sí contestó pero MegaBot no, y `_offline`
+           lo pone pedir() cuando no se llegó ni al servidor. Mirando
+           solo la primera, un reintento sin señal caía en el `else` y
+           decía "Reenviado." — la palabra exactamente contraria a lo
+           que había pasado. */
+        if (r && (r.offline || r._offline)) {
           await resolverMegaBotOffline(hilo, textoOriginal);
         } else {
           avisar('Reenviado.');
@@ -724,9 +735,41 @@ function pintarMensajesNuevosDeMegaBot(hilo, mensajes) {
     if (hilo.querySelector('[data-mensaje-id="' + m.id + '"]')) return;
     (m.propuestas || []).forEach(p => { ESTADO_PROPUESTAS_MEGABOT[p.id] = p; });
     hilo.insertAdjacentHTML('beforeend', htmlDeBurbujaMegaBot(m));
-    MEGABOT_ULTIMO_ID = Math.max(MEGABOT_ULTIMO_ID, m.id);
+
+    /* Solo los ids de la base hacen avanzar la marca. Los optimistas y
+       los de las respuestas offline son 'local-1725…', y
+       Math.max(0, 'local-1725…') da NaN: desde ese momento el poll
+       pedía `despues_de=NaN`, PHP lo leía como 0 y volvía a bajar el
+       hilo ENTERO cada dos segundos. */
+    const id = Number(m.id);
+    if (Number.isFinite(id)) MEGABOT_ULTIMO_ID = Math.max(MEGABOT_ULTIMO_ID, id);
   });
   if (mensajes.length) hilo.scrollTop = hilo.scrollHeight;
+}
+
+/**
+ * Le pone a la burbuja optimista el id que le dio la base.
+ *
+ * POR QUÉ
+ * Se pintaba el mensaje al toque con un id 'local-…' y el poll traía
+ * después la fila real con su id numérico: como los ids no coincidían,
+ * la burbuja real se agregaba al lado y el texto de Lucila aparecía DOS
+ * veces. Adoptando el id real, el poll la reconoce como ya pintada y no
+ * la vuelve a agregar — sin quitar ni volver a dibujar nada.
+ *
+ * @param {Element} hilo
+ * @param {string} idLocal
+ * @param {number} idReal
+ * @returns {void}
+ */
+function adoptarIdRealDeBurbuja(hilo, idLocal, idReal) {
+  const id = Number(idReal);
+  if (!Number.isFinite(id) || id <= 0) return;
+
+  const burbuja = hilo.querySelector('[data-mensaje-id="' + idLocal + '"]');
+  if (burbuja) burbuja.dataset.mensajeId = String(id);
+
+  MEGABOT_ULTIMO_ID = Math.max(MEGABOT_ULTIMO_ID, id);
 }
 
 /**
@@ -982,13 +1025,23 @@ function abrirAsistente() {
     // deshacer nada si falla: el mensaje ya quedó guardado del lado
     // del servidor salvo que la red haya fallado de verdad.
     if (hilo.querySelector('.vacio__texto')) hilo.innerHTML = '';
+    const idLocal = 'local-' + Date.now();
     pintarMensajesNuevosDeMegaBot(hilo, [{
-      id: 'local-' + Date.now(), rol: 'lucila', texto: texto, estado: 'enviado', propuestas: [],
+      id: idLocal, rol: 'lucila', texto: texto, estado: 'enviado', propuestas: [],
     }]);
 
     try {
-      const r = await mandar('chat.php?accion=enviar', { texto: texto, pantalla: VISTA_ACTUAL });
-      if (r && r.offline) await resolverMegaBotOffline(hilo, texto);
+      /* Sin cola a propósito: un mensaje de chat no es un pago, y
+         encolarlo dejaba el hilo mudo esperando una señal que podía
+         tardar horas, en vez de dejar que fallara y entraran los
+         agentes que contestan desde el teléfono. */
+      const r = await mandarSinCola('chat.php?accion=enviar',
+        { texto: texto, pantalla: VISTA_ACTUAL });
+
+      // La fila ya existe y tiene id: la burbuja que se pintó al toque
+      // lo adopta, y así el poll no la pinta de nuevo al lado.
+      if (r && r.id) adoptarIdRealDeBurbuja(hilo, idLocal, r.id);
+      if (r && (r.offline || r._offline)) await resolverMegaBotOffline(hilo, texto);
     } catch (error) {
       // Sin red ni para llegar a chat.php: mandar() tira acá, así que
       // nunca llega el offline:true de arriba. Es exactamente el caso
@@ -1194,8 +1247,8 @@ async function abrirConfiguracionMegaBot() {
     pieDeFormulario('Guardar')
   );
 
-  buscar('#megabot-rotar-clave', cuerpo).addEventListener('click', () => {
-    if (!confirmarAccion(
+  buscar('#megabot-rotar-clave', cuerpo).addEventListener('click', async () => {
+    if (!await confirmarAccion(
       'La clave anterior deja de servir. Copiá la nueva ahora — no se ' +
       'vuelve a mostrar. ¿Generar una nueva?'
     )) return;

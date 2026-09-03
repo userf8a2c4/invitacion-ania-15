@@ -130,8 +130,20 @@ $TABLAS = [
             'capacidad' => ['entero', 1, 99],
             'ubicacion' => ['texto', 120],
             'notas'     => ['texto', 2000],
+            /* Dónde va en el plano. En 0 = todavía sin ubicar. Sin
+               estas dos, una mesa creada a mano no se podía colocar en
+               el plano por ninguna vía: el arrastre solo reubica lo que
+               ya tiene un lugar. Mismos topes que mesas.php?accion=ubicar. */
+            'fila'      => ['entero', 0, 20],
+            'columna'   => ['entero', 0, 12],
         ],
         'obligatorio' => 'nombre',
+        /* Al EDITAR, lo que no venga en el JSON conserva lo que ya
+           tenía. Sin esto, cualquier guardado que no mande fila y
+           columna —un formulario viejo en caché, el asistente— las
+           dejaría en 0 y la mesa desaparecería del plano sin que nadie
+           haya pedido moverla. */
+        'conservar_si_falta' => ['fila', 'columna'],
     ],
     'regalos' => [
         'orden'  => 'pedido_en_lista DESC, agradecido, recibido_en DESC, id DESC',
@@ -218,12 +230,20 @@ case 'todo':
     /* Las mesas con cuántos lugares llevan ocupados. Se calcula acá y no
        en la app porque hace falta cruzar dos tablas. Sin
        asignacion_mesas (instalación sin migrar) se devuelve la
-       ocupación en cero en vez de tronar: Mesas se ve vacía, no rota. */
+       ocupación en cero en vez de tronar: Mesas se ve vacía, no rota.
+
+       `fijadas` y `sueltas` viajan para que borrar una mesa pueda decir
+       a cuántos afecta ANTES de hacerlo (el CASCADE de la tabla los
+       levanta a todos en silencio, candado incluido). Las personas
+       sueltas —Fase 9, alguien sacado de su familia— van en una
+       consulta aparte a propósito: unir las dos tablas en un solo
+       GROUP BY multiplica las filas y `ocupados` saldría inflado. */
     $resultado['ocupacion'] = existeTabla('asignacion_mesas')
         ? consultarTodo(
             'SELECT m.id, m.nombre, m.capacidad,
                     COALESCE(SUM(a.lugares), 0) AS ocupados,
-                    COUNT(a.id)                 AS grupos
+                    COUNT(a.id)                 AS grupos,
+                    COALESCE(SUM(a.fijada), 0)  AS fijadas
              FROM mesas m
              LEFT JOIN asignacion_mesas a ON a.mesa_id = m.id
              GROUP BY m.id, m.nombre, m.capacidad
@@ -231,8 +251,31 @@ case 'todo':
         )
         : array_map(function ($m) {
             return ['id' => $m['id'], 'nombre' => $m['nombre'],
-                    'capacidad' => $m['capacidad'], 'ocupados' => 0, 'grupos' => 0];
+                    'capacidad' => $m['capacidad'], 'ocupados' => 0,
+                    'grupos' => 0, 'fijadas' => 0];
         }, $resultado['mesas']);
+
+    if (existeTabla('asignacion_mesas_persona')) {
+        $sueltasPorMesa = [];
+        foreach (consultarTodo(
+            'SELECT mesa_id,
+                    COUNT(*)                  AS sueltas,
+                    COALESCE(SUM(fijada), 0)  AS fijadas
+             FROM asignacion_mesas_persona
+             GROUP BY mesa_id'
+        ) as $fila) {
+            $sueltasPorMesa[(int) $fila['mesa_id']] = $fila;
+        }
+
+        foreach ($resultado['ocupacion'] as &$mesa) {
+            $extra = $sueltasPorMesa[(int) $mesa['id']] ?? null;
+            $mesa['sueltas'] = $extra ? (int) $extra['sueltas'] : 0;
+            $mesa['ocupados'] = (int) $mesa['ocupados'] + $mesa['sueltas'];
+            $mesa['fijadas']  = (int) $mesa['fijadas']
+                              + ($extra ? (int) $extra['fijadas'] : 0);
+        }
+        unset($mesa);
+    }
 
     responderBien($resultado);
     break;
@@ -286,8 +329,17 @@ case 'guardar':
     $id = campoEntero($datos, 'id', 0);
 
     if ($id > 0) {
-        $hay = consultarUno("SELECT id FROM `$que` WHERE id = :id", [':id' => $id]);
+        $hay = consultarUno("SELECT * FROM `$que` WHERE id = :id", [':id' => $id]);
         if (!$hay) responderMal('Ese registro ya no existe.', 404);
+
+        /* Lo que la sección declaró como "conservar si falta" y no vino
+           en el JSON se rellena con lo que ya estaba guardado, en vez de
+           pisarlo con el valor por defecto del tipo. */
+        foreach ($config['conservar_si_falta'] ?? [] as $columna) {
+            if (!array_key_exists($columna, $datos) && isset($hay[$columna])) {
+                $valores[$columna] = $hay[$columna];
+            }
+        }
 
         actualizar($que, $id, $valores);
         anotarEnBitacora($yo, 'editó un registro', $que, $id, (string) $valores[$clave]);
@@ -313,6 +365,20 @@ case 'borrar':
 
     $datos = cuerpoJson();
     $id    = campoEntero($datos, 'id', 1);
+
+    /* Borrar una mesa levanta a todos sus sentados por CASCADE, candado
+       incluido (ver `asignacion_mesa` en migracion.sql). La foto se toma
+       ACÁ, no solo antes de autoasignar, porque este es el otro camino
+       por el que se pierde un acomodo entero — y hasta ahora era el
+       único de los dos sin red. */
+    if ($que === 'mesas') {
+        require_once __DIR__ . '/_lib/mesas.php';
+        $mesa = consultarUno('SELECT nombre FROM mesas WHERE id = :m', [':m' => $id]);
+        guardarFotoDelAcomodo(
+            'antes de borrar la mesa ' . ($mesa['nombre'] ?? $id),
+            (int) ($yo['id'] ?? 0)
+        );
+    }
 
     borrar($que, $id);
     anotarEnBitacora($yo, 'borró un registro', $que, $id);

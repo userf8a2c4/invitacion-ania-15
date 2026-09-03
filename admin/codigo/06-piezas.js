@@ -176,9 +176,15 @@ function abrirHoja(titulo, contenido, alCerrar) {
 /**
  * Cierra la hoja.
  *
- * @returns {void}
+ * Es asíncrona porque preguntar por lo escrito sin guardar ahora abre
+ * una hoja propia y no el confirm() del navegador (ver confirmarAccion).
+ * Con `forzar` —que es como la llama el código después de guardar— no
+ * hay nada que preguntar y el cierre ocurre igual de inmediato que antes.
+ *
+ * @param {boolean} [forzar]
+ * @returns {Promise<void>}
  */
-function cerrarHoja(forzar) {
+async function cerrarHoja(forzar) {
   const hoja = buscar('#hoja');
   if (hoja.classList.contains('oculto')) return;
 
@@ -194,8 +200,11 @@ function cerrarHoja(forzar) {
   const huboAlgoEscrito = loEscritoEnLaHoja() !== LO_QUE_HABIA_AL_ABRIR;
 
   if (!forzar && huboAlgoEscrito) {
-    if (!confirmarAccion('Escribiste cosas que todavía no se guardaron.\n\n' +
-                         '¿Cerrar igual y perderlas?')) return;
+    if (!await confirmarAccion(
+          'Escribiste cosas que todavía no se guardaron.\n\n' +
+          'Si cierras ahora se pierden.',
+          { confirmar: 'Cerrar y perderlas', cancelar: 'Seguir editando',
+            peligro: true })) return;
   }
 
   /* Fase 8, la señal más valiosa que antes no existía: qué formulario se
@@ -1131,18 +1140,110 @@ function valorDe(id, dentroDe) {
 
 /* ─── 5. CONFIRMAR ANTES DE BORRAR ─────────────────────────────────── */
 
+/** La confirmación abierta, para no apilar dos si algo pregunta dos veces. */
+let CONFIRMACION_ABIERTA = null;
+
 /**
  * Pregunta antes de hacer algo que no se puede deshacer.
  *
- * Se usa el confirm() del navegador a propósito: es feo pero es el
- * diálogo del sistema, imposible de ignorar por accidente, y para borrar
- * un proveedor o un gasto eso es exactamente lo que se busca.
+ * POR QUÉ YA NO ES EL confirm() DEL NAVEGADOR
+ * Era el diálogo del sistema, imposible de ignorar por accidente. Pero
+ * Chrome en Android, a partir del segundo confirm() seguido, agrega la
+ * casilla "No volver a mostrar más diálogos" — y con veinte
+ * confirmaciones en la app es cuestión de tiempo que se toque. Desde
+ * ese momento TODAS devuelven false en silencio, sin nada en pantalla:
+ * los borrados dejan de funcionar y, peor, deja de funcionar el
+ * guardarraíl de "escribiste cosas que no se guardaron", que es el que
+ * evita perder media hora de trabajo con un dedo mal apoyado.
  *
- * @param {string} pregunta
- * @returns {boolean}
+ * Un diálogo propio no se puede silenciar, y además permite lo que el
+ * del sistema no: rotular el botón con la acción real ("Borrar la
+ * mesa") en vez de "Aceptar", y separar el título de lo que se pierde.
+ *
+ * DEVUELVE UNA PROMESA. Todos los llamadores usan `await`; sin él, un
+ * objeto Promise es siempre verdadero y la pregunta no frenaría nada.
+ *
+ * @param {string} pregunta - Lo de antes del primer renglón en blanco
+ *   es el título; lo de después, el detalle de qué se pierde.
+ * @param {Object} [opciones]
+ * @param {string} [opciones.confirmar] - Rótulo del botón que sigue adelante.
+ * @param {string} [opciones.cancelar]  - Rótulo del botón que se echa atrás.
+ * @param {boolean} [opciones.peligro]  - Si lo que se hace destruye algo.
+ * @returns {Promise<boolean>}
+ *
+ * @example
+ *   if (!await confirmarAccion('¿Borrar la mesa 5?\n\nSe sientan 8.',
+ *                              { confirmar: 'Borrar la mesa', peligro: true })) return;
  */
-function confirmarAccion(pregunta) {
-  return window.confirm(pregunta);
+function confirmarAccion(pregunta, opciones) {
+  const op = opciones || {};
+
+  /* Si ya hay una pregunta en pantalla, la segunda se responde que no.
+     Apilarlas dejaría una tapada abajo esperando para siempre. */
+  if (CONFIRMACION_ABIERTA) return Promise.resolve(false);
+
+  const partes  = String(pregunta).split(/\n\s*\n/);
+  const titulo  = partes.shift();
+  const detalle = partes.join('\n\n').trim();
+
+  return new Promise(resolve => {
+    const capa = document.createElement('div');
+    capa.className = 'confirmar';
+    capa.setAttribute('role', 'alertdialog');
+    capa.setAttribute('aria-modal', 'true');
+    capa.innerHTML =
+      '<div class="confirmar__fondo" data-confirmar="no"></div>' +
+      '<div class="confirmar__panel' +
+           (op.peligro ? ' confirmar__panel--peligro' : '') + '">' +
+        '<div class="confirmar__titulo">' + seguro(titulo) + '</div>' +
+        (detalle
+          ? '<div class="confirmar__detalle">' + seguro(detalle) + '</div>'
+          : '') +
+        '<div class="confirmar__acciones">' +
+          '<button class="boton" data-confirmar="no">' +
+            seguro(op.cancelar || 'Cancelar') + '</button>' +
+          '<button class="boton ' +
+                  (op.peligro ? 'boton--peligro' : 'boton--principal') + '" ' +
+                  'data-confirmar="si">' +
+            seguro(op.confirmar || 'Sí, seguir') + '</button>' +
+        '</div>' +
+      '</div>';
+
+    /* Una sola salida para las tres formas de responder (los botones, el
+       fondo, la tecla Escape), y el listener del teclado se desengancha
+       ahí mismo: si quedara vivo, cada confirmación dejaría uno más. */
+    const responder = respuesta => {
+      if (CONFIRMACION_ABIERTA !== capa) return;
+      CONFIRMACION_ABIERTA = null;
+      document.removeEventListener('keydown', porTecla, true);
+      capa.remove();
+      resolve(respuesta);
+    };
+
+    const porTecla = evento => {
+      if (evento.key !== 'Escape') return;
+      /* En captura y cortando la propagación: si no, el mismo Escape
+         llegaría al listener de 05-navegacion.js y cerraría también la
+         hoja de atrás, que es justo lo que se estaba por confirmar. */
+      evento.stopPropagation();
+      responder(false);
+    };
+
+    capa.addEventListener('click', evento => {
+      const boton = evento.target.closest('[data-confirmar]');
+      if (boton) responder(boton.dataset.confirmar === 'si');
+    });
+    document.addEventListener('keydown', porTecla, true);
+
+    CONFIRMACION_ABIERTA = capa;
+    document.body.appendChild(capa);
+
+    /* El foco arranca en Cancelar a propósito: un Enter de reflejo, o un
+       segundo toque en el mismo lugar donde estaba el botón anterior, no
+       debe destruir nada. */
+    const cancelar = capa.querySelector('[data-confirmar="no"].boton');
+    if (cancelar) cancelar.focus();
+  });
 }
 
 
@@ -1577,7 +1678,7 @@ async function repintarListaDeEtiquetasAcomodo(cuerpo) {
 
   buscarTodos('[data-borrar-etiqueta-acomodo]', contenedor).forEach(boton => {
     boton.addEventListener('click', async () => {
-      if (!confirmarAccion(
+      if (!await confirmarAccion(
         '¿Borrar esta etiqueta? Se saca de todas las personas y mesas que la tengan.'
       )) return;
       try {

@@ -234,7 +234,7 @@ function abrirEtiquetas() {
   });
 
   buscar('#et-restaurar', cuerpo).addEventListener('click', async () => {
-    if (!confirmarAccion('¿Volver a los nombres originales?')) return;
+    if (!await confirmarAccion('¿Volver a los nombres originales?')) return;
 
     try {
       const r = await mandar('etiquetas.php?accion=restaurar', {});

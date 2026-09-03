@@ -411,7 +411,7 @@ function pintarVistaPreviaDeImportacion(donde, cuerpo) {
   buscar('#imp-importar', cuerpo).addEventListener('click', async () => {
     const boton = buscar('#imp-importar', cuerpo);
 
-    if (!confirmarAccion('¿Importar ' + r.filas + ' invitados?\n\n' +
+    if (!await confirmarAccion('¿Importar ' + r.filas + ' invitados?\n\n' +
                          'Suman ' + r.personas + ' personas.')) return;
 
     boton.disabled = true;
@@ -496,6 +496,16 @@ function pintarPreviaDeCotizaciones(donde, cuerpo, encontradas) {
 
   buscar('#imp-cot', cuerpo).addEventListener('click', async () => {
     const boton = buscar('#imp-cot', cuerpo);
+
+    /* Importar invitados pregunta y esto no preguntaba nada, siendo la
+       misma clase de acción: escribir de golpe un montón de filas que
+       después hay que borrar una por una si estaban mal. */
+    if (!await confirmarAccion(
+      '¿Importar ' + encontradas.length + ' cotizaciones?\n\n' +
+      'Se agregan al rubro «' + (valorDe('imp-servicio', cuerpo) || 'Salón') +
+      '». Si algo sale mal, hay que borrarlas una por una.',
+      { confirmar: 'Importar' })) return;
+
     boton.disabled = true;
     boton.textContent = 'Importando…';
 

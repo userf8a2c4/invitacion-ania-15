@@ -218,8 +218,8 @@ function formularioNota(nota) {
 
   const borrar = buscar('#pie-borrar', cuerpo);
   if (borrar) {
-    borrar.addEventListener('click', () => {
-      if (!confirmarAccion('¿Borrar esta nota?')) return;
+    borrar.addEventListener('click', async () => {
+      if (!await confirmarAccion('¿Borrar esta nota?')) return;
       guardarPlan('borrar_nota', { id: nota.id }, () => abrirHojaDeNota());
     });
   }
@@ -377,8 +377,8 @@ function formularioTarea(tarea) {
 
   const borrar = buscar('#pie-borrar', cuerpo);
   if (borrar) {
-    borrar.addEventListener('click', () => {
-      if (!confirmarAccion('¿Borrar esta tarea?')) return;
+    borrar.addEventListener('click', async () => {
+      if (!await confirmarAccion('¿Borrar esta tarea?')) return;
       guardarPlan('borrar_tarea', { id: tarea.id }, refrescarVistaEvento);
     });
   }
@@ -497,8 +497,8 @@ function formularioCita(cita) {
 
   const borrar = buscar('#pie-borrar', cuerpo);
   if (borrar) {
-    borrar.addEventListener('click', () => {
-      if (!confirmarAccion('¿Borrar esta fecha?')) return;
+    borrar.addEventListener('click', async () => {
+      if (!await confirmarAccion('¿Borrar esta fecha?')) return;
       guardarPlan('borrar_cita', { id: cita.id }, refrescarVistaEvento);
     });
   }

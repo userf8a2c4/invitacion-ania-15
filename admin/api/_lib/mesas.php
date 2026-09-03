@@ -867,7 +867,8 @@ function guardarFotoDelAcomodo($motivo, $usuarioId = 0) {
  * lista plana, se lo trata como "familias" y "personas" queda vacío —
  * así una foto tomada la semana pasada se puede seguir restaurando.
  *
- * @return array ['ok' => bool, 'cuantos' => int, 'error' => string]
+ * @return array ['ok' => bool, 'cuantos' => int, 'salteadas' => int,
+ *                'error' => string]
  */
 function volverAlAcomodoAnterior() {
     if (!existeTabla('acomodo_respaldo')) {
@@ -888,11 +889,30 @@ function volverAlAcomodoAnterior() {
     $filasFamilias = $esFormatoViejo ? $contenido : ($contenido['familias'] ?? []);
     $filasPersonas = $esFormatoViejo ? [] : ($contenido['personas'] ?? []);
 
+    /* Una foto guarda mesas y personas por id, y entre la foto y el
+       deshacer se pudo borrar cualquiera de las dos. Restaurar a ciegas
+       choca contra la clave foránea y tumba la transacción entera: el
+       acomodo NO vuelve y el mensaje es "No se pudo volver atrás".
+       Se restaura entonces lo que todavía existe, y se dice cuánto no. */
+    $mesasVivas = [];
+    foreach (consultarTodo('SELECT id FROM mesas') as $m) {
+        $mesasVivas[(int) $m['id']] = true;
+    }
+
+    $sigueViva = function ($fila) use ($mesasVivas) {
+        return isset($mesasVivas[(int) $fila['mesa_id']]);
+    };
+
+    $familiasVivas = array_values(array_filter($filasFamilias, $sigueViva));
+    $personasVivas = array_values(array_filter($filasPersonas, $sigueViva));
+    $salteadas = (count($filasFamilias) - count($familiasVivas))
+               + (count($filasPersonas) - count($personasVivas));
+
     bd()->beginTransaction();
     try {
         ejecutar('DELETE FROM asignacion_mesas');
 
-        foreach ($filasFamilias as $f) {
+        foreach ($familiasVivas as $f) {
             insertar('asignacion_mesas', [
                 'confirmacion_id' => (int) $f['confirmacion_id'],
                 'mesa_id'         => (int) $f['mesa_id'],
@@ -904,7 +924,7 @@ function volverAlAcomodoAnterior() {
 
         if (existeTabla('asignacion_mesas_persona')) {
             ejecutar('DELETE FROM asignacion_mesas_persona');
-            foreach ($filasPersonas as $f) {
+            foreach ($personasVivas as $f) {
                 insertar('asignacion_mesas_persona', [
                     'acompanante_id' => (int) $f['acompanante_id'],
                     'mesa_id'        => (int) $f['mesa_id'],
@@ -919,7 +939,11 @@ function volverAlAcomodoAnterior() {
         ejecutar('DELETE FROM acomodo_respaldo WHERE id = :id', [':id' => $ultimo['id']]);
 
         bd()->commit();
-        return ['ok' => true, 'cuantos' => count($filasFamilias) + count($filasPersonas)];
+        return [
+            'ok'        => true,
+            'cuantos'   => count($familiasVivas) + count($personasVivas),
+            'salteadas' => $salteadas,
+        ];
 
     } catch (Exception $e) {
         bd()->rollBack();

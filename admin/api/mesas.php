@@ -128,6 +128,15 @@ case 'todo':
         ? consultarUno("SELECT valor FROM ajustes WHERE clave = 'auto_al_confirmar'")
         : null;
 
+    /* De cuándo es la foto a la que vuelve "Volver al acomodo anterior",
+       y por qué se tomó. Viaja para que la app pueda preguntar diciendo
+       QUÉ se pierde ("vuelves a como estaba el 2 de septiembre") en vez
+       de un "¿estás seguro?" que no ayuda a decidir. */
+    $ultimoRespaldo = existeTabla('acomodo_respaldo')
+        ? consultarUno('SELECT cuando, motivo, cuantos FROM acomodo_respaldo
+                        ORDER BY cuando DESC, id DESC LIMIT 1')
+        : null;
+
     responderBien([
         'mesas'       => array_values($porMesa),
         'sin_sentar'  => $sinSentar,
@@ -144,6 +153,7 @@ case 'todo':
             'faltan_lugares' => max(0, $totalGente - $capacidadTotal),
         ],
         'auto_al_confirmar' => $ajuste && $ajuste['valor'] === '1',
+        'ultimo_respaldo'   => $ultimoRespaldo ?: null,
     ]);
     break;
 
@@ -252,7 +262,14 @@ case 'deshacer':
     anotarEnBitacora($yo, 'volvió al acomodo anterior', 'asignacion_mesas', 0,
                      $r['cuantos'] . ' asignaciones restauradas');
 
-    responderBien(['mensaje' => 'Listo: el acomodo volvió a como estaba antes.']);
+    /* Si desde la foto se borró alguna mesa, esa gente no tiene dónde
+       volver. Se dice, en vez de dejar que la cuenta no cierre sola. */
+    $salteadas = (int) ($r['salteadas'] ?? 0);
+    responderBien(['mensaje' => $salteadas
+        ? 'Listo, con una salvedad: ' . $salteadas . ' ' .
+          ($salteadas === 1 ? 'persona quedó' : 'personas quedaron') .
+          ' sin mesa porque la suya se borró después de esa foto.'
+        : 'Listo: el acomodo volvió a como estaba antes.']);
     break;
 
 
