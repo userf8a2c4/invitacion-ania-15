@@ -421,12 +421,16 @@ function bloqueDinero(dinero) {
              '.</p>';
   }
 
-  const pendientes = dinero.padrinos_pendientes;
-  if (pendientes && pendientes.cuantos > 0) {
+  /* `padrinos_pendientes` es el monto y `_cuantos` la cantidad — dos
+     claves sueltas, la misma forma que devuelve presupuesto.php. Antes
+     acá era un objeto {monto, cuantos} y allá dos claves: el mismo dato
+     con dos formas según la pantalla. */
+  if (dinero.padrinos_pendientes_cuantos > 0) {
     // En ojo y no en rojo: no es un error, es algo que hay que seguir.
     extra += '<p class="vacio__texto" style="color:var(--ojo)">' +
-             seguro(comoDinero(pendientes.monto, false)) + ' de ' +
-             seguro(pluralizar(pendientes.cuantos, 'padrino', 'padrinos')) +
+             seguro(comoDinero(dinero.padrinos_pendientes, false)) + ' de ' +
+             seguro(pluralizar(dinero.padrinos_pendientes_cuantos,
+                               'padrino', 'padrinos')) +
              ' todavía sin entregar.</p>';
   }
 

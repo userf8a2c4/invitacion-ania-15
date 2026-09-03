@@ -182,6 +182,23 @@ $agregarColumna('llegadas', 'intentos', 'INT NOT NULL DEFAULT 0');
 $agregarColumna('categorias_gasto', 'presupuesto_id', 'INT NOT NULL DEFAULT 1');
 $agregarColumna('gastos', 'presupuesto_id', 'INT NOT NULL DEFAULT 1');
 
+/* Cuánto ENTREGÓ un padrino, que no es lo mismo que cuánto prometió.
+   `estado` es un sí/no: una entrega parcial —"de los $30,000 me dio
+   $10,000 y el resto en octubre"— no se podía representar sin mentir
+   para un lado o para el otro.
+
+   Los que YA estaban marcados 'entregado' arrancan con su monto
+   completo: es lo que esa marca significaba hasta ahora, y dejarlos en
+   0 haría aparecer de golpe una deuda que no existe. Se hace una sola
+   vez, y solo sobre los que quedaron en 0 — así correr instalar.php de
+   nuevo no pisa una entrega parcial cargada a mano después. */
+$agregarColumna('padrinos', 'monto_entregado', 'DECIMAL(12,2) NOT NULL DEFAULT 0');
+if (existeTabla('padrinos')
+    && in_array('monto_entregado', columnasDe('padrinos'), true)) {
+    ejecutar("UPDATE padrinos SET monto_entregado = monto
+              WHERE estado = 'entregado' AND monto_entregado = 0");
+}
+
 /* La pregunta de seguridad de "olvidé mi contraseña" (ver sesion.php).
  * Igual que la contraseña, la respuesta NUNCA se guarda en claro — solo
  * su hash. La pregunta en sí sí queda en claro: hace falta mostrarla de

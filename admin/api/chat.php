@@ -295,7 +295,34 @@ function usoDeMegabotGuardado() {
     if ($valor === '') return null;
 
     $uso = json_decode($valor, true);
-    return is_array($uso) ? $uso : null;
+    if (!is_array($uso)) return null;
+
+    /* ⚡ EL RELOJ ESTABA CONGELADO (2026-09-03).
+     * `reinicia_en` son los segundos que faltaban EN EL MOMENTO en que
+     * MegaBot lo mandó, y se devolvía tal cual para siempre: si dijo
+     * "reinicia en una hora" y pasaron cincuenta minutos, el panel
+     * seguía diciendo una hora. Un contador que no baja no es un
+     * contador, es un cartel.
+     *
+     * Ahora se guarda CUÁNDO se anotó y acá se descuenta lo que pasó
+     * desde entonces. Llegado a cero, la cuota ya se reinició: el uso
+     * vuelve a cero y deja de estar agotado, que es lo que significa
+     * que el reloj llegue al final. */
+    $guardadoEn = (int) ($uso['guardado_en'] ?? 0);
+    $faltaban   = (int) ($uso['reinicia_en'] ?? 0);
+
+    if ($guardadoEn > 0 && $faltaban > 0) {
+        $transcurrido = max(0, time() - $guardadoEn);
+        $uso['reinicia_en'] = max(0, $faltaban - $transcurrido);
+
+        if ($uso['reinicia_en'] === 0) {
+            $uso['porcentaje'] = 0;
+            $uso['agotado']    = false;
+        }
+    }
+
+    unset($uso['guardado_en']);   // detalle interno, no viaja al panel
+    return $uso;
 }
 
 /**
@@ -319,7 +346,15 @@ function guardarUsoDeMegabotSiVino($usoCrudo) {
     // encabezado) — no se guarda un uso vacío.
     if ($porcentaje === null && !$agotado) return;
 
-    $uso = ['porcentaje' => $porcentaje, 'reinicia_en' => $reiniciaEn, 'agotado' => $agotado];
+    /* `guardado_en` es lo que permite que el reloj baje: sin él,
+       `reinicia_en` quedaba clavado en el valor del momento en que
+       MegaBot lo mandó. Ver usoDeMegabotGuardado(). */
+    $uso = [
+        'porcentaje'  => $porcentaje,
+        'reinicia_en' => $reiniciaEn,
+        'agotado'     => $agotado,
+        'guardado_en' => time(),
+    ];
     ejecutar(
         "INSERT INTO ajustes (clave, valor) VALUES ('megabot_uso', :v)
          ON DUPLICATE KEY UPDATE valor = VALUES(valor)",
@@ -408,13 +443,40 @@ case 'propuesta_estado':
     $datos = cuerpoJson();
 
     $id = campoEntero($datos, 'id', 0);
-    $estado = campoOpcion($datos, 'estado', ['aceptada', 'rechazada'], '');
+    /* 'fallida' (2026-09-03): la propuesta se intentó y el panel no
+       pudo hacerla — típicamente una acción que MegaBot pidió y que no
+       está en la whitelist. La columna tenía ese estado desde el primer
+       día y nadie lo escribía nunca, así que esos casos quedaban como
+       'abierta' para siempre, indistinguibles de los que nadie miró. */
+    $estado = campoOpcion($datos, 'estado', ['aceptada', 'rechazada', 'fallida'], '');
     if ($id <= 0 || $estado === '') responderMal('Falta decir qué propuesta y qué pasó.', 400);
+
+    /* ⚡ LA PROPUESTA TIENE QUE SER DEL HILO DE QUIEN LA RESPONDE
+       (2026-09-03). Acá se actualizaba por id y nada más: bastaba
+       adivinar un número para marcar como "ejecutada" o "rechazada" una
+       propuesta del hilo de otra persona. No re-ejecuta nada —eso está
+       prohibido en este archivo— pero sí ensucia el historial de
+       alguien más y le hace desaparecer los botones de una decisión que
+       nunca tomó. Los hilos son por cuenta: se comprueba contra el
+       propio. */
+    $propuesta = consultarUno(
+        'SELECT p.id
+         FROM chat_propuestas p
+         JOIN chat_mensajes m ON m.id = p.mensaje_id
+         WHERE p.id = :p AND m.hilo_id = :h',
+        [':p' => $id, ':h' => hiloDe((int) $yo['id'])]
+    );
+    if (!$propuesta) responderMal('Esa propuesta no es de tu conversación.', 404);
 
     // Solo se marca — la UI ya corrió mandar() antes de llamar acá.
     // Nunca se re-ejecuta la acción desde PHP: sería un segundo camino
     // para escribir, justo lo que este archivo tiene prohibido.
-    actualizar('chat_propuestas', $id, ['estado' => $estado === 'aceptada' ? 'ejecutada' : 'rechazada']);
+    $comoSeGuarda = [
+        'aceptada'  => 'ejecutada',
+        'rechazada' => 'rechazada',
+        'fallida'   => 'fallida',
+    ];
+    actualizar('chat_propuestas', $id, ['estado' => $comoSeGuarda[$estado]]);
     responderBien(['mensaje' => 'Anotado.']);
     break;
 

@@ -279,14 +279,24 @@ function abrirSelectorDePresupuesto() {
 }
 
 /**
- * Las dos cifras de arriba, más lo pendiente.
+ * La cabecera de Dinero: el estado, la cifra que manda y el resto.
  *
- * @param {Object} t - Los totales.
+ * ⚡ UNA SOLA CIFRA DOMINANTE (2026-09-03)
+ * Acá había dos cifras de 30px del mismo peso —"Cuesta" y "De tu
+ * bolsillo"— aunque la segunda sea un subconjunto optimista de la
+ * primera, y debajo entre veinte y veinticinco números más en gris
+ * chico. El ojo no sabía dónde caer.
+ *
+ * Ahora manda una: LO QUE FALTA PAGAR DE VERDAD. Es la pregunta con la
+ * que se abre esta pantalla. El resto se agrupa por pregunta, y cada
+ * número se gana su lugar contestando algo distinto en vez de repetir
+ * lo mismo con otra fórmula.
+ *
+ * @param {Object} t - Los totales (ver cifrasDelPresupuesto en
+ *   _lib/dinero.php: son las MISMAS que usa la pantalla de inicio).
  * @returns {string} HTML
  */
 function bloqueTotales(t) {
-  let avisos = '';
-
   /* El selector de moneda. Cambia SOLO cómo se ven los números: en la
      base de datos todo sigue guardado en pesos. Por eso, cuando está en
      dólares, se aclara con qué tipo de cambio y de cuándo — para que
@@ -301,163 +311,278 @@ function bloqueTotales(t) {
       }).join('') +
     '</div>';
 
-  if (cual !== CONFIGURACION.dinero.monedaBase) {
-    avisos += '<p class="vacio__texto">Convertido a ' +
-              seguro(CONFIGURACION.dinero.pesosPorDolar) + ' pesos por dólar ' +
-              '(actualizado el ' +
-              seguro(comoFecha(CONFIGURACION.dinero.tipoDeCambioActualizado)) +
-              '). Los montos se guardan en pesos.</p>';
-  }
+  const nota = cual !== CONFIGURACION.dinero.monedaBase
+    ? '<p class="vacio__texto">Convertido a ' +
+      seguro(CONFIGURACION.dinero.pesosPorDolar) + ' pesos por dólar ' +
+      '(actualizado el ' +
+      seguro(comoFecha(CONFIGURACION.dinero.tipoDeCambioActualizado)) +
+      '). Los montos se guardan en pesos.</p>'
+    : '';
 
-  if (t.por_pagar > 0) {
-    avisos += '<p class="vacio__texto">Por pagar: <strong>' +
-              seguro(comoDinero(t.por_pagar, false)) + '</strong> en ' +
-              seguro(pluralizar(t.por_pagar_cuantos, 'pago', 'pagos')) + '.</p>';
-  }
+  return selector +
+         '<div class="tarjeta">' +
+           bloqueComoVamos(t) +
+           nota +
+           '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-3)">' +
+             '<button class="boton boton--chico" style="flex:1" id="exportar-dinero">' +
+               'Descargar</button>' +
+             '<button class="boton boton--chico" style="flex:1" id="resumen-ejecutivo">' +
+               'Resumen ejecutivo' +
+             '</button>' +
+           '</div>' +
+         '</div>';
+}
 
-  if (t.padrinos_pendientes > 0) {
-    avisos += '<p class="vacio__texto" style="color:var(--ojo)">' +
-              seguro(comoDinero(t.padrinos_pendientes, false)) + ' de ' +
-              seguro(pluralizar(t.padrinos_pendientes_cuantos, 'padrino', 'padrinos')) +
-              ' sin entregar todavía.</p>';
-  }
+/**
+ * "Cómo vamos": la frase de estado, la cifra que manda y las tres
+ * lecturas que hasta ahora solo existían dentro del PDF.
+ *
+ * POR QUÉ ESTO NO SIGUE VIVIENDO EN EL PDF
+ * El resumen ejecutivo (13-exportar.js) tenía todo el pensamiento
+ * contable que la app no mostraba: exposición restante, comprometido
+ * frente a pagado, gastos sin ningún pago. Que eso viviera en un PDF
+ * que hay que generar, y no en la pantalla que se abre todos los días,
+ * era el mayor desperdicio del módulo.
+ *
+ * @param {Object} t
+ * @returns {string} HTML
+ */
+function bloqueComoVamos(t) {
+  const costo  = Number(t.costo) || 0;
+  const pagado = Number(t.pagado) || 0;
+  const falta  = Number(t.falta) || 0;
 
-  /* "De tu bolsillo" (arriba) da por hecho que todo padrino asignado a
-     un gasto SÍ va a entregar. Cuando hay gastos cubiertos por un
-     padrino que todavía no entregó (solo lo habló o lo confirmó), ese
-     dinero no es seguro todavía — se avisa cuál sería el bolsillo real
-     si nadie más entrega, para no gastar de más confiando en una
-     promesa. */
-  const prometidoSinEntregar = (t.de_padrinos || 0) - (t.de_padrinos_entregado || 0);
-  if (prometidoSinEntregar > 0.01) {
-    avisos += '<p class="vacio__texto" style="color:var(--ojo)">' +
-              seguro(comoDinero(prometidoSinEntregar, false)) + ' de padrinos ' +
-              'todavía no entregado — si nadie más entrega, tu bolsillo real ' +
-              'sería <strong>' + seguro(comoDinero(t.bolsillo_si_nadie_mas_entrega, false)) +
-              '</strong>.</p>';
-  }
+  /* ─── La cifra que manda ──────────────────────────────────────────
+   *
+   * ⚡ "AL DÍA" NO TAPA DOS SITUACIONES DISTINTAS. Antes cualquier resta
+   * negativa se mostraba como "Al día", y eso producía una pantalla que
+   * se contradice sola: decía que la fiesta cuesta $10,000, que ya se
+   * pagaron $128,145, y donde debería decir cuánto falta decía "Al día".
+   * Nadie lee eso como "no debes nada": se lee como que la pantalla está
+   * rota, y quien la usa deja de confiar en el resto de los números. */
+  let rotulo, cifra, pie, clase;
 
-  /* costo_por_invitado viene null cuando todavía no hay nadie
-     confirmado (presupuesto.php lo calcula así a propósito): se dice
-     explícito por qué no hay número, en vez de mostrar "$0/persona"
-     como si costara gratis. */
-  const costoPorInvitado = t.costo_por_invitado === null || t.costo_por_invitado === undefined
-    ? '<p class="vacio__texto">Costo por invitado: se calcula en cuanto ' +
-      'haya al menos una confirmación que asiste.</p>'
-    : '<p class="vacio__texto">' +
-      seguro(comoDinero(t.costo_por_invitado, false)) + ' por invitado' +
-      ' (' + seguro(pluralizar(t.confirmados, 'confirmado', 'confirmados')) + ').</p>';
-
-  /* ⚡ TERCERA CIFRA: PAGADO (2026-08-27). "Cuesta" y "De tu bolsillo" ya
-     existían; faltaba la única que realmente responde "¿cuánto llevo
-     pagado?" — antes el panel calculaba `t.pagado` (suma real de
-     `pagos`) y lo tiraba sin usar. "Falta" es la resta directa: si da
-     negativo (se pagó de más, o Cuesta todavía no refleja el gasto
-     real), se muestra "Al día" en vez de un número negativo confuso. */
-  /* ⚡ "AL DÍA" YA NO TAPA DOS SITUACIONES DISTINTAS (2026-09-02).
-     Antes cualquier resta negativa se mostraba como "Al día", y eso
-     producía una pantalla que se contradice sola: decía que la fiesta
-     cuesta $10,000, que ya se pagaron $128,145, y en el lugar donde
-     debería decir cuánto falta decía "Al día". Nadie lee eso como "no
-     debés nada": se lee como que la pantalla está rota, y quien la usa
-     deja de confiar en el resto de los números.
-
-     Ahora se separan los dos casos que antes se mezclaban:
-       · Presupuesto sin definir — lo pagado supera al presupuesto por
-         muchísimo, señal de que "Cuesta" todavía es un valor de arranque
-         y no el costo real. Se dice así, y se dice qué hacer.
-       · Pagado de más — diferencia real y chica: se muestra el sobrante
-         con ese nombre, que es información útil, no un error.
-       · Y si de verdad no falta nada, recién ahí "Al día". */
-  const costo  = t.costo  || 0;
-  const pagado = t.pagado || 0;
-  const falta  = costo - pagado;
-
-  let cierreDeLaCuenta;
   if (falta > 0.01) {
-    cierreDeLaCuenta = 'Falta: <strong>' + seguro(comoDinero(falta, false)) + '</strong>';
+    rotulo = 'Falta pagar';
+    cifra  = comoDinero(falta, false);
+    clase  = '';
+    pie    = 'De ' + comoDinero(costo, false) + ' que cuesta, llevas ' +
+             comoDinero(pagado, false) + ' pagados.';
   } else if (costo > 0.01 && pagado > costo * 2) {
-    cierreDeLaCuenta = '<strong>Presupuesto sin definir</strong> — lo pagado supera ' +
-      'al presupuesto cargado. Definí el presupuesto para ver cuánto falta.';
+    rotulo = 'Falta pagar';
+    cifra  = '—';
+    clase  = ' cuenta__cifra--alerta';
+    pie    = 'Lo pagado (' + comoDinero(pagado, false) + ') supera por mucho al ' +
+             'presupuesto cargado (' + comoDinero(costo, false) + '). ' +
+             'Carga el costo real de los gastos para ver cuánto falta.';
   } else if (falta < -0.01) {
-    cierreDeLaCuenta = 'Pagado de más: <strong>' +
-      seguro(comoDinero(Math.abs(falta), false)) + '</strong>';
+    rotulo = 'Pagado de más';
+    cifra  = comoDinero(Math.abs(falta), false);
+    clase  = ' cuenta__cifra--alerta';
+    pie    = 'Pagaste más que el costo cargado. Revisa si falta subir algún costo real.';
   } else {
-    cierreDeLaCuenta = '<strong>Al día</strong>';
+    rotulo = 'Al día';
+    cifra  = comoDinero(0, false);
+    clase  = ' cuenta__cifra--bien';
+    pie    = 'Todo lo que está cargado ya está pagado.';
   }
 
-  const resumenDePagado = '<p class="vacio__texto">' +
-    'Pagado: <strong>' + seguro(comoDinero(t.pagado, false)) + '</strong>' +
-    ' · ' + cierreDeLaCuenta + '</p>';
+  /* ─── Una sola frase de estado, arriba de todo ────────────────────
+   * Es lo que Lucila quiere saber antes de mirar un solo número. Mismo
+   * criterio que la "salud del presupuesto" del PDF: alerta si el costo
+   * se pasó de lo planeado, ojo si lo que falta pagar es una porción
+   * material (15%+), bien si no. */
+  const planeado  = Number(t.planeado) || 0;
+  const sobregiro = costo - planeado;
+  const expuesto  = planeado > 0 ? falta / planeado : 0;
+
+  let estado, tono;
+  if (planeado > 0 && sobregiro > planeado * 0.01) {
+    tono   = 'alerta';
+    estado = 'Estás <strong>' + comoDinero(sobregiro, false) +
+             '</strong> por encima de lo que habías planeado.';
+  } else if (expuesto >= 0.15) {
+    tono   = 'ojo';
+    estado = 'Vas bien, pero todavía falta pagar <strong>' +
+             Math.round(expuesto * 100) + '%</strong> de lo planeado.';
+  } else if (costo > 0) {
+    tono   = 'bien';
+    estado = '<strong>Vas bien.</strong> Lo que falta pagar está dentro de lo planeado.';
+  } else {
+    tono   = 'ojo';
+    estado = 'Todavía no hay gastos cargados.';
+  }
+
+  /* ─── Las tres lecturas del PDF, una línea cada una ─────────────── */
+  const lecturas = [];
+
+  /* "Si ningún padrino más entrega". Resta lo ENTREGADO de verdad, no lo
+     asignado a gastos: un padrino que ya pagó pero cuyo aporte todavía
+     no se enlazó a ningún gasto —el caso más común— hacía que esta
+     cifra mostrara el costo entero como si nadie hubiera entregado. */
+  const prometido = Number(t.prometido_padrinos) || 0;
+  if (prometido > 0) {
+    const sinEntregar = prometido - (Number(t.entregado_padrinos) || 0);
+    if (sinEntregar > 0.01) {
+      lecturas.push('Si ningún padrino más entrega, tu bolsillo real es <strong>' +
+        comoDinero(t.bolsillo_si_nadie_mas_entrega, false) + '</strong> — hay ' +
+        comoDinero(sinEntregar, false) + ' prometidos y todavía sin entregar.');
+    }
+  }
+
+  /* "Por pagar" es solo lo que YA está cargado como pago pendiente, y
+     siempre es menor o igual a "Falta". La diferencia entre las dos es
+     dinero que se debe y ni siquiera está anotado — por eso van juntas
+     y explicadas, nunca una al lado de la otra sin nada que las
+     distinga, que es como estaban. */
+  if ((Number(t.por_pagar) || 0) > 0) {
+    lecturas.push('<strong>' + comoDinero(t.por_pagar, false) + '</strong> ya está ' +
+      'anotado como pago pendiente, en ' +
+      pluralizar(t.por_pagar_cuantos, 'pago', 'pagos') + '. El resto de lo que ' +
+      'falta todavía no tiene un pago cargado.');
+  }
+
+  // La zona gris que el PDF ya declaraba en vez de asumir.
+  const sinPago = Number(t.sin_ningun_pago) || 0;
+  if (sinPago > 0) {
+    lecturas.push('<strong>' + pluralizar(sinPago, 'gasto', 'gastos') +
+      '</strong> no ' + (sinPago === 1 ? 'tiene' : 'tienen') +
+      ' ningún pago cargado (' + comoDinero(t.sin_ningun_pago_monto, false) + '). ' +
+      'No se sabe si ya se pagaron en efectivo o si faltan.');
+  }
+
+  /* ─── Las cifras de apoyo, agrupadas por pregunta ────────────────
+   * Cada una contesta algo DISTINTO. "De tu bolsillo" baja de tamaño a
+   * propósito: es un subconjunto optimista de "Cuesta", no su igual. */
+  const renglon = (pregunta, valor) =>
+    '<div class="cuenta__renglon"><span>' + pregunta + '</span>' +
+    '<span class="cifra">' + valor + '</span></div>';
+
+  const apoyo =
+    renglon('Cuánto sale en total', seguro(comoDinero(costo, false))) +
+    renglon('Cuánto sale de tu bolsillo' + ayuda('dinero.dos-cifras'),
+            seguro(comoDinero(t.propio, false))) +
+    renglon('Cuánto llevas pagado', seguro(comoDinero(pagado, false))) +
+
+    /* ⚡ El costo por invitado tiene renglón propio (2026-09-03): es el
+       número con el que se decide si se invita a alguien más, y competía
+       con otras diez cifras chicas apiladas. Viene null cuando todavía
+       no hay nadie confirmado, y se dice por qué en vez de mostrar
+       "$0 por invitado" como si costara gratis. */
+    renglon('Cuánto sale por invitado',
+      (t.costo_por_invitado === null || t.costo_por_invitado === undefined)
+        ? '<span class="vacio__texto">en cuanto haya una confirmación</span>'
+        : seguro(comoDinero(t.costo_por_invitado, false)) +
+          ' <span class="vacio__texto">· ' + seguro(t.confirmados) + '</span>');
 
   return '' +
-    selector +
-    '<div class="tarjeta">' +
-      '<div class="dinero-resumen">' +
-        '<div class="dinero-resumen__mitad">' +
-          '<div class="dinero-resumen__rotulo">Cuesta</div>' +
-          '<div class="dinero-resumen__cifra">' +
-            seguro(comoDinero(t.costo, false)) + '</div>' +
-        '</div>' +
-        '<div class="dinero-resumen__mitad">' +
-          '<div class="dinero-resumen__rotulo">De tu bolsillo' +
-            ayuda('dinero.dos-cifras') + '</div>' +
-          '<div class="dinero-resumen__cifra dinero-resumen__cifra--propio">' +
-            seguro(comoDinero(t.propio, false)) + '</div>' +
-        '</div>' +
-      '</div>' +
-      resumenDePagado +
-      costoPorInvitado +
-      avisos +
-      '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-2)">' +
-        '<button class="boton boton--chico" style="flex:1" id="exportar-dinero">' +
-          'Descargar</button>' +
-        '<button class="boton boton--chico" style="flex:1" id="resumen-ejecutivo">' +
-          'Resumen ejecutivo' +
-        '</button>' +
-      '</div>' +
-    '</div>';
+    '<div class="cuenta__estado cuenta__estado--' + tono + '">' + estado + '</div>' +
+
+    '<div class="cuenta__rotulo">' + seguro(rotulo) + '</div>' +
+    '<div class="cuenta__cifra' + clase + '">' + seguro(cifra) + '</div>' +
+    '<div class="cuenta__pie">' + seguro(pie) + '</div>' +
+
+    (lecturas.length
+      ? '<div class="cuenta__lecturas">' +
+          lecturas.map(l => '<p class="cuenta__lectura">' + l + '</p>').join('') +
+        '</div>'
+      : '') +
+
+    '<div style="margin-top:var(--esp-3)">' + apoyo + '</div>';
 }
 
 
 /**
- * Los pagos pendientes que vencen más pronto, para no tener que abrir
- * la pestaña de Pagos y hacer memoria de cuál era el próximo.
+ * Qué hay que pagar, cortado por cuándo.
  *
- * Se arma en el teléfono con lo que ya trae `case 'todo'` — no hace
- * falta un endpoint aparte, `pagos.fecha_limite` ya existe de antes.
+ * ⚡ LA CUARTA PREGUNTA: "¿QUÉ PAGO ESTE MES?" (2026-09-03)
+ * Esto listaba los cinco próximos vencimientos, sin agrupar y sin
+ * totales — para saber cuánto había que juntar este mes había que
+ * sumarlos de cabeza, y el flujo a noventa días solo existía dentro del
+ * PDF. Ahora el corte es el que se usa para decidir: este mes, el que
+ * viene, y más adelante.
+ *
+ * Y LOS PAGOS SIN FECHA DEJAN DE SER INVISIBLES. Un pago pendiente sin
+ * `fecha_limite` no aparecía en ninguna vista de urgencia —el filtro
+ * pedía fecha— pero SÍ sumaba en "Por pagar". Plata que se debe,
+ * contada en el total y que no figuraba en ninguna lista: la forma más
+ * segura de que a alguien se le pase. Van en su propio grupo, para
+ * ponerles fecha.
  *
  * @param {Array} pagos
- * @returns {string} HTML, o '' si no hay ningún pago pendiente con fecha.
+ * @returns {string} HTML, o '' si no hay ningún pago pendiente.
  */
 function bloqueProximosPagos(pagos) {
-  const proximos = (pagos || [])
-    .filter(p => p.estado !== 'pagado' && p.fecha_limite)
-    .sort((a, b) => (a.fecha_limite < b.fecha_limite ? -1 : 1))
-    .slice(0, 5);
+  const pendientes = (pagos || []).filter(p => p.estado !== 'pagado');
+  if (!pendientes.length) return '';
 
-  if (!proximos.length) return '';
+  const hoy = new Date();
+  const mesDe = fecha => String(fecha).slice(0, 7);          // "2026-10"
+  const esteMes = mesDe(hoy.toISOString());
+  const mesQueViene = mesDe(
+    new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1).toISOString());
+
+  const grupos = [
+    { clave: 'atrasado',  titulo: 'Atrasados',      pagos: [] },
+    { clave: 'este',      titulo: 'Este mes',       pagos: [] },
+    { clave: 'siguiente', titulo: 'El mes que viene', pagos: [] },
+    { clave: 'despues',   titulo: 'Más adelante',   pagos: [] },
+    { clave: 'sin_fecha', titulo: 'Sin fecha',      pagos: [] },
+  ];
+  const porClave = {};
+  grupos.forEach(g => { porClave[g.clave] = g; });
+
+  pendientes.forEach(pago => {
+    if (!pago.fecha_limite)              { porClave.sin_fecha.pagos.push(pago); return; }
+    if (diasHasta(pago.fecha_limite) < 0){ porClave.atrasado.pagos.push(pago);  return; }
+
+    const mes = mesDe(pago.fecha_limite);
+    if (mes === esteMes)           porClave.este.pagos.push(pago);
+    else if (mes === mesQueViene)  porClave.siguiente.pagos.push(pago);
+    else                           porClave.despues.pagos.push(pago);
+  });
+
+  const suma = lista => lista.reduce((s, p) => s + (Number(p.monto) || 0), 0);
+
+  const filaDePago = pago =>
+    '<button class="lista__fila" data-proximo-pago="' + seguro(pago.id) + '">' +
+      '<span class="lista__cuerpo">' +
+        '<span class="lista__titulo">' +
+          seguro(pago.concepto || pago.gasto_concepto || 'Pago') + '</span>' +
+        '<span class="lista__pie">' +
+          (pago.fecha_limite
+            ? (diasHasta(pago.fecha_limite) < 0
+                ? '<span class="etiqueta etiqueta--alerta">Atrasado</span> desde ' +
+                  seguro(comoFecha(pago.fecha_limite))
+                : 'Vence ' + seguro(comoCuando(pago.fecha_limite)))
+            // Se dice qué hacer, no solo que falta el dato.
+            : 'Sin fecha — tócalo para ponerle una') +
+        '</span>' +
+      '</span>' +
+      '<span class="lista__lado cifra">' + seguro(comoDinero(pago.monto, false)) + '</span>' +
+    '</button>';
+
+  const bloques = grupos
+    .filter(g => g.pagos.length)
+    .map(g =>
+      '<div class="cuenta__renglon" style="border-top:none;padding-bottom:0">' +
+        '<span>' + seguro(g.titulo) + ' · ' +
+          seguro(pluralizar(g.pagos.length, 'pago', 'pagos')) + '</span>' +
+        '<span class="cifra"><strong>' +
+          seguro(comoDinero(suma(g.pagos), false)) + '</strong></span>' +
+      '</div>' +
+      /* Ordenados por fecha dentro del grupo; los sin fecha conservan
+         el orden en que vinieron, que es el de carga. */
+      g.pagos
+        .slice()
+        .sort((a, b) => String(a.fecha_limite || '').localeCompare(String(b.fecha_limite || '')))
+        .map(filaDePago).join('')
+    ).join('');
 
   return '' +
     '<div class="tarjeta" style="margin-top:var(--esp-2)">' +
-      '<div class="tarjeta__titulo">Próximos pagos</div>' +
-      proximos.map(pago => {
-        const atrasado = diasHasta(pago.fecha_limite) < 0;
-        return '' +
-          '<button class="lista__fila" data-proximo-pago="' + seguro(pago.id) + '">' +
-            '<span class="lista__cuerpo">' +
-              '<span class="lista__titulo">' +
-                seguro(pago.concepto || pago.gasto_concepto || 'Pago') + '</span>' +
-              '<span class="lista__pie">' +
-                (atrasado
-                  ? '<span class="etiqueta etiqueta--alerta">Atrasado</span> desde ' +
-                    seguro(comoFecha(pago.fecha_limite))
-                  : 'Vence ' + seguro(comoCuando(pago.fecha_limite))) +
-              '</span>' +
-            '</span>' +
-            '<span class="lista__lado cifra">' + seguro(comoDinero(pago.monto, false)) + '</span>' +
-          '</button>';
-      }).join('') +
+      '<div class="tarjeta__titulo">Qué hay que pagar</div>' +
+      bloques +
     '</div>';
 }
 
@@ -582,11 +707,29 @@ function pintarCategorias(cuerpo) {
       ? comoDinero(gastado, false) + ' / ' + comoDinero(techo, false)
       : comoDinero(gastado, false);
 
+    /* ⚡ EL RENGLÓN "SIN CATEGORÍA" (2026-09-03). Los gastos que no
+       tienen categoría no aparecían en NINGÚN renglón del desglose —y
+       los tres flujos automáticos (pago a proveedor, recibo,
+       cotización) crean el gasto justamente sin categoría. Era plata
+       que estaba en el total de arriba y en ninguna fila de abajo.
+       Viene con id null desde categoriasConGasto() (_lib/dinero.php);
+       no es una categoría de verdad, así que no se puede editar ni
+       borrar: se toca para ver qué gastos son y ponerles una. */
+    const esHuerfanos = categoria.id === null || categoria.id === undefined;
+
     return '' +
       '<button class="tarjeta" style="display:block;width:100%;text-align:left" ' +
-              'data-categoria="' + seguro(categoria.id) + '">' +
+              (esHuerfanos
+                ? 'data-sin-categoria="1"'
+                : 'data-categoria="' + seguro(categoria.id) + '"') + '>' +
         '<div style="display:flex;justify-content:space-between;gap:var(--esp-2)">' +
-          '<span>' + seguro(categoria.nombre) + '</span>' +
+          '<span>' + seguro(categoria.nombre) +
+            (esHuerfanos
+              ? ' <span class="etiqueta etiqueta--ojo">' +
+                seguro(pluralizar(categoria.cuantos_gastos, 'gasto', 'gastos')) +
+                '</span>'
+              : '') +
+          '</span>' +
           '<span class="cifra" style="color:var(--texto-suave);white-space:nowrap">' +
             seguro(derecha) + '</span>' +
         '</div>' +
@@ -595,8 +738,13 @@ function pintarCategorias(cuerpo) {
               '<div class="barra__relleno' + clase + '" style="width:' +
                 Math.min(pct, 100) + '%"></div>' +
             '</div>'
-          : '<div class="vacio__texto" style="margin-top:4px">Sin techo definido' +
-            ayuda('dinero.techo') + '</div>') +
+          : '<div class="vacio__texto" style="margin-top:4px">' +
+            (esHuerfanos
+              // No es una categoría sin techo: es lo que le falta categoría.
+              ? 'Estos gastos no están en ninguna categoría, así que no ' +
+                'cuentan contra ningún techo. Tócalos para ponerles una.'
+              : 'Sin techo definido' + ayuda('dinero.techo')) +
+            '</div>') +
         /* Estimado vs. real: `planeado` es lo que se pensó gastar al
            cargar cada gasto, `gastado` es lo que costó DE VERDAD. Verlos
            juntos avisa cuando una categoría todavía es puro cálculo —
@@ -622,7 +770,58 @@ function pintarCategorias(cuerpo) {
       abrirDetalleDeCategoria(cat);
     });
   });
+
+  // El renglón "Sin categoría" no abre una ficha de categoría —no lo
+  // es—: lleva a la lista de gastos filtrada por los que no tienen una.
+  const sinCategoria = buscar('[data-sin-categoria]', cuerpo);
+  if (sinCategoria) {
+    sinCategoria.addEventListener('click', () => abrirGastosSinCategoria());
+  }
+
   buscar('#agregar', cuerpo).addEventListener('click', () => formularioCategoria());
+}
+
+/**
+ * Los gastos que no están en ninguna categoría, para poder ponérsela.
+ *
+ * POR QUÉ EXISTE
+ * El desglose por categoría no los mostraba en ningún renglón, así que
+ * eran plata que estaba en el total de arriba y en ninguna fila de
+ * abajo. Ahora aparecen en "Sin categoría", y desde acá se arregla de
+ * un toque: se abre el gasto y se le pone la que corresponda.
+ *
+ * @returns {void}
+ */
+function abrirGastosSinCategoria() {
+  const huerfanos = (DINERO.gastos || []).filter(g => !g.categoria_id);
+
+  const cuerpo = abrirHoja('Sin categoría',
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+      'Estos gastos cuentan en el total pero no están en ninguna ' +
+      'categoría, así que no aparecen en el desglose ni cuentan contra ' +
+      'ningún techo. Toca uno para ponerle la suya.' +
+    '</p>' +
+    (huerfanos.length
+      ? huerfanos.map(g =>
+          '<button class="lista__fila" data-gasto-huerfano="' + seguro(g.id) + '">' +
+            '<span class="lista__cuerpo">' +
+              '<span class="lista__titulo">' + seguro(g.concepto) + '</span>' +
+              '<span class="lista__pie">' +
+                seguro(g.proveedor_nombre || 'Sin proveedor') + '</span>' +
+            '</span>' +
+            '<span class="lista__lado cifra">' +
+              seguro(comoDinero(costoDelGasto(g), false)) + '</span>' +
+          '</button>'
+        ).join('')
+      : '<p class="vacio__texto">Ya no queda ninguno: todos tienen categoría.</p>')
+  );
+
+  buscarTodos('[data-gasto-huerfano]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', () => {
+      const gasto = huerfanos.find(g => String(g.id) === boton.dataset.gastoHuerfano);
+      if (gasto) formularioGasto(gasto);
+    });
+  });
 }
 
 /**
@@ -843,7 +1042,39 @@ function abrirDetalleDeGasto(gasto) {
      llegar ahí). Mismo patrón que "Pagos registrados" en
      abrirDetalleDeProveedor, pero acotado a ESTE gasto. */
   const pagosDeEsteGasto = (DINERO.pagos || []).filter(p => p.gasto_id === gasto.id);
-  const seccionPagos = pagosDeEsteGasto.length
+
+  /* ⚡ LA PRIMERA PREGUNTA: "¿CUÁNTO FALTA PAGAR DE ESTO?" (2026-09-03)
+     La ficha listaba sus pagos SIN SUMARLOS: contestar la pregunta más
+     frecuente sobre un gasto había que hacerlo de cabeza, mirando una
+     lista. Ahora el saldo va arriba de la lista y con estado explícito
+     (sin pagar / abonado / liquidado / pagado de más), que es lo que
+     dice si hay algo que hacer o no. */
+  const s = saldoDelGasto(gasto);
+  const comoSeLee = {
+    'sin pagar':     ['alerta', 'Sin pagar'],
+    'abonado':       ['ojo',    'Abonado'],
+    'liquidado':     ['bien',   'Liquidado'],
+    'pagado de más': ['alerta', 'Pagado de más'],
+  }[s.estado];
+
+  const seccionSaldo = s.costo > 0
+    ? '<div class="cuenta__renglon" style="border-top:none;margin-top:var(--esp-3)">' +
+        '<span>Falta pagar de este gasto</span>' +
+        '<span class="cifra"><strong>' +
+          seguro(comoDinero(Math.max(0, s.saldo), false)) + '</strong></span>' +
+      '</div>' +
+      '<p class="vacio__texto">' +
+        '<span class="etiqueta etiqueta--' + comoSeLee[0] + '">' +
+          seguro(comoSeLee[1]) + '</span> ' +
+        'Cuesta ' + seguro(comoDinero(s.costo, false)) +
+        ' y lleva ' + seguro(comoDinero(s.pagado, false)) + ' pagados' +
+        (s.saldo < -0.005
+          ? ' — ' + seguro(comoDinero(Math.abs(s.saldo), false)) + ' de más.'
+          : '.') +
+      '</p>'
+    : '';
+
+  const seccionPagos = seccionSaldo + (pagosDeEsteGasto.length
     ? '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">Pagos de este gasto</div>' +
       '<div class="lista">' +
         pagosDeEsteGasto.map(p =>
@@ -857,7 +1088,10 @@ function abrirDetalleDeGasto(gasto) {
           '</div>'
         ).join('') +
       '</div>'
-    : '';
+    // Sin ningún pago cargado no se sabe si ya se pagó o si falta: se
+    // dice, en vez de dejar el silencio como si fuera un cero.
+    : '<p class="vacio__texto" style="margin-top:var(--esp-2)">' +
+      'Este gasto no tiene ningún pago cargado.</p>');
 
   const proveedor = gasto.proveedor_id
     ? (DINERO.proveedores || []).find(p => p.id === gasto.proveedor_id)
@@ -1209,6 +1443,49 @@ function abrirDetalleDePadrino(padrino) {
     '<span class="detalle__valor">' + seguro(r[1]) + '</span>'
   ).join('');
 
+  /* ⚡ LOS TRES NÚMEROS JUNTOS (2026-09-03)
+     Prometido, aplicado y entregado cuentan una parte distinta de la
+     misma historia, y ver solo una desorienta:
+       · prometido = lo que dijo que iba a poner.
+       · aplicado  = cuánto de eso ya quedó atado a un gasto concreto
+                     (el SQL lo calculaba y el dato se tiraba).
+       · entregado = cuánto puso de verdad.
+     Cuando no coinciden hay algo que hacer, y se dice cuál. */
+  const prometido = Number(padrino.monto) || 0;
+  const aplicado  = Number(padrino.cubre) || 0;
+  const entregado = Number(padrino.monto_entregado) || 0;
+
+  const desajustes = [];
+  if (prometido - entregado > 0.01) {
+    desajustes.push('Faltan ' + comoDinero(prometido - entregado, false) +
+      ' por entregar.');
+  }
+  if (prometido - aplicado > 0.01) {
+    desajustes.push('Hay ' + comoDinero(prometido - aplicado, false) +
+      ' prometidos que todavía no están asignados a ningún gasto, así que ' +
+      'no bajan «De tu bolsillo».');
+  }
+  if (aplicado - prometido > 0.01) {
+    desajustes.push('Cubre ' + comoDinero(aplicado - prometido, false) +
+      ' más de lo que prometió: revisa los gastos que tiene asignados.');
+  }
+
+  const seccionAporte = padrino.tipo_aporte === 'dinero' && prometido > 0
+    ? '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">Su aporte</div>' +
+      '<div class="cuenta__renglon" style="border-top:none">' +
+        '<span>Prometió</span><span class="cifra">' +
+        seguro(comoDinero(prometido, false)) + '</span></div>' +
+      '<div class="cuenta__renglon">' +
+        '<span>Ya entregó</span><span class="cifra">' +
+        seguro(comoDinero(entregado, false)) + '</span></div>' +
+      '<div class="cuenta__renglon">' +
+        '<span>Aplicado a gastos</span><span class="cifra">' +
+        seguro(comoDinero(aplicado, false)) + '</span></div>' +
+      desajustes.map(d =>
+        '<p class="vacio__texto" style="color:var(--ojo)">' + seguro(d) + '</p>'
+      ).join('')
+    : '';
+
   /* ─── GASTOS QUE CUBRE (el sentido que faltaba) ──────────────────────
      gastos.padrino_id ya conecta gasto→padrino, y abrirDetalleDeGasto
      ya muestra "Lo cubre" con el nombre del padrino. Acá faltaba el
@@ -1229,6 +1506,7 @@ function abrirDetalleDePadrino(padrino) {
 
   const cuerpo = abrirHoja(padrino.nombre,
     '<div class="detalle">' + detalle + '</div>' +
+    seccionAporte +
     seccionGastos +
     '<div id="tareas-de-la-ficha"></div>' +
     '<div class="acciones" style="margin-top:var(--esp-3)">' +
@@ -2065,9 +2343,20 @@ function formularioPadrino(padrino) {
                    { valor: 'especie', texto: 'En especie (pone la cosa)' },
                  ] }) +
 
-    campoTexto({ id: 'pad-monto', rotulo: 'Monto', tipo: 'number',
+    campoTexto({ id: 'pad-monto', rotulo: 'Cuánto prometió', tipo: 'number',
                  paso: '0.01', valor: d.monto ? desdePesos(d.monto) : '',
                  ayuda: 'Si aporta en especie, pon el valor aproximado o dejalo en 0.' }) +
+
+    /* ⚡ CUÁNTO ENTREGÓ DE VERDAD (2026-09-03). `estado` es un sí/no, así
+       que una entrega parcial —"de los $30,000 me dio $10,000 y el
+       resto en octubre", que es lo más común— era irrepresentable: había
+       que elegir entre mentir diciendo que ya entregó todo o mentir
+       diciendo que no entregó nada. */
+    campoTexto({ id: 'pad-entregado', rotulo: 'Cuánto entregó ya', tipo: 'number',
+                 paso: '0.01',
+                 valor: d.monto_entregado ? desdePesos(d.monto_entregado) : '',
+                 ayuda: 'Déjalo vacío si todavía no entregó nada. ' +
+                        'Puede ser una parte: el resto queda como pendiente.' }) +
 
     campoLista({ id: 'pad-estado', rotulo: 'En qué va',
                  valor: d.estado || 'hablado',
@@ -2090,14 +2379,15 @@ function formularioPadrino(padrino) {
     const nombre = valorDe('pad-nombre', cuerpo);
     if (!nombre) { avisar('Falta el nombre.', true); return null; }
     return {
-      nombre:      nombre,
-      apadrina:    valorDe('pad-apadrina', cuerpo),
-      tipo_aporte: valorDe('pad-tipo', cuerpo),
-      monto:       aPesos(valorDe('pad-monto', cuerpo)),
-      estado:      valorDe('pad-estado', cuerpo),
-      telefono:    valorDe('pad-telefono', cuerpo),
-      correo:      valorDe('pad-correo', cuerpo),
-      notas:       valorDe('pad-notas', cuerpo),
+      nombre:          nombre,
+      apadrina:        valorDe('pad-apadrina', cuerpo),
+      tipo_aporte:     valorDe('pad-tipo', cuerpo),
+      monto:           aPesos(valorDe('pad-monto', cuerpo)),
+      monto_entregado: aPesos(valorDe('pad-entregado', cuerpo)),
+      estado:          valorDe('pad-estado', cuerpo),
+      telefono:        valorDe('pad-telefono', cuerpo),
+      correo:          valorDe('pad-correo', cuerpo),
+      notas:           valorDe('pad-notas', cuerpo),
     };
   }, 'padrino', padrino);
 }

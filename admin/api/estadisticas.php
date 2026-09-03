@@ -20,6 +20,7 @@
 require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
+require_once __DIR__ . '/_lib/dinero.php';
 
 $yo = exigirSesion();
 exigirMetodo('GET');
@@ -151,54 +152,57 @@ $resultado['dinero'] = ['hay' => false];
 /* Sin permiso no se consulta siquiera: lo que no se lee no se puede
    filtrar por error más adelante. */
 if ($vePlata && existeTabla('gastos')) {
-    /* Las dos cifras que de verdad importan, y son distintas:
-         · costo   = lo que sale la fiesta entera.
-         · propio  = lo que pone la familia, o sea el costo menos lo que
-                     cubren los padrinos.
-       Un presupuesto que solo muestra el costo asusta de más; uno que
-       solo muestra lo propio esconde que alguien puede echarse atrás. */
-    $totales = consultarUno(
-        'SELECT
-           COALESCE(SUM(presupuestado), 0) AS presupuestado,
-           COALESCE(SUM(monto_real), 0)    AS costo,
-           COALESCE(SUM(CASE WHEN padrino_id IS NULL THEN monto_real ELSE 0 END), 0) AS propio,
-           COALESCE(SUM(CASE WHEN padrino_id IS NOT NULL THEN monto_real ELSE 0 END), 0) AS de_padrinos
-         FROM gastos'
+    /* ⚡ ESTA PANTALLA YA NO CALCULA SU PROPIO DINERO (2026-09-03).
+     *
+     * Acá se sumaba `SUM(monto_real)` a secas: sin el fallback al
+     * estimado que usa Dinero, y sin filtrar por presupuesto activo, o
+     * sea sumando todos los escenarios juntos. Inicio y Dinero daban
+     * dos respuestas distintas a "¿cuánto llevamos?", en dos pantallas
+     * seguidas, y no había forma de saber cuál creer.
+     *
+     * Ahora las dos piden las MISMAS cifras a cifrasDelPresupuesto()
+     * (_lib/dinero.php). Las claves que ya devolvía esta pantalla se
+     * conservan con su nombre de siempre para no romper a quien las
+     * lee, pero salen todas del mismo cálculo.
+     *
+     * Las dos que de verdad importan, y son distintas:
+     *   · costo   = lo que sale la fiesta entera.
+     *   · propio  = lo que pone la familia, o sea el costo menos lo que
+     *               cubren los padrinos.
+     * Un presupuesto que solo muestra el costo asusta de más; uno que
+     * solo muestra lo propio esconde que alguien puede echarse atrás. */
+    $tienePresupuestos = existeTabla('presupuestos')
+                       && in_array('presupuesto_id', columnasDe('gastos'), true);
+    $cifras = cifrasDelPresupuesto(
+        $tienePresupuestos ? presupuestoActivo() : null,
+        $tienePresupuestos
     );
 
-    $resultado['dinero'] = [
+    $resultado['dinero'] = array_merge($cifras, [
         'hay'           => true,
-        'presupuestado' => (float) $totales['presupuestado'],
-        'costo'         => (float) $totales['costo'],
-        'propio'        => (float) $totales['propio'],
-        'de_padrinos'   => (float) $totales['de_padrinos'],
-    ];
+        // El nombre viejo de `planeado`, para no romper a quien lo lee.
+        'presupuestado' => $cifras['planeado'],
+    ]);
 
-    /* Categorías pasadas de su techo. Es el aviso de sobregiro. */
-    if (existeTabla('categorias_gasto')) {
-        $resultado['dinero']['categorias'] = consultarTodo(
-            'SELECT c.id, c.nombre, c.techo,
-                    COALESCE(SUM(g.monto_real), 0) AS gastado
-             FROM categorias_gasto c
-             LEFT JOIN gastos g ON g.categoria_id = c.id
-             GROUP BY c.id, c.nombre, c.techo
-             HAVING c.techo > 0 OR gastado > 0
-             ORDER BY c.orden, c.nombre'
-        );
-    }
+    /* Categorías pasadas de su techo. Es el aviso de sobregiro, y sale
+       del mismo desglose que usa Dinero — incluido el renglón "Sin
+       categoría", que antes no existía en ningún lado. */
+    $resultado['dinero']['categorias'] = array_values(array_filter(
+        categoriasConGasto($tienePresupuestos ? presupuestoActivo() : null,
+                           $tienePresupuestos),
+        function ($c) { return $c['techo'] > 0 || $c['gastado'] > 0; }
+    ));
 
-    /* Lo que un padrino prometió pero todavía no entregó. */
-    if (existeTabla('padrinos')) {
-        $pendiente = consultarUno(
-            "SELECT COALESCE(SUM(monto), 0) AS monto, COUNT(*) AS cuantos
-             FROM padrinos
-             WHERE estado <> 'entregado' AND tipo_aporte = 'dinero'"
-        );
-        $resultado['dinero']['padrinos_pendientes'] = [
-            'monto'   => (float) $pendiente['monto'],
-            'cuantos' => (int) $pendiente['cuantos'],
-        ];
-    }
+    /* Lo que un padrino prometió pero todavía no entregó ya viene en
+       $cifras, como `padrinos_pendientes` (monto) y
+       `padrinos_pendientes_cuantos`. Antes acá era un objeto
+       {monto, cuantos} y en presupuesto.php dos claves sueltas: el
+       mismo dato con dos formas según de qué pantalla venía. Ahora es
+       uno solo, con la forma de presupuesto.php.
+
+       Y cuenta bien las entregas parciales: con `monto_entregado`,
+       quien prometió $30,000 y entregó $10,000 queda pendiente por
+       $20,000, no por los $30,000 enteros ni por nada. */
 }
 
 

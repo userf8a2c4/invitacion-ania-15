@@ -89,3 +89,293 @@ function conMontosNumericos(array $filas, array $columnas) {
 
     return $filas;
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   LAS CIFRAS DEL PRESUPUESTO, CALCULADAS EN UN SOLO LUGAR
+
+   POR QUÉ ESTO EXISTE
+   La pantalla de inicio y la de Dinero contestaban distinto la misma
+   pregunta. `presupuesto.php` calculaba el costo con el fallback al
+   estimado y filtrando por plan activo; `estadisticas.php` usaba
+   `SUM(monto_real)` a secas, sin fallback y sumando TODOS los
+   escenarios juntos. Dos respuestas a "¿cuánto llevamos?" en dos
+   pantallas seguidas, y ninguna forma de saber cuál creer.
+
+   El desglose por categoría tenía el mismo problema por dentro: arriba
+   decía "Cuesta $50,000" y la categoría de ese gasto decía "Gastado $0"
+   con la barra en verde, porque el desglose no aplicaba el fallback.
+
+   Acá está la definición ÚNICA de cada cifra. Quien necesite un número
+   de dinero lo pide, no lo recalcula.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * LA REGLA DEL COSTO, escrita una sola vez.
+ *
+ * Un gasto cuesta lo que costó de verdad (`monto_real`) o, mientras eso
+ * no se sepa, lo que se presupuestó. NULLIF convierte el 0 —que es
+ * "todavía no lo sé", no "es gratis"— en NULL para que COALESCE caiga
+ * al estimado.
+ *
+ * Es un fragmento de SQL y no una función de PHP a propósito: la suma
+ * tiene que ocurrir en la base, no trayendo mil filas al servidor.
+ *
+ * @param string $alias Prefijo de la tabla en la consulta ('g.' o '').
+ * @return string
+ */
+function sqlCostoDeUnGasto($alias = '') {
+    return "COALESCE(NULLIF({$alias}monto_real, 0), {$alias}presupuestado)";
+}
+
+/**
+ * Todas las cifras de dinero del presupuesto activo, ya resueltas.
+ *
+ * Devuelve, en pesos:
+ *   planeado   lo presupuestado, sin mirar lo real
+ *   costo      lo que sale la fiesta (regla del costo, arriba)
+ *   propio     lo que no tiene padrino asignado
+ *   de_padrinos            lo que sí lo tiene, haya entregado o no
+ *   prometido_padrinos     lo que los padrinos dijeron que van a poner
+ *   entregado_padrinos     lo que de verdad entregaron
+ *   pagado                 la plata que ya salió
+ *   por_pagar              pagos cargados y todavía pendientes
+ *   falta                  costo − pagado, LA cifra que manda
+ *   bolsillo_si_nadie_mas_entrega   costo − entregado_padrinos
+ *   sin_ningun_pago        cuántos gastos no tienen ni un pago cargado
+ *   confirmados / costo_por_invitado
+ *
+ * SOBRE `falta` Y `por_pagar`
+ * Son dos preguntas distintas y estaban una al lado de la otra, mismo
+ * tamaño y mismo color, sin nada que las distinguiera:
+ *   · `falta`     = todo lo que queda por pagar, esté cargado o no.
+ *   · `por_pagar` = solo lo que YA está cargado como pago pendiente.
+ * La segunda siempre es menor o igual, y la diferencia es el dinero que
+ * se debe y ni siquiera está anotado. La que manda es `falta`.
+ *
+ * SOBRE LOS PADRINOS
+ * `bolsillo_si_nadie_mas_entrega` resta lo ENTREGADO leído de la tabla
+ * `padrinos`, no lo aplicado a gastos concretos. Restar las dos cosas
+ * contaría dos veces al mismo padrino, y restar solo lo aplicado
+ * ignoraba al padrino que ya pagó pero cuyo aporte todavía no se
+ * enlazó a ningún gasto — el caso más común. Es el mismo criterio que
+ * el resumen ejecutivo del PDF ya usaba, corrigiendo al servidor a
+ * propósito (ver 13-exportar.js).
+ *
+ * @param int $activo Presupuesto activo.
+ * @param bool $porPlan Si la instalación tiene presupuestos múltiples.
+ * @return array
+ */
+function cifrasDelPresupuesto($activo, $porPlan) {
+    /* Sin la tabla de gastos no hay nada que sumar: se devuelven las
+       mismas claves en cero. Que una instalación a medio migrar muestre
+       ceros es entendible; que reviente la pantalla de inicio, no. */
+    if (!existeTabla('gastos')) return cifrasVacias();
+
+    $costo  = sqlCostoDeUnGasto();
+    $filtro = $porPlan ? ' WHERE presupuesto_id = :activo' : '';
+    $args   = $porPlan ? [':activo' => $activo] : [];
+
+    $t = consultarUno(
+        "SELECT
+           COALESCE(SUM(presupuestado), 0) AS planeado,
+           COALESCE(SUM($costo), 0)        AS costo,
+           COALESCE(SUM(CASE WHEN padrino_id IS NULL     THEN $costo ELSE 0 END), 0) AS propio,
+           COALESCE(SUM(CASE WHEN padrino_id IS NOT NULL THEN $costo ELSE 0 END), 0) AS de_padrinos,
+           COUNT(*) AS cuantos
+         FROM gastos" . $filtro,
+        $args
+    );
+
+    /* Los pagos heredan el presupuesto de su gasto. Un pago suelto (sin
+       gasto) no pertenece a ningún plan y cuenta siempre: es más seguro
+       mostrar de más que esconder plata que salió de verdad. */
+    $filtroPagos = $porPlan ? ' AND (p.gasto_id IS NULL OR g.presupuesto_id = :activo)' : '';
+
+    $pagos = existeTabla('pagos')
+        ? consultarUno(
+            "SELECT
+               COALESCE(SUM(CASE WHEN p.estado = 'pagado'    THEN p.monto ELSE 0 END), 0) AS pagado,
+               COALESCE(SUM(CASE WHEN p.estado = 'pendiente' THEN p.monto ELSE 0 END), 0) AS por_pagar,
+               COALESCE(SUM(CASE WHEN p.estado = 'pendiente' THEN 1 ELSE 0 END), 0)       AS por_pagar_cuantos
+             FROM pagos p LEFT JOIN gastos g ON g.id = p.gasto_id
+             WHERE 1 = 1" . $filtroPagos,
+            $args)
+        : ['pagado' => 0, 'por_pagar' => 0, 'por_pagar_cuantos' => 0];
+
+    /* Los padrinos son globales: apadrinan la fiesta, no un escenario.
+       `monto_entregado` puede no existir todavía (instalación sin
+       migrar): ahí se cae a la lectura vieja, "entregado" = todo. */
+    $prometido = 0.0;
+    $entregado = 0.0;
+    $pendientes = ['monto' => 0, 'cuantos' => 0];
+
+    if (existeTabla('padrinos')) {
+        $hayEntregado = in_array('monto_entregado', columnasDe('padrinos'), true);
+        $sqlEntregado = $hayEntregado
+            ? 'monto_entregado'
+            : "CASE WHEN estado = 'entregado' THEN monto ELSE 0 END";
+
+        $p = consultarUno(
+            "SELECT COALESCE(SUM(monto), 0)         AS prometido,
+                    COALESCE(SUM($sqlEntregado), 0) AS entregado
+             FROM padrinos WHERE tipo_aporte = 'dinero'"
+        );
+        $prometido = (float) $p['prometido'];
+        $entregado = (float) $p['entregado'];
+
+        $pendientes = consultarUno(
+            "SELECT COALESCE(SUM(monto - $sqlEntregado), 0) AS monto, COUNT(*) AS cuantos
+             FROM padrinos
+             WHERE tipo_aporte = 'dinero' AND monto > $sqlEntregado"
+        );
+    }
+
+    /* Los gastos que no tienen NI UN pago cargado. Es la zona gris que
+       el PDF ya declaraba en vez de asumir: no significa que no se
+       pagaron, significa que no se sabe. */
+    $sinPago = existeTabla('pagos')
+        ? consultarUno(
+            "SELECT COUNT(*) AS cuantos, COALESCE(SUM($costo), 0) AS monto
+             FROM gastos
+             WHERE NOT EXISTS (SELECT 1 FROM pagos p WHERE p.gasto_id = gastos.id)" .
+            ($porPlan ? ' AND presupuesto_id = :activo' : ''),
+            $args)
+        : ['cuantos' => (int) $t['cuantos'], 'monto' => $t['costo']];
+
+    /* Cuánto sale por cada invitado QUE DE VERDAD VA: gente (adultos +
+       niños), no confirmaciones — contar "familia López" como una sola
+       persona daría un número falso. Sin nadie confirmado se deja en
+       null explícito, en vez de dividir por cero o mostrar un $0 que
+       parecería un error. */
+    $personas = existeTabla('confirmaciones')
+        ? (int) consultarUno(
+            'SELECT COALESCE(SUM(adultos), 0) + COALESCE(SUM(ninos), 0) AS n
+             FROM confirmaciones WHERE asiste = 1')['n']
+        : 0;
+
+    $costoTotal = (float) $t['costo'];
+    $pagadoTotal = (float) $pagos['pagado'];
+
+    return [
+        'planeado'    => (float) $t['planeado'],
+        'costo'       => $costoTotal,
+        'propio'      => (float) $t['propio'],
+        'de_padrinos' => (float) $t['de_padrinos'],
+        'cuantos_gastos' => (int) $t['cuantos'],
+
+        'prometido_padrinos' => $prometido,
+        'entregado_padrinos' => $entregado,
+        'padrinos_pendientes'         => (float) $pendientes['monto'],
+        'padrinos_pendientes_cuantos' => (int) $pendientes['cuantos'],
+
+        'pagado'            => $pagadoTotal,
+        'por_pagar'         => (float) $pagos['por_pagar'],
+        'por_pagar_cuantos' => (int) $pagos['por_pagar_cuantos'],
+
+        // La cifra que manda: todo lo que queda por pagar de verdad.
+        'falta' => round($costoTotal - $pagadoTotal, 2),
+
+        'bolsillo_si_nadie_mas_entrega' => round($costoTotal - $entregado, 2),
+
+        'sin_ningun_pago'        => (int) $sinPago['cuantos'],
+        'sin_ningun_pago_monto'  => (float) $sinPago['monto'],
+
+        'confirmados'        => $personas,
+        'costo_por_invitado' => $personas > 0 ? round($costoTotal / $personas, 2) : null,
+    ];
+}
+
+/**
+ * Las mismas claves que cifrasDelPresupuesto(), todas en cero.
+ *
+ * Existe para que quien consuma esto no tenga que preguntarse nunca si
+ * una clave va a estar: siempre están todas.
+ *
+ * @return array
+ */
+function cifrasVacias() {
+    return [
+        'planeado' => 0.0, 'costo' => 0.0, 'propio' => 0.0, 'de_padrinos' => 0.0,
+        'cuantos_gastos' => 0,
+        'prometido_padrinos' => 0.0, 'entregado_padrinos' => 0.0,
+        'padrinos_pendientes' => 0.0, 'padrinos_pendientes_cuantos' => 0,
+        'pagado' => 0.0, 'por_pagar' => 0.0, 'por_pagar_cuantos' => 0,
+        'falta' => 0.0, 'bolsillo_si_nadie_mas_entrega' => 0.0,
+        'sin_ningun_pago' => 0, 'sin_ningun_pago_monto' => 0.0,
+        'confirmados' => 0, 'costo_por_invitado' => null,
+    ];
+}
+
+/**
+ * El desglose por categoría, que SUMA lo mismo que el total de arriba.
+ *
+ * DOS COSAS QUE ESTABAN MAL
+ * 1. El desglose usaba `SUM(monto_real)` sin el fallback al estimado.
+ *    Arriba decía "Cuesta $50,000" y la categoría de ese mismo gasto
+ *    decía "Gastado $0", con la barra en verde: el gasto existía, tenía
+ *    su presupuestado cargado, y el desglose lo contaba como cero.
+ * 2. Los gastos SIN categoría no aparecían en ningún renglón — y los
+ *    tres flujos automáticos (pago a proveedor, recibo, cotización)
+ *    crean el gasto justamente sin categoría. Plata que estaba en el
+ *    total y en ninguna fila del desglose.
+ *
+ * Ahora todo gasto aparece: los que no tienen categoría caen en un
+ * renglón "Sin categoría" (con id null), que es visible y se puede
+ * arreglar de un toque.
+ *
+ * @param int  $activo
+ * @param bool $porPlan
+ * @return array
+ */
+function categoriasConGasto($activo, $porPlan) {
+    if (!existeTabla('categorias_gasto') || !existeTabla('gastos')) return [];
+
+    $costo = sqlCostoDeUnGasto('g.');
+    $args  = $porPlan ? [':activo' => $activo] : [];
+
+    /* El filtro de plan va en el ON del JOIN y no en el WHERE: en un
+       LEFT JOIN, ponerlo en el WHERE descarta las categorías que
+       todavía no tienen ningún gasto en este plan, y una categoría
+       vacía tiene que aparecer igual para poder cargarle el primero. */
+    $categorias = consultarTodo(
+        "SELECT c.id, c.nombre, c.techo, c.orden,
+                COALESCE(SUM($costo), 0)            AS gastado,
+                COALESCE(SUM(g.presupuestado), 0)   AS planeado,
+                COUNT(g.id)                         AS cuantos_gastos
+         FROM categorias_gasto c
+         LEFT JOIN gastos g ON g.categoria_id = c.id" .
+            ($porPlan ? ' AND g.presupuesto_id = :activo' : '') .
+        ($porPlan ? ' WHERE c.presupuesto_id = :activo' : '') .
+        ' GROUP BY c.id, c.nombre, c.techo, c.orden
+          ORDER BY c.orden, c.nombre',
+        $args
+    );
+
+    $huerfanos = consultarUno(
+        "SELECT COALESCE(SUM($costo), 0)          AS gastado,
+                COALESCE(SUM(g.presupuestado), 0) AS planeado,
+                COUNT(g.id)                       AS cuantos_gastos
+         FROM gastos g
+         WHERE g.categoria_id IS NULL" .
+        ($porPlan ? ' AND g.presupuesto_id = :activo' : ''),
+        $args
+    );
+
+    if ((int) $huerfanos['cuantos_gastos'] > 0) {
+        $categorias[] = [
+            // id null: no es una categoría de verdad, es lo que le
+            // falta categoría. La app lo usa para saber que esa fila no
+            // se puede editar ni borrar como las otras.
+            'id'             => null,
+            'nombre'         => 'Sin categoría',
+            'techo'          => 0,
+            'orden'          => 9999,
+            'gastado'        => $huerfanos['gastado'],
+            'planeado'       => $huerfanos['planeado'],
+            'cuantos_gastos' => (int) $huerfanos['cuantos_gastos'],
+        ];
+    }
+
+    return conMontosNumericos($categorias, ['techo', 'gastado', 'planeado']);
+}
