@@ -293,7 +293,7 @@ function bloqueFrasesDeMetricas(titulo, filas, tono) {
 function nombreLegibleDeMetrica(clave) {
   const nombres = {
     hoy: 'Hoy', resumen: 'Resumen', planificar: 'Planificar', mas: 'Más',
-    invitados: 'Gente', correo: 'Correo', dinero: 'Presupuesto', evento: 'Evento',
+    invitados: 'Gente', correo: 'Correo', dinero: 'Dinero', evento: 'Evento',
     abrir_ficha_invitado: 'Abrir ficha de invitado',
     asignar_mesa: 'Asignar mesa',
     marcar_llegada: 'Marcar llegada / escanear pase',

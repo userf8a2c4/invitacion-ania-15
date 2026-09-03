@@ -29,6 +29,28 @@ let INVITADOS_EDITABLES = false;
 /** Qué filtro está puesto: 'todos', 'asisten', 'no_asisten'. */
 let FILTRO_INVITADOS = 'todos';
 
+/** Los chips de filtro: [clave, lo que se lee en pantalla].
+ *
+ *  Están acá, en una lista, y no escritos a mano en el HTML, por dos motivos:
+ *  el chip encendido se deduce de FILTRO_INVITADOS al dibujar (antes se fijaba
+ *  a mano en "Todos" y mentía), y las palabras quedan en un solo sitio.
+ *
+ *  ⚠️ Las CLAVES son las que entiende invitadoPasaElFiltro() y no se tocan;
+ *  lo que cambia es solo el texto. "Confirmaron" y "No vienen" son las
+ *  palabras únicas del proyecto para esos dos estados: la misma gente aparecía
+ *  como "Asisten/Confirmados/Confirman" en unas pantallas y como
+ *  "No asisten/No puede/No viene/Declinadas" en otras. */
+const FILTROS_DE_GENTE = [
+  ['todos',         'Todos'],
+  ['asisten',       'Confirmaron'],
+  ['no_asisten',    'No vienen'],
+  ['sin_enviar',    'Sin enviar'],
+  ['sin_responder', 'Sin responder'],
+  ['alergias',      'Con alergias'],
+  ['sin_mesa',      'Sin mesa'],
+  ['sin_telefono',  'Sin teléfono'],
+];
+
 /** Qué se escribió en el buscador. */
 let BUSQUEDA_INVITADOS = '';
 
@@ -281,15 +303,35 @@ async function dibujarInvitados() {
     /* ⚡ (2026-08-28) Los filtros de "sin_enviar/sin_responder/sin_telefono"
        vienen de la extinta pestaña Envíos, fusionada acá — ver la nota
        grande en confirmaciones.php?accion=listar. */
+    /* ⚡ EL CHIP ENCENDIDO SE DEDUCE DEL FILTRO, NO SE FIJA A MANO
+       (2026-09-03). Antes "Todos" venía escrito con la clase `activo` en el
+       HTML, mientras que el filtro de verdad vive en FILTRO_INVITADOS, una
+       global que sobrevive al redibujado. Bastaba entrar desde Hoy → cifra
+       "Alergias" (que pone FILTRO_INVITADOS='alergias' y luego redibuja) para
+       que la lista saliera filtrada por alergias con el chip de "Todos"
+       encendido: la pantalla decía una cosa y mostraba otra, y no había forma
+       de darse cuenta salvo contando las filas. */
     '<div class="filtros" style="flex-wrap:wrap">' +
-      '<button class="filtro activo" data-filtro="todos">Todos</button>' +
-      '<button class="filtro" data-filtro="asisten">Asisten</button>' +
-      '<button class="filtro" data-filtro="no_asisten">No asisten</button>' +
-      '<button class="filtro" data-filtro="sin_enviar">Sin enviar</button>' +
-      '<button class="filtro" data-filtro="sin_responder">Sin responder</button>' +
-      '<button class="filtro" data-filtro="alergias">Con alergias</button>' +
-      '<button class="filtro" data-filtro="sin_mesa">Sin mesa</button>' +
-      '<button class="filtro" data-filtro="sin_telefono">Sin teléfono</button>' +
+      FILTROS_DE_GENTE.map(f =>
+        '<button class="filtro' + (FILTRO_INVITADOS === f[0] ? ' activo' : '') + '" ' +
+                'data-filtro="' + f[0] + '">' + f[1] + '</button>'
+      ).join('') +
+    '</div>' +
+
+    /* ⚡ "AGREGAR INVITADO" SUBIÓ ACÁ, ANTES DE LA LISTA (2026-09-03).
+       Estaba al fondo, después de la lista COMPLETA y del botón de fecha
+       límite. O sea que el costo de dar de alta a alguien crecía con cada
+       invitado ya cargado: con la lista real hay que recorrer decenas de
+       filas para llegar al botón que se usa justamente cuando la lista va
+       creciendo. Medido: 4 toques y un scroll largo, para una tarea que es
+       de las más frecuentes mientras se arma la fiesta.
+
+       Arriba, junto al buscador, está siempre a la vista y no se mueve
+       nunca. "Seleccionar" y "Descargar" se quedan abajo: son de usar
+       después de mirar la lista, no antes. */
+    '<div style="display:flex;gap:var(--esp-2);margin-bottom:var(--esp-2)">' +
+      '<button class="boton boton--principal" style="flex:1" id="inv-nuevo">' +
+        'Agregar invitado</button>' +
     '</div>' +
 
     '<div id="lista-invitados"></div>' +
@@ -303,8 +345,6 @@ async function dibujarInvitados() {
     '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-1)">' +
       '<button class="boton" style="flex:1" id="inv-seleccionar">Seleccionar</button>' +
       '<button class="boton" style="flex:1" id="inv-descargar">Descargar</button>' +
-      '<button class="boton boton--principal" style="flex:1" id="inv-nuevo">' +
-        'Agregar invitado</button>' +
     '</div>' +
 
     /* La barra flotante de acciones en lote. Vive siempre en el DOM,
@@ -313,6 +353,7 @@ async function dibujarInvitados() {
     '<div id="barra-seleccion" class="barra-seleccion oculto">' +
       '<span id="seleccion-cuantos" class="barra-seleccion__cuantos"></span>' +
       '<div class="barra-seleccion__botones">' +
+        '<button class="boton boton--chico" id="sel-recordar">Recordar</button>' +
         '<button class="boton boton--chico" id="sel-mesa">Asignar mesa</button>' +
         '<button class="boton boton--chico" id="sel-llegada">Marcar llegada</button>' +
         '<button class="boton boton--chico boton--peligro" id="sel-cancelar">Cancelar</button>' +
@@ -347,6 +388,30 @@ async function dibujarInvitados() {
   if (!INVITADOS_EDITABLES) {
     avisar('La tabla no tiene columna id: solo se puede consultar.', true);
   }
+
+  /* ⚡ ENTRAR ACÁ ES "YA LAS VI" (2026-09-03). La pestaña Gente lleva un
+     número con las respuestas nuevas desde la última vez (lo calcula
+     actualizarBurbujasDeLaBarra() en 30-vista-hoy.js, con el total que
+     manda hoy.php). Abrir la lista es exactamente el gesto de mirarlas, así
+     que acá se guarda el total de ahora y el número se apaga solo — sin un
+     botón de "marcar como visto", que sería trabajo extra para decir algo
+     que la propia visita ya dijo.
+
+     ⚠️ SE GUARDA EL NÚMERO DE hoy.php, NO UNO CONTADO ACÁ. Las dos cuentas
+     deberían dar igual, pero salen de tablas distintas (hoy.php cuenta
+     `invitaciones`; esta lista son `confirmaciones` con la invitación
+     embebida) y basta una invitación sin confirmación para que difieran en
+     uno — y entonces la burbuja quedaría encendida para siempre, sin forma
+     de apagarla. Guardando lo que dijo la misma fuente que la enciende, la
+     resta da cero seguro. Si todavía no se abrió Hoy en esta sesión, se cae
+     al conteo local, que es mejor que no apagar nada. */
+  const respondidasSegunHoy = (typeof ULTIMO_HOY !== 'undefined' && ULTIMO_HOY)
+    ? Number(ULTIMO_HOY.respondidas)
+    : NaN;
+  recordar('gente-respuestas-vistas', Number.isFinite(respondidasSegunHoy)
+    ? respondidasSegunHoy
+    : INVITADOS.filter(f => f.invitacion_respondida_en).length);
+  if (typeof ponerBurbuja === 'function') ponerBurbuja('#burbuja-gente', 0);
 
   engancharInvitados(vista);
   pintarListaDeInvitados();
@@ -412,6 +477,7 @@ function engancharInvitados(vista) {
 
   buscar('#sel-cancelar', vista).addEventListener('click', salirDeSeleccion);
 
+  buscar('#sel-recordar', vista).addEventListener('click', () => recordarEnLote());
   buscar('#sel-mesa', vista).addEventListener('click', () => asignarMesaEnLote());
   buscar('#sel-llegada', vista).addEventListener('click', () => marcarLlegadaEnLote());
 }
@@ -702,6 +768,35 @@ function filaDeInvitado(fila) {
 /* ─── 3. DETALLE DE UNA CONFIRMACIÓN ───────────────────────────────── */
 
 /**
+ * Copia el link personal al portapapeles y avisa.
+ *
+ * Vive suelta acá, y no dentro del detalle, porque hacen falta dos: la del
+ * link que ya existía y la del que se acaba de generar (ver el comentario
+ * grande en el botón de generar). Una sola función evita que una de las dos
+ * se arregle y la otra se quede vieja.
+ *
+ * @param {string} link - La dirección a copiar.
+ * @param {HTMLElement} cuerpo - La hoja abierta, para el camino de respaldo.
+ * @returns {Promise<void>}
+ */
+async function copiarElLinkPersonal(link, cuerpo) {
+  try {
+    await navigator.clipboard.writeText(link);
+  } catch (error) {
+    /* Sin permiso de portapapeles (o sin https): se selecciona el campo y se
+       copia a la vieja usanza. */
+    const campo = buscar('#link-invitacion-valor', cuerpo);
+    if (campo) {
+      campo.removeAttribute('readonly');
+      campo.select();
+      document.execCommand('copy');
+      campo.setAttribute('readonly', 'readonly');
+    }
+  }
+  avisar('Link copiado.');
+}
+
+/**
  * Abre la hoja con todos los datos de una confirmación.
  *
  * @param {number} id
@@ -724,12 +819,46 @@ function abrirDetalleDeInvitado(id) {
   // al servidor.
   const tieneInvitacion = !!fila.invitacion_id;
 
+  /* ⚡ EL ORDEN DE ESTOS RENGLONES ES UNA DECISIÓN, NO EL AZAR DE CÓMO SE
+     FUE ESCRIBIENDO (2026-09-03).
+
+     Antes la Mesa era el ÚLTIMO de trece renglones —después de correo,
+     teléfono, grupo, estado del envío, menús, notas y código— y la alergia
+     el décimo. Las dos cosas que se preguntan de pie, en la puerta, con
+     alguien esperando enfrente, estaban al fondo de un modal que hay que
+     scrollear.
+
+     Ahora manda quién pregunta y cuándo:
+       · Arriba, lo del día de la fiesta: si viene, dónde se sienta, qué no
+         puede comer, cuántos son.
+       · Abajo, lo de la gestión: correo, teléfono, grupo, envío, notas,
+         código. Eso se mira sentada en casa, con tiempo. */
   const renglones = [
     ['Asistencia', asiste
       ? '<span class="etiqueta etiqueta--bien">Sí asiste</span>'
-      : '<span class="etiqueta etiqueta--alerta">No puede</span>', true],
-    ['Correo',   seguro(fila.correo || '—')],
+      : '<span class="etiqueta etiqueta--alerta">No viene</span>', true],
   ];
+
+  if (asiste) {
+    renglones.push(['Mesa', fila.mesa
+      ? '<span class="etiqueta etiqueta--bien">' + seguro(fila.mesa) + '</span>'
+      : '<span class="etiqueta etiqueta--alerta">Sin asignar</span>', true]);
+  }
+
+  renglones.push(
+    ['Alergias', fila.alergias && !/^(ninguna|ninguno|no|-)$/i.test(fila.alergias)
+                 ? '<span class="etiqueta etiqueta--ojo">⚠ ' +
+                   seguro(fila.alergias) + '</span>'
+                 : 'Ninguna', true],
+    ['Personas', asiste
+                 ? seguro(gente + ' (' +
+                     pluralizar(fila.adultos || 0, 'adulto', 'adultos') + ', ' +
+                     pluralizar(fila.ninos || 0, 'niño', 'niños') + ')')
+                 : '—'],
+    ['Menús',    seguro(fila.resumen_menus || '—')],
+    ['Detalle',  seguro(fila.menus || '—')],
+    ['Correo',   seguro(fila.correo || '—')]
+  );
 
   if (tieneInvitacion) {
     const vecesEnviado = Number(fila.invitacion_veces_enviado) || 0;
@@ -746,25 +875,11 @@ function abrirDetalleDeInvitado(id) {
   }
 
   renglones.push(
-    ['Personas', asiste
-                 ? seguro(gente + ' (' +
-                     pluralizar(fila.adultos || 0, 'adulto', 'adultos') + ', ' +
-                     pluralizar(fila.ninos || 0, 'niño', 'niños') + ')')
-                 : '—'],
-    ['Menús',    seguro(fila.resumen_menus || '—')],
-    ['Detalle',  seguro(fila.menus || '—')],
-    ['Alergias', seguro(fila.alergias || 'Ninguna')],
     ['Notas',    seguro(fila.notas || '—')],
     ['Código',   fila.codigo
                  ? '<span class="codigo-pase">' + seguro(fila.codigo) + '</span>'
                  : '—', true]
   );
-
-  if (asiste) {
-    renglones.push(['Mesa', fila.mesa
-      ? '<span class="etiqueta etiqueta--bien">' + seguro(fila.mesa) + '</span>'
-      : '<span class="etiqueta etiqueta--alerta">Sin asignar</span>', true]);
-  }
 
   const detalle = renglones.map(r =>
     '<span class="detalle__rotulo">' + seguro(r[0]) + '</span>' +
@@ -789,9 +904,25 @@ function abrirDetalleDeInvitado(id) {
     : '<button type="button" class="boton boton--ancho" style="margin-top:var(--esp-3)" ' +
               'id="generar-link-invitado">Generar link personal</button>';
 
+  /* ⚡ EL ORDEN DE LOS BOTONES SIGUE AL DE LOS DATOS (2026-09-03).
+     "Editar" estaba al final de todo: después de trece renglones de detalle,
+     del bloque del link, de los botones de mesa, de la lista de acompañantes
+     con sus propios botones y de las etiquetas. Editar a alguien costaba
+     cinco toques y un scroll largo dentro del modal.
+
+     Ahora, de arriba abajo: primero lo del día de la fiesta (llegada y
+     mesa), después editar, y al fondo la gestión (link, acompañantes,
+     etiquetas). "Borrar" se queda solo, hasta abajo del todo, lejos del
+     pulgar y lejos de "Editar": son dos botones que nunca deberían estar
+     uno al lado del otro. */
   const cuerpo = abrirHoja(fila.nombre || 'Confirmación',
     '<div class="detalle">' + detalle + '</div>' +
-    bloqueLink +
+    (asiste && fila.codigo
+      ? '<div class="acciones">' +
+          '<button class="boton boton--ancho" id="marcar-llegada-invitado">' +
+            'Marcar llegada</button>' +
+        '</div>'
+      : '') +
     (asiste
       ? '<div class="acciones">' +
           '<button class="boton" id="mesa-auto-invitado">Sentar solo</button>' +
@@ -800,12 +931,12 @@ function abrirDetalleDeInvitado(id) {
           '</button>' +
         '</div>'
       : '') +
-    (asiste && fila.codigo
+    (INVITADOS_EDITABLES
       ? '<div class="acciones">' +
-          '<button class="boton boton--ancho" id="marcar-llegada-invitado">' +
-            'Marcar llegada</button>' +
+          '<button class="boton boton--ancho" id="editar-invitado">Editar</button>' +
         '</div>'
       : '') +
+    bloqueLink +
     (asiste && gente ? '<div id="bloque-acompanantes"></div>' : '') +
     /* ⚡ (2026-08-30) Etiquetas del PAQUETE, siempre visibles — no solo
        cuando hay acompañantes nombrados. Es lo que permite taguear
@@ -817,9 +948,9 @@ function abrirDetalleDeInvitado(id) {
       '<div id="etiquetas-confirmacion"></div>' +
     '</div>' +
     (INVITADOS_EDITABLES
-      ? '<div class="acciones">' +
-          '<button class="boton boton--peligro" id="borrar-invitado">Borrar</button>' +
-          '<button class="boton boton--principal" id="editar-invitado">Editar</button>' +
+      ? '<div class="acciones" style="margin-top:var(--esp-4)">' +
+          '<button class="boton boton--peligro boton--ancho" id="borrar-invitado">' +
+            'Borrar</button>' +
         '</div>'
       : '')
   );
@@ -845,28 +976,46 @@ function abrirDetalleDeInvitado(id) {
       });
     }
 
-    buscar('#copiar-link-invitacion', cuerpo).addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(fila.invitacion_link);
-      } catch (error) {
-        const campo = buscar('#link-invitacion-valor', cuerpo);
-        campo.removeAttribute('readonly');
-        campo.select();
-        document.execCommand('copy');
-        campo.setAttribute('readonly', 'readonly');
-      }
-      avisar('Link copiado.');
-    });
+    buscar('#copiar-link-invitacion', cuerpo)
+      .addEventListener('click', () => copiarElLinkPersonal(fila.invitacion_link, cuerpo));
   } else {
     const botonGenerar = buscar('#generar-link-invitado', cuerpo);
     if (botonGenerar) {
       botonGenerar.addEventListener('click', async () => {
         try {
-          await mandar('invitaciones.php?accion=generar_link', { confirmacion_id: fila.id });
-          cerrarHoja(true);
-          avisar('Link generado.');
-          ensuciarVistas('invitados');
-          dibujarGente();
+          const creado = await mandar('invitaciones.php?accion=generar_link',
+                                      { confirmacion_id: fila.id });
+
+          /* ⚡ LA HOJA YA NO SE CIERRA AL GENERAR EL LINK (2026-09-03).
+             Acá había `cerrarHoja(true)` + `dibujarGente()`: el link se creaba
+             y la ficha desaparecía en el mismo movimiento, así que para
+             copiarlo había que volver a escribir el nombre en el buscador,
+             abrir la ficha otra vez y recién entonces copiar. Medido: siete
+             toques para una tarea de tres, y los tres de más caían justo
+             después de la acción, que es cuando uno cree que ya terminó.
+
+             Ahora el botón se convierte en el link con su botón de copiar, en
+             el sitio, sin perder el contexto. La lista se marca sucia y se
+             redibuja sola la próxima vez que se entre a Gente. */
+          fila.invitacion_id = creado.id;
+          fila.invitacion_link = creado.link;
+
+          botonGenerar.outerHTML =
+            '<div class="campo" style="margin-top:var(--esp-3)">' +
+              '<span class="campo__rotulo">Link personal</span>' +
+              '<input type="text" id="link-invitacion-valor" class="campo__control" ' +
+                     'value="' + seguro(creado.link) + '" readonly>' +
+            '</div>' +
+            '<div class="acciones" style="flex-wrap:wrap">' +
+              '<button class="boton boton--principal" id="copiar-link-invitacion">' +
+                'Copiar link</button>' +
+            '</div>';
+
+          buscar('#copiar-link-invitacion', cuerpo)
+            .addEventListener('click', () => copiarElLinkPersonal(creado.link, cuerpo));
+
+          avisar('Link listo. Ya lo puedes copiar.');
+          ensuciarVistas('invitados', 'resumen');
         } catch (error) {
           avisar(error.message, true);
         }
@@ -1075,6 +1224,90 @@ async function marcarLlegadaEnLote() {
   ensuciarVistas('hoy', 'resumen');
   salirDeSeleccion();
   dibujarGente();
+}
+
+
+/**
+ * Abre una lista para mandarle el recordatorio, uno por uno, a todos los
+ * seleccionados — sin tener que volver a buscar a nadie entre medio.
+ *
+ * ⚡ POR QUÉ ESTO NO MANDA TODO DE UNA SOLA VEZ.
+ * WhatsApp abre UN chat por vez: no existe forma desde una web de mandarle
+ * el mismo mensaje a veinte personas de un tirón, y prometerlo sería mentir.
+ * Lo que sí se puede arreglar es el verdadero costo, que no era mandar el
+ * mensaje sino ENCONTRAR a la persona siguiente: hasta ahora, insistirle a
+ * quien no respondió era escribir el nombre en el buscador, tocar la fila,
+ * bajar dentro de la ficha, tocar WhatsApp, volver, y repetir el recorrido
+ * entero por cada uno. Cinco toques por persona, veinte personas.
+ *
+ * Con esta lista el recorrido se hace una sola vez: se filtra por "Sin
+ * responder", se seleccionan todos, y desde acá cada persona es UN toque.
+ * Los que ya se mandaron quedan marcados, para saber por dónde iba una si
+ * la interrumpen — que con veinte mensajes es seguro que pasa.
+ *
+ * @returns {Promise<void>}
+ */
+async function recordarEnLote() {
+  if (!SELECCIONADOS.size) return;
+
+  const filas = Array.from(SELECCIONADOS)
+    .map(id => INVITADOS.find(f => Number(f.id) === id))
+    .filter(Boolean);
+
+  const conWhatsApp = filas.filter(f =>
+    f.invitacion_link && sirveParaWhatsApp(f.invitacion_telefono));
+
+  if (!conWhatsApp.length) {
+    avisar('Ninguno de los seleccionados tiene link y teléfono para WhatsApp.', true);
+    return;
+  }
+
+  const sinTelefono = filas.length - conWhatsApp.length;
+
+  const cuerpo = abrirHoja('Mandar recordatorio',
+    '<p class="vacio__texto" style="margin-top:0">' +
+      'Toca a cada quien para abrir su chat. Los que ya mandaste quedan ' +
+      'marcados.' +
+      (sinTelefono
+        ? ' ' + pluralizar(sinTelefono, 'persona', 'personas') +
+          ' sin teléfono o sin link: no aparecen acá.'
+        : '') +
+    '</p>' +
+    '<div id="lista-recordatorios"></div>');
+
+  const lista = buscar('#lista-recordatorios', cuerpo);
+  lista.innerHTML = conWhatsApp.map(f =>
+    '<button class="lista__fila" data-recordar="' + f.id + '">' +
+      '<span class="lista__cuerpo">' +
+        '<span class="lista__titulo">' + seguro(f.nombre) + '</span>' +
+        '<span class="lista__pie">' + seguro(f.invitacion_telefono) + '</span>' +
+      '</span>' +
+      '<span class="lista__lado" data-marca="' + f.id + '"></span>' +
+    '</button>'
+  ).join('');
+
+  buscarTodos('[data-recordar]', lista).forEach(boton => {
+    boton.addEventListener('click', () => {
+      const fila = conWhatsApp.find(f => Number(f.id) === Number(boton.dataset.recordar));
+      if (!fila) return;
+
+      const texto = textoDeInvitacion({
+        nombre: fila.nombre, pases: fila.invitacion_pases, link: fila.invitacion_link,
+      });
+      window.open('https://wa.me/' + paraWhatsApp(fila.invitacion_telefono) +
+                  '?text=' + encodeURIComponent(texto), '_blank');
+
+      mandar('invitaciones.php?accion=marcar_enviada',
+             { id: fila.invitacion_id }).catch(() => {});
+
+      const marca = buscar('[data-marca="' + fila.id + '"]', lista);
+      if (marca) marca.textContent = '✓';
+      boton.style.opacity = '.5';
+    });
+  });
+
+  registrarEvento('accion', 'recordar_en_lote', { cuantos: conWhatsApp.length });
+  ensuciarVistas('invitados');
 }
 
 

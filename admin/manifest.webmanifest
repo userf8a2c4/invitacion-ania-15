@@ -26,8 +26,8 @@
       "url": "./?ir=invitados"
     },
     {
-      "name": "Presupuesto",
-      "short_name": "Presupuesto",
+      "name": "Dinero",
+      "short_name": "Dinero",
       "description": "Gastos, pagos y padrinos",
       "url": "./?ir=dinero"
     },
