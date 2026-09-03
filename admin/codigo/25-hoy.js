@@ -488,7 +488,7 @@ async function armarParaCompartir(cual, proveedor) {
   buscar('#comp-copiar', cuerpo).addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(datos.texto);
-      avisar('Copiado. Pegalo donde quieras.');
+      avisar('Copiado. Pégalo donde quieras.');
     } catch (error) {
       /* En algunos navegadores el portapapeles solo funciona con
          permiso. Si falla, se selecciona el texto para copiarlo a mano
@@ -498,7 +498,7 @@ async function armarParaCompartir(cual, proveedor) {
       rango.selectNodeContents(bloque);
       window.getSelection().removeAllRanges();
       window.getSelection().addRange(rango);
-      avisar('Seleccionado: copialo con el menú del teléfono.', true);
+      avisar('Seleccionado: cópialo con el menú del teléfono.', true);
     }
   });
 }

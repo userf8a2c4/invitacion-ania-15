@@ -143,7 +143,7 @@ if ($accion === 'a_quien') {
 if ($accion === 'anotar_envio') {
     exigirMetodo('POST');
     if (!existeTabla('envios_proveedor')) {
-        responderMal('Falta la tabla envios_proveedor. Corre migracion.sql.', 500);
+        responderMal('Falta una parte de la instalación del panel. Avísale a quien lo instaló.', 500);
     }
 
     $datos = cuerpoJson();

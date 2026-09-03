@@ -64,7 +64,7 @@ function pintarListaDeInvitaciones(cuerpo, totales, capacidad) {
     ['sin_enviar',   'Sin enviar'],
     ['sin_responder','Sin responder'],
     ['confirmada',   'Confirmadas'],
-    ['declinada',    'Declinadas'],
+    ['declinada',    'No vienen'],
     ['sin_telefono', 'Sin teléfono'],
   ];
 

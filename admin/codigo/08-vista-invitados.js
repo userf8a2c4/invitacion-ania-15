@@ -386,7 +386,7 @@ async function dibujarInvitados() {
   // Si la tabla no tiene id, el panel no puede editar ni borrar filas.
   // Se avisa una vez, en lugar de mostrar botones que fallarían.
   if (!INVITADOS_EDITABLES) {
-    avisar('La tabla no tiene columna id: solo se puede consultar.', true);
+    avisar('Esta lista es de solo lectura: se puede mirar, pero no editar.', true);
   }
 
   /* ⚡ ENTRAR ACÁ ES "YA LAS VI" (2026-09-03). La pestaña Gente lleva un
@@ -435,7 +435,7 @@ function engancharInvitados(vista) {
 
   buscar('#inv-nuevo', vista).addEventListener('click', () => {
     if (!INVITADOS_EDITABLES) {
-      avisar('La tabla no permite agregar invitados.', true);
+      avisar('Esta lista es de solo lectura: no se pueden agregar invitados.', true);
       return;
     }
     // ⚡ (2026-08-28) A pedido explícito: crear un invitado SIEMPRE
@@ -835,7 +835,7 @@ function abrirDetalleDeInvitado(id) {
          código. Eso se mira sentada en casa, con tiempo. */
   const renglones = [
     ['Asistencia', asiste
-      ? '<span class="etiqueta etiqueta--bien">Sí asiste</span>'
+      ? '<span class="etiqueta etiqueta--bien">Confirmó</span>'
       : '<span class="etiqueta etiqueta--alerta">No viene</span>', true],
   ];
 
@@ -1041,7 +1041,7 @@ function abrirDetalleDeInvitado(id) {
       try {
         if (!MESAS) MESAS = await traer('mesas.php?accion=todo');
         if (!MESAS.mesas.length) {
-          avisar('Todavía no armaste ninguna mesa. Ve a Evento → Mesas.', true);
+          avisar('Todavía no has armado ninguna mesa. Ve a Gente → Mesas.', true);
           return;
         }
         elegirMesaPara(fila.id, refrescar);
@@ -1131,7 +1131,7 @@ async function asignarMesaEnLote() {
   }
 
   if (!MESAS.mesas.length) {
-    avisar('Todavía no armaste ninguna mesa. Ve a Evento → Mesas.', true);
+    avisar('Todavía no has armado ninguna mesa. Ve a Gente → Mesas.', true);
     return;
   }
 
@@ -1199,9 +1199,17 @@ async function marcarLlegadaEnLote() {
     return;
   }
 
-  if (!confirmarAccion(
-    '¿Marcar llegada de ' + pluralizar(conCodigo.length, 'persona', 'personas') + '?'
-  )) return;
+  /* ⚡ SIN PREGUNTAR (2026-09-03). Acá había un confirm() del navegador, y
+     era el único de los 36 del panel que no protegía nada: marcar una
+     llegada no borra ni pisa nada, se puede volver a marcar, y el propio
+     escáner ya avisa cuando un pase se lee dos veces.
+
+     Lo que sí costaba era el momento: esto se usa en la puerta, con gente
+     esperando, y en Chrome de Android el diálogo del sistema aparece
+     anunciado como "aniaxv.com dice:" — rompe la ilusión de app justo en el
+     minuto en que la app tiene que desaparecer detrás de la tarea. Los
+     confirm() de los borrados se quedan donde están: ahí el freno es el
+     punto. */
 
   let listas = 0;
   for (const fila of conCodigo) {
@@ -1331,8 +1339,8 @@ function abrirFormularioDeInvitado(fila) {
       id: 'inv-asiste', rotulo: 'Asistencia',
       valor: Number(datos.asiste) === 1 ? '1' : '0',
       opciones: [
-        { valor: '1', texto: 'Sí asiste' },
-        { valor: '0', texto: 'No puede asistir' },
+        { valor: '1', texto: 'Confirmó' },
+        { valor: '0', texto: 'No viene' },
       ],
     }) +
 

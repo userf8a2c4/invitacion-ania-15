@@ -32,7 +32,7 @@ $yo     = exigirSesion();
 $accion = (string) ($_GET['accion'] ?? 'obtener');
 
 if (!existeTabla('ajustes')) {
-    responderMal('Falta correr la migración: no existe la tabla ajustes.', 500);
+    responderMal('Falta una parte de la instalación del panel. Avísale a quien lo instaló.', 500);
 }
 
 

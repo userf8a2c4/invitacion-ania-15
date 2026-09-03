@@ -29,7 +29,7 @@ exigirPermiso($yo, 'invitados', ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' 
 $accion = (string) ($_GET['accion'] ?? 'listar');
 
 if (!existeTabla('acompanantes')) {
-    responderMal('Falta correr la migración: no existe la tabla acompanantes.', 500);
+    responderMal('Falta una parte de la instalación del panel. Avísale a quien lo instaló.', 500);
 }
 
 

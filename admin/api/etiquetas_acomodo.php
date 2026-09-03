@@ -38,7 +38,7 @@ $yo     = exigirSesion();
 $accion = (string) ($_GET['accion'] ?? 'listar');
 
 if (!existeTabla('etiquetas') || !existeTabla('etiquetas_asignadas')) {
-    responderMal('Falta correr la migración: no existen las tablas de etiquetas.', 500);
+    responderMal('Falta una parte de la instalación del panel. Avísale a quien lo instaló.', 500);
 }
 
 /**

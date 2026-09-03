@@ -1892,7 +1892,7 @@ function formularioPago(pago) {
     const monto    = aPesos(valorDe('pag-monto', cuerpo));
 
     if (!monto || monto <= 0) {
-      avisar('Poné un monto mayor a cero.', true);
+      avisar('Pon un monto mayor a cero.', true);
       return null;
     }
 
@@ -2157,7 +2157,7 @@ function abrirGeneradorDeRecibo(proveedor) {
   buscar('#rec-generar', cuerpo).addEventListener('click', async () => {
     const monto = aPesos(valorDe('rec-monto', cuerpo));
     if (!monto || monto <= 0) {
-      avisar('Poné un monto mayor a cero.', true);
+      avisar('Pon un monto mayor a cero.', true);
       return;
     }
 
@@ -2266,7 +2266,7 @@ async function abrirGeneradorDeReciboGenerico() {
   buscar('#rec2-generar', cuerpo).addEventListener('click', async () => {
     const monto = aPesos(valorDe('rec2-monto', cuerpo));
     if (!monto || monto <= 0) {
-      avisar('Poné un monto mayor a cero.', true);
+      avisar('Pon un monto mayor a cero.', true);
       return;
     }
 
@@ -2755,7 +2755,7 @@ function abrirGeneradorDeContrato(proveedor) {
   buscar('#con-generar', cuerpo).addEventListener('click', async () => {
     const monto = aPesos(valorDe('con-monto', cuerpo));
     if (!monto || monto <= 0) {
-      avisar('Poné un monto total mayor a cero.', true);
+      avisar('Pon un monto total mayor a cero.', true);
       return;
     }
 
