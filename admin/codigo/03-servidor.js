@@ -282,6 +282,73 @@ function mandarSinCola(ruta, cuerpo) {
   return pedir(ruta, { metodo: 'POST', cuerpo: cuerpo, noEncolar: true });
 }
 
+/**
+ * Baja un archivo del servidor al dispositivo.
+ *
+ * POR QUÉ NO ALCANZA CON window.open() NI CON UN ENLACE
+ * La sesión de este panel viaja en la cabecera `Authorization: Bearer`,
+ * no en una cookie (ver pedir(), arriba). Una pestaña nueva o un
+ * <a href> salen SIN esa cabecera, así que el servidor contestaría 401
+ * y la descarga fallaría siempre. Hay que pedirlo con fetch para poder
+ * mandar el token, y recién después entregárselo al navegador.
+ *
+ * POR QUÉ NO PASA POR pedir()
+ * pedir() espera JSON y lo interpreta. Acá lo que vuelve es un binario.
+ * Se comparte el token y la base, no el parseo.
+ *
+ * POR QUÉ blob Y NO STREAM A DISCO
+ * Bajar por partes necesitaría la API de acceso al sistema de archivos,
+ * que Safari en iPhone no tiene — y el panel se usa desde el teléfono.
+ * El navegador respalda los blobs grandes en disco por su cuenta, así
+ * que en la práctica aguanta lo que haga falta.
+ *
+ * @param {string} ruta - Relativa a la API, como en traer().
+ * @param {string} nombreSugerido - Con qué nombre se guarda.
+ * @returns {Promise<void>} Falla con ErrorDelServidor si algo salió mal.
+ */
+async function bajarDelServidor(ruta, nombreSugerido) {
+  const token = tokenGuardado();
+  if (!token) {
+    manejarSesionVencida();
+    throw new ErrorDelServidor('No hay sesión iniciada.', 401);
+  }
+
+  const respuesta = await fetch(CONFIGURACION.servidor.base + ruta, {
+    headers: { 'Authorization': 'Bearer ' + token },
+    cache: 'no-store',
+  });
+
+  if (!respuesta.ok) {
+    /* El servidor contesta los errores en JSON aunque el camino feliz
+       sea un binario, así que se intenta leer el motivo de verdad antes
+       de caer en un mensaje genérico. */
+    let motivo = 'No se pudo bajar el archivo.';
+    try {
+      const cuerpo = await respuesta.json();
+      if (cuerpo && cuerpo.error) motivo = cuerpo.error;
+    } catch (error) {
+      // No era JSON: se queda el mensaje genérico.
+    }
+    if (respuesta.status === 401) manejarSesionVencida();
+    throw new ErrorDelServidor(motivo, respuesta.status);
+  }
+
+  const contenido = await respuesta.blob();
+  const direccion = URL.createObjectURL(contenido);
+
+  const enlace = document.createElement('a');
+  enlace.href = direccion;
+  enlace.download = nombreSugerido;
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+
+  /* Se libera un rato después y no en el acto: revocar la dirección
+     antes de que el navegador termine de leerla cancela la descarga en
+     algunos navegadores. */
+  setTimeout(() => URL.revokeObjectURL(direccion), 60000);
+}
+
 
 /* ─── CUANDO LA SESIÓN VENCE ───────────────────────────────────────── */
 
