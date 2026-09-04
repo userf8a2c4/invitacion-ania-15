@@ -147,11 +147,114 @@
     if (BITACORA.length > 30) BITACORA.shift();
   }
 
-  // Se expone para poder leerla desde la consola del teléfono.
+  // Desde la consola, cuando la hay.
   window.__musica = function () {
     if (console.table) console.table(BITACORA);
     return BITACORA;
   };
+
+  /**
+   * La bitácora como texto, una línea por suceso.
+   *
+   * @returns {string}
+   */
+  function bitacoraComoTexto() {
+    if (!BITACORA.length) return 'Todavía no pasó nada.';
+
+    return BITACORA.map(function (s) {
+      return s.hora +
+             ' | ' + s.que +
+             (s.detalle ? ' (' + s.detalle + ')' : '') +
+             ' | contexto=' + s.contexto +
+             ' | pausado=' + s.pausado +
+             ' | quiere=' + s.quiere +
+             ' | vol=' + s.volumen;
+    }).join('\n');
+  }
+
+  /* ─── VER EL REGISTRO SIN CONSOLA ─────────────────────────────
+
+     El fallo del reproductor solo pasa EN EL TELÉFONO, al bloquear y
+     desbloquear — y en el navegador de un teléfono no hay consola donde
+     escribir `__musica()`. O sea que la bitácora, tal como estaba, no
+     servía para el único caso en que hace falta.
+
+     Esto pone un botón chico en la pantalla que la muestra en un cuadro
+     de texto, listo para copiar y pegar en un mensaje.
+
+     SOLO EN PBE. Se mira el host, igual que reiniciar-prueba.php: en
+     aniaxv.com este bloque no existe. Es código de diagnóstico y se saca
+     cuando el problema esté cerrado. */
+  if (location.hostname.indexOf('pbe.') === 0) {
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.textContent = '♪ registro';
+    boton.setAttribute('aria-label', 'Ver el registro del reproductor');
+    boton.style.cssText =
+      'position:fixed;left:8px;bottom:8px;z-index:2147483000;' +
+      'font:12px/1 system-ui,sans-serif;padding:8px 10px;min-height:34px;' +
+      'border:1px solid rgba(255,255,255,.35);border-radius:6px;' +
+      'background:rgba(0,0,0,.65);color:#fff;opacity:.55';
+
+    boton.addEventListener('click', function () {
+      const capa = document.createElement('div');
+      capa.style.cssText =
+        'position:fixed;inset:0;z-index:2147483001;background:rgba(0,0,0,.92);' +
+        'display:flex;flex-direction:column;gap:8px;padding:12px;' +
+        'font:13px/1.4 system-ui,sans-serif;color:#fff';
+
+      const area = document.createElement('textarea');
+      area.readOnly = true;
+      area.value = bitacoraComoTexto();
+      area.style.cssText =
+        'flex:1;width:100%;background:#111;color:#eee;border:1px solid #444;' +
+        'border-radius:6px;padding:8px;font:11px/1.5 ui-monospace,monospace;' +
+        'white-space:pre;overflow:auto';
+
+      const fila = document.createElement('div');
+      fila.style.cssText = 'display:flex;gap:8px';
+
+      const copiar = document.createElement('button');
+      copiar.type = 'button';
+      copiar.textContent = 'Copiar';
+      copiar.style.cssText =
+        'flex:1;min-height:44px;border-radius:6px;border:0;' +
+        'background:#c9a227;color:#000;font:600 14px system-ui,sans-serif';
+      copiar.addEventListener('click', function () {
+        area.select();
+        let listo = false;
+        try { listo = document.execCommand('copy'); } catch (e) { listo = false; }
+        if (!listo && navigator.clipboard) {
+          navigator.clipboard.writeText(area.value).then(
+            function () { copiar.textContent = 'Copiado'; },
+            function () { copiar.textContent = 'Selecciona y copia a mano'; });
+          return;
+        }
+        copiar.textContent = listo ? 'Copiado' : 'Selecciona y copia a mano';
+      });
+
+      const cerrar = document.createElement('button');
+      cerrar.type = 'button';
+      cerrar.textContent = 'Cerrar';
+      cerrar.style.cssText =
+        'flex:1;min-height:44px;border-radius:6px;border:1px solid #666;' +
+        'background:transparent;color:#fff;font:600 14px system-ui,sans-serif';
+      cerrar.addEventListener('click', function () { capa.remove(); });
+
+      fila.appendChild(copiar);
+      fila.appendChild(cerrar);
+      capa.appendChild(area);
+      capa.appendChild(fila);
+      document.body.appendChild(capa);
+    });
+
+    /* Se agrega cuando el documento esté listo: este archivo puede correr
+       antes de que exista <body>. */
+    if (document.body) document.body.appendChild(boton);
+    else document.addEventListener('DOMContentLoaded', function () {
+      document.body.appendChild(boton);
+    });
+  }
 
   let grafoDeAudio = null;
 
