@@ -79,11 +79,17 @@ case 'notas':
        las palabras de menos de 4 letras y las muy repetidas, así que
        buscar "DJ" o "pan" no encontraría nada. Con decenas de notas,
        LIKE es instantáneo igual. */
+    /* ⚠️ UN NOMBRE POR APARICIÓN. Con PDO en modo no emulado
+       (ATTR_EMULATE_PREPARES => false, ver _lib/bd.php), repetir `:b`
+       en la misma consulta con un solo valor en el array es
+       SQLSTATE[HY093]: buscar en las notas devolvía 500. La lista sin
+       búsqueda (arriba) no lo hace, y por eso el error solo aparecía al
+       escribir en el buscador. */
     responderBien(consultarTodo(
         'SELECT * FROM notas
-         WHERE titulo LIKE :b OR cuerpo LIKE :b
+         WHERE titulo LIKE :b_titulo OR cuerpo LIKE :b_cuerpo
          ORDER BY fijada DESC, editado_en DESC LIMIT 200',
-        [':b' => '%' . $busca . '%']
+        [':b_titulo' => '%' . $busca . '%', ':b_cuerpo' => '%' . $busca . '%']
     ));
     break;
 

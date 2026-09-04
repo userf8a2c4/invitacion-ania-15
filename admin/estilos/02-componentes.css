@@ -1197,3 +1197,14 @@ select.campo__control {
   padding-top: 11px;
   padding-bottom: 11px;
 }
+
+/* En qué moneda se está escribiendo un monto. Solo aparece cuando NO es
+   la moneda base: el selector vive en localStorage y sobrevive entre
+   sesiones, así que puede quedar en dólares sin que nadie se acuerde —
+   y al guardar se multiplica por el tipo de cambio. Ver campoDinero(). */
+.campo__moneda {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--oro);
+}

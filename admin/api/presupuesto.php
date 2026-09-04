@@ -57,7 +57,12 @@ case 'todo':
        por presupuesto directo en g.presupuesto_id, no a través de la
        categoría: un gasto sin categoría también tiene que quedar del
        lado correcto. */
-    $gastos = consultarTodo(
+    /* Cada bloque se guarda por su cuenta, como hace
+       cifrasDelPresupuesto(): en una instalación a medio migrar, media
+       pantalla degradaba bien y la otra media tiraba 500. Devolver una
+       lista vacía se ve como "todavía no hay nada", que es entendible;
+       un error genérico no. */
+    $gastos = !existeTabla('gastos') ? [] : consultarTodo(
         'SELECT g.*,
                 c.nombre AS categoria_nombre,
                 p.nombre AS proveedor_nombre,
@@ -77,7 +82,7 @@ case 'todo':
        gasto_id, no pertenece a ningún presupuesto en particular y se
        muestra siempre: es más seguro mostrar de más que esconder un pago
        real. */
-    $pagos = consultarTodo(
+    $pagos = (!existeTabla('pagos') || !existeTabla('gastos')) ? [] : consultarTodo(
         'SELECT p.*, g.concepto AS gasto_concepto
          FROM pagos p
          LEFT JOIN gastos g ON g.id = p.gasto_id' .
@@ -96,14 +101,23 @@ case 'todo':
        (COALESCE(NULLIF(monto_real,0), presupuestado)): con SUM(monto_real)
        a secas, un padrino que cubre un gasto de $12,000 todavía sin
        costo real cargado aparecía cubriendo $0. */
-    $padrinos = consultarTodo(
+    /* ⚡ `cubre` SE FILTRA POR PLAN (2026-09-03). Sin el filtro, esta
+       cifra sumaba los gastos que el padrino cubre en TODOS los
+       escenarios, y se mostraba al lado de `de_padrinos` del resumen,
+       que sí filtra. Con dos planes abiertos, la ficha del padrino
+       decía que cubre más de lo que el total admite. El filtro va en el
+       ON del LEFT JOIN, no en el WHERE: un padrino sin gastos en este
+       plan tiene que seguir apareciendo, con cubre = 0. */
+    $padrinos = !existeTabla('padrinos') ? [] : consultarTodo(
         'SELECT pa.*,
                 COALESCE(SUM(' . sqlCostoDeUnGasto('g.') . '), 0) AS cubre,
                 COUNT(g.id)                                       AS cuantos_gastos
          FROM padrinos pa
-         LEFT JOIN gastos g ON g.padrino_id = pa.id
-         GROUP BY pa.id
-         ORDER BY pa.nombre'
+         LEFT JOIN gastos g ON g.padrino_id = pa.id' .
+        ($tienePresupuestos ? ' AND g.presupuesto_id = :activo' : '') .
+        ' GROUP BY pa.id
+          ORDER BY pa.nombre',
+        $tienePresupuestos ? [':activo' => $activo] : []
     );
 
     /* ⚡ `pagado_real` (2026-08-27): antes lo único que decía "cuánto se le
@@ -121,9 +135,18 @@ case 'todo':
        Menú → Compartir y no desde la ficha del proveedor, que es la
        puerta que se usa todos los días: la protección estrella del
        sistema no protegía por el camino más transitado. */
-    $hayEnvios = existeTabla('envios_proveedor');
+    /* ⚠️ LA GUARDA MIRA LAS DOS COSAS, NO SOLO LA TABLA.
+       Estas subconsultas no dependen únicamente de `envios_proveedor`:
+       comparan contra `pr.paquete`, que es columna de `proveedores` y
+       la agrega instalar.php —cuyo catch se traga el error si el ALTER
+       falla—. O sea que existe un estado real donde la tabla está y la
+       columna no, y ahí esta consulta moría entera y con ella toda la
+       pantalla de Dinero. Este mismo archivo ya se cuida de esa columna
+       para ESCRIBIR (ver guardar_proveedor); a la lectura le faltaba. */
+    $hayEnvios = existeTabla('envios_proveedor')
+              && in_array('paquete', columnasDe('proveedores'), true);
 
-    $proveedores = consultarTodo(
+    $proveedores = !existeTabla('proveedores') ? [] : consultarTodo(
         'SELECT pr.*,
                 COALESCE(SUM(CASE WHEN p.estado = \'pagado\' THEN p.monto ELSE 0 END), 0) AS pagado_real' .
         ($hayEnvios
@@ -135,12 +158,19 @@ case 'todo':
                    ORDER BY e.enviado_en DESC LIMIT 1) AS huella"
             : ', NULL AS enviado_en, NULL AS huella') . '
          FROM proveedores pr
-         LEFT JOIN gastos g ON g.proveedor_id = pr.id
+         LEFT JOIN gastos g ON g.proveedor_id = pr.id' .
+        /* Mismo motivo que en `cubre`: sin este filtro, `pagado_real`
+           sumaba los pagos del proveedor en todos los escenarios y se
+           mostraba junto a `pagado` del resumen, que sí filtra. La
+           ficha de un proveedor podía decir que se le pagó más de lo
+           que el total admitía haber pagado. */
+        ($tienePresupuestos ? ' AND g.presupuesto_id = :activo' : '') . '
          LEFT JOIN pagos p  ON p.gasto_id = g.id
          GROUP BY pr.id
-         ORDER BY pr.nombre'
+         ORDER BY pr.nombre',
+        $tienePresupuestos ? [':activo' => $activo] : []
     );
-    $cotizaciones = consultarTodo(
+    $cotizaciones = !existeTabla('cotizaciones') ? [] : consultarTodo(
         'SELECT * FROM cotizaciones ORDER BY servicio, monto'
     );
 

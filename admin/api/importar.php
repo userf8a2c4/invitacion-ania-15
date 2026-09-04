@@ -473,7 +473,13 @@ case 'cotizaciones':
         $proveedor = trim((string) ($fila['proveedor'] ?? ''));
         if ($proveedor === '') continue;
 
-        $monto = campoMonto($fila, 'monto');
+        /* `false`: acá NO se corta con error. Esto importa decenas de
+           filas pegadas de una hoja de cálculo, y una sola con el monto
+           raro tiraría abajo la importación entera —incluidas las que
+           estaban bien—. La fila entra con monto 0, que se ve y se
+           corrige; cortar todo, no. En los formularios de a uno sí se
+           corta, que es donde hay alguien mirando para arreglarlo. */
+        $monto = campoMonto($fila, 'monto', false);
 
         $repetida = consultarUno(
             'SELECT id FROM cotizaciones WHERE servicio = :s AND proveedor = :p',

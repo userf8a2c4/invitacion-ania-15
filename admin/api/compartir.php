@@ -122,6 +122,18 @@ if ($accion === 'que_hay') {
 if ($accion === 'a_quien') {
     if (!existeTabla('proveedores')) responderBien(['proveedores' => []]);
 
+    /* ⚠️ SIN LA COLUMNA `paquete` NO HAY NADA QUE LISTAR, Y HAY QUE
+       DECIRLO ANTES DE CONSULTAR. Esta pantalla es "a quién hay que
+       mandarle", y eso se define por el paquete asignado a cada
+       proveedor: `p.paquete` está en el SELECT y en el WHERE, o sea
+       fuera del ternario de abajo. La columna la agrega instalar.php y
+       su catch se traga el error si el ALTER falla, así que sin esta
+       guarda la pantalla entera moría con un 500 en vez de mostrarse
+       vacía. */
+    if (!in_array('paquete', columnasDe('proveedores'), true)) {
+        responderBien(['proveedores' => []]);
+    }
+
     $hayEnvios = existeTabla('envios_proveedor');
 
     $filas = consultarTodo(

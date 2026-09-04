@@ -548,6 +548,17 @@ let MEGABOT_ULTIMO_ID = 0;
 let MEGABOT_INTERVALO = null;
 
 /**
+ * Cuántas veces se abrió el chat en esta sesión.
+ *
+ * Cada apertura crea su propia closure de polling, con su propio `hilo`.
+ * Si se cierra y se reabre rápido, la closure vieja puede despertar
+ * DESPUÉS de que la nueva ya arrancó, y sin forma de distinguirse
+ * apagaba el poll de la nueva dejando el chat mudo. Comparando su
+ * número contra este, la vieja sabe que ya no manda.
+ */
+let MEGABOT_GENERACION = 0;
+
+/**
  * Le avisa al polling que hay una respuesta en camino, para que vuelva
  * al ritmo rápido. La define abrirMegaBot() mientras la hoja vive; en
  * null significa que no hay chat abierto.
@@ -585,12 +596,19 @@ function htmlDeBurbujaMegaBot(m) {
   const esSistema = m.rol === 'sistema';
 
   return '' +
-    /* El texto viaja también en un atributo. "Reintentar" lo leía del
-       `firstChild.textContent` de la burbuja: cualquier cambio en cómo
-       se arma —un ícono adelante, un `<span>` de envoltura— lo dejaba
-       reenviando una cadena vacía, en silencio y sin fallar. */
+    /* El texto viaja también en un atributo. Sirve para dos cosas:
+       "Reintentar" lo leía del `firstChild.textContent` de la burbuja
+       —cualquier cambio en cómo se arma la dejaba reenviando una cadena
+       vacía, en silencio— y ahora además es la clave con la que una
+       burbuja optimista se reconcilia con su fila real (ver
+       burbujaOptimistaConEsteTexto).
+
+       `data-optimista` marca la que todavía espera su id de la base. Se
+       borra al adoptarlo, así que una burbuja ya reconciliada nunca se
+       vuelve a tomar por otra. */
     '<div class="megabot-fila megabot-fila--' + m.rol + '" data-mensaje-id="' + seguro(m.id) + '"' +
-         ' data-mensaje-texto="' + seguro(m.texto) + '">' +
+         ' data-mensaje-texto="' + seguro(m.texto) + '"' +
+         (m.optimista ? ' data-optimista="1"' : '') + '>' +
       '<div class="megabot-burbuja megabot-burbuja--' + m.rol + '">' +
         seguro(m.texto) +
         (m.estado === 'error'
@@ -903,7 +921,46 @@ let ESTADO_PROPUESTAS_MEGABOT = {};
  */
 function pintarMensajesNuevosDeMegaBot(hilo, mensajes) {
   mensajes.forEach(m => {
+    // Ya está pintado con su id real: no hay nada que hacer.
     if (hilo.querySelector('[data-mensaje-id="' + m.id + '"]')) return;
+
+    /* ⚡ RECONCILIACIÓN POR IDENTIDAD, NO POR CARRERA (2026-09-03)
+     *
+     * EL DUPLICADO QUE NO SE IBA
+     * Al mandar un mensaje se pinta una burbuja optimista con un id
+     * `local-…`, y en paralelo el servidor ya guardó la fila real. El
+     * poll corre cada 2 s mientras se espera; el envío no puede volver
+     * en menos de eso, porque chat.php llama al webhook EN LÍNEA con
+     * timeout de 10 s. O sea que el poll casi siempre llega primero,
+     * trae la fila real, no la reconoce —la optimista todavía se llama
+     * `local-…`— y pinta la segunda burbuja.
+     *
+     * El intento anterior (adoptarIdRealDeBurbuja, abajo) solo podía
+     * ganar si el POST contestaba en menos de 2 segundos: en la
+     * práctica, solo cuando no había webhook configurado. Por eso el
+     * duplicado seguía apareciendo.
+     *
+     * LA SOLUCIÓN
+     * No competir. Cuando llega un mensaje de Lucila que no está
+     * pintado, primero se busca una burbuja optimista con EL MISMO
+     * TEXTO y se la adopta. Gane quien gane la carrera, hay una sola
+     * burbuja — y si el envío contesta después, encuentra la burbuja ya
+     * adoptada y no hace nada.
+     */
+    if (m.rol === 'lucila') {
+      const optimista = burbujaOptimistaConEsteTexto(hilo, m.texto);
+      if (optimista) {
+        optimista.dataset.mensajeId = String(m.id);
+        delete optimista.dataset.optimista;
+
+        const idAdoptado = Number(m.id);
+        if (Number.isFinite(idAdoptado)) {
+          MEGABOT_ULTIMO_ID = Math.max(MEGABOT_ULTIMO_ID, idAdoptado);
+        }
+        return;
+      }
+    }
+
     (m.propuestas || []).forEach(p => { ESTADO_PROPUESTAS_MEGABOT[p.id] = p; });
     hilo.insertAdjacentHTML('beforeend', htmlDeBurbujaMegaBot(m));
 
@@ -919,14 +976,38 @@ function pintarMensajesNuevosDeMegaBot(hilo, mensajes) {
 }
 
 /**
+ * La burbuja optimista que corresponde a este texto, si todavía hay una
+ * esperando su id real.
+ *
+ * Se compara el texto exacto porque es lo único que las dos versiones
+ * de la misma burbuja comparten con seguridad: la optimista se pinta
+ * con lo que se escribió, y el servidor devuelve eso mismo. Se toma la
+ * PRIMERA sin adoptar, que con dos mensajes iguales seguidos es la más
+ * vieja — el orden se conserva.
+ *
+ * @param {Element} hilo
+ * @param {string} texto
+ * @returns {Element|null}
+ */
+function burbujaOptimistaConEsteTexto(hilo, texto) {
+  const candidatas = hilo.querySelectorAll('[data-optimista="1"]');
+
+  for (const fila of candidatas) {
+    if (fila.dataset.mensajeTexto === texto) return fila;
+  }
+  return null;
+}
+
+/**
  * Le pone a la burbuja optimista el id que le dio la base.
  *
- * POR QUÉ
- * Se pintaba el mensaje al toque con un id 'local-…' y el poll traía
- * después la fila real con su id numérico: como los ids no coincidían,
- * la burbuja real se agregaba al lado y el texto de Lucila aparecía DOS
- * veces. Adoptando el id real, el poll la reconoce como ya pintada y no
- * la vuelve a agregar — sin quitar ni volver a dibujar nada.
+ * Es el camino rápido: si el envío contesta antes de que el poll traiga
+ * la fila, se adopta acá y el poll ya la encuentra por id. Si el poll
+ * gana —lo normal, ver la nota de pintarMensajesNuevosDeMegaBot—, la
+ * adopción ya ocurrió allá y esto no encuentra nada que hacer.
+ *
+ * Los dos caminos son idempotentes: el que llegue segundo no duplica ni
+ * pisa nada.
  *
  * @param {Element} hilo
  * @param {string} idLocal
@@ -937,8 +1018,14 @@ function adoptarIdRealDeBurbuja(hilo, idLocal, idReal) {
   const id = Number(idReal);
   if (!Number.isFinite(id) || id <= 0) return;
 
-  const burbuja = hilo.querySelector('[data-mensaje-id="' + idLocal + '"]');
-  if (burbuja) burbuja.dataset.mensajeId = String(id);
+  // Si el poll ya la adoptó, no hay dos: hay una, con su id real.
+  if (!hilo.querySelector('[data-mensaje-id="' + id + '"]')) {
+    const burbuja = hilo.querySelector('[data-mensaje-id="' + idLocal + '"]');
+    if (burbuja) {
+      burbuja.dataset.mensajeId = String(id);
+      delete burbuja.dataset.optimista;
+    }
+  }
 
   MEGABOT_ULTIMO_ID = Math.max(MEGABOT_ULTIMO_ID, id);
 }
@@ -1466,7 +1553,10 @@ function abrirAsistente() {
     hilo.innerHTML = '';
     pintarMensajesNuevosDeMegaBot(hilo, r.mensajes || []);
     if (!(r.mensajes || []).length) {
-      hilo.innerHTML = '<p class="vacio__texto">Escribile a MegaBot lo que necesites.</p>';
+      // Con id propio: es lo único que `enviar` puede sacar del hilo.
+      // Ver la nota de ahí sobre por qué ya no se borra por clase.
+      hilo.innerHTML = '<p class="vacio__texto" id="megabot-vacio">' +
+        'Escríbele a MegaBot lo que necesites.</p>';
     }
     pintarUsoDeMegaBot(r.uso);
     entrada.focus();
@@ -1474,10 +1564,41 @@ function abrirAsistente() {
     hilo.innerHTML = '<p class="aviso-error">' + seguro(error.message) + '</p>';
   });
 
+  /* ⚡ UN ENVÍO A LA VEZ (2026-09-03)
+   *
+   * Ni el botón ni los chips se deshabilitaban mientras se mandaba, y
+   * `enviar` no tenía guardia de reentrada. Como el envío puede tardar
+   * hasta diez segundos —chat.php llama al webhook en línea—, lo normal
+   * era tocar de nuevo creyendo que no había pasado nada: dos POST, dos
+   * filas distintas en la base, dos burbujas que ningún deduplicador
+   * puede unir porque legítimamente son dos mensajes.
+   *
+   * En las capturas se ve exactamente eso: "¿Qué vence hoy?" dos veces
+   * CON dos respuestas.
+   */
+  let mandando = false;
+
+  const bloquearEnvio = bloqueado => {
+    mandando = bloqueado;
+
+    const boton = buscar('#asistente-mandar', cuerpo);
+    if (boton) {
+      boton.disabled = bloqueado;
+      boton.textContent = bloqueado ? 'Enviando…' : 'Enviar';
+    }
+    // Los chips también: son el camino por el que más se toca dos veces.
+    buscarTodos('[data-megabot-chip]', cuerpo).forEach(chip => {
+      chip.disabled = bloqueado;
+    });
+  };
+
   const enviar = async textoCrudo => {
+    if (mandando) return;
+
     const texto = (textoCrudo || '').trim();
     if (!texto) return;
     entrada.value = '';
+    bloquearEnvio(true);
 
     // Optimista: se pinta ya, con un id temporal que nunca va a chocar
     // con uno real (los de la base son numéricos). El poll de abajo va
@@ -1485,10 +1606,23 @@ function abrirAsistente() {
     // (ver 36-optimista.js), simplificada porque acá no hace falta
     // deshacer nada si falla: el mensaje ya quedó guardado del lado
     // del servidor salvo que la red haya fallado de verdad.
-    if (hilo.querySelector('.vacio__texto')) hilo.innerHTML = '';
+    /* ⚡ SOLO SE BORRA EL ESTADO VACÍO, NO EL HILO (2026-09-03)
+       Acá decía `if (hilo.querySelector('.vacio__texto')) hilo.innerHTML = ''`.
+       Pero `.vacio__texto` no es solo el cartel de "todavía no hay
+       nada": lo usan también las propuestas ya resueltas, su detalle y
+       las sugerencias offline. O sea que si el hilo tenía UNA propuesta,
+       el siguiente mensaje borraba la conversación entera — y como
+       MEGABOT_ULTIMO_ID no se reinicia, esos mensajes no volvían nunca
+       más. Ahora se quita el cartel, que es lo único que sobra. */
+    const cartelDeVacio = hilo.querySelector('#megabot-vacio');
+    if (cartelDeVacio) cartelDeVacio.remove();
+
     const idLocal = 'local-' + Date.now();
     pintarMensajesNuevosDeMegaBot(hilo, [{
       id: idLocal, rol: 'lucila', texto: texto, estado: 'enviado', propuestas: [],
+      // La marca que permite reconciliarla con su fila real cuando
+      // llegue, gane el poll o gane la respuesta del envío.
+      optimista: true,
     }]);
 
     // Hay respuesta en camino: el poll pasa al ritmo rápido (y se
@@ -1516,12 +1650,42 @@ function abrirAsistente() {
       if (r && r.id) adoptarIdRealDeBurbuja(hilo, idLocal, r.id);
       if (r && (r.offline || r._offline)) await resolverMegaBotOffline(hilo, texto);
     } catch (error) {
+      /* ⚡ UN 429 NO ES "SIN CONEXIÓN" (2026-09-03). El servidor tiene
+         un techo de peticiones por IP, y el poll del chat consume de
+         ahí. Al pasarse, la respuesta es 429 — el servidor contestó
+         perfectamente, solo que dijo "más despacio". Reportarlo como
+         falta de señal manda a buscar el problema al lugar equivocado,
+         y encima el mensaje no queda en la base, así que reintentar SÍ
+         sirve. */
+      if (error && error.codigo === 429) {
+        avisar('Demasiadas peticiones seguidas. Espera unos segundos y ' +
+               'vuelve a intentarlo.', true);
+        quitarEscribiendoDeMegaBot(hilo);
+
+        /* El mensaje NO llegó a guardarse, así que su burbuja optimista
+           no tiene fila real que la adopte nunca: quedaría ahí para
+           siempre, indistinguible de un mensaje mandado. Se retira y se
+           devuelve el texto al campo, listo para reintentar sin volver
+           a escribirlo. */
+        const huerfana = hilo.querySelector('[data-mensaje-id="' + idLocal + '"]');
+        if (huerfana) huerfana.remove();
+        entrada.value = texto;
+
+        return;
+      }
+
       // Sin red ni para llegar a chat.php: mandar() tira acá, así que
       // nunca llega el offline:true de arriba. Es exactamente el caso
       // sin señal que 40-44/46 tienen que resolver — no basta con
       // avisar el error y dejar el hilo mudo.
       avisar(error.message, true);
       await resolverMegaBotOffline(hilo, texto);
+    } finally {
+      /* Se libera cuando el mensaje ESTÁ MANDADO, no cuando llega la
+         respuesta: ya se puede escribir el siguiente. Lo que evita el
+         bloqueo es el doble toque por impaciencia durante el envío, no
+         seguir conversando. */
+      bloquearEnvio(false);
     }
 
     /* Los puntitos NO se quitan acá. `enviar` termina cuando el
@@ -1577,6 +1741,11 @@ function abrirAsistente() {
    *   · se apaga tras 5 minutos sin novedad, y vuelve al escribir.
    *
    * Con eso, esos mismos diez minutos pasan de ~300 peticiones a ~40. */
+  /* Cada apertura del chat se lleva un número. Es lo que permite que
+     una closure de una apertura anterior sepa que ya no manda y se
+     retire sin tocar nada — ver la nota grande en `consultar`. */
+  const miGeneracion = ++MEGABOT_GENERACION;
+
   const POLL_RAPIDO_MS   = 2000;
   const POLL_REPOSO_MS   = 15000;
   const APAGAR_TRAS_MS   = 300000;   // 5 minutos sin nada nuevo
@@ -1592,13 +1761,37 @@ function abrirAsistente() {
   };
 
   const consultar = async () => {
+    /* ⚡ UNA CLOSURE VIEJA NO PUEDE APAGAR EL CHAT NUEVO (2026-09-03)
+     *
+     * Acá se hacía `clearTimeout(MEGABOT_INTERVALO)` y
+     * `MEGABOT_ESPERAR_RESPUESTA = null` a secas. Esas dos son globales
+     * de módulo, pero `hilo` y `consultar` son de la closure de cada
+     * apertura del chat.
+     *
+     * El caso real: se cierra la hoja con una consulta en vuelo y se
+     * vuelve a abrir enseguida. Cuando la consulta vieja despierta, ve
+     * su propio hilo desprendido y "limpia" — pero para entonces
+     * MEGABOT_INTERVALO ya es el temporizador de la hoja NUEVA. La
+     * apaga, y de paso deja MEGABOT_ESPERAR_RESPUESTA en null, con lo
+     * cual el chat nuevo queda sin poll y sin forma de reencenderlo:
+     * mudo para siempre, con los puntitos girando.
+     *
+     * `resolverMegaBotOffline` llama a `cerrarHoja(true)` en medio del
+     * flujo, así que este escenario no es teórico.
+     *
+     * La marca de generación lo resuelve: solo el poll vigente puede
+     * tocar las globales. */
     if (!document.body.contains(hilo)) {
-      // La hoja se cerró: el poll se apaga solo, sin dejar nada vivo.
-      if (MEGABOT_INTERVALO) clearTimeout(MEGABOT_INTERVALO);
-      MEGABOT_INTERVALO = null;
-      MEGABOT_ESPERAR_RESPUESTA = null;
+      if (MEGABOT_GENERACION === miGeneracion) {
+        if (MEGABOT_INTERVALO) clearTimeout(MEGABOT_INTERVALO);
+        MEGABOT_INTERVALO = null;
+        MEGABOT_ESPERAR_RESPUESTA = null;
+      }
       return;
     }
+
+    // Quedó una closure de una apertura anterior: se retira en silencio.
+    if (MEGABOT_GENERACION !== miGeneracion) return;
 
     /* Con la pestaña en segundo plano no se pregunta nada: el chat no se
        está mirando, y gastar cuota ahí es exactamente lo que dejaba sin
@@ -1608,20 +1801,38 @@ function abrirAsistente() {
     let huboNovedad = false;
     try {
       const r = await traer('chat.php?accion=listar&despues_de=' + MEGABOT_ULTIMO_ID);
+      const llegaron = r.mensajes || [];
 
-      const cuantos = (r.mensajes || []).length;
-      huboNovedad = cuantos > 0;
+      /* ⚡ EL ECO DEL PROPIO MENSAJE NO ES UNA RESPUESTA (2026-09-03)
+       * `listar` no filtra por rol: devuelve también la fila de Lucila
+       * que se acaba de guardar. Antes eso contaba como novedad, y con
+       * eso se apagaban los puntitos y el poll volvía a 15 s AUNQUE
+       * MegaBot no hubiera contestado todavía. La espera de verdad
+       * quedaba sin señal y a ritmo lento — y si MegaBot tardaba más de
+       * cinco minutos, el poll se apagaba del todo.
+       *
+       * Novedad es que conteste ALGUIEN MÁS. La fila propia se pinta
+       * igual (o se reconcilia con su burbuja optimista), solo que no
+       * cuenta como respuesta. */
+      const respuestas = llegaron.filter(m => m.rol !== 'lucila');
+      huboNovedad = respuestas.length > 0;
 
       // Llegó la respuesta: los puntitos se van justo antes de que
       // aparezca la burbuja de verdad, no después.
       if (huboNovedad) quitarEscribiendoDeMegaBot(hilo);
 
-      pintarMensajesNuevosDeMegaBot(hilo, r.mensajes || []);
+      pintarMensajesNuevosDeMegaBot(hilo, llegaron);
       pintarUsoDeMegaBot(r.uso);
 
       // Llegó lo que se esperaba: se vuelve al ritmo de reposo.
       if (huboNovedad) {
         esperandoRespuesta = false;
+        ultimaNovedad = Date.now();
+      } else if (llegaron.length) {
+        /* Solo llegó el eco. No es una respuesta, pero sí prueba de que
+           el hilo está vivo: se corre el reloj del apagado por
+           inactividad para no dejar de escuchar justo mientras MegaBot
+           está pensando. */
         ultimaNovedad = Date.now();
       }
     } catch (error) {
@@ -1636,7 +1847,16 @@ function abrirAsistente() {
       return;
     }
 
-    programarPoll(esperandoRespuesta ? POLL_RAPIDO_MS : POLL_REPOSO_MS);
+    /* El ritmo rápido tiene tope. Preguntar cada 2 s está bien para los
+       segundos en que la respuesta está por llegar; sostenerlo cinco
+       minutos contra un MegaBot que no va a contestar son 150
+       peticiones tiradas, de una cuota que comparte con el resto del
+       panel. Pasado el minuto se baja a reposo sin dejar de escuchar. */
+    const esperaLarga = Date.now() - ultimaNovedad > 60000;
+
+    programarPoll(esperandoRespuesta && !esperaLarga
+      ? POLL_RAPIDO_MS
+      : POLL_REPOSO_MS);
   };
 
   /* setTimeout encadenado y no setInterval: con setInterval, una
