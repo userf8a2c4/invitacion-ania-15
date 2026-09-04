@@ -158,6 +158,15 @@ function irA(cual, recargar, desdeElHistorial) {
   }
   VISTA_ENTRO_EN = Date.now();
 
+  /* Lo que una pantalla deja a medias no puede seguirla a la siguiente.
+     Por ahora solo Gente tiene un estado así (el modo selección); si
+     aparece otro, va acá, que es el único lugar por donde se cambia de
+     vista. Ver olvidarSeleccionDeGente() en 08-vista-invitados.js. */
+  if (VISTA_ACTUAL === 'invitados' && cual !== 'invitados' &&
+      typeof olvidarSeleccionDeGente === 'function') {
+    olvidarSeleccionDeGente();
+  }
+
   VISTA_ACTUAL = cual;
 
   // Mover la clase "activa" en las secciones.

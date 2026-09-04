@@ -122,6 +122,19 @@ function arrancarLaApp() {
   prepararGuardadoParaLaSesion().then(() => {
     actualizarBannerConexion();
     sincronizarCola();
+
+    /* Limpia los rechazos de telemetría que quedaron guardados de antes
+       (ver purgarRechazosDeTelemetria en 26-sincronizacion.js). Si sacó
+       alguno, se repinta la burbuja: si no, la campana seguiría
+       mostrando un número que ya no corresponde a nada hasta el
+       próximo motivo para actualizarla. */
+    if (typeof purgarRechazosDeTelemetria === 'function') {
+      purgarRechazosDeTelemetria().then(cuantos => {
+        if (cuantos && typeof actualizarBurbujaCampana === 'function') {
+          actualizarBurbujaCampana();
+        }
+      });
+    }
   });
 
   // F1: refresca sola la vista que se esté mirando cada 60-120s con

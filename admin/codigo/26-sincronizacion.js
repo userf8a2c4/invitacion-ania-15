@@ -461,6 +461,43 @@ function borrarRechazado(id) {
 }
 
 /**
+ * Saca de la bandeja los rechazos que nunca debieron llegar ahí.
+ *
+ * POR QUÉ EXISTE (2026-09-04)
+ * La telemetría viajaba en la cola de escrituras. Un rato sin señal
+ * acumulaba decenas de eventos; al volver la conexión se mandaban todos
+ * de golpe, chocaban contra el techo de peticiones del servidor y
+ * volvían con 429 — y cada rechazo se apartaba en "Cambios que el
+ * servidor rechazó", que es la bandeja donde Lucila tiene que ver los
+ * cambios de VERDAD que se perdieron.
+ *
+ * Eso ya está arreglado en el origen (registrarEvento() usa ahora
+ * mandarSinCola), pero los que YA se guardaron siguen ahí: una lista de
+ * "metricas.php?accion=registrar · Demasiadas peticiones seguidas" que
+ * no le dice nada a nadie y que hay que descartar de a una tocando la X
+ * veinte veces. Esto los saca solos, una vez, al arrancar.
+ *
+ * Solo `metricas.php`: cualquier otro rechazo es un cambio real que
+ * alguien tiene que ver, y borrarlo automáticamente sería justo el tipo
+ * de pérdida silenciosa que esta bandeja existe para evitar.
+ *
+ * @returns {Promise<number>} Cuántos se descartaron.
+ */
+async function purgarRechazosDeTelemetria() {
+  try {
+    const todos = await conAlmacen('rechazados', 'readonly', store => store.getAll());
+    const basura = todos.filter(i => String(i.ruta || '').startsWith('metricas.php'));
+
+    for (const item of basura) await borrarRechazado(item.id);
+
+    return basura.length;
+  } catch (error) {
+    // Que no se pueda limpiar no puede impedir arrancar.
+    return 0;
+  }
+}
+
+/**
  * Cuántos cambios están esperando.
  *
  * @returns {Promise<number>}
@@ -727,6 +764,24 @@ const RUTAS_A_PRECALENTAR = [
     casi juntos, por ejemplo). */
 let _precalentando = false;
 
+/** Cuándo terminó el último. Ver ENFRIAMIENTO_DE_PRECALENTADO. */
+let _precalentadoEn = 0;
+
+/* ⚠️ ENFRIAMIENTO ENTRE PRECALENTADOS (2026-09-04)
+
+   anotarSiLlego() dispara precalentarCopias() en cada transición "no
+   llegaba → llegó". Con el wifi de un salón, que parpadea, esa
+   transición pasa cada pocos segundos: nueve GET cada vez. El techo del
+   hosting es de 300 peticiones cada 5 minutos POR IP y lo comparte todo
+   el equipo, así que el propio mecanismo que existe para sobrevivir a
+   la mala señal era el que agotaba la cuota justo cuando la señal
+   estaba mal.
+
+   La bandera _precalentando solo evitaba que se pisaran; dos corridas
+   SEGUIDAS pasaban igual. Cinco minutos es más que suficiente: lo que
+   se precalienta cambia en horas, no en segundos. */
+const ENFRIAMIENTO_DE_PRECALENTADO = 5 * 60 * 1000;
+
 /**
  * Pide en segundo plano las rutas de RUTAS_A_PRECALENTAR, una por una,
  * para que queden guardadas por si se pierde la señal. No bloquea nada,
@@ -736,6 +791,7 @@ let _precalentando = false;
  */
 async function precalentarCopias() {
   if (_precalentando || SIN_LLEGADA) return;
+  if (Date.now() - _precalentadoEn < ENFRIAMIENTO_DE_PRECALENTADO) return;
   _precalentando = true;
 
   try {
@@ -754,6 +810,10 @@ async function precalentarCopias() {
     }
   } finally {
     _precalentando = false;
+    // Se anota al TERMINAR, no al empezar: si la tanda tardó dos
+    // minutos por la red, el enfriamiento tiene que contar desde el
+    // final, que es cuando de verdad dejó de gastar peticiones.
+    _precalentadoEn = Date.now();
   }
 }
 

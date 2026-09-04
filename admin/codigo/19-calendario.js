@@ -381,11 +381,19 @@ function abrirFichaDelHito(destino, seccion, tipo, id) {
     SECCION_DINERO = seccion || 'pagos';
     irA('dinero', true);
 
-    // Se espera a que la vista termine de cargar antes de abrir la ficha.
-    setTimeout(() => {
-      const pago = (DINERO && DINERO.pagos || []).find(p => Number(p.id) === id);
-      if (pago) formularioPago(pago);
-    }, 700);
+    /* Se espera a que la vista termine de cargar antes de abrir la
+       ficha. Antes eran 700 ms fijos: con la red del salón, a los
+       700 ms DINERO seguía en null y no pasaba NADA — ni la ficha ni un
+       error. Ahora se espera al dato, y si no llega se dice. */
+    alTenerLosDatos(
+      () => DINERO && DINERO.pagos,
+      () => {
+        const pago = DINERO.pagos.find(p => Number(p.id) === id);
+        if (pago) formularioPago(pago);
+        else avisar('Ese pago ya no está en la lista.', true);
+      },
+      'la lista de pagos'
+    );
     return;
   }
 
@@ -393,25 +401,34 @@ function abrirFichaDelHito(destino, seccion, tipo, id) {
     SECCION_EVENTO = seccion || 'tareas';
     irA('evento', true);
 
-    setTimeout(() => {
-      // Las tareas y la agenda viven en el planificador; el resto, en
-      // la tabla genérica de la vista Evento.
-      if (seccion === 'tareas') {
-        const t = (PLAN.tareas || []).find(x => Number(x.id) === id);
-        if (t) formularioTarea(t);
-        return;
-      }
-      if (seccion === 'agenda') {
-        const a = (PLAN.agenda || []).find(x => Number(x.id) === id);
-        if (a) formularioCita(a);
-        return;
-      }
-      if (seccion === 'ceremonia') { formularioCeremonia(); return; }
+    // Mismo motivo que arriba: se espera al dato, no al reloj.
+    if (seccion === 'tareas' || seccion === 'agenda') {
+      // Las tareas y la agenda viven en el planificador.
+      const cual = seccion === 'tareas' ? 'tareas' : 'agenda';
+      alTenerLosDatos(
+        () => PLAN && PLAN[cual] && PLAN[cual].length,
+        () => {
+          const fila = PLAN[cual].find(x => Number(x.id) === id);
+          if (!fila) { avisar('Eso ya no está en la lista.', true); return; }
+          if (cual === 'tareas') formularioTarea(fila);
+          else                   formularioCita(fila);
+        },
+        cual === 'tareas' ? 'las tareas' : 'la agenda'
+      );
+      return;
+    }
 
-      const lista = (EVENTO && EVENTO[seccion]) || [];
-      const fila = lista.find(x => Number(x.id) === id);
-      if (fila) formularioEvento(seccion, fila);
-    }, 700);
+    if (seccion === 'ceremonia') { formularioCeremonia(); return; }
+
+    alTenerLosDatos(
+      () => EVENTO && EVENTO[seccion],
+      () => {
+        const fila = EVENTO[seccion].find(x => Number(x.id) === id);
+        if (fila) formularioEvento(seccion, fila);
+        else avisar('Eso ya no está en la lista.', true);
+      },
+      'los datos del evento'
+    );
   }
 }
 
@@ -450,7 +467,15 @@ function agregarEnEseDia(fecha) {
       if (que === 'pago') {
         SECCION_DINERO = 'pagos';
         irA('dinero', true);
-        setTimeout(() => formularioPago({ fecha_limite: fecha }), 700);
+        /* formularioPago() lee DINERO.gastos apenas abre. Esperar 700 ms
+           y confiar alcanzaba con buena red y no con la del salón: ahí
+           DINERO todavía era null y el formulario no abría, sin decir
+           nada. Ver alTenerLosDatos() en 06-piezas.js. */
+        alTenerLosDatos(
+          () => DINERO && DINERO.gastos,
+          () => formularioPago({ fecha_limite: fecha }),
+          'la lista de gastos'
+        );
       }
     });
   });

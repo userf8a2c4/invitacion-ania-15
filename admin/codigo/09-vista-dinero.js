@@ -3121,8 +3121,13 @@ async function abrirListaDeDocumentos(tipo, proveedor) {
         id: 'doc-filtro-proveedor',
         rotulo: 'Filtrar por proveedor',
         valor: '',
+        // (DINERO && ...) y no (DINERO.proveedores || []): el `|| []`
+        // cubre que falte la propiedad, no que DINERO entero sea null —
+        // que es lo que pasa si se llega acá desde el FAB antes de que
+        // Dinero termine de cargar. Misma clase de fallo que los saltos
+        // de 16-contactos.js.
         opciones: [{ valor: '', texto: 'Todos los proveedores' }].concat(
-          (DINERO.proveedores || []).map(p => ({ valor: p.id, texto: p.nombre }))
+          ((DINERO && DINERO.proveedores) || []).map(p => ({ valor: p.id, texto: p.nombre }))
         ),
       })
     : '';

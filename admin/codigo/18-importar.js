@@ -242,6 +242,11 @@ function leerCotizacionesPegadas(filas) {
   return salida;
 }
 
+/** Los números chicos que se leyeron como precio en la tanda actual.
+    Puede que sean cantidades ("6 horas") y no pesos: se avisa en la
+    vista previa en vez de convertirlos en 0 por las dudas. */
+let NUMEROS_SOSPECHOSOS = [];
+
 /**
  * Saca un precio de una celda como "$880 pp" o "620.0".
  *
@@ -253,8 +258,22 @@ function sacarNumero(celda) {
   const limpio = texto.replace(/[^\d.,]/g, '').replace(/,/g, '');
 
   const numero = parseFloat(limpio);
-  // Los números chiquitos suelen ser cantidades ("6 horas"), no precios.
-  return (isFinite(numero) && numero >= 50) ? numero : 0;
+  if (!isFinite(numero) || numero <= 0) return 0;
+
+  /* ⚠️ YA NO SE TIRA EL NÚMERO, SE AVISA (2026-09-04).
+     Acá había un `numero >= 50 ? numero : 0`: todo precio menor a 50 se
+     convertía en 0 EN SILENCIO. La intención era buena —en una planilla
+     de cotizaciones un "6" suele ser "6 horas" y no seis pesos— pero el
+     efecto era que una cotización de $40 por servilleta entraba como
+     gratis, y quedaba así en el presupuesto sin que nada lo dijera.
+
+     Ahora el número se conserva y se anota qué se dudó. Quien pega la
+     planilla ve la vista previa antes de confirmar (ver
+     analizarLoPegado): con el aviso puede corregirlo ahí; con el 0
+     silencioso no tenía cómo enterarse. */
+  if (numero < 50) NUMEROS_SOSPECHOSOS.push(numero);
+
+  return numero;
 }
 
 /**
@@ -278,6 +297,8 @@ async function analizarLoPegado(cuerpo) {
   // Las cotizaciones se interpretan en el teléfono: ver el comentario
   // de leerCotizacionesPegadas().
   if (QUE_SE_IMPORTA === 'cotizaciones') {
+    // Se vacía antes de leer: el aviso tiene que ser de ESTA tanda.
+    NUMEROS_SOSPECHOSOS = [];
     pintarPreviaDeCotizaciones(donde, cuerpo, leerCotizacionesPegadas(filas));
     return;
   }
@@ -461,7 +482,20 @@ function pintarPreviaDeCotizaciones(donde, cuerpo, encontradas) {
     return;
   }
 
+  /* Los números chicos que se leyeron como precio. Antes se convertían
+     en 0 en silencio y una cotización de $40 entraba como gratis; ahora
+     se muestran acá, que es el único momento en que se pueden corregir
+     antes de que queden guardados. Ver sacarNumero(). */
+  const dudosos = NUMEROS_SOSPECHOSOS.length
+    ? '<p class="aviso-error" style="margin-bottom:var(--esp-2)">' +
+        'Ojo con ' + seguro(NUMEROS_SOSPECHOSOS.join(', ')) + ': son ' +
+        'números muy chicos para ser precios. Si en la planilla eran ' +
+        'cantidades («6 horas») y no pesos, corrígelos antes de guardar.' +
+      '</p>'
+    : '';
+
   donde.innerHTML =
+    dudosos +
     '<div class="rejilla-datos">' +
       tarjetaDato(encontradas.length, 'Encontradas') +
     '</div>' +

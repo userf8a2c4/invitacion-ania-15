@@ -203,7 +203,21 @@ registrarAgente('mesas', 'Mesas', async () => {
   } else if (sinSentar.length >= UMBRAL_ACOMODO_COMPLETO) {
     let vista = null;
     try {
-      vista = await mandar('mesas.php?accion=vista_previa', {});
+      /* ⚠️ mandarSinCola() Y NO mandar() (2026-09-04).
+         `vista_previa` es un cálculo de SOLO LECTURA —dice qué pasaría
+         si se acomodara, sin tocar nada— pero viaja por POST porque
+         manda parámetros. Con mandar(), sin señal se guardaba en la
+         cola de escrituras pendientes JUNTO A LOS PAGOS y los
+         invitados: al volver la conexión se mandaba una consulta vieja
+         que ya no significaba nada, y si el servidor la rechazaba
+         aparecía en "Cambios que el servidor rechazó", la bandeja donde
+         Lucila tiene que ver lo que se perdió DE VERDAD.
+
+         Y esto corre en el arranque, sin que nadie lo pida: es el mismo
+         patrón que ya se le arregló a la telemetría. Sin cola, la falta
+         de señal falla y ya está — que es lo correcto para una
+         pregunta. */
+      vista = await mandarSinCola('mesas.php?accion=vista_previa', {});
     } catch (error) {
       vista = null;
     }
