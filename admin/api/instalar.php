@@ -124,6 +124,12 @@ $agregarColumna('invitaciones', 'veces_respondida', 'INT NOT NULL DEFAULT 0');
 // Fijar una asignación de mesa para que la autoasignación no la toque.
 $agregarColumna('asignacion_mesas', 'fijada', 'TINYINT(1) NOT NULL DEFAULT 0');
 
+/* El punto en el mapa de una dirección de entrega. Van aparte del CREATE
+   TABLE porque una instalación que ya tenga la tabla no recibiría las
+   columnas de otra forma. */
+$agregarColumna('direcciones_entrega', 'lat', 'DECIMAL(10,7) NULL');
+$agregarColumna('direcciones_entrega', 'lng', 'DECIMAL(10,7) NULL');
+
 // Precio por persona en las cotizaciones, para poder compararlas.
 $agregarColumna('cotizaciones', 'tipo_precio',
                 "ENUM('por_persona','fijo') NOT NULL DEFAULT 'fijo'");

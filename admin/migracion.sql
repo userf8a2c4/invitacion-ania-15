@@ -1306,6 +1306,13 @@ CREATE TABLE IF NOT EXISTS direcciones_entrega (
   -- una referencia útil nunca entra en un campo con forma.
   referencias       TEXT,
   telefono_contacto VARCHAR(40) NOT NULL DEFAULT '',
+  -- El punto exacto en el mapa, puesto con un pin arrastrable. Va JUNTO
+  -- a la direccion escrita, no en vez de ella: la escrita es la que lee
+  -- una persona, y el punto es el que sirve para llegar. Una colonia mal
+  -- escrita se entiende igual; un punto mal puesto, no.
+  -- NULL cuando todavia no se marco: no hay coordenada "vacia" que sirva.
+  lat               DECIMAL(10,7) NULL,
+  lng               DECIMAL(10,7) NULL,
   es_predeterminada TINYINT(1) NOT NULL DEFAULT 0,
   activa            TINYINT(1) NOT NULL DEFAULT 1,
   creado_en         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
