@@ -276,6 +276,62 @@ async function consultarPase(codigo, donde) {
  * @param {Element} donde
  * @returns {void}
  */
+/**
+ * «Mesa 3 · Ana, Luis» por cada mesa donde caiga alguien del grupo.
+ *
+ * CUÁNDO SE MUESTRA, Y CUÁNDO NO
+ * Solo cuando AGREGA algo. Si todos van a la misma mesa que ya dice la
+ * etiqueta grande de arriba, esto sería repetir lo mismo dos veces — y
+ * en la puerta, con gente esperando, cada línea de más cuesta.
+ *
+ * Aparece justamente en el caso en que la etiqueta grande se queda
+ * corta: cuando alguien del grupo fue movido a otra mesa por su cuenta.
+ *
+ * Los lugares sin nombre cargado no se listan como «Adulto 2»: se
+ * cuentan al final de su mesa («y 2 más»). Un nombre de relleno en la
+ * puerta no ayuda a nadie a sentarse.
+ *
+ * @param {Object} datos - Lo que devuelve llegadas.php.
+ * @returns {string} HTML, o cadena vacía si no hay nada que agregar.
+ */
+function quienVaAQueMesa(datos) {
+  const lugares = datos.lugares || [];
+  if (!lugares.length) return '';
+
+  const porMesa = new Map();
+
+  lugares.forEach(lugar => {
+    const mesa = String(lugar.mesa || '').trim();
+    if (!mesa) return;                     // sin mesa: no hay nada que decir
+
+    if (!porMesa.has(mesa)) porMesa.set(mesa, { nombres: [], sinNombre: 0 });
+
+    const grupo = porMesa.get(mesa);
+    const nombre = String(lugar.nombre || '').trim();
+    if (nombre) grupo.nombres.push(nombre);
+    else grupo.sinNombre++;
+  });
+
+  if (!porMesa.size) return '';
+
+  // Todos en la misma mesa, y es la que ya dice la etiqueta de arriba.
+  if (porMesa.size === 1 && porMesa.has(String(datos.mesa || '').trim())) return '';
+
+  const lineas = [];
+  porMesa.forEach((grupo, mesa) => {
+    const quienes = grupo.nombres.slice();
+    if (grupo.sinNombre) quienes.push('y ' + grupo.sinNombre + ' más');
+
+    lineas.push(
+      '<div style="margin-top:var(--gota)">' +
+        '<b>Mesa ' + seguro(mesa) + '</b> · ' + seguro(quienes.join(', ')) +
+      '</div>');
+  });
+
+  return '<div class="vacio__texto" style="margin-top:var(--esp-2);font-size:14px;' +
+              'text-align:left">' + lineas.join('') + '</div>';
+}
+
 function pintarTarjetaDeLaPuerta(datos, donde) {
   const gente = datos.adultos + datos.ninos;
   const tieneAlergia = datos.alergias &&
@@ -312,6 +368,9 @@ function pintarTarjetaDeLaPuerta(datos, donde) {
               (datos.mesa ? 'Mesa ' + seguro(datos.mesa) : 'Sin mesa asignada') +
           '</div>'
         : '') +
+
+      // Quién va a qué mesa, si no todos van a la misma.
+      (datos.asiste ? quienVaAQueMesa(datos) : '') +
 
       (tieneAlergia
         ? '<div class="etiqueta etiqueta--alerta" style="margin-top:var(--esp-2);' +

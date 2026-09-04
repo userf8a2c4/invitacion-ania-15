@@ -429,6 +429,11 @@ let TARJETA_EN_MEMORIA = null;
 /** La bajada en curso, para no pedirla dos veces. */
 let BAJANDO_LA_TARJETA = null;
 
+/** Si la bajada ya terminó y salió mal. Sirve para distinguir «todavía
+    no llegó» de «no va a llegar», que para quien manda son dos consejos
+    distintos: esperar un segundo, o avisar que algo está roto. */
+let LA_TARJETA_NO_SE_PUDO = false;
+
 /**
  * Deja la tarjeta lista para compartir.
  *
@@ -450,10 +455,12 @@ function precargarLaTarjeta() {
          compartir ninguno. */
       if (blob && blob.size > 0 && String(blob.type || '').indexOf('image/') === 0) {
         TARJETA_EN_MEMORIA = blob;
+      } else {
+        LA_TARJETA_NO_SE_PUDO = true;
       }
       return TARJETA_EN_MEMORIA;
     })
-    .catch(() => null);
+    .catch(() => { LA_TARJETA_NO_SE_PUDO = true; return null; });
 
   return BAJANDO_LA_TARJETA;
 }
@@ -468,18 +475,44 @@ function precargarLaTarjeta() {
  * @returns {File|null}
  */
 function tarjetaParaCompartir() {
-  if (!TARJETA_EN_MEMORIA) return null;
-  if (!navigator.share || !navigator.canShare) return null;
-  if (typeof File !== 'function') return null;
+  /* ⚡ DEVUELVE EL MOTIVO, NO SOLO `null` (2026-09-04)
+   *
+   * Antes esto contestaba null y se caía al texto EN SILENCIO. Desde
+   * afuera todo se veía igual —abre WhatsApp con el texto— pasara lo que
+   * pasara, así que llevábamos tres intentos sin saber cuál de los
+   * cuatro motivos era. Es el mismo callejón en el que estuvimos con la
+   * música, y se sale igual: haciendo que el código hable.
+   *
+   * Además de servir para arreglarlo, es mejor así para siempre: quien
+   * manda 51 invitaciones tiene derecho a saber que salió sin la imagen.
+   *
+   * @returns {{archivo: File}|{motivo: string}}
+   */
+  if (!navigator.share) {
+    return { motivo: 'este navegador no sabe compartir' };
+  }
+  if (!navigator.canShare || typeof File !== 'function') {
+    return { motivo: 'este navegador no sabe compartir archivos' };
+  }
+  if (!TARJETA_EN_MEMORIA) {
+    return LA_TARJETA_NO_SE_PUDO
+      ? { motivo: 'no se pudo bajar la tarjeta' }
+      : { motivo: 'la tarjeta todavía se está bajando, probá de nuevo' };
+  }
 
   try {
     const archivo = new File([TARJETA_EN_MEMORIA], 'invitacion-ania-xv.jpg',
                              { type: TARJETA_EN_MEMORIA.type || 'image/jpeg' });
+
     /* canShare() con `files` es la única forma honesta de saberlo: hay
        navegadores con navigator.share que no aceptan archivos. */
-    return navigator.canShare({ files: [archivo] }) ? archivo : null;
+    if (!navigator.canShare({ files: [archivo] })) {
+      return { motivo: 'este teléfono no acepta compartir la imagen' };
+    }
+    return { archivo: archivo };
   } catch (error) {
-    return null;
+    return { motivo: 'no se pudo preparar la imagen' +
+                     (error && error.name ? ' (' + error.name + ')' : '') };
   }
 }
 
@@ -515,9 +548,18 @@ function abrirElChatConElTexto(inv, texto) {
  */
 function mandarInvitacionPorWhatsApp(inv) {
   const texto = textoDeInvitacion(inv);
-  const archivo = tarjetaParaCompartir();
+  const intento = tarjetaParaCompartir();
 
-  if (!archivo) return Promise.resolve(abrirElChatConElTexto(inv, texto));
+  if (!intento.archivo) {
+    /* Se manda igual —el texto con el link es lo que no puede faltar—
+       pero se DICE que fue sin la imagen y por qué. Callarlo es lo que
+       nos tuvo tres rondas adivinando. */
+    const salio = abrirElChatConElTexto(inv, texto);
+    if (salio) avisar('Salió solo el texto, sin la tarjeta: ' + intento.motivo + '.', true);
+    return Promise.resolve(salio);
+  }
+
+  const archivo = intento.archivo;
 
   return navigator.share({ files: [archivo], text: texto })
     .then(() => true)

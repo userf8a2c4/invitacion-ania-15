@@ -260,6 +260,59 @@ function buscarConfirmacionPorCodigo($codigo) {
  * @param array $fila
  * @return array
  */
+/**
+ * Cada integrante del grupo con la mesa que le toca.
+ *
+ * POR QUÉ NO ALCANZA CON LA MESA DE LA FAMILIA
+ * El panel deja mover a UNA persona a otra mesa sin mover al resto
+ * (tabla `asignacion_mesas_persona`, ver mesas.php). Cuando eso pasa, la
+ * etiqueta grande de la tarjeta —que muestra la mesa de la familia—
+ * miente por omisión: dice «Mesa 3» mientras dos de los cuatro están en
+ * la 7. En la puerta eso es mandar gente al lugar equivocado.
+ *
+ * COALESCE, en ese orden y no al revés: la mesa PROPIA gana sobre la de
+ * la familia. Mover a alguien a mano es una decisión posterior y más
+ * específica que el acomodo del grupo.
+ *
+ * Las dos tablas tienen clave única (una mesa por confirmación, una por
+ * persona), así que estos LEFT JOIN no pueden multiplicar filas.
+ *
+ * Si a esta base le falta alguna de las tablas del acomodo, devuelve
+ * vacío y la tarjeta simplemente no muestra el detalle: la etiqueta
+ * grande sigue estando.
+ *
+ * @param int $confirmacionId
+ * @return array
+ */
+function lugaresDeLaPuerta($confirmacionId) {
+    foreach (['acompanantes', 'mesas', 'asignacion_mesas', 'asignacion_mesas_persona'] as $tabla) {
+        if (!existeTabla($tabla)) return [];
+    }
+
+    $filas = consultarTodo(
+        'SELECT a.nombre, COALESCE(mp.nombre, mf.nombre) AS mesa
+           FROM acompanantes a
+           LEFT JOIN asignacion_mesas_persona ap ON ap.acompanante_id = a.id
+           LEFT JOIN mesas mp                    ON mp.id = ap.mesa_id
+           LEFT JOIN asignacion_mesas af         ON af.confirmacion_id = a.confirmacion_id
+           LEFT JOIN mesas mf                    ON mf.id = af.mesa_id
+          WHERE a.confirmacion_id = :c
+          ORDER BY a.id',
+        [':c' => (int) $confirmacionId]
+    );
+
+    /* Solo nombre y mesa. Ni menús ni alergias por persona: la entrada es
+       el cuello de botella de la noche y la tarjeta ya trae el total, las
+       alergias del grupo y los menús. Un dato más por persona, y nada
+       más. */
+    return array_map(function ($f) {
+        return [
+            'nombre' => (string) ($f['nombre'] ?? ''),
+            'mesa'   => (string) ($f['mesa'] ?? ''),
+        ];
+    }, $filas);
+}
+
 function datosParaLaPuerta($fila) {
     return [
         'confirmacion_id' => (int) $fila['id'],
@@ -274,6 +327,8 @@ function datosParaLaPuerta($fila) {
            preguntan; los menús sirven para avisarle a la cocina de una
            en la puerta, y son dato viejo apenas se sientan. */
         'mesa'            => $fila['mesa'] ?? '',
+        // Quién va a qué mesa, cuando no todos van a la misma.
+        'lugares'         => lugaresDeLaPuerta((int) $fila['id']),
         'resumen_menus'   => $fila['resumen_menus'] ?? '',
         'ya_llego'        => !empty($fila['llegada_en']),
         'llegada_en'      => $fila['llegada_en'] ?? null,
