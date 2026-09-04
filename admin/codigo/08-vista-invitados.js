@@ -1019,15 +1019,24 @@ function abrirDetalleDeInvitado(id) {
   if (tieneInvitacion) {
     const botonWhatsapp = buscar('#inv-whatsapp', cuerpo);
     if (botonWhatsapp) {
+      /* precargarLaTarjeta() y mandarInvitacionPorWhatsApp() viven en
+         48-invitaciones.js (mismo scope global), igual que
+         textoDeInvitacion() — mismo texto y misma imagen que manda la
+         pantalla de Invitaciones. La imagen se baja acá, al abrir la
+         ficha, no dentro del click. */
+      precargarLaTarjeta();
       botonWhatsapp.addEventListener('click', () => {
-        // textoDeInvitacion() vive en 48-invitaciones.js (mismo scope
-        // global) — mismo texto que mandaba la extinta pestaña Envíos.
-        const texto = textoDeInvitacion({
-          nombre: fila.nombre, pases: fila.invitacion_pases, link: fila.invitacion_link,
+        mandarInvitacionPorWhatsApp({
+          nombre: fila.nombre,
+          pases: fila.invitacion_pases,
+          link: fila.invitacion_link,
+          telefono: fila.invitacion_telefono,
+        }).then(seMando => {
+          // Si cancelaron, no se mandó nada: no se marca como enviada.
+          if (!seMando) return;
+          mandar('invitaciones.php?accion=marcar_enviada',
+                 { id: fila.invitacion_id }).catch(() => {});
         });
-        const numero = paraWhatsApp(fila.invitacion_telefono);
-        window.open('https://wa.me/' + numero + '?text=' + encodeURIComponent(texto), '_blank');
-        mandar('invitaciones.php?accion=marcar_enviada', { id: fila.invitacion_id }).catch(() => {});
       });
     }
 
@@ -1392,23 +1401,30 @@ async function recordarEnLote() {
     '</button>'
   ).join('');
 
+  // La tarjeta, una sola vez para toda la lista. Ver 48-invitaciones.js.
+  precargarLaTarjeta();
+
   buscarTodos('[data-recordar]', lista).forEach(boton => {
     boton.addEventListener('click', () => {
       const fila = conWhatsApp.find(f => Number(f.id) === Number(boton.dataset.recordar));
       if (!fila) return;
 
-      const texto = textoDeInvitacion({
-        nombre: fila.nombre, pases: fila.invitacion_pases, link: fila.invitacion_link,
+      mandarInvitacionPorWhatsApp({
+        nombre: fila.nombre,
+        pases: fila.invitacion_pases,
+        link: fila.invitacion_link,
+        telefono: fila.invitacion_telefono,
+      }).then(seMando => {
+        // La palomita miente si la persona canceló la hoja de compartir.
+        if (!seMando) return;
+
+        mandar('invitaciones.php?accion=marcar_enviada',
+               { id: fila.invitacion_id }).catch(() => {});
+
+        const marca = buscar('[data-marca="' + fila.id + '"]', lista);
+        if (marca) marca.textContent = '✓';
+        boton.style.opacity = '.5';
       });
-      window.open('https://wa.me/' + paraWhatsApp(fila.invitacion_telefono) +
-                  '?text=' + encodeURIComponent(texto), '_blank');
-
-      mandar('invitaciones.php?accion=marcar_enviada',
-             { id: fila.invitacion_id }).catch(() => {});
-
-      const marca = buscar('[data-marca="' + fila.id + '"]', lista);
-      if (marca) marca.textContent = '✓';
-      boton.style.opacity = '.5';
     });
   });
 

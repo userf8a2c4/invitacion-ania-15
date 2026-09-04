@@ -9,6 +9,19 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
+    # 2026-09-04 - Por que esta esta variable
+    # GitHub dejo de correr estas acciones en Node 20 y las fuerza a Node 24
+    # (aviso del 2025-09-19). El despliegue funciono durante meses sin que se
+    # tocara una linea del FTP, y empezo a cortarse al CONECTAR con
+    # "Timeout (control socket)". Esto las devuelve a Node 20, que es para lo
+    # que fueron escritas.
+    #
+    # Es TEMPORAL: cuando actions/checkout y FTP-Deploy-Action publiquen
+    # versiones que soporten Node 24, se actualizan y esta linea se saca.
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,6 +34,8 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./
           server-dir: /
+          # Por defecto son 30 s y el fallo llego justo en ese limite (31 s).
+          timeout: 60000
           exclude: |
             **/.git*
             **/.git*/**

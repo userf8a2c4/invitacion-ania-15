@@ -142,33 +142,76 @@
 })();
 
 
-/* ═══ 2. APARICIÓN DE LAS SECCIONES ═══════════════════════════════════ */
+/* ═══ 2. APARICIÓN DE LAS SECCIONES ═══════════════════════════ */
 (function preparaLaAparicionDeLasSecciones() {
 
   const elementosQueAparecen = buscarTodos('.revelar');
   if (elementosQueAparecen.length === 0) return;
 
-  /* ⚡ RECIÉN ACÁ SE ESCONDE LO QUE VA A APARECER (2026-09-03)
+  /* ⚡ EL QUE ESCONDE ES EL QUE MUESTRA (2026-09-04)
    *
-   * El CSS ya no arranca con `opacity: 0`: si este archivo no bajara,
-   * diez bloques de la invitación —el formulario de confirmar incluido—
-   * quedaban invisibles para siempre, en una página que se ve cargada.
+   * Diez bloques de la invitación llevan `.revelar`, y entre ellos está
+   * el FORMULARIO DE CONFIRMAR. Si alguno queda invisible, la invitada no
+   * ve un error: ve una página cargada y vacía, y no tiene motivo para
+   * recargar. Es el peor fallo posible de esta web, y ya ocurrió dos
+   * veces por dos motivos distintos.
    *
-   * La clase se pone acá, cuando ya está garantizado que hay quien la
-   * saque. Y se pone ANTES de observar, en la misma tarea, para que no
-   * haya un parpadeo de contenido visible.
+   * La segunda vez fue así, en el teléfono de una invitada real: el CSS
+   * escondía con `.revelar { opacity: 0 }` y este archivo desescondía
+   * solo si el <html> tenía una clase que ESE CSS no conocía — porque el
+   * CSS va empaquetado dentro de index.html y el paquete no se había
+   * regenerado. Con las animaciones apagadas este módulo ni siquiera
+   * arrancaba, así que al encenderlas desde el botón se caía la única
+   * regla que las mantenía visibles y no quedaba nadie para mostrarlas.
+   * Media invitación en blanco, sin vuelta atrás salvo recargar.
    *
-   * Si el navegador no tiene IntersectionObserver (muy viejo), no se
-   * esconde nada y se ve todo de una: sin animación, pero completo. */
+   * DE AHÍ LAS DOS REGLAS QUE SIGUE ESTE BLOQUE, Y QUE NO HAY QUE ROMPER:
+   *
+   *   1. ESCONDE ESTE CÓDIGO, NO EL CSS. El `opacity: 0` se pone como
+   *      estilo del propio elemento, acá, una línea antes de empezar a
+   *      vigilarlo. Ya no hay un contrato entre dos archivos que se
+   *      despliegan por caminos distintos y pueden desfasarse: si este
+   *      archivo no baja, no esconde — se pierde la animación, nunca el
+   *      contenido.
+   *
+   *   2. EL OBSERVADOR SE CREA SIEMPRE. Antes, con menos movimiento
+   *      pedido, este módulo se iba antes de crearlo. Ahora se crea igual
+   *      y lo único que cambia es si se esconde o no: así nunca existe un
+   *      elemento escondido sin nadie que pueda mostrarlo.
+   *
+   * Si el navegador es tan viejo que no tiene IntersectionObserver, no se
+   * esconde nada y se ve todo de una: sin animación, pero completo.
+   */
   if (!('IntersectionObserver' in window)) return;
 
-  /* Quien pidió menos movimiento en su sistema no necesita que las
-     secciones aparezcan: se muestran y ya. Antes esto no se respetaba
-     acá —el CSS de `prefers-reduced-motion` solo acortaba duraciones—,
-     así que igual dependía del observador para ver el formulario. */
-  if (typeof prefiereMenosMovimiento === 'function' && prefiereMenosMovimiento()) return;
+  /* Lo único que decide "menos movimiento" es si se esconde. Nunca si hay
+     observador — ver la regla 2 de arriba. */
+  const seEsconde = !(typeof prefiereMenosMovimiento === 'function'
+                      && prefiereMenosMovimiento());
 
-  document.documentElement.classList.add('con-revelado');
+  /**
+   * Deja un bloque listo para aparecer (invisible y un poco más abajo).
+   * @param {Element} elemento
+   * @returns {void}
+   */
+  function esconder(elemento) {
+    elemento.style.opacity = '0';
+    elemento.style.transform = 'translateY(30px)';
+  }
+
+  /**
+   * Lo muestra. Se BORRAN los estilos en vez de ponerlos en su valor
+   * final: así el elemento vuelve a quedar exactamente como lo dejó el
+   * CSS, sin arrastrar un estilo propio que después pise otra cosa. La
+   * transición de .revelar (en estilos/01-fundamentos.css) hace el resto.
+   * @param {Element} elemento
+   * @returns {void}
+   */
+  function revelar(elemento) {
+    elemento.style.opacity = '';
+    elemento.style.transform = '';
+    elemento.classList.add('visible');
+  }
 
   /*
      IntersectionObserver ("observador de intersección") es una
@@ -180,8 +223,7 @@
     entradas.forEach(entrada => {
       if (!entrada.isIntersecting) return;
 
-      // La clase "visible" es la que dispara la animación (ver el CSS)
-      entrada.target.classList.add('visible');
+      revelar(entrada.target);
 
       // Una vez que apareció, dejamos de vigilarlo: no queremos que se
       // esconda de nuevo al subir.
@@ -201,6 +243,48 @@
     rootMargin: '0px 0px -12% 0px',
   });
 
-  elementosQueAparecen.forEach(elemento => observador.observe(elemento));
+  elementosQueAparecen.forEach(elemento => {
+    // Esconder ANTES de observar, en la misma tarea, para que no haya un
+    // parpadeo de contenido visible.
+    if (seEsconde) esconder(elemento);
+    observador.observe(elemento);
+  });
+
+
+  /* ─── LA RED DE ABAJO DEL TODO ─────────────────────────────
+
+     Con las dos reglas de arriba, para que un bloque quede invisible
+     tendría que fallar el propio IntersectionObserver. No es una
+     hipótesis de manual: en Safari de iPhone hay casos conocidos en que
+     no dispara después de volver a la página desde el historial (esa
+     vuelta no recarga nada, restaura la página tal cual estaba).
+
+     Esto es el último recurso, y es barato: repasa como mucho diez
+     elementos, y solo muestra los que YA TENDRÍAN que verse — los que
+     están dentro de la pantalla o más arriba. Lo que sigue abajo del
+     todo no se toca, así que no adelanta ninguna aparición. En el caso
+     normal no hace nada, porque el observador ya pasó. */
+  function mostrarLoQueYaSeTendriaQueVer() {
+    elementosQueAparecen.forEach(elemento => {
+      if (elemento.classList.contains('visible')) return;
+      if (elemento.getBoundingClientRect().top >= window.innerHeight) return;
+      revelar(elemento);
+      observador.unobserve(elemento);
+    });
+  }
+
+  /* Una pasada tardía, cuando ya cargó todo y el observador tuvo de sobra.
+     Se mira readyState primero porque este archivo lo carga un script, no
+     una etiqueta del HTML: para cuando corre, el evento load PUEDE HABER
+     PASADO YA, y entonces el listener no se dispararía nunca. */
+  if (document.readyState === 'complete') {
+    setTimeout(mostrarLoQueYaSeTendriaQueVer, 2500);
+  } else {
+    window.addEventListener('load', () => setTimeout(mostrarLoQueYaSeTendriaQueVer, 2500));
+  }
+  // Y al volver desde el historial, que es el caso conocido de arriba.
+  window.addEventListener('pageshow', evento => {
+    if (evento.persisted) mostrarLoQueYaSeTendriaQueVer();
+  });
 
 })();
