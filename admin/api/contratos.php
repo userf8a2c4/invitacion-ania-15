@@ -382,6 +382,10 @@ case 'generar':
     $prefijo       = ajusteConRespaldo('contrato_prefijo', 'CON');
     $numeroInicial = max(1, (int) ajusteConRespaldo('contrato_numero_inicial', '1'));
 
+    // Mismo motivo que en recibos.php: el FOR UPDATE no tiene qué
+    // bloquear en el primer contrato de la serie.
+    $turno = pedirTurnoDeNumeracion('contratos');
+
     bd()->beginTransaction();
 
     $ultimo = consultarUno(
@@ -422,25 +426,57 @@ case 'generar':
         0, 255
     );
 
-    $archivoId = insertar('archivos', [
-        'nombre_real'  => $nombreLegible,
-        'nombre_disco' => $nombreDisco,
-        'tipo_mime'    => 'application/pdf',
-        'tamano_bytes' => strlen($bytesPdf),
-        'atado_a_tipo' => 'proveedor',
-        'atado_a_id'   => $proveedorId,
-        'subido_por'   => (int) $yo['id'],
-    ]);
-
-    $contrato['archivo_id'] = $archivoId;
     $contrato['creado_por'] = (int) $yo['id'];
 
-    $filaParaGuardar = $contrato;
-    unset($filaParaGuardar['proveedor_identificacion']);
+    /* ⚡ SI ESTO FALLA, NO SE DEJA BASURA ATRÁS (2026-09-04).
+       El PDF ya está escrito en el disco. Sin este bloque, un fallo al
+       guardar salía por responderMal() —que hace exit— y el archivo
+       quedaba en admin/archivos para siempre, sin ninguna fila que lo
+       nombrara: nadie lo iba a encontrar ni a borrar. Es lo mismo que
+       recibos.php ya resolvía y contratos.php no; ahora los dos van por
+       el mismo camino.
 
-    $contratoId = insertar('contratos', $filaParaGuardar);
+       intentando() (ver _lib/bd.php) es lo que hace que el catch
+       exista de verdad: sin eso, insertar() no lanza, sale. */
+    try {
+        list($archivoId, $contratoId) = intentando(
+            function () use ($nombreLegible, $nombreDisco, $bytesPdf, $proveedorId, $yo, $contrato) {
+                $archivoId = insertar('archivos', [
+                    'nombre_real'  => $nombreLegible,
+                    'nombre_disco' => $nombreDisco,
+                    'tipo_mime'    => 'application/pdf',
+                    'tamano_bytes' => strlen($bytesPdf),
+                    'atado_a_tipo' => 'proveedor',
+                    'atado_a_id'   => $proveedorId,
+                    'subido_por'   => (int) $yo['id'],
+                ]);
+
+                $filaParaGuardar = $contrato;
+                $filaParaGuardar['archivo_id'] = $archivoId;
+                unset($filaParaGuardar['proveedor_identificacion']);
+
+                // `archivo_id` y `creado_por` son de una ronda posterior
+                // a la que creó `contratos`, y migracion.sql las tenía
+                // pero instalar.php no las agregaba (ver la nota de esa
+                // ronda). Se guarda lo que la tabla tenga hoy.
+                return [
+                    $archivoId,
+                    insertar('contratos', soloColumnasQueExisten('contratos', $filaParaGuardar)),
+                ];
+            }
+        );
+    } catch (Throwable $e) {
+        if (bd()->inTransaction()) bd()->rollBack();
+        if (is_file($rutaCompleta)) @unlink($rutaCompleta);
+
+        error_log('[Ania XV · contratos] No se pudo guardar el contrato: ' . $e->getMessage());
+        responderMal('No se pudo guardar el contrato. No quedó nada a medias.', 500);
+    }
+
+    $contrato['archivo_id'] = $archivoId;
 
     bd()->commit();
+    soltarTurnoDeNumeracion($turno);
 
     anotarEnBitacora($yo, 'generó un contrato', 'contratos', $contratoId, $proveedor['nombre']);
 

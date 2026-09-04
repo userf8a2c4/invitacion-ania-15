@@ -440,9 +440,30 @@ function exigirPermiso($usuario, $seccion, $nivelMinimo = 'ver') {
 /**
  * Los cuatro permisos que no son una sección del panel.
  *
- * Mismo criterio que tienePermiso(): admin siempre puede, y una cuenta
- * sin fila en `usuarios` para esta columna (instalación vieja sin
- * migrar) no se restringe.
+ * QUÉ PASA SI LA MIGRACIÓN NO CORRIÓ  (2026-09-04)
+ *
+ * Las columnas `puede_*` las agrega instalar.php a una tabla `usuarios`
+ * que ya existía, y usuarioActual() solo las trae si columnasDe() las
+ * encuentra. O sea que "la columna no está en $usuario" significa "esta
+ * base no tiene el organigrama", no "a esta persona no se lo
+ * configuraron".
+ *
+ * Hasta acá eso devolvía `true` para todos, y el resultado era que una
+ * cuenta 'entrada' —la de la puerta— veía el presupuesto entero. Una
+ * reja que se abre sola cuando falta un ALTER no es una reja.
+ *
+ * Pero invertir los CUATRO a "negar" tiene su propio filo: 'escanear'
+ * es lo que deja pasar a los invitados, y negarlo convertiría "faltó
+ * correr instalar.php" en "nadie entra a la fiesta", en la puerta, de
+ * noche, con la gente esperando. Por eso el default se decide por lo
+ * que protege cada permiso:
+ *
+ *   · ver_dinero, borrar, crear_cuentas → NEGAR. Lo que está en juego
+ *     es que alguien vea o rompa lo que no debe; que Lucila (admin)
+ *     pueda igual alcanza para seguir trabajando.
+ *   · escanear → PERMITIR, y dejarlo anotado. Lo que está en juego es
+ *     que la fiesta funcione, y esta acción no muestra nada privado:
+ *     marca una llegada de alguien que ya tiene sesión.
  *
  * @param array  $usuario
  * @param string $clave 'escanear' | 'ver_dinero' | 'borrar' | 'crear_cuentas'
@@ -452,7 +473,13 @@ function tieneEspecial($usuario, $clave) {
     if (($usuario['rol'] ?? '') === 'admin') return true;
 
     $columna = 'puede_' . $clave;
-    if (!array_key_exists($columna, $usuario)) return true;
+
+    if (!array_key_exists($columna, $usuario)) {
+        error_log('[Ania XV · sesion] `usuarios` no tiene ' . $columna .
+                  ' — hay que correr admin/api/instalar.php.');
+        // Solo el de la puerta sigue abierto. Ver la nota de arriba.
+        return $clave === 'escanear';
+    }
 
     return (int) $usuario[$columna] === 1;
 }

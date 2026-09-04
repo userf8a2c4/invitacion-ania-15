@@ -30,6 +30,30 @@ require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
 
 $yo     = exigirSesion();
+
+/* ⚠️ ESTE ARCHIVO ERA EL ÚNICO SIN NINGÚN exigirPermiso() (2026-09-04).
+   Sus seis pares —mesas, invitados, contactos, archivos, avisos,
+   planificador— lo tienen desde que existe el organigrama; evento.php
+   se quedó con exigirSesion() a secas. O sea que la casilla "Evento"
+   que Ajustes → Cuentas ofrece marcar (ver 01-configuracion.js) no
+   hacía NADA: con cualquier cuenta con sesión —incluida la de la
+   puerta— se podían crear y borrar mesas, cambiar la ceremonia y
+   desentar invitados por ?accion=sentar.
+
+   POR QUÉ SOLO SE PIDE PERMISO PARA ESCRIBIR, Y NO PARA LEER
+   Los seis pares piden 'ver' en los GET, pero ninguno de ellos es la
+   fuente de la pantalla Hoy. `?accion=todo` de acá sí lo es: lo piden
+   25-hoy.js (el cronograma que se mira en la puerta),
+   08-vista-invitados.js (Mesas, Regalos y Foráneos) y el precalentado
+   de 26-sincronizacion.js. Cerrar el GET convertiría "a esta cuenta no
+   le marcaron Evento" en "el cronograma no carga", de noche, en la
+   entrada — y lo que había que cerrar es la ESCRITURA, que es lo que
+   deja crear mesas y desentar gente. Si algún día Hoy deja de depender
+   de este endpoint, el GET se cierra también. */
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+    exigirPermiso($yo, 'evento', 'editar');
+}
+
 $accion = (string) ($_GET['accion'] ?? 'todo');
 
 /**
@@ -302,12 +326,20 @@ case 'guardar':
             'notas'     => campoTexto($datos, 'notas', 2000),
         ];
 
+        /* soloColumnasQueExisten() (ver _lib/bd.php): varias de estas
+           columnas se agregaron por rondas. En una instalación que no
+           volvió a correr instalar.php, nombrar una que falta cortaba
+           la petición con un 500 y no se guardaba NADA — ni siquiera lo
+           que sí existe. Este archivo ya se cuida así para LEER
+           ('orden_si_falta_migracion' más arriba); faltaba al escribir. */
+        $guardables = soloColumnasQueExisten('ceremonia', $valores);
+
         $existe = consultarUno('SELECT id FROM ceremonia ORDER BY id LIMIT 1');
         if ($existe) {
-            actualizar('ceremonia', $existe['id'], $valores);
+            actualizar('ceremonia', $existe['id'], $guardables);
             $id = (int) $existe['id'];
         } else {
-            $id = insertar('ceremonia', $valores);
+            $id = insertar('ceremonia', $guardables);
         }
 
         anotarEnBitacora($yo, 'guardó los datos de la ceremonia', 'ceremonia', $id);
@@ -341,12 +373,16 @@ case 'guardar':
             }
         }
 
-        actualizar($que, $id, $valores);
+        // Mismo motivo que en ceremonia: `mesas.fila`/`mesas.columna` y
+        // los cuatro campos de la mesa de regalos son de rondas
+        // posteriores. Se guarda lo que la tabla tenga hoy y el resto
+        // queda anotado en el log del servidor.
+        actualizar($que, $id, soloColumnasQueExisten($que, $valores));
         anotarEnBitacora($yo, 'editó un registro', $que, $id, (string) $valores[$clave]);
         responderBien(['id' => $id, 'creado' => false]);
     }
 
-    $nuevo = insertar($que, $valores);
+    $nuevo = insertar($que, soloColumnasQueExisten($que, $valores));
     anotarEnBitacora($yo, 'creó un registro', $que, $nuevo, (string) $valores[$clave]);
     responderBien(['id' => $nuevo, 'creado' => true], 201);
     break;
@@ -428,14 +464,27 @@ case 'sentar':
         responderBien(['mensaje' => 'Se quitó de la mesa.']);
     }
 
-    // Cuántos lugares ocupa: los que declaró en su confirmación.
+    /* ⚠️ LAS SILLAS EXTRA CUENTAN (2026-09-04). Acá se sumaba
+       adultos + ninos y nada más, mientras que las otras CUATRO rutas
+       que sientan gente usan lugaresQueOcupa() (_lib/mesas.php), que
+       además suma `preferencias_invitado.sillas_extra` — la silla de
+       ruedas, la sillita de bebé, el lugar del acompañante que no es
+       invitado. Resultado: sentar desde la pantalla Evento anotaba
+       menos lugares de los que la familia ocupa, y la mesa se veía con
+       lugar libre donde ya no lo hay. Se descubre recién en el salón,
+       con la gente parada. */
+    require_once __DIR__ . '/_lib/mesas.php';
+
     $gente = consultarUno(
-        'SELECT adultos, ninos FROM confirmaciones WHERE id = :id',
+        'SELECT c.adultos, c.ninos, p.sillas_extra
+         FROM confirmaciones c
+         LEFT JOIN preferencias_invitado p ON p.confirmacion_id = c.id
+         WHERE c.id = :id',
         [':id' => $confirmacion]
     );
     if (!$gente) responderMal('Esa confirmación no existe.', 404);
 
-    $lugares = max(1, (int) $gente['adultos'] + (int) $gente['ninos']);
+    $lugares = lugaresQueOcupa($gente);
 
     /* Un invitado no puede estar en dos mesas: la tabla tiene índice
        único por confirmacion_id, así que se reemplaza la asignación

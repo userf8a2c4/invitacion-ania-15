@@ -16,12 +16,17 @@
    puntual, `contrato_id` queda para eso, pero nunca es obligatorio.
 
    POR QUÉ EL NÚMERO NO SE REPITE
-   Se calcula DENTRO de una transacción con `FOR UPDATE`, que bloquea la
-   fila del último recibo del año hasta terminar: si dos pestañas
-   generan un recibo casi al mismo tiempo, la segunda espera a que la
-   primera termine de guardar antes de mirar cuál es el próximo número.
-   El UNIQUE de la tabla (ver admin/migracion.sql) es la red de
-   seguridad final si algo se coló igual.
+   Tres cosas, en este orden. Primero un turno con nombre para toda la
+   base (pedirTurnoDeNumeracion(), _lib/bd.php): si dos pestañas generan
+   un recibo casi al mismo tiempo, la segunda espera acá. Después, ya
+   dentro de la transacción, el `FOR UPDATE` sobre el último recibo de
+   la serie. Y al final el UNIQUE de la tabla (ver admin/migracion.sql)
+   como red.
+
+   El turno hace falta porque el FOR UPDATE bloquea FILAS, y el PRIMER
+   recibo de una serie no tiene ninguna que bloquear — al estrenar la
+   numeración, el 1 de enero, o al cambiar el prefijo. Ahí el FOR UPDATE
+   solo no garantizaba nada.
 
    QUÉ SE LE PUEDE PEDIR
      GET  ?accion=listar&proveedor_id=8      recibos de un proveedor
@@ -457,6 +462,14 @@ case 'generar':
     $prefijo       = ajusteConRespaldo('recibo_prefijo', 'REC');
     $numeroInicial = max(1, (int) ajusteConRespaldo('recibo_numero_inicial', '1'));
 
+    /* ⚠️ EL FOR UPDATE SOLO NO ALCANZA (2026-09-04). Bloquea FILAS, y el
+       PRIMER recibo de una serie no tiene ninguna: al estrenar la
+       numeración, el 1 de enero, o al cambiar el prefijo (que abre serie
+       nueva), dos pestañas podían calcular el mismo número. El turno con
+       nombre no depende de que exista una fila. Ver
+       pedirTurnoDeNumeracion() en _lib/bd.php. */
+    $turno = pedirTurnoDeNumeracion('recibos');
+
     bd()->beginTransaction();
 
     $ultimo = consultarUno(
@@ -597,7 +610,18 @@ case 'generar':
        El catch deshace las dos cosas en el orden correcto: primero la
        base, después el archivo, y recién ahí se avisa. */
     try {
-        $reciboId = insertar('recibos', $filaParaGuardar);
+        // intentando() (ver _lib/bd.php) es lo que hace que este catch
+        // exista de verdad: sin eso, insertar() salía por responderMal()
+        // —que hace exit— y el PDF ya escrito quedaba huérfano en el
+        // disco, que es exactamente lo que el comentario de arriba dice
+        // haber resuelto el 2026-09-03.
+        $reciboId = intentando(function () use ($filaParaGuardar) {
+            // `archivo_id` y `creado_por` estaban en migracion.sql pero
+            // instalar.php no las agregaba a una tabla `recibos` ya
+            // creada (arreglado en la misma ronda). En una instalación
+            // vieja, nombrarlas acá tiraba el recibo entero.
+            return insertar('recibos', soloColumnasQueExisten('recibos', $filaParaGuardar));
+        });
     } catch (Throwable $e) {
         if (bd()->inTransaction()) bd()->rollBack();
         if (is_file($rutaCompleta)) @unlink($rutaCompleta);
@@ -618,6 +642,7 @@ case 'generar':
        nadie tenga que empujarlo a mano a ningún otro lado. */
 
     bd()->commit();
+    soltarTurnoDeNumeracion($turno);
 
     anotarEnBitacora($yo, 'generó un recibo', 'recibos', $reciboId, $recibo['numero']);
 

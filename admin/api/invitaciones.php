@@ -565,7 +565,13 @@ case 'marcar_enviada':
         $cambios['estado'] = 'enviada';
         $cambios['enviada_en'] = date('Y-m-d H:i:s');
     }
-    actualizar('invitaciones', $id, $cambios);
+    /* `veces_enviado` y `enviada_en` se agregaron a `invitaciones` en
+       rondas posteriores a la que creó la tabla. En una instalación que
+       no volvió a correr instalar.php, nombrarlas acá cortaba la
+       petición con un 500 — y este archivo ya se cuida así para LEER
+       (ver $columnasInv en confirmaciones.php), solo faltaba al
+       escribir. Ver soloColumnasQueExisten() en _lib/bd.php. */
+    actualizar('invitaciones', $id, soloColumnasQueExisten('invitaciones', $cambios));
 
     responderBien(['id' => $id]);
     break;
@@ -610,11 +616,19 @@ case 'enviar_correo':
         // Devuelve `true` o el texto del error, nunca lanza excepción.
         $resultado = enviarCorreo($inv['correo'], $asunto, $cuerpoHtml);
         if ($resultado === true) {
-            actualizar('invitaciones', $id, [
+            /* ⚠️ ACÁ EL CORREO YA SALIÓ (2026-09-04). Si esta escritura
+               moría —porque `veces_enviado` o `enviada_en` todavía no
+               existen en esta instalación—, la petición se cortaba con
+               un 500 en la PRIMERA invitación: los correos que ya
+               habían salido no quedaban registrados, el panel decía que
+               falló todo, y reintentar mandaba el mismo correo de
+               nuevo a gente que ya lo tenía. Ver
+               soloColumnasQueExisten() en _lib/bd.php. */
+            actualizar('invitaciones', $id, soloColumnasQueExisten('invitaciones', [
                 'estado'        => $inv['estado'] === 'sin_enviar' ? 'enviada' : $inv['estado'],
                 'enviada_en'    => date('Y-m-d H:i:s'),
                 'veces_enviado' => (int) ($inv['veces_enviado'] ?? 0) + 1,
-            ]);
+            ]));
             $mandados++;
         } else {
             $fallidos++;
