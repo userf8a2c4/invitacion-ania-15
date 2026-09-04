@@ -195,7 +195,7 @@ Options -Indexes
   # intermediario que ese archivo se sirve tal cual. Va SOLO para esta
   # imagen: para el resto del sitio, la conversión a WebP es una ventaja
   # y se deja como está.
-  <Files "tarjeta-invitacion.jpg">
+  <Files "vista-previa-compartir.jpg">
     Header set Cache-Control "public, max-age=31536000, no-transform"
   </Files>
 
