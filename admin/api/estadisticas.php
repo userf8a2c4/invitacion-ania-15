@@ -77,10 +77,42 @@ if (existeTabla('confirmaciones')) {
         : 0;
     $libres = max(0, $capacidad - $personas);
 
+    /* ⚠️ `si_asisten` NO ES "CONFIRMARON" (2026-09-04).
+       Cuenta `asiste = 1`, y una confirmación NACE con asiste = 1: el
+       cupo se aparta desde el día uno para que el bot de mesas pueda
+       acomodar antes de que nadie conteste. La pantalla Resumen mostraba
+       ese número bajo el rótulo "Confirmaron" —dos veces— con la
+       invitación todavía sin mandar.
+
+       `contestaron` usa el mismo criterio que la lista de Gente, el
+       asistente y ahora la tarjeta de Hoy: yaRespondio()
+       (08-vista-invitados.js). `si_asisten` se deja: sigue siendo el
+       cupo apartado, que es lo que se le dice al salón. */
+    $contestaron = 0;
+    if ($tieneAsiste && existeTabla('invitaciones')) {
+        $colsInv = columnasDe('invitaciones');
+
+        // `respondida_en` es de una ronda posterior a la que creó la
+        // tabla: sin ella se cuenta solo por estado.
+        $yaContesto = in_array('respondida_en', $colsInv, true)
+            ? "(i.respondida_en IS NOT NULL OR i.estado IN ('confirmada', 'declinada'))"
+            : "i.estado IN ('confirmada', 'declinada')";
+
+        $filaContestaron = consultarUno(
+            'SELECT COUNT(*) AS n
+             FROM confirmaciones c
+             JOIN invitaciones i ON i.confirmacion_id = c.id
+             WHERE c.asiste = 1 AND ' . $yaContesto
+        );
+        $contestaron = (int) ($filaContestaron['n'] ?? 0);
+    }
+
     $resultado['invitados'] = [
         'hay'         => true,
         'respuestas'  => (int) ($totales['respuestas'] ?? 0),
         'si_asisten'  => (int) ($totales['si_asisten'] ?? 0),
+        // Grupos que de verdad contestaron y vienen. Ver la nota de arriba.
+        'contestaron' => $contestaron,
         'no_asisten'  => (int) ($totales['no_asisten'] ?? 0),
         'adultos'     => $adultos,
         'ninos'       => $ninos,

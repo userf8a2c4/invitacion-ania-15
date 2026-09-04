@@ -211,9 +211,14 @@ function bloqueEjecutivo(datos, pendientes) {
 
   return '' +
     '<div class="tarjeta rejilla-ejecutiva">' +
+      /* ⚠️ `contestaron` Y NO `si_asisten` (2026-09-04). `si_asisten`
+         cuenta `asiste = 1`, y una confirmación nace con asiste = 1
+         porque el cupo se aparta desde el día uno. Este número decía
+         "51 confirmaron" con la invitación sin mandar. Mismo criterio
+         que la tarjeta de Hoy y que la lista de Gente. */
       '<button class="rejilla-ejecutiva__dato" data-lleva-a="invitados">' +
         '<span class="rejilla-ejecutiva__numero">' +
-          seguro(invitados.hay ? invitados.si_asisten : '—') +
+          seguro(invitados.hay ? (invitados.contestaron || 0) : '—') +
         '</span>' +
         '<span class="rejilla-ejecutiva__rotulo">Confirmaron</span>' +
       '</button>' +
@@ -317,7 +322,11 @@ function bloqueInvitados(invitados) {
       // SUM(mesas.capacidad) -140 hoy, pero calculado, no pisado a
       // mano-, no contra cantidad de invitaciones ni de filas RSVP.
       tarjetaDato(invitados.libres, 'Libres') +
-      tarjetaDato(invitados.si_asisten, 'Confirmaron') +
+      // "Confirmaron" son los que contestaron (ver la nota de arriba);
+      // "Apartados" es el cupo reservado, que es lo que `si_asisten`
+      // siempre midió y lo que se le dice al salón.
+      tarjetaDato(invitados.contestaron || 0, 'Confirmaron') +
+      tarjetaDato(invitados.si_asisten, 'Apartados') +
       tarjetaDato(invitados.no_asisten, 'No vienen') +
       tarjetaDato(invitados.adultos, 'Adultos') +
       tarjetaDato(invitados.ninos, 'Niños') +

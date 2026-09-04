@@ -137,7 +137,7 @@ function textoDeInvitacionConfigurado() {
         "{nombre}:\n\n" .
         "Hay fechas que uno quiere recordar acompañado, y esta es una de ellas. " .
         "Nos dará mucha alegría contar con ustedes.\n\n" .
-        "Hemos reservado {lugares} lugares a su nombre.\n\n" .
+        "Hemos reservado {lugares} a su nombre.\n\n" .
         "Aquí está su invitación. Ahí mismo pueden confirmar y elegir su menú:\n" .
         "{link}\n\n" .
         "Les pedimos confirmar antes del {fecha_limite}. " .
@@ -149,6 +149,42 @@ function textoDeInvitacionConfigurado() {
     $valor = trim((string) ($fila['valor'] ?? ''));
 
     return $valor !== '' ? $valor : $original;
+}
+
+/**
+ * "1 lugar" / "4 lugares", con el número adelante.
+ *
+ * Tiene que decir lo mismo que el formulario de la web, que ya resolvía
+ * el singular por su cuenta (codigo/11-formulario-confirmacion.js).
+ *
+ * @param int $cuantos
+ * @return string
+ */
+function lugaresEnPalabras($cuantos) {
+    return $cuantos . ($cuantos === 1 ? ' lugar' : ' lugares');
+}
+
+/**
+ * Quita la palabra "lugares" pegada después de `{lugares}`.
+ *
+ * ⚠️ POR QUÉ EXISTE (2026-09-04)
+ * `{lugares}` era solo el número, y la plantilla escribía la palabra a
+ * mano: "Hemos reservado {lugares} lugares a su nombre". A una familia
+ * de un solo pase le llegaba **"Hemos reservado 1 lugares"**.
+ *
+ * Ahora `{lugares}` trae el número Y la palabra en la forma correcta.
+ * Pero el texto es editable desde el panel y puede haber una copia
+ * GUARDADA con la palabra pegada: sin esto, esa copia diría "1 lugar
+ * lugares". Se limpia al leerla, en vez de migrar la base — así
+ * funciona igual si algún día se restaura un respaldo viejo.
+ *
+ * @param string $texto
+ * @return string
+ */
+function conLugaresSinPluralPegado($texto) {
+    // Solo cuando la palabra viene INMEDIATAMENTE después del marcador:
+    // "{lugares} lugares" y "{lugares} lugar", sin tocar nada más.
+    return preg_replace('/\\{lugares\\}\\s+lugar(?:es)?\\b/u', '{lugares}', $texto);
 }
 
 /**
@@ -169,7 +205,9 @@ function textoDeInvitacionConfigurado() {
  * @return string HTML ya escapado.
  */
 function invitacionComoHtml($plantilla, $inv, $link, $fechaLimite) {
-    $texto = (string) $plantilla;
+    // Acá y no al leer el ajuste: por esta función pasan la plantilla
+    // guardada, la original y cualquiera que llegue de afuera.
+    $texto = conLugaresSinPluralPegado((string) $plantilla);
 
     if ($fechaLimite === '') {
         $renglones = array_filter(
@@ -181,7 +219,9 @@ function invitacionComoHtml($plantilla, $inv, $link, $fechaLimite) {
 
     $texto = strtr($texto, [
         '{nombre}'       => $inv['nombre'],
-        '{lugares}'      => (string) (int) $inv['pases'],
+        // El número Y la palabra: "1 lugar" / "4 lugares". La plantilla
+        // ya no escribe "lugares" a mano (ver conLugaresSinPluralPegado).
+        '{lugares}'      => lugaresEnPalabras((int) $inv['pases']),
         '{link}'         => $link,
         '{fecha_limite}' => $fechaLimite,
     ]);

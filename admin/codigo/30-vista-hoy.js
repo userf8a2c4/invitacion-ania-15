@@ -167,8 +167,26 @@ function bloqueEstadoDelDia(dia, textoConexion, diasParaLaFiesta) {
                   ? ' · ' + seguro(dia.grupos_llegaron) + ' grupos'
                   : '') +
               '</div>'
-            : '<div class="hoy-estado__numero">' + seguro(dia.esperados || 0) + '</div>' +
-              '<div class="hoy-estado__rotulo">Confirmaron</div>') +
+            /* ⚠️ "CONFIRMARON" AHORA CUENTA A LOS QUE CONTESTARON
+               (2026-09-04). Acá iba `dia.esperados`, que es la suma de
+               `asiste = 1` — y una confirmación NACE con asiste = 1,
+               porque el cupo se aparta desde el día uno para que el bot
+               de mesas pueda acomodar antes de que nadie conteste. O sea
+               que la tarjeta decía "114 CONFIRMARON" con la invitación
+               todavía sin mandar y nadie habiendo abierto su link.
+
+               `dia.confirmados` (hoy.php) usa el mismo criterio que la
+               lista de Gente y el asistente: contestó de verdad. El
+               total apartado no se pierde, pasa a ser la mitad chica:
+               "0 de 114" se lee de un vistazo y sigue diciendo el cupo. */
+            : '<div class="hoy-estado__numero">' + seguro(dia.confirmados || 0) +
+                '<span class="hoy-estado__de"> de ' + seguro(dia.esperados || 0) +
+                '</span></div>' +
+              '<div class="hoy-estado__rotulo">Confirmaron' +
+                (dia.grupos_confirmados
+                  ? ' · ' + seguro(dia.grupos_confirmados) + ' grupos'
+                  : '') +
+              '</div>') +
         '</div>' +
         '<div class="hoy-estado__cifra hoy-estado__cifra--tocable" data-hoy-ir="mesas" ' +
              'role="button" tabindex="0">' +
