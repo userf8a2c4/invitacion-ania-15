@@ -60,6 +60,10 @@
 
 (function preparaLasVelas() {
 
+  // Interruptor de diagnóstico: ver apagadoParaMedir() en 02-utilidades.js.
+  if (apagadoParaMedir('velas')) return;
+
+
   const capaApliques = buscar('#apliques');
   const capaLuz      = buscar('#luz-de-velas');
   if (!capaApliques || !capaLuz) return;
@@ -67,6 +71,166 @@
   /* Todo se dibuja SIEMPRE y queda ENCENDIDO, aun con las animaciones
      apagadas: es la fuente de luz de la profundidad. Lo único que se apaga
      en modo "sin animación" es el TITILEO (ver el guard del bucle). */
+
+
+  /* ─── 0. EL LIENZO DE LAS VELAS, EN COORDENADAS DE DOCUMENTO (Etapa B,
+     2026-08-31) ─────────────────────────────────────────────────────────
+     Hasta acá, las velas dejaban de entregarle sus fuegos al lienzo de
+     23-lienzo-de-luz.js (2026-08-20) para que el resplandor se moviera con
+     el mismo scroll nativo que la llama, sin ningún paso de JavaScript de
+     por medio — sino, la luz se atrasaba de la llama en scroll rápido. La
+     única forma de tener ESO y además evitar las 8 capas `mix-blend-mode:
+     screen` de siempre (medidas en el 31 % del perfil, "Layerize") es un
+     canvas que TAMPOCO necesite JavaScript para seguir el scroll: uno en
+     `position: absolute`, en coordenadas de DOCUMENTO, igual que la llama.
+     Al no ser `fixed`, lo mueve el compositor nativo junto con la página —
+     cero diferencia posible, por construcción, no por reaccionar rápido.
+
+     Este es un canvas PROPIO de este archivo, separado del de
+     23-lienzo-de-luz.js (que sigue igual: fijo, con haces/motas/fauna). No
+     se tocan sus sellos, se PRESTAN (window.LienzoDeLuz.sellos) — son
+     bitmaps ya rasterizados, no hace falta un segundo degradado.
+
+     Si por algún motivo esos sellos no llegaron a existir (por ejemplo,
+     con ?luz=dom, que apaga 23-lienzo-de-luz.js entero), este canvas
+     tampoco se crea y usaElLienzoAhora() vuelve a dar false: quedan los
+     104 divs de siempre, el camino de reserva de toda la vida. */
+  let lienzoDeVelas = null, pincelDeVelas = null;
+  let anchoLienzoVelas = 0, altoLienzoVelas = 0, densidadLienzoVelas = 1;
+
+  /** Dónde empieza el lienzo dentro del documento, en píxeles CSS. Ver la
+   *  nota grande de ajustarLienzoDeVelas(). */
+  let topLienzoVelas = 0;
+
+  /** La franja del documento que de verdad ocupan las luces, o null si
+   *  todavía no se colocó ninguna pieza. La calcula medirLaFranjaDeLuces()
+   *  DESPUÉS de acomodar, y se guarda acá — y no se lee `piezas` directo
+   *  desde ajustarLienzoDeVelas()— porque esa función corre al evaluar el
+   *  archivo, cuando `piezas` (declarado más abajo) todavía no existe. */
+  let franjaDeLuces = null;
+
+  /** Se enciende cuando ya hay piezas colocadas. Sirve para saber si es
+   *  seguro leer `piezas` (que se declara más abajo en el archivo). */
+  let hayPiezasColocadas = false;
+
+  // Mismos valores que FACTOR_POR_CALIDAD en 23-lienzo-de-luz.js — ese
+  // archivo no los expone, así que se repiten acá. Si se cambia uno, hay
+  // que cambiar el otro: la luz de las velas y la de haces/motas deben
+  // verse igual de nítidas entre sí.
+  const FACTOR_DE_DENSIDAD_POR_CALIDAD = { 0: 0.75, 1: 0.6, 2: 0.5 };
+  const MAXIMA_DENSIDAD_DE_VELAS = 1;
+
+  /**
+   * Ajusta el tamaño del lienzo de velas al ancho de su contenedor y al
+   * alto real del documento (no de la ventana: este canvas scrollea con
+   * la página, tiene que cubrirla entera).
+   * @returns {void}
+   */
+  function ajustarLienzoDeVelas() {
+    if (!lienzoDeVelas) return;
+    const factor = FACTOR_DE_DENSIDAD_POR_CALIDAD[nivelDeCalidad()] ?? 1;
+    densidadLienzoVelas = Math.min(window.devicePixelRatio || 1, MAXIMA_DENSIDAD_DE_VELAS) * factor;
+
+    anchoLienzoVelas = capaLuz.clientWidth || window.innerWidth;
+    const altoDelDocumento = capaLuz.offsetHeight || document.documentElement.scrollHeight;
+
+    /* ⚡ SOLO LA FRANJA DONDE HAY LUCES, NO EL DOCUMENTO ENTERO
+       (2026-09-02).
+
+       Este lienzo cubría el documento completo: 2466 × 5629 = casi 14
+       millones de píxeles, la capa más grande de la página por lejos. Pero
+       los candelabros solo viven en la mitad de abajo — sus anclajes (ver
+       ANCLAS) son #regalos, #ubicacion, #confirmacion y el pie. En la
+       portada y las primeras secciones no hay ni una vela, y esa mitad
+       vacía igual se reservaba, se subía a la GPU y se recomponía.
+
+       El tamaño era colateral, no un requisito: lo que hacía falta era
+       vivir en COORDENADAS DE DOCUMENTO, para que el scroll lo mueva el
+       compositor sin que ningún script lo sincronice (esa fue la solución
+       al desfase de la luz respecto de la llama). Esa propiedad se conserva
+       intacta: el lienzo sigue siendo `absolute` en el documento, solo que
+       ahora empieza donde empieza la primera luz.
+
+       El desplazamiento se compensa en el dibujo con setTransform (ver
+       dibujarCuadro), así que todo el resto del archivo sigue trabajando en
+       coordenadas de documento, sin enterarse. */
+    /* Se remide en cada ajuste: un resize puede haber movido las secciones
+       y con ellas las velas, y una franja vieja dejaría el resplandor
+       cortado. Solo cuando ya hay piezas — antes de eso, `piezas` ni
+       siquiera existe todavía. */
+    if (hayPiezasColocadas) medirLaFranjaDeLuces();
+
+    if (franjaDeLuces) {
+      const MARGEN = 48;   // aire para que el resplandor no quede cortado
+      topLienzoVelas  = Math.max(0, Math.floor(franjaDeLuces.arriba - MARGEN));
+      const abajo     = Math.min(altoDelDocumento, Math.ceil(franjaDeLuces.abajo + MARGEN));
+      altoLienzoVelas = Math.max(1, abajo - topLienzoVelas);
+    } else {
+      // Todavía no se colocó ninguna pieza: se cubre todo, como antes.
+      topLienzoVelas  = 0;
+      altoLienzoVelas = altoDelDocumento;
+    }
+
+    lienzoDeVelas.width  = Math.max(1, Math.round(anchoLienzoVelas * densidadLienzoVelas));
+    lienzoDeVelas.height = Math.max(1, Math.round(altoLienzoVelas  * densidadLienzoVelas));
+    lienzoDeVelas.style.width  = anchoLienzoVelas + 'px';
+    lienzoDeVelas.style.height = altoLienzoVelas  + 'px';
+    lienzoDeVelas.style.top    = topLienzoVelas   + 'px';
+
+    /* Para el cartel de ?fps=1: sin este dato no hay forma de confirmar que
+       el recorte de la franja hizo lo que dice que hace. */
+    window.EstadoDelLienzoDeVelas = {
+      ancho: anchoLienzoVelas,
+      alto:  altoLienzoVelas,
+      top:   topLienzoVelas,
+    };
+  }
+
+  /**
+   * Mide la franja del documento que ocupan todas las luces, con su radio
+   * de resplandor incluido. Se llama DESPUÉS de colocar las piezas, que es
+   * cuando fuego.cy y fuego.radioDerrame tienen su valor real.
+   * @returns {void}
+   */
+  function medirLaFranjaDeLuces() {
+    let arriba = Infinity;
+    let abajo  = -Infinity;
+
+    for (const pieza of piezas) {
+      for (const fuego of pieza.fuegos) {
+        if (typeof fuego.cy !== 'number') continue;
+        const radio = fuego.radioDerrame || fuego.radioNucleo || 0;
+        if (fuego.cy - radio < arriba) arriba = fuego.cy - radio;
+        if (fuego.cy + radio > abajo)  abajo  = fuego.cy + radio;
+      }
+    }
+
+    franjaDeLuces = (arriba < abajo) ? { arriba, abajo } : null;
+  }
+
+  /**
+   * Crea el canvas de velas, si hay sellos prestados de
+   * 23-lienzo-de-luz.js. Se llama una sola vez, al evaluar este archivo.
+   * @returns {void}
+   */
+  function crearLienzoDeVelas() {
+    if (!(window.LienzoDeLuz && window.LienzoDeLuz.sellos)) return;
+
+    const lienzo = document.createElement('canvas');
+    lienzo.id = 'lienzo-de-velas';
+    lienzo.setAttribute('aria-hidden', 'true');
+    const pincel = lienzo.getContext('2d', { alpha: true });
+    if (!pincel) return;
+
+    capaLuz.appendChild(lienzo);
+    lienzoDeVelas = lienzo;
+    pincelDeVelas = pincel;
+    ajustarLienzoDeVelas();
+
+    window.addEventListener('resize', alCambiarElAncho(rebotar(ajustarLienzoDeVelas, 200)));
+    document.addEventListener('calidad-cambio', () => setTimeout(ajustarLienzoDeVelas, 50));
+  }
+  crearLienzoDeVelas();
 
 
   /* ─── 1. DIBUJO ────────────────────────────────────────────────────────
@@ -574,40 +738,39 @@
   function acomodarTodo(alTerminar) {
     const anchoRef = anchoBase();
 
-    /* ⚡ LAS VELAS YA NO ENTRAN AL LIENZO DE LUZ (2026-08-20), A PEDIDO —
-       ESTO DESACOPLA SU SINCRONÍA DEL SCROLL DE RAÍZ.
-       Con el lienzo, el resplandor es un <canvas> que un script en
-       23-lienzo-de-luz.js reposiciona a mano en cada evento de scroll; la
-       llama, en cambio, es un elemento normal que el navegador mueve solo,
-       por compositor, sin que ningún JavaScript tenga que enterarse. Por
-       más rápido que reaccione ese script (y reacciona rápido: escucha el
-       scroll directo, sin esperar al siguiente cuadro — ver la nota
-       grande en 23-lienzo-de-luz.js), sigue habiendo un paso de JavaScript
-       de por medio que la llama no tiene. Esa diferencia, mínima pero
-       real, es la que se venía reportando como "la luz se atrasa".
+    /* ⚡ LAS VELAS VUELVEN AL LIENZO (Etapa B, 2026-08-31) — ESTA VEZ SIN
+       PERDER LA SINCRONÍA.
+       El 2026-08-20 se sacaron del lienzo porque ESE canvas (el de
+       23-lienzo-de-luz.js) es `position: fixed` y le resta el scroll a
+       mano en cada evento — un paso de JavaScript que la llama, un
+       elemento normal, no tiene. Esa diferencia, mínima pero real, era
+       "la luz se atrasa de la vela" que se había reportado.
 
-       La única forma de que sean CERO diferencia, no una diferencia
-       chica, es que el resplandor también sea un elemento normal que el
-       navegador mueva por su cuenta — que es exactamente lo que ya hacía
-       este archivo ANTES de que existiera el lienzo (ver rearmarLasFuentes-
-       DeLuz(), más abajo, y la nota de arriba sobre `?luz=dom`). No hace
-       falta reconstruir nada: alcanza con no entregarle los fuegos al
-       lienzo, así el navegador sigue moviendo estos divs con el mismo
-       scroll nativo que mueve la llama — cero JavaScript de por medio,
-       cero diferencia posible.
+       El lienzo de velas de ESTE archivo (ver la sección 0, arriba) es
+       distinto: `position: absolute`, en coordenadas de DOCUMENTO, igual
+       que la llama. Al no ser `fixed`, lo mueve el compositor nativo
+       junto con la página — cero JavaScript de por medio, cero diferencia
+       posible, por construcción. Con esa base, ya no hace falta resignar
+       las 8 capas `mix-blend-mode: screen` (el 31 % de "Layerize" medido
+       en vivo) para tener sincronía perfecta: se pueden tener las dos
+       cosas.
 
-       Los haces de luz, las motas de polvo y las luciérnagas SIGUEN en el
-       lienzo (el pedido fue solo sobre las velas): esos vienen de otros
-       arreglos de window.LienzoDeLuz (.haces/.motas/.fauna), que esto no
-       toca. El costo de rendimiento que esto reintroduce es el que ya
-       estaba documentado cuando se armó el lienzo (~104 escrituras de
-       estilo por cuadro en vez de 2 lecturas de canvas) — una decisión a
-       propósito, no un descuido: acá se prioriza la sincronía perfecta
-       por sobre ese ahorro. */
+       rearmarLasFuentesDeLuz() sigue llamándose DESPUÉS DE CADA PIEZA, no
+       solo al final — ver el porqué en el comentario grande de arriba de
+       esta función: sin eso, mientras se acomodan las ocho piezas el
+       candelabro ya está en su sitio nuevo y la luz se seguía dibujando en
+       el viejo. */
     trabajarPorTandas(
       piezas.length,
-      i => colocarPieza(piezas[i], anchoRef),
+      i => {
+        colocarPieza(piezas[i], anchoRef);
+        rearmarLasFuentesDeLuz();
+      },
       () => {
+        /* Recién acá las luces tienen su posición definitiva, así que recién
+           acá se sabe qué franja del documento hay que cubrir. */
+        hayPiezasColocadas = true;
+        ajustarLienzoDeVelas();
         if (typeof alTerminar === 'function') alTerminar();
       }
     );
@@ -795,29 +958,22 @@
 
   /** Cada fuego aporta dos manchas: su núcleo y su derrame. */
   function rearmarLasFuentesDeLuz() {
-    const fuentes = [];
-    for (const c of piezas) {
-      for (const fuego of c.fuegos) {
-        /* ⚠️ SE SALTEA UN FUEGO QUE TODAVÍA NO TIENE POSICIÓN.
-           Desde que acomodarTodo() llama a esta función después de CADA
-           pieza (y no solo al final de las ocho), acá pueden convivir
-           fuegos ya colocados con otros que esperan su turno —a esos
-           colocarPieza() todavía no les asignó cx/radioNucleo/radioDerrame,
-           así que quedarían `undefined`. Sin este filtro, el lienzo
-           recibiría una fuente con radio undefined y perdería tiempo en
-           cada cuadro intentando dibujar algo que no existe. */
-        if (fuego.radioNucleo === undefined) continue;
+    /* ⚡ YA NO ARMA UN ARRAY DE "FUENTES" (Etapa B, 2026-08-31). Antes esto
+       llenaba window.LienzoDeLuz.fuentes para que 23-lienzo-de-luz.js las
+       dibujara en SU canvas (fijo, en coordenadas de ventana) — el paso de
+       JavaScript que restaba el scroll y causaba el atraso reportado.
+       Ahora dibujarCuadro() (más abajo, sección 4) pinta cada fuego
+       directo en el lienzo PROPIO de este archivo (coordenadas de
+       documento), leyendo fuego.cx/cy/radioNucleo/radioDerrame en el
+       momento — no hace falta ningún array intermedio.
 
-        fuego.fuenteNucleo  = { x: fuego.cx, y: fuego.cy, radio: fuego.radioNucleo,  alfa: 0, derrame: false };
-        fuego.fuenteDerrame = { x: fuego.cx, y: fuego.cy, radio: fuego.radioDerrame, alfa: 0, derrame: true };
-        fuentes.push(fuego.fuenteDerrame, fuego.fuenteNucleo);   // el derrame va debajo
-      }
+       Lo único que sigue haciendo falta acá es apagar los divs de mezcla,
+       y solo si el lienzo de velas está realmente activo. Si no lo está
+       (sin sellos prestados, ver crearLienzoDeVelas más arriba), se dejan
+       encendidos: son el camino de reserva. */
+    if (usaElLienzoAhora()) {
+      for (const c of piezas) c.luzDeLaPieza.style.display = 'none';
     }
-    window.LienzoDeLuz.fuentes = fuentes;
-
-    /* Los contenedores de mezcla dejan de existir para el compositor: son
-       las 8 capas de `mix-blend-mode` que costaban la mitad del perfil. */
-    for (const c of piezas) c.luzDeLaPieza.style.display = 'none';
   }
 
   /* ─── 3 bis. NI CONSTRUIR NI ACOMODAR DURANTE LA CARGA ─────────────────
@@ -849,6 +1005,13 @@
     if (yaSeConstruyo) return;
     yaSeConstruyo = true;
 
+    /* Se vuelve a medir el lienzo de velas justo acá: si este archivo
+       evaluó con el sobre todavía cerrado, #luz-de-velas podía estar
+       dentro de un ancestro en display:none y medir 0 (ver
+       ajustarLienzoDeVelas más arriba). Ahora la invitación ya se ve de
+       verdad, así que la medida es la real. */
+    ajustarLienzoDeVelas();
+
     // Los <defs> compartidos (degradados y filtros) van una sola vez.
     capaApliques.insertAdjacentHTML('beforeend', defsCompartidos);
 
@@ -858,9 +1021,31 @@
       // Recién con todas las piezas creadas tiene sentido medirlas.
       () => acomodarTodo(observarLasSecciones)
     );
+
+    /* ⚡ EL BUCLE DEL TITILEO ARRANCA ACÁ, NO AL EVALUAR EL SCRIPT
+       (2026-08-30). Antes `requestAnimationFrame(dibujarCuadro)` se pedía
+       de una, sin importar si el sobre estaba abierto: un cuadro vacío
+       pedido de sobra en cada vsync (hayAlgoQueMirar() lo cortaba, pero
+       igual competía por el turno). Recién hace falta un cuadro cuando la
+       invitación se ve, así que recién ahí se pide el primero; una vez
+       arrancado se sigue reagendando para siempre, igual que antes. */
+    requestAnimationFrame(dibujarCuadro);
   }
 
-  document.addEventListener('invitacion-visible', construirYAcomodarUnaSolaVez);
+  // escucharEventoQueQuizasYaPaso() (02-utilidades.js): este script se
+  // inyecta encadenado detrás de otros — el evento puede haber pasado
+  // antes de que cargara.
+  /* ⚡ 300 ms DE DEMORA, A PROPÓSITO (2026-09-03). Desde que los 23 scripts
+     de la escena bajan en paralelo (44f54c9), este archivo y
+     07-marco-y-enredaderas.js —los dos más caros de construir— arrancaban
+     su construcción en el MISMO instante, compitiendo por el mismo hilo.
+     22-luz-de-la-hora.js y 27-fauna-nocturna.js ya usaban este mismo
+     escalonamiento (300 y 600 ms); acá faltaba. Dejar que 07 arranque solo
+     y que las velas entren 300 ms después reduce las chances de que dos
+     pasos indivisibles (el cierre de un ramillete acá, colocarPieza allá)
+     caigan en la misma tanda de cuadros. */
+  escucharEventoQueQuizasYaPaso('invitacion-visible',
+    () => setTimeout(construirYAcomodarUnaSolaVez, 300));
 
   /* Rehacer si cambia el tamaño de la ventana (con un respiro).
      Si todavía no se construyó nada, no hay nada que acomodar. */
@@ -919,16 +1104,14 @@
   let ultimoCalculo = 0;
 
   /** ¿Está pintando el canvas? Se consulta una vez por cuadro, no por vela. */
-  /* ⚡ SIEMPRE false, A PROPÓSITO (2026-08-20) — ver la nota grande en
-     acomodarTodo(), más arriba: las velas dejaron de entregarle sus
-     fuegos al lienzo para que el resplandor se mueva con el mismo scroll
-     nativo que mueve la llama, sin ningún paso de JavaScript de por
-     medio. Este archivo queda listo para volver a usar el lienzo el día
-     que haga falta (alcanza con restaurar esta función y la llamada a
-     rearmarLasFuentesDeLuz() en acomodarTodo()); rearmarLasFuentesDeLuz()
-     en sí no se borró, por eso. */
+  /* ⚡ REACTIVADO (Etapa B, 2026-08-31) — ver la nota grande en
+     acomodarTodo(), más arriba: el lienzo de velas de este archivo (no el
+     de 23-lienzo-de-luz.js) es en coordenadas de documento, así que ya no
+     hay JavaScript restando el scroll que pueda desincronizarse. `true`
+     solo si crearLienzoDeVelas() consiguió sellos prestados y armó el
+     canvas; si no, sigue el camino de los divs (mismo que ?luz=dom). */
   function usaElLienzoAhora() {
-    return false;
+    return !!lienzoDeVelas;
   }
 
   /* En calidad baja, la llama deja de "respirar" en tamaño (solo titila en
@@ -965,6 +1148,32 @@
     const desplazamiento = scrollActualY();
     const arriba = desplazamiento - window.innerHeight * ventana.arriba;
     const abajo  = desplazamiento + window.innerHeight * ventana.abajo;
+
+    /* ⚡ SE BORRA SOLO LA BANDA VISIBLE, NO EL LIENZO ENTERO (Etapa B,
+       2026-08-31). El documento mide miles de píxeles de alto; limpiar y
+       repintar todo en cada recálculo sería tan caro como el problema que
+       esto viene a resolver. `arriba`/`abajo` es la MISMA ventana que ya
+       decide qué fuego se recalcula (ver el `continue` de acá abajo): un
+       fuego que queda afuera de esa banda no se toca este cuadro, así que
+       tampoco hace falta limpiar donde estaba — sus últimos píxeles
+       quedan quietos, que es exactamente el comportamiento ya documentado
+       ("los candelabros nunca se apagan por esto, solo dejan de
+       recalcularse"). setTransform, no scale: clearRect también tiene que
+       respetar la densidad del lienzo. */
+    if (usaElLienzo) {
+      /* El último parámetro desplaza el origen: el lienzo ya no arranca en
+         el tope del documento sino en topLienzoVelas (ver
+         ajustarLienzoDeVelas), así que se le resta esa altura y todo lo que
+         sigue puede seguir dibujando en COORDENADAS DE DOCUMENTO, igual que
+         antes. Va multiplicado por la densidad porque setTransform trabaja
+         en píxeles del lienzo, no en píxeles CSS. */
+      pincelDeVelas.setTransform(
+        densidadLienzoVelas, 0, 0, densidadLienzoVelas,
+        0, -topLienzoVelas * densidadLienzoVelas
+      );
+      pincelDeVelas.clearRect(0, arriba, anchoLienzoVelas, abajo - arriba);
+      pincelDeVelas.globalCompositeOperation = 'lighter';
+    }
 
     for (const c of piezas) {
       for (const fuego of c.fuegos) {
@@ -1013,25 +1222,38 @@
         const brilloNucleo  = fuego.base * brillo;
         const brilloDerrame = fuego.base * brillo * 0.85 * fuego.atenua;
 
-        /* ⚡ CON EL LIENZO ACTIVO SE ESCRIBEN NÚMEROS, NO ESTILOS.
-           Antes esto eran 104 escrituras de `style.opacity` por cuadro, y
-           cada una obliga al navegador a recalcular estilo y rehacer el
-           árbol de capas. Ahora se guardan dos números que el canvas lee
-           cuando pinta: cero trabajo para el motor de CSS. */
+        /* ⚡ CON EL LIENZO ACTIVO SE DIBUJA DIRECTO, NO SE ESCRIBEN ESTILOS
+           (Etapa B, 2026-08-31). Antes esto eran 104 escrituras de
+           `style.opacity` por cuadro sobre divs dentro de 8 capas
+           `mix-blend-mode: screen` — cada una obliga al navegador a
+           recalcular estilo Y a rehacer el árbol de capas. Ahora se
+           estampa directo en el lienzo PROPIO de este archivo (coordenadas
+           de documento, ver sección 0), reusando los mismos sellos
+           pre-rasterizados que 23-lienzo-de-luz.js. */
         if (usaElLienzo) {
-          if (fuego.fuenteNucleo)  fuego.fuenteNucleo.alfa  = brilloNucleo;
-          if (fuego.fuenteDerrame) {
-            /* ⚠️ EL DERRAME "DETRÁS" NECESITA UN AJUSTE.
-               En el sistema de divs, cuando un derrame queda muy encima de
-               una caja de texto se lo muda a #apliques, que vive DEBAJO del
-               velo de penumbra: ahí la propia penumbra lo apaga y el texto
-               se sigue leyendo. El lienzo, en cambio, pinta todo por encima
-               del velo, así que ese apagado no ocurre solo.
+          const sellos = window.LienzoDeLuz.sellos;
 
-               Se replica bajando su brillo. No es capricho: es exactamente
-               el trabajo que hacía el velo, aplicado a mano. Sin esto, los
-               textos cercanos a un candelabro quedarían lavados. */
-            fuego.fuenteDerrame.alfa = fuego.detras ? brilloDerrame * 0.4 : brilloDerrame;
+          /* ⚠️ EL DERRAME "DETRÁS" NECESITA EL MISMO AJUSTE QUE YA TENÍA.
+             En el sistema de divs, cuando un derrame queda muy encima de
+             una caja de texto se lo muda a #apliques, que vive DEBAJO del
+             velo de penumbra: ahí la propia penumbra lo apaga y el texto
+             se sigue leyendo. Este lienzo pinta por encima del velo, así
+             que ese apagado no ocurre solo — se replica bajando el brillo.
+             Sin esto, los textos cercanos a un candelabro quedarían
+             lavados. */
+          const alfaDerrame = fuego.detras ? brilloDerrame * 0.4 : brilloDerrame;
+
+          if (brilloNucleo > 0.004 && fuego.radioNucleo > 0) {
+            pincelDeVelas.globalAlpha = brilloNucleo > 1 ? 1 : brilloNucleo;
+            const lado = fuego.radioNucleo * 2;
+            pincelDeVelas.drawImage(sellos.nucleo,
+              fuego.cx - fuego.radioNucleo, fuego.cy - fuego.radioNucleo, lado, lado);
+          }
+          if (alfaDerrame > 0.004 && fuego.radioDerrame > 0) {
+            pincelDeVelas.globalAlpha = alfaDerrame > 1 ? 1 : alfaDerrame;
+            const lado = fuego.radioDerrame * 2;
+            pincelDeVelas.drawImage(sellos.derrame,
+              fuego.cx - fuego.radioDerrame, fuego.cy - fuego.radioDerrame, lado, lado);
           }
         } else {
           /* Sin toFixed: el navegador acepta el número directo y así no se
@@ -1041,8 +1263,14 @@
         }
       }
     }
+    if (usaElLienzo) {
+      pincelDeVelas.globalAlpha = 1;
+      pincelDeVelas.globalCompositeOperation = 'source-over';
+    }
     requestAnimationFrame(dibujarCuadro);
   }
-  requestAnimationFrame(dibujarCuadro);
+  /* ⛔ ACÁ YA NO VA `requestAnimationFrame(dibujarCuadro)` A SECAS: el
+     primer cuadro se pide dentro de construirYAcomodarUnaSolaVez(), al
+     recibir 'invitacion-visible' (ver más arriba). */
 
 })();

@@ -364,6 +364,14 @@ h2 {
      tienen. La promoción se paga sola: cachear una textura compleja sale
      más barato que repintarla. */
   will-change: transform;
+
+  /* ⚡ NO SE TOCA CON EL PUNTERO (2026-09-02). Era la única capa grande
+     del sitio sin esto — las otras diez ya lo tenían, y sus hijos lo
+     heredan. Sin esta línea, el navegador tiene que considerarla en cada
+     movimiento del mouse para decidir sobre qué cayó el puntero, sobre una
+     superficie de 2466 × 1625. En un perfil real, ese trabajo aparecía como
+     204 ms de "Hit test". No hay nada que tocar acá: es el fondo. */
+  pointer-events: none;
 }
 
 
@@ -556,13 +564,33 @@ h2 {
    cuando entran en pantalla. El archivo 08-efectos-de-scroll.js les
    agrega la clase "visible" en el momento justo.
    ---------------------------------------------------------------------- */
-.revelar {
+/* ⚡ EL CONTENIDO ES VISIBLE POR DEFECTO (2026-09-03)
+ *
+ * Antes esto era `.revelar { opacity: 0 }` y solo el JavaScript de
+ * 08-efectos-de-scroll.js le agregaba `.visible`. O sea que **diez
+ * bloques de la invitación —el formulario de confirmar incluido—
+ * dependían de que ese archivo bajara bien**. Si no bajaba, la página se
+ * veía "cargada" pero vacía, sin ningún error y sin nada que invitara a
+ * recargar.
+ *
+ * Y había un segundo camino al mismo sitio: el observador usaba
+ * `threshold: 0.15`, que un bloque más alto que ~6,7 pantallas no puede
+ * alcanzar nunca. Con un grupo grande y el texto agrandado por
+ * accesibilidad, el formulario entraba en ese caso.
+ *
+ * Ahora la regla es al revés: **el contenido se ve siempre**, y el
+ * efecto de aparición lo enciende el propio JS agregando `.con-revelado`
+ * al <html> cuando está listo para manejarlo. Si el archivo no baja, se
+ * pierde una animación; nunca el contenido.
+ */
+.revelar { transition: opacity .8s var(--curva-elegante),
+                       transform .8s var(--curva-elegante); }
+
+html.con-revelado .revelar {
   opacity: 0;
   transform: translateY(30px);
-  transition: opacity .8s var(--curva-elegante),
-              transform .8s var(--curva-elegante);
 }
-.revelar.visible { opacity: 1; transform: translateY(0); }
+html.con-revelado .revelar.visible { opacity: 1; transform: translateY(0); }
 
 /* Aparecer desde abajo (se usa en la portada) */
 @keyframes aparecer-desde-abajo {

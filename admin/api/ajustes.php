@@ -31,8 +31,22 @@ require_once __DIR__ . '/_lib/responder.php';
 $yo     = exigirSesion();
 $accion = (string) ($_GET['accion'] ?? 'obtener');
 
+/**
+ * Los ajustes que `obtener` NUNCA devuelve, a nadie.
+ *
+ * Son secretos, no configuración: con la clave de servicio se escribe
+ * en el hilo de MegaBot de cualquiera, y con la del webhook se habla
+ * con el Orquestador haciéndose pasar por el panel. Se generan, se
+ * copian una vez y se guardan afuera — ninguna pantalla las necesita
+ * de vuelta, así que no hay nada que perder cerrándolas.
+ */
+const CLAVES_QUE_NUNCA_SE_DEVUELVEN = [
+    'megabot_servicio_clave',
+    'megabot_webhook_clave',
+];
+
 if (!existeTabla('ajustes')) {
-    responderMal('Falta correr la migración: no existe la tabla ajustes.', 500);
+    responderMal('Falta una parte de la instalación del panel. Avísale a quien lo instaló.', 500);
 }
 
 
@@ -48,6 +62,22 @@ case 'obtener':
     // 'entrada'. Lo que sí es solo de admin es cambiarlos.
     $clave = campoTexto($_GET, 'clave', 60);
     if ($clave === '') responderMal('Falta decir qué ajuste.', 400);
+
+    /* ⚡ HAY AJUSTES QUE NO SON "DEL EVENTO", SON SECRETOS (2026-09-03).
+       Esta acción devolvía CUALQUIER clave a cualquier cuenta con
+       sesión — incluida `megabot_servicio_clave`, que es la que
+       autoriza a escribir en el hilo de MegaBot. Una cuenta de entrada,
+       la que trabaja en la puerta el día del evento, podía pedirla con
+       una sola llamada y con ella inyectar propuestas en el chat de
+       cualquiera. Lo mismo con la clave y la URL del webhook saliente.
+
+       No alcanza con que la app no las pida: la API es la que tiene que
+       negarse. Nunca se devuelven; ni siquiera a la administradora,
+       porque no hay ninguna pantalla que las necesite de vuelta —se
+       generan, se copian una vez y se guardan. */
+    if (in_array($clave, CLAVES_QUE_NUNCA_SE_DEVUELVEN, true)) {
+        responderMal('Ese ajuste no se puede leer.', 403);
+    }
 
     $fila = consultarUno('SELECT valor FROM ajustes WHERE clave = :c', [':c' => $clave]);
     responderBien(['clave' => $clave, 'valor' => $fila ? $fila['valor'] : null]);
@@ -74,6 +104,22 @@ case 'guardar':
                  || $clave === 'carino_' . $suPropioId
                  || $clave === 'avisos_agentes_' . $suPropioId;
     if (!$esSuyaPropia) exigirAdministrador();
+
+    /* ⚡ EL https:// SE EXIGE ACÁ, NO SOLO EN EL FORMULARIO (2026-09-03).
+       La pantalla de MegaBot ya validaba que la URL del webhook
+       empezara con https://, pero eso es una comodidad del formulario,
+       no una defensa: cualquiera con sesión de admin puede llamar a
+       este endpoint directo. Con una URL http:// —o peor, con un
+       esquema raro— el panel le manda el hilo entero de Lucila a donde
+       sea, en claro. */
+    if ($clave === 'megabot_webhook_url' && $valor !== '') {
+        if (stripos($valor, 'https://') !== 0) {
+            responderMal('La dirección del webhook tiene que empezar con https://', 400);
+        }
+        if (!filter_var($valor, FILTER_VALIDATE_URL)) {
+            responderMal('Esa no es una dirección válida.', 400);
+        }
+    }
 
     $existe = consultarUno('SELECT clave FROM ajustes WHERE clave = :c', [':c' => $clave]);
     if ($existe) {

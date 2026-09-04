@@ -286,7 +286,10 @@
   }
 
   if (document.body.classList.contains('sobre-visible')) {
-    document.addEventListener('sobre-abierto', mostrarBoton, { once: true });
+    // escucharEventoQueQuizasYaPaso() (02-utilidades.js): este script se
+    // inyecta encadenado detrás de otros — el evento puede haber pasado
+    // antes de que cargara.
+    escucharEventoQueQuizasYaPaso('sobre-abierto', mostrarBoton);
   } else {
     // Sin sobre en pantalla (ya se abrió, o se entró con un enlace que lo
     // saltea): el botón va desde el principio.

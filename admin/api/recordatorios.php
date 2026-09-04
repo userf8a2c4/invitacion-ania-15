@@ -63,7 +63,7 @@ case 'suscribir':
     $auth     = campoTexto($datos, 'auth', 100);
 
     if ($endpoint === '' || !filter_var($endpoint, FILTER_VALIDATE_URL)) {
-        responderMal('La suscripción no es válida.', 400);
+        responderMal('Este teléfono no quedó bien registrado para los avisos. Vuelve a activarlos desde Más → Avisos.', 400);
     }
 
     /* Si este teléfono ya estaba suscrito se actualiza en vez de

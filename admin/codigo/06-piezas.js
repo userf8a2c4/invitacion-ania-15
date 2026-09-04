@@ -26,6 +26,175 @@
 /** Qué hacer cuando la hoja se cierre. Se usa para refrescar la vista. */
 let AL_CERRAR_HOJA = null;
 
+/* ─── COMPENSAR EL TECLADO DEL CELULAR ──────────────────────────────
+   QUÉ PROBLEMA RESUELVE
+   Ni `vh` ni `dvh` ni `svh` reaccionan a que aparezca el teclado virtual
+   —por especificación, esa distinción queda afuera de lo que esas
+   unidades cubren—, así que `.hoja__panel` (con `max-height` fijo) podía
+   terminar más alto que lo que de verdad se ve en pantalla, tapando un
+   campo de texto o el botón de abajo detrás del teclado (el caso real: el
+   Asistente, admin/codigo/32-asistente.js). `visualViewport` sí sabe
+   cuánto se ve de verdad.
+
+   Se engancha en abrirHoja() y se desengancha en cerrarHoja(): un
+   listener global permanente no tiene sentido si la hoja no está en
+   pantalla, y así cualquier formulario futuro con un campo de texto
+   queda cubierto gratis, no solo el Asistente. */
+let quitarCompensacionDeTeclado = null;
+
+/**
+ * Mantiene `--tope-visible`, `--alto-visible` y `--alto-hoja` al día
+ * mientras la hoja esté abierta, leyendo `visualViewport`.
+ *
+ * EL PROBLEMA DE FONDO
+ * `.hoja` es `position:fixed` y con `align-items:flex-end` el panel se
+ * pega al fondo de su caja. Si esa caja es la pantalla ENTERA, el borde
+ * de abajo queda detrás del teclado. Ni `vh` ni `dvh` ni `svh`
+ * reaccionan al teclado — por especificación, esa distinción queda
+ * fuera de lo que esas unidades cubren. `visualViewport` es la única
+ * API que sabe cuánto se ve de verdad.
+ *
+ * ⚡ POR QUÉ SE DEJÓ DE CALCULAR UN DESPLAZAMIENTO (2026-09-04)
+ * Las dos versiones anteriores subían la hoja con un `translateY`
+ * negativo, calculado como `innerHeight − (offsetTop + height)`: cuánto
+ * tapa el teclado del fondo de la pantalla física. Esa cuenta solo vale
+ * si el layout viewport NO se achica con el teclado, que es lo que
+ * promete `interactive-widget=resizes-visual` (admin/index.html).
+ *
+ * Pero no todos los navegadores lo cumplen igual: donde el layout
+ * viewport también se achica, la resta da ≈0, el `translateY` no
+ * compensa nada, y la hoja vuelve a quedar debajo del teclado — que es
+ * justo el síntoma que se reportaba al abrir "Nuevo pago".
+ *
+ * Ahora no se calcula ningún desplazamiento: se le da a `.hoja` la
+ * posición y el alto del área visible, y el panel se apoya en el fondo
+ * de esa área. Deja de depender de que dos medidas del navegador
+ * concuerden entre sí.
+ *
+ * Sin soporte de `visualViewport` no hace nada: los respaldos del CSS
+ * (`inset: 0` y `88dvh`) dan el comportamiento de siempre.
+ *
+ * @returns {void}
+ */
+function activarCompensacionDeTeclado() {
+  if (!window.visualViewport) return;
+
+  function ajustar() {
+    const vv = window.visualViewport;
+    const raiz = document.documentElement.style;
+
+    /* Las dos primeras posicionan la caja de `.hoja` EXACTAMENTE sobre
+       el área que se ve; la tercera limita el alto del panel dentro de
+       esa área. Ver la nota larga en `.hoja` (02-componentes.css) sobre
+       por qué esto reemplazó al translateY calculado. */
+    raiz.setProperty('--tope-visible', Math.round(vv.offsetTop) + 'px');
+    raiz.setProperty('--alto-visible', Math.round(vv.height) + 'px');
+    raiz.setProperty('--alto-hoja', Math.round(vv.height * 0.88) + 'px');
+  }
+
+  // Red de seguridad adicional: si el campo que se tocó queda tapado de
+  // todos modos (por ejemplo, estaba más abajo del área recién
+  // liberada), se lo trae a la vista. El setTimeout espera a que el
+  // teclado termine de animar — sin esto, scrollIntoView mide contra un
+  // viewport que todavía se está achicando y calcula mal.
+  function alEnfocar(evento) {
+    const campo = evento.target;
+    if (!campo || !campo.matches || !campo.matches('input, textarea, select')) return;
+    // 'nearest' y no 'center': con la hoja ya bien ubicada, el campo
+    // suele verse entero, y 'center' lo empujaba igual — un salto
+    // gratis que se siente como que la hoja se sacude sola al tocar
+    // cada campo.
+    setTimeout(() => campo.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 300);
+  }
+
+  const cuerpo = buscar('#hoja-cuerpo');
+  cuerpo.addEventListener('focusin', alEnfocar);
+
+  ajustar();
+  window.visualViewport.addEventListener('resize', ajustar);
+  // Safari a veces avisa el cambio de alto por acá y no por 'resize'.
+  window.visualViewport.addEventListener('scroll', ajustar);
+
+  quitarCompensacionDeTeclado = () => {
+    window.visualViewport.removeEventListener('resize', ajustar);
+    window.visualViewport.removeEventListener('scroll', ajustar);
+    cuerpo.removeEventListener('focusin', alEnfocar);
+    document.documentElement.style.removeProperty('--tope-visible');
+    document.documentElement.style.removeProperty('--alto-visible');
+    document.documentElement.style.removeProperty('--alto-hoja');
+  };
+}
+
+/**
+ * Desengancha lo que haya activado activarCompensacionDeTeclado().
+ * @returns {void}
+ */
+function desactivarCompensacionDeTeclado() {
+  if (!quitarCompensacionDeTeclado) return;
+  quitarCompensacionDeTeclado();
+  quitarCompensacionDeTeclado = null;
+}
+
+/**
+ * Cosas que hay que apagar cuando la hoja deja de estar en pantalla,
+ * SE CIERRE COMO SE CIERRE.
+ *
+ * ⚡ POR QUÉ EXISTE, APARTE DE `AL_CERRAR_HOJA` (2026-09-03)
+ *
+ * Los dos corren "al final", pero no son lo mismo y mezclarlos rompía
+ * cosas:
+ *
+ *   · `AL_CERRAR_HOJA` es NAVEGACIÓN: qué pasa después de cerrar
+ *     —refrescar la lista de atrás, volver a la ficha anterior—. Solo
+ *     tiene sentido en un cierre de verdad, y por eso lo pisa la hoja
+ *     siguiente sin ejecutarlo.
+ *   · Esto es LIMPIEZA DE RECURSOS: apagar la cámara, cortar un
+ *     temporizador. No se puede saltear nunca, ni cuando otra hoja se
+ *     abre encima. Si se saltea, la cámara del escáner se queda
+ *     prendida en la puerta de la fiesta.
+ *
+ * Es una lista y no un solo valor a propósito: dos piezas de la misma
+ * hoja pueden tener cada una lo suyo que apagar, y la segunda no debe
+ * borrar el registro de la primera.
+ */
+let LIMPIEZAS_DE_LA_HOJA = [];
+
+/**
+ * Registra algo para apagar cuando la hoja se vaya de pantalla.
+ *
+ * @param {Function} limpieza - Debe ser idempotente por las dudas.
+ * @returns {void}
+ *
+ * @example
+ *   alSoltarLaHoja(apagarCamaraDelEscaner);
+ */
+function alSoltarLaHoja(limpieza) {
+  if (typeof limpieza === 'function') LIMPIEZAS_DE_LA_HOJA.push(limpieza);
+}
+
+/**
+ * Corre y vacía todas las limpiezas registradas. La llaman abrirHoja()
+ * y cerrarHoja(); nadie más debería necesitarla.
+ *
+ * @returns {void}
+ */
+function soltarLaHoja() {
+  if (!LIMPIEZAS_DE_LA_HOJA.length) return;
+
+  // Se vacía ANTES de correrlas: si una lanza, las demás igual se
+  // ejecutan y ninguna queda anotada para correr dos veces.
+  const pendientes = LIMPIEZAS_DE_LA_HOJA;
+  LIMPIEZAS_DE_LA_HOJA = [];
+
+  pendientes.forEach(limpieza => {
+    try {
+      limpieza();
+    } catch (error) {
+      console.warn('[hoja] Una limpieza falló:', error);
+    }
+  });
+}
+
 /** Cómo estaban los campos al abrir, para detectar lo escrito sin guardar. */
 let LO_QUE_HABIA_AL_ABRIR = '';
 
@@ -52,6 +221,13 @@ function abrirHoja(titulo, contenido, alCerrar) {
   buscar('#hoja-titulo').textContent = titulo;
   HOJA_TITULO_ACTUAL = titulo;
 
+  // Los números de uso son solo de la hoja MegaBot (32-asistente.js los
+  // llena después de abrirla) — cualquier otra hoja arranca sin heredar
+  // el dato de la anterior.
+  const hojaUso = buscar('#hoja-uso');
+  hojaUso.textContent = '';
+  hojaUso.hidden = true;
+
   cuerpo.innerHTML = '';
   if (typeof contenido === 'string') {
     cuerpo.innerHTML = contenido;
@@ -59,8 +235,33 @@ function abrirHoja(titulo, contenido, alCerrar) {
     cuerpo.appendChild(contenido);
   }
 
+  /* ⚡ ABRIR HOJA SOBRE HOJA YA NO DEJA RECURSOS PRENDIDOS (2026-09-03)
+   *
+   * Abrir hoja sobre hoja es EL gesto principal del panel: de un detalle
+   * se toca "Editar" y la misma hoja se reusa con otro contenido, sin
+   * pasar nunca por cerrarHoja(). Eso dejaba dos cosas colgadas:
+   *
+   *   · Las limpiezas de recursos (la cámara del escáner, sobre todo)
+   *     no corrían. Ver soltarLaHoja(), abajo.
+   *   · `activarCompensacionDeTeclado()` se llamaba sin desactivar la
+   *     anterior, y como cada activación engancha tres listeners y pisa
+   *     `quitarCompensacionDeTeclado`, los tres viejos quedaban
+   *     huérfanos para siempre. Una tarde de trabajo deja decenas
+   *     midiendo el viewport en cada tecla.
+   *
+   * POR QUÉ `AL_CERRAR_HOJA` SÍ SE SIGUE PISANDO SIN EJECUTAR
+   * Porque no es una limpieza: es NAVEGACIÓN. En 09-vista-dinero.js el
+   * alCerrar de un recibo es `() => abrirDetalleDeProveedor(proveedor)`
+   * —volver a la ficha de atrás—. Ejecutarlo acá abriría la hoja del
+   * proveedor encima de la que la persona acaba de pedir. "Volver
+   * atrás" solo tiene sentido cuando de verdad se cierra.
+   */
+  soltarLaHoja();
+
   AL_CERRAR_HOJA = alCerrar || null;
   hoja.classList.remove('oculto');
+  desactivarCompensacionDeTeclado();
+  activarCompensacionDeTeclado();
 
   /* Se guarda cómo quedó la hoja recién abierta. Al cerrarla se compara
      contra esto para saber si se escribió algo que se perdería. */
@@ -77,9 +278,15 @@ function abrirHoja(titulo, contenido, alCerrar) {
 /**
  * Cierra la hoja.
  *
- * @returns {void}
+ * Es asíncrona porque preguntar por lo escrito sin guardar ahora abre
+ * una hoja propia y no el confirm() del navegador (ver confirmarAccion).
+ * Con `forzar` —que es como la llama el código después de guardar— no
+ * hay nada que preguntar y el cierre ocurre igual de inmediato que antes.
+ *
+ * @param {boolean} [forzar]
+ * @returns {Promise<void>}
  */
-function cerrarHoja(forzar) {
+async function cerrarHoja(forzar) {
   const hoja = buscar('#hoja');
   if (hoja.classList.contains('oculto')) return;
 
@@ -95,8 +302,11 @@ function cerrarHoja(forzar) {
   const huboAlgoEscrito = loEscritoEnLaHoja() !== LO_QUE_HABIA_AL_ABRIR;
 
   if (!forzar && huboAlgoEscrito) {
-    if (!confirmarAccion('Escribiste cosas que todavía no se guardaron.\n\n' +
-                         '¿Cerrar igual y perderlas?')) return;
+    if (!await confirmarAccion(
+          'Escribiste cosas que todavía no se guardaron.\n\n' +
+          'Si cierras ahora se pierden.',
+          { confirmar: 'Cerrar y perderlas', cancelar: 'Seguir editando',
+            peligro: true })) return;
   }
 
   /* Fase 8, la señal más valiosa que antes no existía: qué formulario se
@@ -109,7 +319,12 @@ function cerrarHoja(forzar) {
   }
 
   hoja.classList.add('oculto');
+  soltarLaHoja();                    // apagar cámara, temporizadores, etc.
+  desactivarCompensacionDeTeclado();
   buscar('#hoja-cuerpo').innerHTML = '';
+  const hojaUsoAlCerrar = buscar('#hoja-uso');
+  hojaUsoAlCerrar.textContent = '';
+  hojaUsoAlCerrar.hidden = true;
   document.body.style.overflow = '';
 
   if (AL_CERRAR_HOJA) {
@@ -117,6 +332,21 @@ function cerrarHoja(forzar) {
     AL_CERRAR_HOJA = null;
     quehacer();
   }
+
+  /* ⚠️ EL REFRESCO DE FONDO SE SALTEA ENTERO MIENTRAS HAY UNA HOJA
+     ABIERTA, y hasta acá no se recuperaba (2026-09-04).
+
+     Saltearlo es correcto: repintar la lista de atrás mientras alguien
+     llena un formulario le mueve el suelo bajo los pies. Pero una hoja
+     puede estar abierta diez minutos —cargar un proveedor, revisar una
+     ficha— y al cerrarla se volvía a la lista con lo de antes, hasta
+     que el temporizador diera la vuelta.
+
+     Cerrar la hoja es justo el momento en que se vuelve a mirar lo de
+     atrás. refrescarEnSegundoPlano() no pinta nada si los datos no
+     cambiaron —compara huella— así que en el caso normal esto no se
+     nota; y si alguien confirmó mientras tanto, aparece solo. */
+  if (typeof refrescarEnSegundoPlano === 'function') refrescarEnSegundoPlano();
 }
 
 /**
@@ -364,6 +594,16 @@ function avisar(texto, esMalo) {
  * @returns {void}
  */
 function pintarCargando(donde, cuantos) {
+  /* En un refresco de fondo NO se vacía nada. El esqueleto existe para
+     que una pantalla en blanco no parezca rota mientras llegan los
+     datos; en un repintado silencioso ya hay contenido bueno en
+     pantalla, y borrarlo para poner cuatro barras grises que laten es
+     exactamente lo contrario de "se actualiza sin que me entere".
+     La declara 26-sincronizacion.js, que se carga DESPUÉS que este
+     archivo — no importa: para cuando algo llama a pintarCargando ya
+     está todo cargado. Ver refrescarEnSegundoPlano() allá. */
+  if (REPINTADO_SILENCIOSO) return;
+
   const n = cuantos || 4;
   donde.innerHTML = '<div class="esqueleto"></div>'.repeat(n);
 }
@@ -407,6 +647,15 @@ function pintarVacio(donde, titulo, texto, guino) {
 /**
  * Pinta un error con botón de reintentar.
  *
+ * ⚠️ EL BOTÓN ESPERA SI EL SERVIDOR DIJO "BASTA" (2026-09-04)
+ * El techo del hosting es de 300 peticiones cada 5 minutos POR IP —
+ * compartido por todo el equipo. Cuando se agota, el servidor contesta
+ * 429, y hasta acá el botón reintentaba en el acto: cada toque gastaba
+ * otra petición de la cuota que ya estaba agotada, y hundía un poco más
+ * el panel de todos. Ahora, mientras dure el retroceso que anotó
+ * pedir() (03-servidor.js), el botón se muestra deshabilitado con la
+ * cuenta atrás y se habilita solo cuando de verdad sirve tocarlo.
+ *
  * @param {Element} donde
  * @param {string} mensaje
  * @param {Function} reintentar
@@ -424,7 +673,93 @@ function pintarError(donde, mensaje, reintentar) {
     '</div>';
 
   const boton = buscar('#reintentar', donde);
-  if (boton && reintentar) boton.addEventListener('click', reintentar);
+  if (!boton) return;
+  if (reintentar) boton.addEventListener('click', reintentar);
+
+  const faltan = typeof segundosDeEsperaDelServidor === 'function'
+    ? segundosDeEsperaDelServidor()
+    : 0;
+  if (faltan > 0) esperarParaReintentar(boton, faltan);
+}
+
+/**
+ * Corre una acción recién cuando el dato que necesita esté cargado.
+ *
+ * POR QUÉ EXISTE (2026-09-04)
+ * Varias pantallas hacen irA('dinero') y después de 600-700 ms tocan
+ * DINERO.proveedores o EVENTO.corte_honor, confiando en que para
+ * entonces la vista ya cargó. Con la red lenta no cargó: DINERO todavía
+ * es null, y el `|| []` que había protegía de que faltara la PROPIEDAD,
+ * no de que el objeto entero fuera null. La ficha no abría y no se veía
+ * ningún error — quedaba en la consola, donde nadie mira.
+ *
+ * Esperar a que el dato esté es lo correcto, y si no llega hay que
+ * DECIRLO. Un tiempo fijo no puede acertar en las dos redes.
+ *
+ * @param {Function} hayDatos - Devuelve algo verdadero cuando ya se puede.
+ * @param {Function} hacer - Lo que se quería hacer.
+ * @param {string} queFaltaba - Para el aviso, si nunca llega.
+ * @returns {void}
+ *
+ * @example
+ *   alTenerLosDatos(
+ *     () => DINERO && DINERO.proveedores,
+ *     () => formularioProveedor(p),
+ *     'la lista de proveedores'
+ *   );
+ */
+function alTenerLosDatos(hayDatos, hacer, queFaltaba) {
+  const limite = Date.now() + 8000;
+
+  const mirar = () => {
+    let listo = false;
+    try { listo = !!hayDatos(); } catch (error) { listo = false; }
+
+    if (listo) { hacer(); return; }
+
+    if (Date.now() > limite) {
+      avisar('No se pudo abrir: ' + queFaltaba + ' no terminó de cargar. ' +
+             'Vuelve a intentarlo.', true);
+      return;
+    }
+
+    setTimeout(mirar, 150);
+  };
+
+  mirar();
+}
+
+/**
+ * Deshabilita el botón de reintentar y le pone la cuenta atrás.
+ *
+ * Se apoya en que el botón esté en el DOM: si la vista se repinta o se
+ * navega a otro lado, document.contains() da false y el temporizador se
+ * corta solo. Sin eso quedaría uno vivo por cada error mostrado.
+ *
+ * @param {Element} boton
+ * @param {number} segundos
+ * @returns {void}
+ */
+function esperarParaReintentar(boton, segundos) {
+  const rotulo = boton.textContent;
+  let faltan = segundos;
+
+  const pintar = () => {
+    boton.disabled = true;
+    boton.textContent = 'Reintentar en ' + faltan + ' s';
+  };
+  pintar();
+
+  const reloj = setInterval(() => {
+    if (!document.contains(boton)) { clearInterval(reloj); return; }
+
+    faltan -= 1;
+    if (faltan > 0) { pintar(); return; }
+
+    clearInterval(reloj);
+    boton.disabled = false;
+    boton.textContent = rotulo;
+  }, 1000);
 }
 
 
@@ -656,6 +991,141 @@ function campoTexto(opciones) {
 }
 
 /**
+ * "150000.5" → "150,000.5". Sin librería: separa la parte entera cada
+ * tres dígitos, deja los decimales tal cual venían.
+ *
+ * @param {string} texto
+ * @returns {string}
+ */
+function formatoDeMiles(texto) {
+  const limpio = String(texto || '').replace(/[^\d.]/g, '');
+  const punto = limpio.indexOf('.');
+  const entero = punto === -1 ? limpio : limpio.slice(0, punto);
+  const decimales = punto === -1 ? '' : limpio.slice(punto);
+  return entero.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + decimales;
+}
+
+/**
+ * Un campo de dinero con separador de miles NATIVO: "1000" se ve
+ * "1,000" apenas se tipea el cuarto dígito, como cualquier app de
+ * plata de verdad. Por dentro sigue siendo texto —los `type="number"`
+ * del navegador no aceptan comas—, pero aPesos() ya limpia cualquier
+ * caracter que no sea dígito o punto al leerlo, así que nada más
+ * cambia con este campo.
+ *
+ * ⚠️ Requiere llamar a activarFormatoDeMiles(id, cuerpo) después de
+ * abrirHoja(), para que el formato se actualice mientras se escribe.
+ *
+ * @param {Object} opciones - id, rotulo, valor (en pesos), pista.
+ * @returns {string}
+ */
+function campoDinero(opciones) {
+  const valor = (opciones.valor !== undefined && opciones.valor !== '' && opciones.valor !== null)
+    ? formatoDeMiles(String(opciones.valor))
+    : '';
+
+  /* ⚡ EN QUÉ MONEDA SE ESTÁ ESCRIBIENDO (2026-09-03)
+   *
+   * El selector de moneda de Dinero vive en localStorage y sobrevive
+   * entre sesiones, así que se puede quedar en dólares desde la semana
+   * pasada sin que nadie se acuerde. Y aPesos() multiplica por el tipo
+   * de cambio al guardar: escribir 50000 en "Costo real" con el
+   * selector olvidado en dólares guarda novecientos veinticinco mil
+   * pesos, sin un solo aviso.
+   *
+   * De los siete formularios con montos, UNO solo nombraba la moneda en
+   * su rótulo. Ahora lo hace el componente, así que lo dicen todos —y
+   * los que se agreguen después—. En la moneda base no se dice nada: no
+   * hay ambigüedad que resolver y sería ruido en cada campo. */
+  const cual = (typeof monedaElegida === 'function') ? monedaElegida() : null;
+  const enOtraMoneda = cual && cual !== CONFIGURACION.dinero.monedaBase;
+
+  const aclaracion = enOtraMoneda
+    ? ' <span class="campo__moneda">en ' +
+      seguro(CONFIGURACION.dinero.monedas[cual].nombre.toLowerCase()) + '</span>'
+    : '';
+
+  return '' +
+    '<label class="campo">' +
+      '<span class="campo__rotulo">' + seguro(opciones.rotulo) + aclaracion + '</span>' +
+      '<input type="text" inputmode="decimal" id="' + seguro(opciones.id) + '" ' +
+             'class="campo__control" value="' + seguro(valor) + '"' +
+             (opciones.pista ? ' placeholder="' + seguro(opciones.pista) + '"' : '') +
+      '>' +
+    '</label>';
+}
+
+/**
+ * Engancha el separador de miles en vivo sobre un campoDinero() ya
+ * insertado en el DOM. El cursor se mantiene al final salvo que se
+ * estuviera editando en medio del número —caso raro en un monto—, para
+ * no complicar el cálculo exacto de dónde reinsertarlo.
+ *
+ * @param {string} id
+ * @param {Element} cuerpo
+ * @returns {void}
+ */
+function activarFormatoDeMiles(id, cuerpo) {
+  const campo = buscar('#' + id, cuerpo);
+  if (!campo) return;
+  campo.addEventListener('input', () => {
+    const estabaAlFinal = campo.selectionStart === campo.value.length;
+    campo.value = formatoDeMiles(campo.value);
+    if (estabaAlFinal) {
+      campo.selectionStart = campo.value.length;
+      campo.selectionEnd = campo.value.length;
+    }
+  });
+}
+
+/**
+ * Una lista de cláusulas típicas para elegir con casillas, más un
+ * texto libre para agregar cualquier otra cosa a mano. Pensado para
+ * que un contrato quede con base legal razonable sin que Lucila tenga
+ * que redactar cláusulas ella misma: puede aceptar las sugeridas tal
+ * cual, tildar solo las que quiera, y sumar lo demás con sus palabras.
+ *
+ * @param {Object} opciones - id, rotulo, opciones (string[]), valorLibre.
+ * @returns {string}
+ */
+function campoDeClausulas(opciones) {
+  const casillas = opciones.opciones.map(texto =>
+    '<label class="casilla" style="align-items:flex-start;margin-bottom:6px">' +
+      '<input type="checkbox" data-clausula-de="' + seguro(opciones.id) + '" ' +
+             'value="' + seguro(texto) + '">' +
+      '<span>' + seguro(texto) + '</span>' +
+    '</label>'
+  ).join('');
+
+  return '' +
+    '<div class="campo">' +
+      '<span class="campo__rotulo">' + seguro(opciones.rotulo) + '</span>' +
+      '<div style="margin:6px 0">' + casillas + '</div>' +
+      '<textarea id="' + seguro(opciones.id) + '-libre" class="campo__control" ' +
+                'placeholder="Agrega cualquier otra, con tus palabras (opcional)">' +
+        seguro(opciones.valorLibre || '') +
+      '</textarea>' +
+    '</div>';
+}
+
+/**
+ * Junta lo tildado en campoDeClausulas() más el texto libre en un solo
+ * bloque de texto, separado por renglones en blanco — el servidor
+ * sigue recibiendo texto plano, como siempre.
+ *
+ * @param {string} id
+ * @param {Element} cuerpo
+ * @returns {string}
+ */
+function valorDeClausulasDe(id, cuerpo) {
+  const tildadas = buscarTodos('[data-clausula-de="' + id + '"]', cuerpo)
+    .filter(casilla => casilla.checked)
+    .map(casilla => casilla.value);
+  const libre = valorDe(id + '-libre', cuerpo);
+  return tildadas.concat(libre ? [libre] : []).join('\n\n');
+}
+
+/**
  * Devuelve el HTML de un área de texto largo.
  *
  * @param {Object} opciones - id, rotulo, valor.
@@ -697,6 +1167,171 @@ function campoLista(opciones) {
         items +
       '</select>' +
     '</label>';
+}
+
+/**
+ * Los códigos de país de todo el continente americano, para que nadie
+ * tenga que acordarse de escribir +52 a mano. México va primero: es
+ * quien usa este panel casi siempre.
+ */
+const CODIGOS_DE_PAIS_AMERICA = [
+  { pais: 'México',               codigo: '+52'  },
+  { pais: 'Estados Unidos',       codigo: '+1'   },
+  { pais: 'Canadá',               codigo: '+1'   },
+  { pais: 'Guatemala',            codigo: '+502' },
+  { pais: 'Belice',               codigo: '+501' },
+  { pais: 'Honduras',             codigo: '+504' },
+  { pais: 'El Salvador',          codigo: '+503' },
+  { pais: 'Nicaragua',            codigo: '+505' },
+  { pais: 'Costa Rica',           codigo: '+506' },
+  { pais: 'Panamá',               codigo: '+507' },
+  { pais: 'Cuba',                 codigo: '+53'  },
+  { pais: 'República Dominicana', codigo: '+1'   },
+  { pais: 'Puerto Rico',          codigo: '+1'   },
+  { pais: 'Colombia',             codigo: '+57'  },
+  { pais: 'Venezuela',            codigo: '+58'  },
+  { pais: 'Ecuador',              codigo: '+593' },
+  { pais: 'Perú',                 codigo: '+51'  },
+  { pais: 'Brasil',               codigo: '+55'  },
+  { pais: 'Bolivia',              codigo: '+591' },
+  { pais: 'Paraguay',             codigo: '+595' },
+  { pais: 'Chile',                codigo: '+56'  },
+  { pais: 'Argentina',            codigo: '+54'  },
+  { pais: 'Uruguay',              codigo: '+598' },
+];
+
+/**
+ * Separa "+52 55 1147 8600" en { codigo: '+52', numero: '55 1147 8600' }.
+ * Si no reconoce ningún código al principio, asume México (+52) y deja
+ * el texto entero como número — nunca se pierde lo que ya estaba
+ * escrito, con o sin código.
+ *
+ * @param {string} telefonoCompleto
+ * @returns {{codigo: string, numero: string}}
+ */
+function separarCodigoDePais(telefonoCompleto) {
+  const texto = String(telefonoCompleto || '').trim();
+  const porLargo = CODIGOS_DE_PAIS_AMERICA.slice()
+    .sort((a, b) => b.codigo.length - a.codigo.length);
+  const encontrado = porLargo.find(c => texto.startsWith(c.codigo));
+
+  return encontrado
+    ? { codigo: encontrado.codigo, numero: texto.slice(encontrado.codigo.length).trim() }
+    : { codigo: '+52', numero: texto };
+}
+
+/**
+ * Un teléfono con su código de país al lado, en vez de un campo de
+ * texto suelto — así nadie tiene que acordarse de escribir "+52" cada
+ * vez. México sale elegido de fábrica, porque es el país de quien usa
+ * este panel casi siempre.
+ *
+ * @param {Object} opciones
+ * @param {string} opciones.id
+ * @param {string} opciones.rotulo
+ * @param {string} [opciones.valor]  - Puede venir con o sin código.
+ * @param {string} [opciones.pista]
+ * @returns {string}
+ */
+function campoTelefono(opciones) {
+  const partes = separarCodigoDePais(opciones.valor || '');
+
+  const items = CODIGOS_DE_PAIS_AMERICA.map(c =>
+    '<option value="' + seguro(c.codigo) + '"' +
+    (c.codigo === partes.codigo ? ' selected' : '') + '>' +
+      seguro(c.codigo) + ' ' + seguro(c.pais) +
+    '</option>'
+  ).join('');
+
+  return '' +
+    '<label class="campo">' +
+      '<span class="campo__rotulo">' + seguro(opciones.rotulo || 'Teléfono') + '</span>' +
+      '<div style="display:flex;gap:6px">' +
+        '<select id="' + seguro(opciones.id) + '-cod" class="campo__control" ' +
+                'style="flex:0 0 auto;width:auto">' +
+          items +
+        '</select>' +
+        '<input type="tel" id="' + seguro(opciones.id) + '" class="campo__control" ' +
+               'value="' + seguro(partes.numero) + '"' +
+               (opciones.pista ? ' placeholder="' + seguro(opciones.pista) + '"' : '') +
+               ' style="flex:1 1 auto">' +
+      '</div>' +
+    '</label>';
+}
+
+/**
+ * Lee un campoTelefono() ya armado y devuelve el número completo, con
+ * su código de país adelante (p. ej. "+52 55 1147 8600"). Vacío si no
+ * se escribió ningún número, aunque haya un país elegido.
+ *
+ * @param {string} id
+ * @param {Element} [dentroDe]
+ * @returns {string}
+ */
+function valorTelefonoDe(id, dentroDe) {
+  const numero = valorDe(id, dentroDe);
+  if (!numero) return '';
+  const codigo = valorDe(id + '-cod', dentroDe) || '+52';
+  return codigo + ' ' + numero;
+}
+
+/**
+ * Manda un archivo ya guardado (un recibo, un contrato) por WhatsApp.
+ *
+ * CÓMO LO HACE
+ * En el teléfono, usa el panel para compartir del propio sistema
+ * operativo (Web Share API) con el PDF ya adjunto: Lucila toca
+ * WhatsApp ahí mismo y el archivo llega adjunto, sin descargar nada a
+ * mano. En escritorio (donde ese panel no sabe compartir archivos) baja
+ * el PDF y abre el chat de WhatsApp del proveedor, listo para arrastrar
+ * el archivo que se acaba de descargar.
+ *
+ * @param {number} archivoId
+ * @param {string} nombreArchivo
+ * @param {string} [telefonoProveedor] - Para el chat, si hay que hacer
+ *   el camino largo de escritorio.
+ * @returns {Promise<void>}
+ */
+async function compartirArchivoPorWhatsApp(archivoId, nombreArchivo, telefonoProveedor) {
+  let blob;
+  try {
+    const respuesta = await fetch('archivos.php?accion=ver&id=' + archivoId,
+                                   { credentials: 'same-origin' });
+    if (!respuesta.ok) throw new Error('No se pudo abrir el archivo.');
+    blob = await respuesta.blob();
+  } catch (error) {
+    avisar(error.message || 'No se pudo abrir el archivo.', true);
+    return;
+  }
+
+  const archivo = new File([blob], nombreArchivo, { type: 'application/pdf' });
+
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [archivo] })) {
+    try {
+      await navigator.share({ files: [archivo], title: nombreArchivo });
+    } catch (error) {
+      // La persona canceló el panel de compartir: no es un error real.
+    }
+    return;
+  }
+
+  // Escritorio, o un navegador sin soporte para compartir archivos:
+  // se descarga y, si hay teléfono, se abre el chat para adjuntarlo.
+  const url = URL.createObjectURL(blob);
+  const enlace = document.createElement('a');
+  enlace.href = url;
+  enlace.download = nombreArchivo;
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  URL.revokeObjectURL(url);
+
+  const numero = paraWhatsApp(telefonoProveedor);
+  if (numero) {
+    window.open('https://wa.me/' + numero + '?text='
+      + encodeURIComponent('Te comparto: ' + nombreArchivo), '_blank');
+  }
+  avisar('Se descargó el PDF' + (numero ? ' y se abrió WhatsApp: adjúntalo ahí.' : '.'));
 }
 
 /**
@@ -750,18 +1385,110 @@ function valorDe(id, dentroDe) {
 
 /* ─── 5. CONFIRMAR ANTES DE BORRAR ─────────────────────────────────── */
 
+/** La confirmación abierta, para no apilar dos si algo pregunta dos veces. */
+let CONFIRMACION_ABIERTA = null;
+
 /**
  * Pregunta antes de hacer algo que no se puede deshacer.
  *
- * Se usa el confirm() del navegador a propósito: es feo pero es el
- * diálogo del sistema, imposible de ignorar por accidente, y para borrar
- * un proveedor o un gasto eso es exactamente lo que se busca.
+ * POR QUÉ YA NO ES EL confirm() DEL NAVEGADOR
+ * Era el diálogo del sistema, imposible de ignorar por accidente. Pero
+ * Chrome en Android, a partir del segundo confirm() seguido, agrega la
+ * casilla "No volver a mostrar más diálogos" — y con veinte
+ * confirmaciones en la app es cuestión de tiempo que se toque. Desde
+ * ese momento TODAS devuelven false en silencio, sin nada en pantalla:
+ * los borrados dejan de funcionar y, peor, deja de funcionar el
+ * guardarraíl de "escribiste cosas que no se guardaron", que es el que
+ * evita perder media hora de trabajo con un dedo mal apoyado.
  *
- * @param {string} pregunta
- * @returns {boolean}
+ * Un diálogo propio no se puede silenciar, y además permite lo que el
+ * del sistema no: rotular el botón con la acción real ("Borrar la
+ * mesa") en vez de "Aceptar", y separar el título de lo que se pierde.
+ *
+ * DEVUELVE UNA PROMESA. Todos los llamadores usan `await`; sin él, un
+ * objeto Promise es siempre verdadero y la pregunta no frenaría nada.
+ *
+ * @param {string} pregunta - Lo de antes del primer renglón en blanco
+ *   es el título; lo de después, el detalle de qué se pierde.
+ * @param {Object} [opciones]
+ * @param {string} [opciones.confirmar] - Rótulo del botón que sigue adelante.
+ * @param {string} [opciones.cancelar]  - Rótulo del botón que se echa atrás.
+ * @param {boolean} [opciones.peligro]  - Si lo que se hace destruye algo.
+ * @returns {Promise<boolean>}
+ *
+ * @example
+ *   if (!await confirmarAccion('¿Borrar la mesa 5?\n\nSe sientan 8.',
+ *                              { confirmar: 'Borrar la mesa', peligro: true })) return;
  */
-function confirmarAccion(pregunta) {
-  return window.confirm(pregunta);
+function confirmarAccion(pregunta, opciones) {
+  const op = opciones || {};
+
+  /* Si ya hay una pregunta en pantalla, la segunda se responde que no.
+     Apilarlas dejaría una tapada abajo esperando para siempre. */
+  if (CONFIRMACION_ABIERTA) return Promise.resolve(false);
+
+  const partes  = String(pregunta).split(/\n\s*\n/);
+  const titulo  = partes.shift();
+  const detalle = partes.join('\n\n').trim();
+
+  return new Promise(resolve => {
+    const capa = document.createElement('div');
+    capa.className = 'confirmar';
+    capa.setAttribute('role', 'alertdialog');
+    capa.setAttribute('aria-modal', 'true');
+    capa.innerHTML =
+      '<div class="confirmar__fondo" data-confirmar="no"></div>' +
+      '<div class="confirmar__panel' +
+           (op.peligro ? ' confirmar__panel--peligro' : '') + '">' +
+        '<div class="confirmar__titulo">' + seguro(titulo) + '</div>' +
+        (detalle
+          ? '<div class="confirmar__detalle">' + seguro(detalle) + '</div>'
+          : '') +
+        '<div class="confirmar__acciones">' +
+          '<button class="boton" data-confirmar="no">' +
+            seguro(op.cancelar || 'Cancelar') + '</button>' +
+          '<button class="boton ' +
+                  (op.peligro ? 'boton--peligro' : 'boton--principal') + '" ' +
+                  'data-confirmar="si">' +
+            seguro(op.confirmar || 'Sí, seguir') + '</button>' +
+        '</div>' +
+      '</div>';
+
+    /* Una sola salida para las tres formas de responder (los botones, el
+       fondo, la tecla Escape), y el listener del teclado se desengancha
+       ahí mismo: si quedara vivo, cada confirmación dejaría uno más. */
+    const responder = respuesta => {
+      if (CONFIRMACION_ABIERTA !== capa) return;
+      CONFIRMACION_ABIERTA = null;
+      document.removeEventListener('keydown', porTecla, true);
+      capa.remove();
+      resolve(respuesta);
+    };
+
+    const porTecla = evento => {
+      if (evento.key !== 'Escape') return;
+      /* En captura y cortando la propagación: si no, el mismo Escape
+         llegaría al listener de 05-navegacion.js y cerraría también la
+         hoja de atrás, que es justo lo que se estaba por confirmar. */
+      evento.stopPropagation();
+      responder(false);
+    };
+
+    capa.addEventListener('click', evento => {
+      const boton = evento.target.closest('[data-confirmar]');
+      if (boton) responder(boton.dataset.confirmar === 'si');
+    });
+    document.addEventListener('keydown', porTecla, true);
+
+    CONFIRMACION_ABIERTA = capa;
+    document.body.appendChild(capa);
+
+    /* El foco arranca en Cancelar a propósito: un Enter de reflejo, o un
+       segundo toque en el mismo lugar donde estaba el botón anterior, no
+       debe destruir nada. */
+    const cancelar = capa.querySelector('[data-confirmar="no"].boton');
+    if (cancelar) cancelar.focus();
+  });
 }
 
 
@@ -1083,4 +1810,335 @@ function valorDeListaDeDetalle(id, dentroDe) {
       hecho: buscar('[data-detalle-hecho]', fila).checked,
     }))
     .filter(item => item.texto);
+}
+
+
+/* ─── 7. ETIQUETAS LIBRES (ENTREGA 2) ──────────────────────────────── */
+
+/**
+ * Pinta los "chips" de etiquetas de una persona o una mesa, con forma
+ * de agregar (elegir una existente o escribir una nueva) y de quitar
+ * cada una. Autocontenido a propósito: se llama una vez, con el
+ * contenedor vacío donde va, y desde ahí se arma y refresca solo — así
+ * sirve igual desde la ficha de un acompañante (08-vista-invitados.js)
+ * que desde la de una mesa (17-mesas.js), sin duplicar nada.
+ *
+ * @param {'acompanante'|'mesa'} tipo
+ * @param {number} id
+ * @param {Element} contenedor
+ * @returns {Promise<void>}
+ */
+/**
+ * La pantalla central de etiquetas: todas las que existen, cuántas
+ * veces se usó cada una, y un botón para borrarla del todo. No permite
+ * PONERLAS desde acá a propósito — eso solo tiene sentido parado sobre
+ * una persona o una mesa concreta (ver pintarEtiquetasDe()); esta
+ * pantalla es para verlas de un vistazo y limpiar las que sobraron.
+ *
+ * @returns {Promise<void>}
+ */
+async function abrirEtiquetasAcomodo() {
+  const cuerpo = abrirHoja('Etiquetas',
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+      'Palabras libres que pones a una persona o a una mesa —"Familia ' +
+      'paterna", "Jóvenes", "Mesa ruidosa"— para que el acomodo ' +
+      'automático las tenga en cuenta. También se agregan desde la ficha ' +
+      'de cada persona (en Gente → Invitados) o de cada mesa (en Gente → ' +
+      'Mesas); aquí se ven todas juntas.' +
+    '</p>' +
+    /* ⚡ (2026-08-30) A pedido: antes esta pantalla solo listaba y
+       borraba — no tenía sentido un menú de configuración de etiquetas
+       que no dejara crear ninguna. El backend (etiquetas_acomodo.php?accion
+       =crear) ya existía, solo faltaba conectarlo acá. */
+    '<div style="display:flex;gap:6px;margin-bottom:var(--esp-3)">' +
+      '<input type="text" id="etiqueta-nueva-acomodo" class="campo__control" ' +
+             'placeholder="Nombre de la etiqueta nueva" style="flex:1">' +
+      '<button type="button" class="boton boton--principal" id="crear-etiqueta-acomodo">' +
+        'Crear</button>' +
+    '</div>' +
+    '<div id="lista-etiquetas-acomodo"><div class="esqueleto"></div></div>'
+  );
+
+  const campoNueva = buscar('#etiqueta-nueva-acomodo', cuerpo);
+  const crear = async () => {
+    const nombre = campoNueva.value.trim();
+    if (!nombre) { avisar('Escribe un nombre para la etiqueta.', true); return; }
+    try {
+      await mandar('etiquetas_acomodo.php?accion=crear', { nombre: nombre });
+      campoNueva.value = '';
+      avisar('Etiqueta creada.');
+      repintarListaDeEtiquetasAcomodo(cuerpo);
+    } catch (error) {
+      avisar(error.message, true);
+    }
+  };
+  buscar('#crear-etiqueta-acomodo', cuerpo).addEventListener('click', crear);
+  campoNueva.addEventListener('keydown', evento => {
+    if (evento.key === 'Enter') { evento.preventDefault(); crear(); }
+  });
+
+  await repintarListaDeEtiquetasAcomodo(cuerpo);
+}
+
+/**
+ * @param {Element} cuerpo
+ * @returns {Promise<void>}
+ */
+async function repintarListaDeEtiquetasAcomodo(cuerpo) {
+  const contenedor = buscar('#lista-etiquetas-acomodo', cuerpo);
+  if (!contenedor) return;
+
+  let filas;
+  try {
+    const r = await traer('etiquetas_acomodo.php?accion=listar');
+    filas = r.filas || [];
+  } catch (error) {
+    pintarError(contenedor, error.message,
+      () => repintarListaDeEtiquetasAcomodo(cuerpo));
+    return;
+  }
+
+  if (!filas.length) {
+    pintarVacio(contenedor, 'Todavía no hay ninguna etiqueta',
+      'Crea la primera arriba, o desde la ficha de una persona o una mesa.');
+    return;
+  }
+
+  contenedor.innerHTML = filas.map(e =>
+    '<div class="lista__fila" style="cursor:default">' +
+      '<span class="lista__cuerpo">' +
+        '<span class="lista__titulo">' + seguro(e.nombre) + '</span>' +
+        '<span class="lista__pie">' +
+          seguro(pluralizar(Number(e.usos) || 0, 'uso', 'usos')) +
+        '</span>' +
+      '</span>' +
+      '<button class="boton-icono" data-borrar-etiqueta-acomodo="' + seguro(e.id) + '" ' +
+              'aria-label="Borrar etiqueta">' +
+        '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
+          '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" ' +
+                'stroke-width="1.5" stroke-linecap="round"/></svg>' +
+      '</button>' +
+    '</div>'
+  ).join('');
+
+  buscarTodos('[data-borrar-etiqueta-acomodo]', contenedor).forEach(boton => {
+    boton.addEventListener('click', async () => {
+      if (!await confirmarAccion(
+        '¿Borrar esta etiqueta? Se saca de todas las personas y mesas que la tengan.'
+      )) return;
+      try {
+        await mandar('etiquetas_acomodo.php?accion=borrar',
+          { id: Number(boton.dataset.borrarEtiquetaAcomodo) });
+        repintarListaDeEtiquetasAcomodo(cuerpo);
+      } catch (error) {
+        avisar(error.message, true);
+      }
+    });
+  });
+}
+
+/**
+ * Etiquetas que se ofrecen aunque nadie las haya creado todavía.
+ *
+ * POR QUÉ EXISTEN
+ * El catálogo arrancaba vacío: para ponerle "Familia materna" a alguien
+ * había que escribirlo entero, bien, la primera vez — y volver a
+ * escribirlo cada vez que uno no se acordaba de cómo lo había escrito
+ * ("familia materna", "Familia Materna", "fam. materna" eran tres
+ * etiquetas distintas). Con una lista de arranque, poner cuatro
+ * etiquetas son cuatro toques y ninguna se escribe dos veces distinto.
+ *
+ * No se crean en la base hasta que alguien toca una: el catálogo real
+ * sigue siendo el de siempre y sigue creciendo con lo que se escriba a
+ * mano.
+ */
+const ETIQUETAS_SUGERIDAS = [
+  'Joven', 'Adulto', 'Niños',
+  'Familia materna', 'Familia paterna',
+  'Compañero de baile', 'Compañero de preparatoria',
+  'Amigos de Ania', 'Trabajo de papá', 'Trabajo de mamá',
+  'Vecinos', 'Padrinos', 'Corte de honor',
+  'Mesa ruidosa', 'Mesa tranquila',
+];
+
+/**
+ * El bloque de etiquetas de una persona o una mesa: todas a la vista,
+ * un toque para poner y otro para quitar.
+ *
+ * ⚡ ANTES ERA DE A UNA Y ESCRIBIÉNDOLAS (2026-09-03)
+ * Se podían poner varias —la base siempre lo permitió— pero había que
+ * escribir cada nombre en un campo de texto y tocar "Agregar", con un
+ * viaje al servidor y un repintado completo entre una y otra. Ponerle
+ * cuatro etiquetas a alguien eran cuatro tipeos y cuatro esperas, y
+ * cualquier diferencia de mayúsculas creaba una etiqueta nueva.
+ *
+ * Ahora se ven TODAS las disponibles como chips: las puestas encendidas,
+ * las demás apagadas. Tocar una la pone o la saca, y el chip cambia al
+ * instante sin esperar al servidor (si falla, vuelve y se avisa). El
+ * campo de texto queda para inventar una que no esté.
+ *
+ * @param {string} tipo - 'acompanante' | 'mesa' | 'confirmacion'
+ * @param {number} id
+ * @param {Element} contenedor
+ * @returns {Promise<void>}
+ */
+async function pintarEtiquetasDe(tipo, id, contenedor) {
+  if (!contenedor) return;
+
+  let puestas = [];
+  let catalogo = [];
+  try {
+    /* Las dos en paralelo: son independientes y esto se pinta dentro de
+       una ficha que ya está abierta esperando. */
+    const [r, c] = await Promise.all([
+      traer('etiquetas_acomodo.php?accion=por_objeto&tipo=' + tipo + '&id=' + id),
+      traer('etiquetas_acomodo.php?accion=listar').catch(() => ({ filas: [] })),
+    ]);
+    puestas  = r.filas || [];
+    catalogo = c.filas || [];
+  } catch (error) {
+    contenedor.innerHTML = '';
+    return; // No es crítico: la ficha se puede ver igual sin esto.
+  }
+
+  const nombresPuestos = puestas.map(e => e.nombre);
+
+  /* El orden es el que se usa: primero lo que ya tiene, después lo que
+     más se usa en el evento, y al final las sugerencias que nadie creó
+     todavía. Sin repetir, comparando sin distinguir mayúsculas para no
+     ofrecer "Joven" cuando ya existe "joven". */
+  const vistos = new Set();
+  const disponibles = [];
+  const agregarSiEsNueva = nombre => {
+    const clave = nombre.toLocaleLowerCase('es');
+    if (vistos.has(clave)) return;
+    vistos.add(clave);
+    disponibles.push(nombre);
+  };
+
+  nombresPuestos.forEach(agregarSiEsNueva);
+  catalogo
+    .slice()
+    .sort((a, b) => (Number(b.usos) || 0) - (Number(a.usos) || 0))
+    .forEach(e => agregarSiEsNueva(e.nombre));
+  ETIQUETAS_SUGERIDAS.forEach(agregarSiEsNueva);
+
+  const puestasEnMinuscula = new Set(
+    nombresPuestos.map(n => n.toLocaleLowerCase('es')));
+
+  /* ⚠️ EN ACORDEÓN, Y CERRADO (2026-09-04)
+     Este bloque pinta los ~15 chips completos, y la ficha de un grupo lo
+     repite UNA VEZ POR PERSONA: con dos personas eran treinta chips y
+     dos campos "Crear otra etiqueta" antes de llegar a nada más. La
+     ficha se volvía ilegible justo cuando más gente tiene.
+
+     Se usa <details>/<summary> nativo y no un desplegable propio: no
+     hay estado que mantener, funciona con teclado y lectores de
+     pantalla sin que haya que escribir nada, y no puede desincronizarse
+     con el DOM.
+
+     CERRADO SIEMPRE, también sin etiquetas puestas. La primera idea fue
+     abrirlo cuando no hubiera ninguna, pero ese es justo el caso de la
+     captura que motivó esto —una ficha recién creada, sin etiquetas en
+     ninguna persona— así que habría quedado igual de saturada. Lo que
+     hace falta ver de un vistazo es QUÉ TIENE PUESTO, y eso va en el
+     resumen; poner una es una acción deliberada y se banca un toque. */
+  const resumenDeLoPuesto = nombresPuestos.length
+    ? nombresPuestos.map(n =>
+        '<span class="etiqueta-chip etiqueta-chip--activa etiqueta-chip--resumen">' +
+          seguro(n) +
+        '</span>').join('')
+    : '<span class="etiquetas-acordeon__vacio">Ninguna todavía</span>';
+
+  contenedor.innerHTML =
+    '<details class="etiquetas-acordeon">' +
+    '<summary class="etiquetas-acordeon__cabecera">' +
+      '<span class="campo__rotulo">Etiquetas</span>' +
+      '<span class="etiquetas-acordeon__puestas">' + resumenDeLoPuesto + '</span>' +
+    '</summary>' +
+
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-1)">' +
+      'Puedes poner todas las que quieras. Toca para poner o quitar.</p>' +
+
+    '<div class="etiquetas-elegir">' +
+      disponibles.map(nombre => {
+        const activa = puestasEnMinuscula.has(nombre.toLocaleLowerCase('es'));
+        return '<button type="button" class="etiqueta-chip' +
+               (activa ? ' etiqueta-chip--activa' : '') + '" ' +
+               'data-etiqueta-alternar="' + seguro(nombre) + '" ' +
+               'aria-pressed="' + (activa ? 'true' : 'false') + '">' +
+                 seguro(nombre) +
+               '</button>';
+      }).join('') +
+    '</div>' +
+
+    '<div style="display:flex;gap:6px;margin-top:var(--esp-2)">' +
+      '<input type="text" id="etiqueta-nueva-' + tipo + id + '" class="campo__control" ' +
+             'placeholder="Crear otra etiqueta" style="flex:1">' +
+      '<button type="button" class="boton boton--chico" id="etiqueta-agregar-' + tipo + id + '">' +
+        'Crear</button>' +
+    '</div>' +
+    '</details>';
+
+  /* Poner y quitar con un toque, sin repintar todo el bloque: repintar
+     perdía el lugar del scroll y hacía parpadear los quince chips para
+     cambiar uno. El chip cambia primero y se corrige solo si el
+     servidor dice que no. */
+  buscarTodos('[data-etiqueta-alternar]', contenedor).forEach(chip => {
+    chip.addEventListener('click', async () => {
+      const nombre  = chip.dataset.etiquetaAlternar;
+      const estaba  = chip.classList.contains('etiqueta-chip--activa');
+      const puesta  = puestas.find(e =>
+        e.nombre.toLocaleLowerCase('es') === nombre.toLocaleLowerCase('es'));
+
+      // Sin id no se puede quitar: hay que saber cuál etiqueta es.
+      if (estaba && !puesta) return;
+
+      chip.classList.toggle('etiqueta-chip--activa', !estaba);
+      chip.setAttribute('aria-pressed', String(!estaba));
+      chip.disabled = true;
+
+      try {
+        if (estaba) {
+          await mandar('etiquetas_acomodo.php?accion=quitar',
+            { etiqueta_id: puesta.id, tipo: tipo, id: id });
+          puestas = puestas.filter(e => e.id !== puesta.id);
+        } else {
+          const r = await mandar('etiquetas_acomodo.php?accion=asignar',
+            { nombre: nombre, tipo: tipo, id: id });
+          // El servidor devuelve el id de la etiqueta (la creó o la
+          // reusó): hace falta para poder quitarla después sin recargar.
+          puestas.push({ id: (r && r.etiqueta_id) || (r && r.id), nombre: nombre });
+        }
+      } catch (error) {
+        // Se deshace el cambio optimista: el chip vuelve a como estaba.
+        chip.classList.toggle('etiqueta-chip--activa', estaba);
+        chip.setAttribute('aria-pressed', String(estaba));
+        avisar(error.message, true);
+      } finally {
+        chip.disabled = false;
+      }
+    });
+  });
+
+  const campoNueva = buscar('#etiqueta-nueva-' + tipo + id, contenedor);
+  const crear = async () => {
+    const nombre = campoNueva.value.trim();
+    if (!nombre) return;
+
+    try {
+      await mandar('etiquetas_acomodo.php?accion=asignar',
+        { nombre: nombre, tipo: tipo, id: id });
+      campoNueva.value = '';
+      // Acá sí se repinta: hay un chip nuevo que no existía en la lista.
+      pintarEtiquetasDe(tipo, id, contenedor);
+    } catch (error) {
+      avisar(error.message, true);
+    }
+  };
+
+  buscar('#etiqueta-agregar-' + tipo + id, contenedor).addEventListener('click', crear);
+  campoNueva.addEventListener('keydown', evento => {
+    if (evento.key === 'Enter') { evento.preventDefault(); crear(); }
+  });
 }

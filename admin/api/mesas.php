@@ -37,6 +37,27 @@ $yo     = exigirSesion();
 exigirPermiso($yo, 'mesas', ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' ? 'ver' : 'editar');
 $accion = (string) ($_GET['accion'] ?? 'todo');
 
+/**
+ * La zona de una mesa según su fila en el plano — mismo criterio que
+ * ya usaba `salon.prioridadPorFila` en 01-configuracion.js (la 3 está
+ * pegada a la pista, la 6 es el fondo), pero como etiqueta real en vez
+ * de un número que solo servía para ordenar. Se usa al armar el salón
+ * (ver 'armar_salon' abajo) para que la zona exista desde el día uno
+ * sin que Lucila tenga que cargarla a mano en las 14 mesas.
+ *
+ * @param int $fila
+ * @return string Cadena vacía si la fila no tiene una zona conocida.
+ */
+function zonaPorFila($fila) {
+    $zonas = [
+        3 => 'Cerca del escenario',
+        4 => 'Zona media',
+        5 => 'Al fondo',
+        6 => 'Al fondo',
+    ];
+    return $zonas[(int) $fila] ?? '';
+}
+
 
 switch ($accion) {
 
@@ -107,6 +128,15 @@ case 'todo':
         ? consultarUno("SELECT valor FROM ajustes WHERE clave = 'auto_al_confirmar'")
         : null;
 
+    /* De cuándo es la foto a la que vuelve "Volver al acomodo anterior",
+       y por qué se tomó. Viaja para que la app pueda preguntar diciendo
+       QUÉ se pierde ("vuelves a como estaba el 2 de septiembre") en vez
+       de un "¿estás seguro?" que no ayuda a decidir. */
+    $ultimoRespaldo = existeTabla('acomodo_respaldo')
+        ? consultarUno('SELECT cuando, motivo, cuantos FROM acomodo_respaldo
+                        ORDER BY cuando DESC, id DESC LIMIT 1')
+        : null;
+
     responderBien([
         'mesas'       => array_values($porMesa),
         'sin_sentar'  => $sinSentar,
@@ -123,6 +153,7 @@ case 'todo':
             'faltan_lugares' => max(0, $totalGente - $capacidadTotal),
         ],
         'auto_al_confirmar' => $ajuste && $ajuste['valor'] === '1',
+        'ultimo_respaldo'   => $ultimoRespaldo ?: null,
     ]);
     break;
 
@@ -167,22 +198,52 @@ case 'armar_salon':
             /* Ya estaba: solo se le pone dónde va. No se le toca la
                capacidad ni la ubicación escrita, que puede haberse
                ajustado a mano por algo. */
-            actualizar('mesas', (int) $existe['id'], [
+            /* `fila`, `columna` y `prioridad` se agregaron a `mesas`
+               después de que la tabla existiera. Sin filtrar, en una
+               instalación sin migrar "Armar el salón" moría con un 500
+               a mitad del lote: unas mesas creadas, otras no, y ningún
+               aviso de por qué. Ver soloColumnasQueExisten() en
+               _lib/bd.php. */
+            actualizar('mesas', (int) $existe['id'], soloColumnasQueExisten('mesas', [
                 'fila' => $fila, 'columna' => $columna, 'prioridad' => $prioridad,
-            ]);
+            ]));
             $ubicadas++;
             continue;
         }
 
-        insertar('mesas', [
+        // Mismo motivo que arriba: sin las columnas del plano la mesa
+        // igual se crea, y queda sin ubicar en vez de no existir.
+        $mesaId = insertar('mesas', soloColumnasQueExisten('mesas', [
             'nombre'    => $nombre,
             'capacidad' => $capacidad,
             'ubicacion' => '',
             'fila'      => $fila,
             'columna'   => $columna,
             'prioridad' => $prioridad,
-        ]);
+        ]));
         $creadas++;
+
+        /* ⚡ (2026-08-30) Zona como etiqueta real desde el día uno, no
+           una palabra que Lucila tenga que acordarse de escribir en
+           las 14 mesas: se auto-asigna acá, con el mismo sistema de
+           etiquetas de siempre (etiquetas_acomodo.php), derivada de la
+           fila. Solo al CREAR (no al reubicar una que ya existía, más
+           arriba): si Lucila la editó o la borró a mano, no se le pisa
+           en la próxima corrida de "Armar el salón". */
+        if (existeTabla('etiquetas') && existeTabla('etiquetas_asignadas')) {
+            $zona = zonaPorFila($fila);
+            if ($zona !== '') {
+                $etiquetaZona = consultarUno('SELECT id FROM etiquetas WHERE nombre = :n', [':n' => $zona]);
+                $etiquetaZonaId = $etiquetaZona
+                    ? (int) $etiquetaZona['id']
+                    : insertar('etiquetas', ['nombre' => $zona]);
+                insertar('etiquetas_asignadas', [
+                    'etiqueta_id'  => $etiquetaZonaId,
+                    'atado_a_tipo' => 'mesa',
+                    'atado_a_id'   => $mesaId,
+                ]);
+            }
+        }
     }
 
     anotarEnBitacora($yo, 'armó el plano del salón', 'mesas', 0,
@@ -209,7 +270,14 @@ case 'deshacer':
     anotarEnBitacora($yo, 'volvió al acomodo anterior', 'asignacion_mesas', 0,
                      $r['cuantos'] . ' asignaciones restauradas');
 
-    responderBien(['mensaje' => 'Listo: el acomodo volvió a como estaba antes.']);
+    /* Si desde la foto se borró alguna mesa, esa gente no tiene dónde
+       volver. Se dice, en vez de dejar que la cuenta no cierre sola. */
+    $salteadas = (int) ($r['salteadas'] ?? 0);
+    responderBien(['mensaje' => $salteadas
+        ? 'Listo, con una salvedad: ' . $salteadas . ' ' .
+          ($salteadas === 1 ? 'persona quedó' : 'personas quedaron') .
+          ' sin mesa porque la suya se borró después de esa foto.'
+        : 'Listo: el acomodo volvió a como estaba antes.']);
     break;
 
 
@@ -224,10 +292,18 @@ case 'ubicar':
         responderMal('Esa mesa no existe.', 404);
     }
 
-    actualizar('mesas', $mesa, [
+    /* Arrastrar una mesa en el plano es el gesto más repetido de esta
+       pantalla: si las columnas del plano no están, tiene que decirlo
+       una vez y no reventar con un 500 en cada arrastre. */
+    $movida = soloColumnasQueExisten('mesas', [
         'fila'    => campoEntero($datos, 'fila', 0, 20),
         'columna' => campoEntero($datos, 'columna', 0, 12),
     ]);
+    if (!$movida) {
+        responderMal('Esta instalación todavía no tiene el plano del salón. ' .
+                     'Hay que correr admin/api/instalar.php.', 503);
+    }
+    actualizar('mesas', $mesa, $movida);
 
     responderBien(['mensaje' => 'Mesa movida.']);
     break;
@@ -687,13 +763,19 @@ case 'pelea':
          * contempló. Se atrapa acá con un mensaje claro en vez de dejar
          * pasar el error crudo de MySQL. */
         try {
-            $id = insertar('incompatibilidades', [
-                'invitado_a'    => $confDe[$acompA],
-                'invitado_b'    => $confDe[$acompB],
-                'acompanante_a' => $acompA,
-                'acompanante_b' => $acompB,
-                'motivo'        => campoTexto($datos, 'motivo', 200),
-            ]);
+            // intentando() (ver _lib/bd.php): sin esto el choque contra
+            // la llave única salía por responderMal() con un 500 crudo,
+            // y el mensaje explicativo de abajo —escrito justo para ese
+            // caso— no se mostraba nunca.
+            $id = intentando(function () use ($confDe, $acompA, $acompB, $datos) {
+                return insertar('incompatibilidades', [
+                    'invitado_a'    => $confDe[$acompA],
+                    'invitado_b'    => $confDe[$acompB],
+                    'acompanante_a' => $acompA,
+                    'acompanante_b' => $acompB,
+                    'motivo'        => campoTexto($datos, 'motivo', 200),
+                ]);
+            });
         } catch (PDOException $e) {
             responderMal(
                 'No se pudo guardar esta regla puntual — probablemente porque ya hay ' .
@@ -848,6 +930,71 @@ case 'personas_de':
             'notas'          => $p['notas'] ?? '',
         ];
     }, $personas));
+    break;
+
+
+/* ─── QUIÉN SE SIENTA EN UNA MESA, PERSONA POR PERSONA ────────────────────
+   GET ?accion=detalle_mesa&mesa_id=N
+
+   Devuelve a cada invitado de esa mesa con su plato y su alergia. Es la
+   hoja que hace falta el día de la fiesta: el mesero necesita saber que en
+   la mesa 3 hay dos vegetarianos y alguien alérgico a los mariscos, y
+   quiénes son — ese cruce no existía en ningún lado, había que entrar
+   invitado por invitado.
+
+   La gente llega a una mesa por dos caminos distintos y hay que mirar los
+   dos: por familia entera (asignacion_mesas, una fila por confirmación) o
+   individualmente (asignacion_mesas_persona, cuando a alguien se lo sentó
+   aparte). Un mismo acompañante podría aparecer por los dos lados, así que
+   se descarta el repetido al unir. */
+case 'detalle_mesa':
+    exigirMetodo('GET');
+    $mesaId = campoEntero($_GET, 'mesa_id', 1);
+
+    $porFamilia = existeTabla('acompanantes')
+        ? consultarTodo(
+            'SELECT a.id, a.nombre, a.tipo, a.menu, a.alergias, c.nombre AS familia
+             FROM asignacion_mesas am
+             JOIN confirmaciones c ON c.id = am.confirmacion_id
+             JOIN acompanantes a   ON a.confirmacion_id = c.id
+             WHERE am.mesa_id = :m
+             ORDER BY c.nombre, a.id',
+            [':m' => $mesaId])
+        : [];
+
+    $porPersona = existeTabla('asignacion_mesas_persona')
+        ? consultarTodo(
+            'SELECT a.id, a.nombre, a.tipo, a.menu, a.alergias, c.nombre AS familia
+             FROM asignacion_mesas_persona ap
+             JOIN acompanantes a       ON a.id = ap.acompanante_id
+             LEFT JOIN confirmaciones c ON c.id = a.confirmacion_id
+             WHERE ap.mesa_id = :m
+             ORDER BY a.id',
+            [':m' => $mesaId])
+        : [];
+
+    $vistos = [];
+    $gente  = [];
+    foreach (array_merge($porFamilia, $porPersona) as $fila) {
+        $id = (int) $fila['id'];
+        if (isset($vistos[$id])) continue;
+        $vistos[$id] = true;
+
+        $alergia = trim((string) ($fila['alergias'] ?? ''));
+        $sinAlergia = $alergia === '' ||
+                      preg_match('/^(ninguna|ninguno|no|n\/a|-)$/i', $alergia) === 1;
+
+        $gente[] = [
+            'id'       => $id,
+            'nombre'   => (string) $fila['nombre'],
+            'tipo'     => (string) $fila['tipo'],
+            'menu'     => (string) ($fila['menu'] ?? ''),
+            'alergias' => $sinAlergia ? '' : $alergia,
+            'familia'  => (string) ($fila['familia'] ?? ''),
+        ];
+    }
+
+    responderBien(['gente' => $gente]);
     break;
 
 

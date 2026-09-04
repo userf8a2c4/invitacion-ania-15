@@ -116,6 +116,11 @@ $agregarColumna = function ($tabla, $columna, $definicion) use (&$columnasQueFal
     }
 };
 
+/* Cuántas veces contestó el invitado desde su enlace. No es lo mismo que
+   veces_enviado (cuántas veces se MANDÓ la invitación): esto cuenta las
+   respuestas, y sirve para notar envíos repetidos o pruebas. */
+$agregarColumna('invitaciones', 'veces_respondida', 'INT NOT NULL DEFAULT 0');
+
 // Fijar una asignación de mesa para que la autoasignación no la toque.
 $agregarColumna('asignacion_mesas', 'fijada', 'TINYINT(1) NOT NULL DEFAULT 0');
 
@@ -177,6 +182,23 @@ $agregarColumna('llegadas', 'intentos', 'INT NOT NULL DEFAULT 0');
 $agregarColumna('categorias_gasto', 'presupuesto_id', 'INT NOT NULL DEFAULT 1');
 $agregarColumna('gastos', 'presupuesto_id', 'INT NOT NULL DEFAULT 1');
 
+/* Cuánto ENTREGÓ un padrino, que no es lo mismo que cuánto prometió.
+   `estado` es un sí/no: una entrega parcial —"de los $30,000 me dio
+   $10,000 y el resto en octubre"— no se podía representar sin mentir
+   para un lado o para el otro.
+
+   Los que YA estaban marcados 'entregado' arrancan con su monto
+   completo: es lo que esa marca significaba hasta ahora, y dejarlos en
+   0 haría aparecer de golpe una deuda que no existe. Se hace una sola
+   vez, y solo sobre los que quedaron en 0 — así correr instalar.php de
+   nuevo no pisa una entrega parcial cargada a mano después. */
+$agregarColumna('padrinos', 'monto_entregado', 'DECIMAL(12,2) NOT NULL DEFAULT 0');
+if (existeTabla('padrinos')
+    && in_array('monto_entregado', columnasDe('padrinos'), true)) {
+    ejecutar("UPDATE padrinos SET monto_entregado = monto
+              WHERE estado = 'entregado' AND monto_entregado = 0");
+}
+
 /* La pregunta de seguridad de "olvidé mi contraseña" (ver sesion.php).
  * Igual que la contraseña, la respuesta NUNCA se guarda en claro — solo
  * su hash. La pregunta en sí sí queda en claro: hace falta mostrarla de
@@ -192,21 +214,122 @@ $agregarColumna('usuarios', 'respuesta_seguridad_hash', 'VARCHAR(255) NULL DEFAU
 $agregarColumna('incompatibilidades', 'acompanante_a', 'INT NULL DEFAULT NULL');
 $agregarColumna('incompatibilidades', 'acompanante_b', 'INT NULL DEFAULT NULL');
 
+/* Instalaciones que ya corrieron la migración vieja de `recibos` (Fase A,
+   sin este campo) no lo tienen — recibos.php ahora puede vincular un
+   recibo a un pago real de Presupuesto, siempre de forma opcional. */
+$agregarColumna('recibos', 'pago_id', 'INT DEFAULT NULL');
+
+/* Mismo motivo: instalaciones con `tareas` de antes de esta ronda no
+   tienen el vínculo a proveedor/gasto/padrino/invitado. */
+$agregarColumna('tareas', 'atada_a_tipo', "VARCHAR(30) NOT NULL DEFAULT ''");
+$agregarColumna('tareas', 'atada_a_id',   'INT NOT NULL DEFAULT 0');
+
+/* Instalaciones con `invitaciones` de antes de esta ronda (2026-08-30):
+   el punto de color + numerito por invitación necesita contar cuántas
+   veces se tocó "Mandar" — ver la nota grande en migracion.sql. */
+$agregarColumna('invitaciones', 'veces_enviado', 'INT NOT NULL DEFAULT 0');
+
+/* Un recibo ya no es exclusivo de un proveedor — puede ir a nombre de
+   un padrino o de alguien sin ficha propia (ver la nota grande en
+   migracion.sql, justo arriba de CREATE TABLE recibos). */
+$agregarColumna('recibos', 'padrino_id',   'INT DEFAULT NULL');
+$agregarColumna('recibos', 'beneficiario', "VARCHAR(200) NOT NULL DEFAULT ''");
+
+/* ⚠️ ESTAS CINCO ESTABAN EN migracion.sql Y NO ACÁ (2026-09-04).
+   `CREATE TABLE IF NOT EXISTS` no agrega columnas a una tabla que ya
+   existe, así que una instalación creada ANTES de que estas columnas se
+   sumaran al esquema no las tenía — y correr instalar.php no lo
+   arreglaba, porque este archivo no las nombraba. Silenciosamente: el
+   PDF de un recibo o de un contrato quedaba generado pero sin la fila
+   de `archivos` que lo enlaza, y un pago sin su comprobante. Es la
+   misma clase de agujero que el respaldo de lista blanca: algo que
+   estaba escrito en un lado y no en el otro. */
+$agregarColumna('recibos',   'archivo_id',     'INT DEFAULT NULL');
+$agregarColumna('recibos',   'creado_por',     'INT DEFAULT NULL');
+$agregarColumna('contratos', 'archivo_id',     'INT DEFAULT NULL');
+$agregarColumna('contratos', 'creado_por',     'INT DEFAULT NULL');
+$agregarColumna('pagos',     'comprobante_id', 'INT DEFAULT NULL');
+
+/* Esto no es agregar una columna, es AFLOJAR una que ya exigía
+   NOT NULL — por eso no usa $agregarColumna(). Se comprueba antes de
+   tocar nada, tanto para no fallar si ya se corrió como para no
+   arriesgarse en una tabla que todavía no existe. */
+if (existeTabla('recibos')) {
+    $columna = consultarUno(
+        "SELECT IS_NULLABLE FROM information_schema.columns
+         WHERE table_schema = DATABASE() AND table_name = 'recibos'
+           AND column_name = 'proveedor_id'"
+    );
+    if ($columna && $columna['IS_NULLABLE'] === 'NO') {
+        try {
+            bd()->exec('ALTER TABLE `recibos` MODIFY `proveedor_id` INT DEFAULT NULL');
+        } catch (PDOException $e) {
+            error_log('[Ania XV · instalar] No se pudo aflojar recibos.proveedor_id: '
+                . $e->getMessage());
+        }
+    }
+
+    /* Los recibos que ya existían tienen proveedor_id pero
+       `beneficiario` vacío (la columna recién se creó) — se completa
+       una sola vez con el nombre del proveedor de esa fila, para que
+       no aparezcan en blanco en los recibos ya generados. */
+    ejecutar(
+        "UPDATE recibos r
+         JOIN proveedores p ON p.id = r.proveedor_id
+         SET r.beneficiario = p.nombre
+         WHERE r.beneficiario = ''"
+    );
+}
+
+
+/* ─── SEMBRAR LA CLAVE DE SERVICIO DE MEGABOT ──────────────────────────
+   Es la que compara admin/api/chat.php contra el header entrante
+   `X-MegaBot-Clave` (acciones 'responder'/'contexto', sin sesión de
+   usuario). Solo si todavía no existe -no se pisa una vez generada, y
+   nunca queda en blanco: sin ella, ese lado del puente queda cerrado
+   para siempre en vez de fallar en silencio. No hay ningún patrón
+   previo en este archivo para "sembrar una clave de ajustes si falta"
+   -esto es nuevo, no una copia de otro lado. */
+if (existeTabla('ajustes')) {
+    $yaTiene = consultarUno(
+        "SELECT valor FROM ajustes WHERE clave = 'megabot_servicio_clave'"
+    );
+    if (!$yaTiene || trim((string) $yaTiene['valor']) === '') {
+        // ON DUPLICATE KEY UPDATE en vez de un insertar() liso: `clave`
+        // es PRIMARY KEY, y una fila con valor vacío (de una corrida
+        // anterior fallida) rebotaría un insertar() normal con "llave
+        // duplicada" en vez de completarse.
+        ejecutar(
+            "INSERT INTO ajustes (clave, valor) VALUES ('megabot_servicio_clave', :v)
+             ON DUPLICATE KEY UPDATE valor = VALUES(valor)",
+            [':v' => bin2hex(random_bytes(32))]
+        );
+    }
+}
+
 
 /* ─── COMPROBAR QUE QUEDÓ TODO ────────────────────────────────────────── */
 
+/* ⚠️ ESTA LISTA SE MANTIENE A MANO Y YA MINTIÓ UNA VEZ (2026-08-28).
+   `confirmaciones` faltaba acá, así que el instalador respondía "Todo
+   listo" con la tabla central de invitados ausente y el panel entero
+   roto. Al agregar un CREATE TABLE nuevo a migracion.sql, agregá su
+   nombre acá también, o el instalador no va a avisar si falla. */
 $tablasEsperadas = [
     'usuarios', 'sesiones', 'recuperaciones_clave', 'intentos_login', 'bitacora', 'notas', 'archivos',
     'ajustes', 'alarmas', 'suscripciones_push', 'categorias_gasto', 'padrinos',
-    'proveedores',
-    'cotizaciones', 'cotizacion_items', 'gastos', 'pagos', 'tareas', 'agenda',
+    'proveedores', 'confirmaciones',
+    'cotizaciones', 'cotizacion_items', 'recibos', 'contratos', 'gastos', 'pagos', 'tareas', 'agenda',
     'cronograma',
     'mesas', 'asignacion_mesas', 'grupos_invitados', 'preferencias_invitado',
     'incompatibilidades', 'corte_honor', 'ensayos', 'asistencia_ensayos',
     'regalos', 'foraneos', 'ceremonia', 'requisitos_ceremonia', 'musica',
     'citas_arreglo', 'tomas_foto', 'acompanantes', 'permisos_usuario', 'llegadas',
     'comandos_usuario', 'presupuestos', 'eventos_uso',
-    'acompanante_reglas', 'asignacion_mesas_persona',
+    'acompanante_reglas', 'asignacion_mesas_persona', 'invitaciones',
+    'escrituras_hechas', 'envios_proveedor', 'acomodo_respaldo',
+    'etiquetas', 'etiquetas_asignadas',
+    'chat_hilos', 'chat_mensajes', 'chat_propuestas',
 ];
 
 $faltantes = [];
@@ -224,6 +347,90 @@ if (existeTabla('usuarios')) {
 
 /* ─── INFORME ─────────────────────────────────────────────────────────── */
 
+/* ─── MUDAR LOS ADJUNTOS FUERA DEL ÁRBOL DEL DESPLIEGUE ─────────────
+
+   Los PDF y las imágenes vivían en `admin/archivos/`, que está dentro
+   del árbol que el despliegue reconstruye pero NO está en el
+   repositorio. Por eso no viajan entre entornos y pueden desaparecer al
+   promover, dejando las filas de `archivos`, `recibos` y `contratos`
+   apuntando a un archivo que ya no existe.
+
+   Si el .env define CARPETA_ARCHIVOS (ver carpetaDeArchivos() en
+   _lib/entorno.php), acá se mudan los que hayan quedado en la carpeta
+   vieja.
+
+   ⚠️ CÓMO SE CUIDA DE NO PERDER NADA
+     · Sin CARPETA_ARCHIVOS configurada NO HACE NADA. Origen y destino
+       son el mismo lugar y no hay nada que mudar.
+     · COPIA, VERIFICA Y RECIÉN AHÍ BORRA, archivo por archivo. Si la
+       copia no queda del mismo tamaño, el original se deja donde está y
+       se informa: es preferible un archivo duplicado a uno perdido.
+     · Si el destino no se puede crear o no es escribible, no se toca
+       nada y se dice por qué.
+     · Un archivo que YA está en el destino no se pisa: se cuenta como
+       hecho. Así correr instalar.php dos veces es inofensivo.
+     · No se toca la base: `nombre_disco` es solo el nombre, nunca la
+       ruta, así que mover la carpeta no invalida ninguna fila. */
+
+$mudanzaDeArchivos = ['hizo_falta' => false];
+
+$carpetaVieja = carpetaDeArchivosPorOmision();
+$carpetaNueva = carpetaDeArchivos();
+
+if ($carpetaNueva !== $carpetaVieja && is_dir($carpetaVieja)) {
+    $sueltos = array_values(array_filter(
+        (array) @scandir($carpetaVieja),
+        function ($n) use ($carpetaVieja) {
+            // El .htaccess se queda: sigue protegiendo la carpeta vieja
+            // por si algo la vuelve a usar.
+            if ($n === '.' || $n === '..' || $n === '.htaccess') return false;
+            return is_file($carpetaVieja . '/' . $n);
+        }
+    ));
+
+    if ($sueltos) {
+        $mudanzaDeArchivos = [
+            'hizo_falta' => true,
+            'desde'      => $carpetaVieja,
+            'hacia'      => $carpetaNueva,
+            'mudados'    => 0,
+            'ya_estaban' => 0,
+            'con_problema' => [],
+        ];
+
+        if (!is_dir($carpetaNueva)) @mkdir($carpetaNueva, 0755, true);
+
+        if (!is_dir($carpetaNueva) || !is_writable($carpetaNueva)) {
+            $mudanzaDeArchivos['con_problema'][] =
+                'No se pudo escribir en ' . $carpetaNueva . '. No se movió nada.';
+        } else {
+            foreach ($sueltos as $nombre) {
+                $origen  = $carpetaVieja . '/' . $nombre;
+                $destino = $carpetaNueva . '/' . $nombre;
+
+                if (is_file($destino)) { $mudanzaDeArchivos['ya_estaban']++; continue; }
+
+                if (!@copy($origen, $destino)) {
+                    $mudanzaDeArchivos['con_problema'][] = $nombre . ' (no se pudo copiar)';
+                    continue;
+                }
+
+                // La copia tiene que pesar lo mismo ANTES de borrar el
+                // original. Un disco lleno copia a medias sin avisar.
+                if (filesize($destino) !== filesize($origen)) {
+                    @unlink($destino);
+                    $mudanzaDeArchivos['con_problema'][] = $nombre . ' (la copia quedó incompleta)';
+                    continue;
+                }
+
+                @unlink($origen);
+                $mudanzaDeArchivos['mudados']++;
+            }
+        }
+    }
+}
+
+
 $listo = empty($faltantes);
 
 responderBien([
@@ -233,9 +440,10 @@ responderBien([
     'tablas_faltantes'  => $faltantes,
     'columnas_agregadas'=> $columnasQueFaltaban,
     'cuentas_existentes'=> $cuentas,
+    'mudanza_de_archivos' => $mudanzaDeArchivos,
     'siguiente_paso'    => $listo
         ? ($cuentas > 0
-            ? 'Todo listo. Entra a https://aniaxv.com/admin/'
+            ? 'Todo listo. Entra a https://' . ($_SERVER['HTTP_HOST'] ?? 'aniaxv.com') . '/admin/'
             : 'Las tablas están creadas. Falta crear la primera cuenta.')
         : 'Faltan tablas. Revisa la lista de fallidas.',
 ]);

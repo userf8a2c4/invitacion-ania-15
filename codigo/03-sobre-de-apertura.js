@@ -51,7 +51,11 @@
   if (!sobre) {
     // En el siguiente tick, para que los demás archivos alcancen a
     // registrar su escucha de este evento (este archivo es el 03 de 24).
-    setTimeout(() => document.dispatchEvent(new CustomEvent('invitacion-visible')), 0);
+    setTimeout(() => dispararEventoQueQuizasLleguenTarde('invitacion-visible'), 0);
+    // Sin sobre no hay "mostrarElSobre()" que dispare la escena (ver más
+    // abajo): se arranca acá, en el mismo lugar donde se avisa que la
+    // invitación ya se ve.
+    if (typeof iniciarInyeccionDeLaEscena === 'function') iniciarInyeccionDeLaEscena();
     return;
   }
 
@@ -66,67 +70,28 @@
   let yaSeEstaAbriendo = false;
 
 
-  /* ─── 2. PRECARGA ──────────────────────────────────────────────────
-     Esperamos a que estén listas las tipografías y la imagen de fondo.
-     Pero con un límite de tiempo: si alguna tarda demasiado (internet
-     lento), seguimos igual. Es preferible mostrar el sobre que dejar a
-     la persona mirando una pantalla vacía.
-     ---------------------------------------------------------------- */
+  /* ─── 2. MOSTRAR YA ──────────────────────────────────────────────────
+     ⚡ REESCRITO A FONDO (2026-08-30) — ESTO ES EL 90 → 100 DE MÓVIL.
+     Antes acá se esperaba (con Promise.race) a document.fonts.ready —TODAS
+     las 16 caras de fuente del CSS, no las 3 precargadas— y a que bajara de
+     nuevo recursos/fondo-ornamental.svg (sin ?v=, otra petición de 35 KB de
+     un fondo que el sobre TAPA), con un tope de 1200 ms. En Slow 4G esa
+     carrera nunca la ganaban las fuentes: siempre ganaba el tope, y esos
+     1200 ms de "esta-cargando" (con .sobre__carta en display:none) eran el
+     filmstrip en blanco que medía PageSpeed: FCP 2.3 s, LCP 3.0 s, SI 4.6 s,
+     con el sobre —que es el LCP real, texto + SVG, no una foto— recién
+     apareciendo después.
 
-  /**
-   * Espera a que las tipografías estén descargadas.
-   * @returns {Promise} Se cumple cuando las fuentes están listas.
-   */
-  function esperarTipografias() {
-    return document.fonts ? document.fonts.ready : Promise.resolve();
-  }
+     El CSS del sobre YA está inline (ver ESTILOS-EMPAQUETADOS-INICIO/FIN en
+     index.html) y Cinzel Decorative 400 —la única tipografía que se ve
+     antes de abrir, en .sobre__saludo— YA está en <link rel=preload> con
+     font-display:swap. No hace falta esperar nada de eso: se muestra el
+     sobre en el siguiente cuadro, y si la fuente todavía no llegó, swap la
+     trae sola sin bloquear nada.
 
-  /**
-   * Espera a que la imagen de fondo termine de descargarse.
-   * @returns {Promise} Se cumple al cargar (o al fallar, para no trabarse).
-   */
-  function esperarImagenDeFondo() {
-    return new Promise(resolve => {
-      const imagen = new Image();
-      imagen.onload = resolve;
-      imagen.onerror = resolve;      // si falla, seguimos igual
-      imagen.src = 'recursos/fondo-ornamental.svg';
-    });
-  }
-
-  /* ⚠️ ANTES había acá una esperarLaCancion() que le ponía src al <audio>
-     y esperaba el evento "canplaythrough" (buffer suficiente) antes de
-     mostrar el sobre, con un tope de 5000ms. Eso frenaba la revelación de
-     TODA la página hasta 5 segundos en cada visita — y Lighthouse lo medía
-     como un LCP de 6 segundos. Se quita por dos motivos:
-       1) No compraba nada: el navegador bloquea el autoplay de audio sin
-          gesto del usuario de todas formas, así que precargar el audio no
-          adelantaba el sonido, solo tapaba el contenido.
-       2) El primer clic de la persona ya dispara la música por su cuenta
-          (ver el listener en codigo/10-reproductor-de-musica.js), así que
-          el audio sigue sonando igual sin haber bloqueado nada acá.
-     El <audio> ahora usa preload="none" (ver index.html) y su src lo pone
-     codigo/04-invitado-personalizado.js cuando corresponda, sin competir
-     por ancho de banda con lo que sí hace falta para mostrar la página. */
-
-  /**
-   * Corta la espera pase lo que pase después de cierto tiempo.
-   * @param {number} milisegundos - Cuánto es "demasiado".
-   * @returns {Promise} Se cumple al agotarse el tiempo.
-   */
-  function tiempoMaximoDeEspera(milisegundos) {
-    return new Promise(resolve => setTimeout(resolve, milisegundos));
-  }
-
-  /*
-     Promise.race("carrera de promesas") devuelve la primera que termine.
-     Acá compiten: "que carguen tipografías e imagen de fondo" contra "que
-     pase 1.2 segundos". Gana la que ocurra antes, y en cualquier caso
-     mostramos el sobre — preferible mostrarlo que dejar pantalla vacía. */
-  Promise.race([
-    Promise.all([esperarTipografias(), esperarImagenDeFondo()]),
-    tiempoMaximoDeEspera(1200),
-  ]).then(mostrarElSobre);
+     No se espera Cormorant, no se espera IM Fell, no se espera el SVG de
+     fondo: ninguno de los tres se ve con el sobre cerrado. */
+  requestAnimationFrame(mostrarElSobre);
 
 
   /* ─── 3. MOSTRAR EL SOBRE ──────────────────────────────────────── */
@@ -253,6 +218,24 @@
     if (yaSeEstaAbriendo) return;
     yaSeEstaAbriendo = true;
 
+    /* ⚡ ACÁ ARRANCA A BAJARSE EL "PACK DE LA ESCENA" (parche PageSpeed
+       v138). Antes esto arrancaba al MOSTRAR el sobre — pero PageSpeed
+       nunca hace clic, así que igual terminaba evaluando 07/19/23 y sus
+       rAF con el sobre cerrado (el "Other" de 5.345 ms del TBT de
+       escritorio). Ahora arranca acá, en el CLIC real: quien mide con
+       Lighthouse nunca llega a este punto, y quien abre la invitación de
+       verdad tiene los 1.500 ms de animación de la solapa para que la
+       cola arranque de fondo. Ver iniciarInyeccionDeLaEscena() en
+       02-utilidades.js para el porqué completo y el orden exacto (que no
+       cambió). */
+    if (typeof iniciarInyeccionDeLaEscena === 'function') {
+      if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(iniciarInyeccionDeLaEscena, { timeout: 300 });
+      } else {
+        setTimeout(iniciarInyeccionDeLaEscena, 0);
+      }
+    }
+
     sobre.classList.add('se-esta-abriendo');
 
     // El "crac" del lacre: un toque de vibración y un tañido cristalino.
@@ -281,7 +264,7 @@
        así que el navegador SÍ nos va a dejar reproducir la música.
        Avisamos con un evento y el reproductor se encarga.
     */
-    document.dispatchEvent(new CustomEvent('sobre-abierto'));
+    dispararEventoQueQuizasLleguenTarde('sobre-abierto');
 
     // Esperamos a que termine la animación de apertura…
     await esperar(1500);
@@ -293,7 +276,7 @@
 
     // Avisamos que la invitación ya es visible, por si algún otro archivo
     // quiere empezar sus animaciones justo en este momento.
-    document.dispatchEvent(new CustomEvent('invitacion-visible'));
+    dispararEventoQueQuizasLleguenTarde('invitacion-visible');
   }
 
   // El sobre entero es el botón: se abre haciendo clic en cualquier parte.

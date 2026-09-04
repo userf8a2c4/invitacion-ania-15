@@ -24,6 +24,7 @@
 require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
+require_once __DIR__ . '/_lib/dinero.php';
 
 $yo     = exigirAdministrador();   // el rol 'entrada' no ve el dinero
 $accion = (string) ($_GET['accion'] ?? 'todo');
@@ -45,28 +46,23 @@ case 'todo':
 
     $activo = $tienePresupuestos ? presupuestoActivo() : null;
 
-    /* Categorías con lo gastado de cada una. El LEFT JOIN es a propósito:
-       una categoría sin gastos todavía tiene que aparecer igual, con su
-       techo, para poder cargarle el primero. */
-    $categorias = consultarTodo(
-        'SELECT c.id, c.nombre, c.techo, c.orden,
-                COALESCE(SUM(g.monto_real), 0)     AS gastado,
-                COALESCE(SUM(g.presupuestado), 0)  AS planeado,
-                COUNT(g.id)                        AS cuantos_gastos
-         FROM categorias_gasto c
-         LEFT JOIN gastos g ON g.categoria_id = c.id' .
-        ($tienePresupuestos ? ' WHERE c.presupuesto_id = :activo' : '') .
-        ' GROUP BY c.id, c.nombre, c.techo, c.orden
-         ORDER BY c.orden, c.nombre',
-        $tienePresupuestos ? [':activo' => $activo] : []
-    );
+    /* Categorías con lo gastado de cada una, con el MISMO criterio de
+       costo que el total de arriba y con el renglón "Sin categoría"
+       para que todo gasto aparezca en alguna fila. Ver
+       categoriasConGasto() en _lib/dinero.php. */
+    $categorias = categoriasConGasto($activo, $tienePresupuestos);
 
     /* Gastos con el nombre de su categoría, proveedor y padrino ya
        resueltos, para que la app no tenga que cruzarlos a mano. Filtrados
        por presupuesto directo en g.presupuesto_id, no a través de la
        categoría: un gasto sin categoría también tiene que quedar del
        lado correcto. */
-    $gastos = consultarTodo(
+    /* Cada bloque se guarda por su cuenta, como hace
+       cifrasDelPresupuesto(): en una instalación a medio migrar, media
+       pantalla degradaba bien y la otra media tiraba 500. Devolver una
+       lista vacía se ve como "todavía no hay nada", que es entendible;
+       un error genérico no. */
+    $gastos = !existeTabla('gastos') ? [] : consultarTodo(
         'SELECT g.*,
                 c.nombre AS categoria_nombre,
                 p.nombre AS proveedor_nombre,
@@ -86,7 +82,7 @@ case 'todo':
        gasto_id, no pertenece a ningún presupuesto en particular y se
        muestra siempre: es más seguro mostrar de más que esconder un pago
        real. */
-    $pagos = consultarTodo(
+    $pagos = (!existeTabla('pagos') || !existeTabla('gastos')) ? [] : consultarTodo(
         'SELECT p.*, g.concepto AS gasto_concepto
          FROM pagos p
          LEFT JOIN gastos g ON g.id = p.gasto_id' .
@@ -101,18 +97,80 @@ case 'todo':
        cubrir varios gastos, así que `monto` (lo prometido) y `cubre` (lo
        efectivamente asignado) pueden no coincidir — y ver esa diferencia
        es justamente lo útil. */
-    $padrinos = consultarTodo(
+    /* `cubre` usa la misma regla de costo que todo lo demás
+       (COALESCE(NULLIF(monto_real,0), presupuestado)): con SUM(monto_real)
+       a secas, un padrino que cubre un gasto de $12,000 todavía sin
+       costo real cargado aparecía cubriendo $0. */
+    /* ⚡ `cubre` SE FILTRA POR PLAN (2026-09-03). Sin el filtro, esta
+       cifra sumaba los gastos que el padrino cubre en TODOS los
+       escenarios, y se mostraba al lado de `de_padrinos` del resumen,
+       que sí filtra. Con dos planes abiertos, la ficha del padrino
+       decía que cubre más de lo que el total admite. El filtro va en el
+       ON del LEFT JOIN, no en el WHERE: un padrino sin gastos en este
+       plan tiene que seguir apareciendo, con cubre = 0. */
+    $padrinos = !existeTabla('padrinos') ? [] : consultarTodo(
         'SELECT pa.*,
-                COALESCE(SUM(g.monto_real), 0) AS cubre,
-                COUNT(g.id)                    AS cuantos_gastos
+                COALESCE(SUM(' . sqlCostoDeUnGasto('g.') . '), 0) AS cubre,
+                COUNT(g.id)                                       AS cuantos_gastos
          FROM padrinos pa
-         LEFT JOIN gastos g ON g.padrino_id = pa.id
-         GROUP BY pa.id
-         ORDER BY pa.nombre'
+         LEFT JOIN gastos g ON g.padrino_id = pa.id' .
+        ($tienePresupuestos ? ' AND g.presupuesto_id = :activo' : '') .
+        ' GROUP BY pa.id
+          ORDER BY pa.nombre',
+        $tienePresupuestos ? [':activo' => $activo] : []
     );
 
-    $proveedores = consultarTodo('SELECT * FROM proveedores ORDER BY nombre');
-    $cotizaciones = consultarTodo(
+    /* ⚡ `pagado_real` (2026-08-27): antes lo único que decía "cuánto se le
+       pagó a este proveedor" era `proveedores.anticipo` — un campo a
+       mano que un pago marcado 'pagado' en Presupuesto NUNCA tocaba
+       (solo lo actualizaba generar un recibo, y con un bug: quedaba
+       capado por `monto_total`, así que un proveedor creado en $0 no
+       podía subir de $0 aunque se le pagara). Acá se calcula de verdad,
+       igual que `cubre` en padrinos arriba: sumando los pagos reales de
+       sus gastos. Mismo criterio que "Pagado" en el resumen general. */
+    /* `enviado_en` y `huella` son del último envío de SU paquete —los
+       mismos dos datos que ya devolvía compartir.php?accion=a_quien, y
+       que son los que permiten avisar "esto cambió desde que se lo
+       mandaste". Sin ellos acá, ese aviso solo aparecía entrando por
+       Menú → Compartir y no desde la ficha del proveedor, que es la
+       puerta que se usa todos los días: la protección estrella del
+       sistema no protegía por el camino más transitado. */
+    /* ⚠️ LA GUARDA MIRA LAS DOS COSAS, NO SOLO LA TABLA.
+       Estas subconsultas no dependen únicamente de `envios_proveedor`:
+       comparan contra `pr.paquete`, que es columna de `proveedores` y
+       la agrega instalar.php —cuyo catch se traga el error si el ALTER
+       falla—. O sea que existe un estado real donde la tabla está y la
+       columna no, y ahí esta consulta moría entera y con ella toda la
+       pantalla de Dinero. Este mismo archivo ya se cuida de esa columna
+       para ESCRIBIR (ver guardar_proveedor); a la lectura le faltaba. */
+    $hayEnvios = existeTabla('envios_proveedor')
+              && in_array('paquete', columnasDe('proveedores'), true);
+
+    $proveedores = !existeTabla('proveedores') ? [] : consultarTodo(
+        'SELECT pr.*,
+                COALESCE(SUM(CASE WHEN p.estado = \'pagado\' THEN p.monto ELSE 0 END), 0) AS pagado_real' .
+        ($hayEnvios
+            ? ", (SELECT e.enviado_en FROM envios_proveedor e
+                   WHERE e.proveedor_id = pr.id AND e.paquete = pr.paquete
+                   ORDER BY e.enviado_en DESC LIMIT 1) AS enviado_en,
+                 (SELECT e.huella FROM envios_proveedor e
+                   WHERE e.proveedor_id = pr.id AND e.paquete = pr.paquete
+                   ORDER BY e.enviado_en DESC LIMIT 1) AS huella"
+            : ', NULL AS enviado_en, NULL AS huella') . '
+         FROM proveedores pr
+         LEFT JOIN gastos g ON g.proveedor_id = pr.id' .
+        /* Mismo motivo que en `cubre`: sin este filtro, `pagado_real`
+           sumaba los pagos del proveedor en todos los escenarios y se
+           mostraba junto a `pagado` del resumen, que sí filtra. La
+           ficha de un proveedor podía decir que se le pagó más de lo
+           que el total admitía haber pagado. */
+        ($tienePresupuestos ? ' AND g.presupuesto_id = :activo' : '') . '
+         LEFT JOIN pagos p  ON p.gasto_id = g.id
+         GROUP BY pr.id
+         ORDER BY pr.nombre',
+        $tienePresupuestos ? [':activo' => $activo] : []
+    );
+    $cotizaciones = !existeTabla('cotizaciones') ? [] : consultarTodo(
         'SELECT * FROM cotizaciones ORDER BY servicio, monto'
     );
 
@@ -133,108 +191,36 @@ case 'todo':
     $cotizaciones = $decodificarDetalle($cotizaciones);
 
     /* ─── Los totales ─────────────────────────────────────────────────
-       Se calculan en SQL y no sumando en PHP porque MySQL lo hace sobre
-       la tabla entera de una sola pasada. Filtrados por presupuesto
-       activo, igual que la lista de gastos de arriba. */
-    $totales = consultarUno(
-        'SELECT
-           COALESCE(SUM(presupuestado), 0) AS planeado,
-           COALESCE(SUM(monto_real), 0)    AS costo,
-           COALESCE(SUM(CASE WHEN padrino_id IS NULL
-                             THEN monto_real ELSE 0 END), 0) AS propio,
-           COALESCE(SUM(CASE WHEN padrino_id IS NOT NULL
-                             THEN monto_real ELSE 0 END), 0) AS de_padrinos
-         FROM gastos' .
-        ($tienePresupuestos ? ' WHERE presupuesto_id = :activo' : ''),
-        $tienePresupuestos ? [':activo' => $activo] : []
-    );
-
-    $porPagar = consultarUno(
-        "SELECT COALESCE(SUM(p.monto), 0) AS monto, COUNT(*) AS cuantos
-         FROM pagos p LEFT JOIN gastos g ON g.id = p.gasto_id
-         WHERE p.estado = 'pendiente'" .
-        ($tienePresupuestos ? ' AND (p.gasto_id IS NULL OR g.presupuesto_id = :activo)' : ''),
-        $tienePresupuestos ? [':activo' => $activo] : []
-    );
-
-    $pagado = consultarUno(
-        "SELECT COALESCE(SUM(p.monto), 0) AS monto
-         FROM pagos p LEFT JOIN gastos g ON g.id = p.gasto_id
-         WHERE p.estado = 'pagado'" .
-        ($tienePresupuestos ? ' AND (p.gasto_id IS NULL OR g.presupuesto_id = :activo)' : ''),
-        $tienePresupuestos ? [':activo' => $activo] : []
-    );
-
-    // Los padrinos son globales (no cuelgan de un presupuesto): apadrinan
-    // a la boda entera, no a un plan en particular.
-    $padrinosPendientes = consultarUno(
-        "SELECT COALESCE(SUM(monto), 0) AS monto, COUNT(*) AS cuantos
-         FROM padrinos WHERE estado <> 'entregado' AND tipo_aporte = 'dinero'"
-    );
-
-    /* `de_padrinos` (arriba, en $totales) suma TODO gasto con padrino
-       asignado, sin importar si ese padrino ya entregó o nomás lo
-       habló. Eso alcanza para el desglose de categorías, pero para
-       decir "cuánto sale de tu bolsillo DE VERDAD" hay que ser más
-       estrictos: un padrino que "lo habló" no es plata seguro (principio
-       del módulo). Acá se suma solo lo de padrinos con estado
-       'entregado' — lo único que ya está, de verdad, cubierto. */
-    $deEntregado = consultarUno(
-        "SELECT COALESCE(SUM(g.monto_real), 0) AS monto
-         FROM gastos g JOIN padrinos pa ON pa.id = g.padrino_id
-         WHERE pa.estado = 'entregado'" .
-        ($tienePresupuestos ? ' AND g.presupuesto_id = :activo' : ''),
-        $tienePresupuestos ? [':activo' => $activo] : []
-    );
-    $dePadrinosEntregado = (float) $deEntregado['monto'];
+       UNA sola definición de cada cifra, en _lib/dinero.php. Este
+       archivo pasó a ser la única fuente: la pantalla de inicio
+       (estadisticas.php) consume estas mismas cifras en vez de
+       recalcularlas con otro criterio, que es lo que hacía que "¿cuánto
+       llevamos?" tuviera dos respuestas distintas en dos pantallas
+       seguidas. Ver la nota grande de cifrasDelPresupuesto(). */
+    $cifras = cifrasDelPresupuesto($activo, $tienePresupuestos);
 
     $presupuestos = $tienePresupuestos
         ? consultarTodo('SELECT * FROM presupuestos ORDER BY creado_en')
         : [];
 
-    /* Cuánto sale la fiesta POR CADA INVITADO QUE DE VERDAD VA. No se
-       usa el total de confirmaciones (grupos), sino la gente real
-       (adultos + niños) — un costo/invitado que contara "familia
-       López" como una sola persona diría un número falso. Si todavía
-       no hay nadie confirmado, se deja explícitamente vacío (null) en
-       vez de dividir por cero o mostrar un $0 que parecería un error. */
-    $confirmados = existeTabla('confirmaciones')
-        ? consultarUno(
-            "SELECT COALESCE(SUM(adultos), 0) + COALESCE(SUM(ninos), 0) AS personas
-             FROM confirmaciones WHERE asiste = 1"
-          )
-        : ['personas' => 0];
-    $personasConfirmadas = (int) $confirmados['personas'];
-    $costoPorInvitado = $personasConfirmadas > 0
-        ? round(((float) $totales['costo']) / $personasConfirmadas, 2)
-        : null;
-
     responderBien([
         'presupuestos'       => $presupuestos,
         'presupuesto_activo' => $activo,
-        'totales' => [
-            'planeado'      => (float) $totales['planeado'],
-            'costo'         => (float) $totales['costo'],
-            'propio'        => (float) $totales['propio'],
-            'de_padrinos'   => (float) $totales['de_padrinos'],
-            // Ver comentario arriba: solo padrinos con estado 'entregado'.
-            'de_padrinos_entregado' => $dePadrinosEntregado,
-            'bolsillo_si_nadie_mas_entrega' =>
-                round(((float) $totales['costo']) - $dePadrinosEntregado, 2),
-            'por_pagar'     => (float) $porPagar['monto'],
-            'por_pagar_cuantos' => (int) $porPagar['cuantos'],
-            'pagado'        => (float) $pagado['monto'],
-            'padrinos_pendientes'         => (float) $padrinosPendientes['monto'],
-            'padrinos_pendientes_cuantos' => (int) $padrinosPendientes['cuantos'],
-            'confirmados'         => $personasConfirmadas,
-            'costo_por_invitado'  => $costoPorInvitado,
-        ],
+        'totales' => $cifras,
+
+        /* Los montos van como NÚMEROS, no como el texto que devuelve
+           PDO para las columnas DECIMAL. Ver conMontosNumericos() en
+           _lib/dinero.php: con `"0.00"` de por medio, un gasto de
+           $50.000 se mostraba como $0. */
+        // (categoriasConGasto ya las devuelve casteadas.)
         'categorias'   => $categorias,
-        'gastos'       => $gastos,
-        'pagos'        => $pagos,
-        'padrinos'     => $padrinos,
-        'proveedores'  => $proveedores,
-        'cotizaciones' => $cotizaciones,
+        'gastos'       => conMontosNumericos($gastos, ['presupuestado', 'monto_real']),
+        'pagos'        => conMontosNumericos($pagos, ['monto']),
+        'padrinos'     => conMontosNumericos($padrinos,
+                            ['monto', 'monto_entregado', 'cubre']),
+        'proveedores'  => conMontosNumericos($proveedores,
+                            ['monto_total', 'anticipo', 'pagado_real']),
+        'cotizaciones' => conMontosNumericos($cotizaciones, ['monto', 'precio_pp']),
     ]);
     break;
 
@@ -324,8 +310,71 @@ case 'guardar_pago':
 
     $estado = campoOpcion($datos, 'estado', ['pendiente', 'pagado'], 'pendiente');
 
+    /* ⚡ PROVEEDOR PRIMERO, GASTO COMO PLOMERÍA INVISIBLE (2026-08-27).
+       El formulario (09-vista-dinero.js, formularioPago) ya no pregunta
+       por un "gasto" — pregunta a quién se le paga: un proveedor
+       existente (`proveedor_id`), uno nuevo escrito ahí mismo
+       (`proveedor_nuevo`), o "Personal/sin proveedor" (ninguno de los
+       dos, y sin `gasto_id`). Acá se resuelve —o se crea— el gasto que
+       le corresponde a ese proveedor, mismo criterio que ya usa
+       recibos.php para `tambien_registrar_pago`: se reusa el primer
+       gasto de ese proveedor si existe, si no se crea uno con lo que ya
+       se sabe de él. Si viene `gasto_id` directo (edición de un pago
+       cuyo proveedor no cambió), se respeta tal cual. */
+    $gastoId = idOpcional($datos, 'gasto_id');
+    $proveedorId = campoEntero($datos, 'proveedor_id', 0);
+    $proveedorNuevo = campoTexto($datos, 'proveedor_nuevo', 150);
+
+    if (!$gastoId && $proveedorNuevo !== '') {
+        $proveedorId = (int) insertar('proveedores', [
+            'nombre'      => $proveedorNuevo,
+            'servicio'    => '',
+            'contacto'    => '',
+            'telefono'    => '',
+            'correo'      => '',
+            'monto_total' => 0,
+            'anticipo'    => 0,
+            'estado'      => 'candidato',
+            'notas'       => '',
+        ]);
+        anotarEnBitacora($yo, 'creó un proveedor', 'proveedores', $proveedorId, $proveedorNuevo);
+    }
+
+    if (!$gastoId && $proveedorId > 0) {
+        /* RESPALDO, NO LA REGLA.
+           Cuando el proveedor tiene más de un gasto —el salón con el
+           paquete y la barra libre por separado— quién decide es el
+           formulario, que ahora pregunta a cuál va y muestra el saldo
+           de cada uno (ver refrescarGastosDelProveedor en
+           09-vista-dinero.js). Esto es lo que queda para quien no
+           pregunta: el asistente, o una escritura que viene de la cola.
+           Toma el más viejo, que es arbitrario pero estable — y ya no
+           es el camino por el que pasan los pagos de todos los días. */
+        $gastoExistente = consultarUno(
+            'SELECT id FROM gastos WHERE proveedor_id = :p ORDER BY id ASC LIMIT 1',
+            [':p' => $proveedorId]
+        );
+        if ($gastoExistente) {
+            $gastoId = (int) $gastoExistente['id'];
+        } else {
+            $proveedor = consultarUno('SELECT * FROM proveedores WHERE id = :i', [':i' => $proveedorId]);
+            $conceptoDelPago = campoTexto($datos, 'concepto', 200);
+            /* Nace en el plan activo. Sin esto caía en el Plan 1 por el
+               valor por defecto de la columna, y con un segundo
+               escenario abierto el pago se guardaba fuera de la vista
+               que se estaba mirando: desaparecía sin decir nada. */
+            $gastoId = (int) insertar('gastos', conPresupuestoActivo([
+                'concepto'      => $conceptoDelPago !== '' ? $conceptoDelPago
+                                    : ($proveedor['servicio'] !== '' ? $proveedor['servicio'] : $proveedor['nombre']),
+                'proveedor_id'  => $proveedorId,
+                'presupuestado' => (float) $proveedor['monto_total'],
+                'monto_real'    => 0,
+            ]));
+        }
+    }
+
     $valores = [
-        'gasto_id'     => idOpcional($datos, 'gasto_id'),
+        'gasto_id'     => $gastoId ?: null,
         'concepto'     => campoTexto($datos, 'concepto', 200),
         'monto'        => campoMonto($datos, 'monto'),
         'fecha_limite' => campoFecha($datos, 'fecha_limite'),
@@ -357,10 +406,20 @@ case 'marcar_pagado':
     // deshacer un toque por error sin tener que abrir el formulario.
     $nuevo = $pago['estado'] === 'pagado' ? 'pendiente' : 'pagado';
 
-    actualizar('pagos', $id, [
-        'estado'       => $nuevo,
-        'fecha_pagado' => $nuevo === 'pagado' ? date('Y-m-d') : null,
-    ]);
+    /* LA FECHA REAL NO SE TOCA.
+       Antes, destildar la ponía en NULL y volver a tildar la ponía en
+       HOY. Un pago hecho el 12 de agosto, destildado por error y vuelto
+       a tildar en septiembre, quedaba fechado en septiembre: el dato de
+       cuándo se pagó de verdad se perdía sin aviso, y con él el orden
+       real de los pagos. Se conserva la que ya había; solo se estrena
+       una fecha cuando no existía ninguna, y se cambia a mano desde el
+       formulario del pago. */
+    $valores = ['estado' => $nuevo];
+    if ($nuevo === 'pagado' && empty($pago['fecha_pagado'])) {
+        $valores['fecha_pagado'] = date('Y-m-d');
+    }
+
+    actualizar('pagos', $id, $valores);
 
     anotarEnBitacora($yo, 'marcó un pago como ' . $nuevo, 'pagos', $id,
                      (string) $pago['concepto']);
@@ -400,6 +459,21 @@ case 'guardar_padrino':
     ];
     if ($valores['nombre'] === '') responderMal('El padrino necesita un nombre.', 400);
 
+    /* Cuánto entregó DE VERDAD, que no es lo mismo que en qué estado
+       está. Solo si la instalación ya tiene la columna.
+
+       Marcar 'entregado' sin decir cuánto significa que entregó todo lo
+       prometido, que es lo que esa marca quería decir hasta ahora; y
+       destildar 'entregado' no borra lo que ya había entregado, porque
+       una entrega parcial sigue siendo una entrega. */
+    if (in_array('monto_entregado', columnasDe('padrinos'), true)) {
+        if (array_key_exists('monto_entregado', $datos)) {
+            $valores['monto_entregado'] = campoMonto($datos, 'monto_entregado');
+        } elseif ($estado === 'entregado') {
+            $valores['monto_entregado'] = $valores['monto'];
+        }
+    }
+
     responderBien(guardarFila('padrinos', $datos, $valores, $yo, 'padrino'));
     break;
 
@@ -426,6 +500,13 @@ case 'guardar_proveedor':
     exigirMetodo('POST');
     $datos = cuerpoJson();
 
+    /* ⚡ `anticipo` YA NO SE ESCRIBE DESDE ACÁ (2026-08-27). Dejó de ser
+       un campo del formulario — ver la nota grande en `presupuesto.php`
+       acción 'todo' (`pagado_real`) y en 09-vista-dinero.js
+       (`formularioProveedor`). La columna se queda en la tabla (para no
+       tocar el esquema en esta ronda) pero nadie la lee ni la escribe
+       más: no se incluye en $valores para no pisarla con un dato viejo
+       en cada edición. */
     $valores = [
         'nombre'      => campoTexto($datos, 'nombre', 150),
         'servicio'    => campoTexto($datos, 'servicio', 120),
@@ -433,7 +514,6 @@ case 'guardar_proveedor':
         'telefono'    => campoTexto($datos, 'telefono', 40),
         'correo'      => campoTexto($datos, 'correo', 190),
         'monto_total' => campoMonto($datos, 'monto_total'),
-        'anticipo'    => campoMonto($datos, 'anticipo'),
         'estado'      => campoOpcion($datos, 'estado',
                          ['candidato', 'contratado', 'pagado', 'cancelado'], 'candidato'),
         /* Cuál de los textos de compartir.php le toca a este proveedor.
@@ -608,18 +688,9 @@ function guardarFila($tabla, $datos, $valores, $yo, $comoSeLlama) {
     return ['id' => $nuevo, 'creado' => true];
 }
 
-/**
- * El id del presupuesto activo, o 1 (el principal) si por lo que sea
- * ninguno está marcado —no debería pasar, pero un dato así de central
- * no puede devolver null y romper todo lo que cuelga de él.
- *
- * @return int
- */
-function presupuestoActivo() {
-    if (!existeTabla('presupuestos')) return 1;
-    $fila = consultarUno("SELECT id FROM presupuestos WHERE activo = 1 LIMIT 1");
-    return $fila ? (int) $fila['id'] : 1;
-}
+/* presupuestoActivo() se mudó a _lib/dinero.php: recibos.php y
+   cotizador.php también crean gastos y necesitaban la misma regla. Ver
+   la nota de por qué en ese archivo. */
 
 /**
  * Lee un id de relación, devolviendo null cuando no hay ninguno.

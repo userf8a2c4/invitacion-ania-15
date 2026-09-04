@@ -31,6 +31,25 @@
     const direccion = CONFIGURACION.lugar.enlaceDelMapaIncrustado;
     if (!direccion) return;
 
+    /* ⚡ EL PRECONNECT AHORA VIVE ACÁ, NO EN EL <head> (2026-08-30). Antes
+       index.html abría la conexión a Google apenas cargaba la página,
+       compitiendo por ancho de banda contra las fuentes en Slow 4G para un
+       mapa que la mayoría de las visitas nunca toca. Se deja resuelta la
+       conexión en el mismo clic, antes de crear el <iframe>: sigue
+       ahorrando el DNS+TCP+TLS, pero solo a quien de verdad va a usarlo. */
+    if (!document.querySelector('link[data-preconnect-mapa]')) {
+      const preconectar = (rel) => {
+        const enlace = document.createElement('link');
+        enlace.rel = rel;
+        enlace.href = 'https://www.google.com';
+        if (rel === 'preconnect') enlace.crossOrigin = 'anonymous';
+        enlace.setAttribute('data-preconnect-mapa', '');
+        document.head.appendChild(enlace);
+      };
+      preconectar('preconnect');
+      preconectar('dns-prefetch');
+    }
+
     const iframe = document.createElement('iframe');
     iframe.title = 'Mapa del salón';
     iframe.allowFullscreen = true;

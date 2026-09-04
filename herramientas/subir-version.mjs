@@ -56,11 +56,121 @@
    además bloquea la carpeta herramientas/ por las dudas.
    ══════════════════════════════════════════════════════════════════════ */
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/* ─── 0. ¿EL CÓDIGO QUE SE VA A SERVIR ESTÁ AL DÍA? ───────────────────
+ *
+ * ⚡ POR QUÉ ESTO EXISTE (2026-09-03)
+ * index.html sirve `codigo/produccion/*.js`, que son las copias
+ * minificadas que genera `minificar-js.mjs`. Este script subía la
+ * versión sin mirarlas — o sea que se podía arreglar un bug, subir la
+ * versión, desplegar, y que a la gente le siguiera llegando el código
+ * viejo, porque el minificado nunca se regeneró.
+ *
+ * Pasó de verdad: el arreglo del reproductor de música quedó en el repo
+ * y NO en producción durante un despliegue entero. Nada lo advirtió.
+ *
+ * Comparar fechas es más honesto que confiar en que alguien se acuerde
+ * de correr dos comandos en el orden correcto. Si un fuente es más nuevo
+ * que su minificado, esto CORTA antes de tocar nada — porque subir la
+ * versión con el código viejo es peor que no subirla: invalida las
+ * cachés y reparte lo de antes como si fuera lo nuevo.
+ */
+const dirFuente = join(raiz, 'codigo');
+const dirProduccion = join(raiz, 'codigo', 'produccion');
+
+if (existsSync(dirProduccion)) {
+  const desactualizados = [];
+
+  for (const archivo of readdirSync(dirFuente)) {
+    if (!archivo.endsWith('.js')) continue;
+
+    const fuente = join(dirFuente, archivo);
+    const minificado = join(dirProduccion, archivo);
+
+    if (!existsSync(minificado)) {
+      desactualizados.push(`${archivo} (no existe su minificado)`);
+      continue;
+    }
+    if (statSync(fuente).mtimeMs > statSync(minificado).mtimeMs) {
+      desactualizados.push(archivo);
+    }
+  }
+
+  if (desactualizados.length) {
+    console.error('');
+    console.error('✗ NO se subió la versión: hay código sin minificar.');
+    console.error('');
+    console.error('  Estos archivos de codigo/ son más nuevos que su copia');
+    console.error('  en codigo/produccion/, que es la que se sirve de verdad:');
+    desactualizados.forEach(a => console.error(`    · ${a}`));
+    console.error('');
+    console.error('  Corré esto y volvé a intentar:');
+    console.error('    node herramientas/minificar-js.mjs');
+    console.error('');
+    process.exit(1);
+  }
+}
+/* ─── 0B. ¿LA IMAGEN DE LA TARJETA SIGUE EN PIE? ─────────────────
+ *
+ * ⚡ POR QUÉ ESTO EXISTE (2026-09-04)
+ * `og:image` es una dirección ABSOLUTA a producción — tiene que serlo,
+ * porque el mismo index.html lo sirven dos dominios y una etiqueta og:
+ * no puede saber desde cuál la leen. Eso significa que ese archivo tiene
+ * que existir en producción con ese nombre exacto, siempre.
+ *
+ * Pasó de verdad: se renombró la imagen en el repositorio, llegó a PBE,
+ * y como producción no se había promovido la etiqueta quedó apuntando a
+ * un 404. La tarjeta desapareció de golpe y costó tres mensajes
+ * descubrirlo, porque desde afuera se ve igual que todos los otros
+ * motivos por los que una tarjeta no aparece.
+ *
+ * Una petición de dos segundos lo dice al instante. Si no hay internet,
+ * NO corta: avisa y sigue. Cortar por no poder comprobar sería peor que
+ * no comprobar — dejaría sin poder subir versión a quien esté sin red.
+ */
+const htmlParaLaTarjeta = readFileSync(join(raiz, 'index.html'), 'utf8');
+const laImagenDeLaTarjeta = (htmlParaLaTarjeta.match(
+  /<meta\s+property="og:image"\s+content="([^"]+)"/i) || [])[1];
+
+if (laImagenDeLaTarjeta && laImagenDeLaTarjeta.startsWith('http')) {
+  let respuesta = null;
+
+  try {
+    respuesta = await fetch(laImagenDeLaTarjeta, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (error) {
+    console.warn('');
+    console.warn('! No se pudo comprobar la imagen de la tarjeta (¿sin internet?).');
+    console.warn(`  ${laImagenDeLaTarjeta}`);
+    console.warn('  Se sigue igual, pero conviené mirarla a mano.');
+    console.warn('');
+  }
+
+  if (respuesta && !respuesta.ok) {
+    console.error('');
+    console.error('✗ NO se subió la versión: la imagen de la tarjeta no responde.');
+    console.error('');
+    console.error(`  og:image apunta a:  ${laImagenDeLaTarjeta}`);
+    console.error(`  y devuelve:         ${respuesta.status}`);
+    console.error('');
+    console.error('  Esa dirección es la que lee WhatsApp para armar la tarjeta del');
+    console.error('  enlace. Si no responde 200, cada invitación sale como texto pelado.');
+    console.error('');
+    console.error('  Suele pasar por renombrar la imagen sin promover a producción:');
+    console.error('  la etiqueta es absoluta a aniaxv.com, así que el archivo tiene');
+    console.error('  que estar AHÍ, no solo en el repositorio.');
+    console.error('');
+    process.exit(1);
+  }
+}
+
 const rutaIndex = join(raiz, 'index.html');
 const rutaSw = join(raiz, 'sw.js');
 const rutaSwAdmin = join(raiz, 'admin', 'sw.js');

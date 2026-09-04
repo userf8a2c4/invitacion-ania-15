@@ -229,6 +229,23 @@ const CONFIGURACION = {
      del Bloque 1 llegue al menú, esto se puede afinar por permiso real
      de cada sección en vez de por rol. */
   indiceDelMenu: [
+    /* ⚡ ESTE GRUPO ES NUEVO (2026-09-03). Cuando la barra de abajo pasó a
+       ser Hoy · Gente · Dinero · Más, "Resumen" y "Planificar" se quedaron
+       sin botón. Lo esencial de Resumen (los accesos rápidos) vive ahora en
+       Hoy, pero el resto —la tarjeta ejecutiva, "Necesita tu atención", los
+       números de invitados y la línea de tiempo de lo que viene— sigue
+       siendo información que Lucila mira, y dejarla sin ninguna puerta
+       habría sido perderla sin decírselo a nadie.
+
+       Van acá, a dos toques: son pantallas de mirar cada tanto, no de todos
+       los días. Lo de todos los días está abajo, en la barra. */
+    {
+      titulo: 'Ver todo',
+      filas: [
+        ['resumen',    'La foto completa: invitados, dinero y lo que viene'],
+        ['planificar', 'El índice de todas las herramientas del panel'],
+      ],
+    },
     {
       titulo: 'Del día',
       filas: [
@@ -239,8 +256,16 @@ const CONFIGURACION = {
     {
       titulo: 'Herramientas',
       filas: [
-        ['compartir', 'Mandar los datos del evento a un proveedor por WhatsApp'],
+        /* Solo admin: compartir.php exige rol admin y una cuenta de
+           entrada recibía un 403 al abrirlo, después de haberlo visto
+           en su menú como cualquier otra herramienta. */
+        ['compartir', 'Mandar los datos del evento a un proveedor por WhatsApp', true],
         ['importar',  'Cargar invitados o gastos desde una hoja de cálculo'],
+        // ⚡ (2026-08-28) Antes las etiquetas de acomodo (Entrega 2) solo
+        // se podían crear o ver desde adentro de la ficha de una persona
+        // o de una mesa — no había ningún lugar central para verlas
+        // todas juntas ni para borrar las que ya no sirven.
+        ['etiquetas_acomodo', 'Ver y borrar las etiquetas de personas y mesas'],
         ['alarmas',   'Ver y probar los recordatorios activos'],
         ['bitacora',  'Quién cambió qué y cuándo', true],
       ],
@@ -255,6 +280,11 @@ const CONFIGURACION = {
         ['etiquetas',  'Cambiar cómo se llaman las cosas en la app', true],
         ['colores',    'Elegir la paleta de colores del panel', true],
         ['fab-config', 'Elegir qué hace el botón redondo de abajo'],
+        // ⚡ (2026-08-30) Solo admin: acá van la URL del webhook y las
+        // dos claves de MegaBot — la de servicio nunca se muestra
+        // (solo al rotarla), así que no tiene sentido que una cuenta
+        // no-admin ni siquiera vea si hay una configurada.
+        ['megabot', 'URL y claves para conectar el chat con MegaBot', true],
         ['comandos-asistente', 'Ver y agregar frases del asistente'],
         ['respaldo',   'Cuándo se guardó por última vez la copia de todo', true],
         ['instalar',   'Poner el acceso directo en la pantalla de inicio'],
@@ -278,12 +308,20 @@ const CONFIGURACION = {
   /* Mesas, Regalos y Foráneos viven acá y no en Evento a propósito: son
      cosas sobre PERSONAS. Antes había que saltar de pestaña para ver
      quién confirmó y dónde sentarlo. */
+  /* ⚡ (2026-08-28) "Invitados" e "Invitaciones" eran dos pestañas para
+     la misma info repartida -compartían raíz, así que además de
+     confundir por el nombre, obligaban a saltar de pantalla para ver
+     el link de alguien que ya se estaba mirando. Se fusionaron: ya no
+     existe la sección 'invitaciones' acá (dibujarInvitaciones() de
+     48-invitaciones.js queda sin usar desde la navegación, pero sus
+     funciones se siguen llamando desde 08-vista-invitados.js). Todo
+     -respuesta, mesa, link, teléfono, grupo- vive en "Invitados". */
   seccionesDeGente: [
-    ['invitados', 'Invitados',          'Quién confirmó, cuántos vienen y qué comen'],
-    ['mesas',     'Mesas',              'Quién se sienta dónde'],
-    ['regalos',   'Regalos',            'Qué llegó y a quién falta agradecerle'],
-    ['foraneos',  'Foráneos',           'Los que vienen de afuera: hospedaje y llegada'],
-    ['contactos', 'Contactos','Todos los teléfonos del evento en un solo lugar'],
+    ['invitados',    'Invitados',       'Quién confirmó, cuántos vienen, qué comen, en qué mesa quedaron y el link para invitarlos'],
+    ['mesas',        'Mesas',           'Quién se sienta dónde'],
+    ['regalos',      'Regalos',         'Qué llegó y a quién falta agradecerle'],
+    ['foraneos',     'Foráneos',        'Los que vienen de afuera: hospedaje y llegada'],
+    ['contactos',    'Contactos','Todos los teléfonos del evento en un solo lugar'],
   ],
 
 
@@ -555,7 +593,7 @@ const CONFIGURACION = {
     },
 
     'mesas.acomodar': {
-      titulo: 'Acomodar solo',
+      titulo: 'Acomodar a todos',
       texto:
         'Reparte a todos los que confirmaron entre las mesas, respetando ' +
         'los grupos, las reglas de "no sentar juntos" y lo que fijaste ' +

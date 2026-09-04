@@ -211,11 +211,16 @@ function bloqueEjecutivo(datos, pendientes) {
 
   return '' +
     '<div class="tarjeta rejilla-ejecutiva">' +
+      /* ⚠️ `contestaron` Y NO `si_asisten` (2026-09-04). `si_asisten`
+         cuenta `asiste = 1`, y una confirmación nace con asiste = 1
+         porque el cupo se aparta desde el día uno. Este número decía
+         "51 confirmaron" con la invitación sin mandar. Mismo criterio
+         que la tarjeta de Hoy y que la lista de Gente. */
       '<button class="rejilla-ejecutiva__dato" data-lleva-a="invitados">' +
         '<span class="rejilla-ejecutiva__numero">' +
-          seguro(invitados.hay ? invitados.si_asisten : '—') +
+          seguro(invitados.hay ? (invitados.contestaron || 0) : '—') +
         '</span>' +
-        '<span class="rejilla-ejecutiva__rotulo">Confirmados</span>' +
+        '<span class="rejilla-ejecutiva__rotulo">Confirmaron</span>' +
       '</button>' +
 
       '<button class="rejilla-ejecutiva__dato' +
@@ -250,14 +255,37 @@ function bloqueEjecutivo(datos, pendientes) {
  * solo lugar donde agregar un acceso nuevo, no dos que se puedan
  * desincronizar.
  */
+/* ⚡ SIN "GENTE" NI "DINERO" DESDE QUE ESTÁN EN LA BARRA (2026-09-03).
+   Los dos tienen ahora su propio botón abajo, así que repetirlos acá era
+   ofrecer dos caminos al mismo sitio en la misma pantalla — ruido, y una
+   decisión de más para alguien que solo quiere llegar. En su lugar entran
+   Evento y Notas, que se quedaron sin casa cuando "Planificar" dejó de ser
+   una parada obligatoria. */
 const ACCESOS_RAPIDOS = [
-  { clave: 'gente',     nombre: 'Gente',     ir: () => irA('invitados') },
   { clave: 'mesas',     nombre: 'Mesas',     ir: () => verPlanoDeMesas() },
-  { clave: 'dinero',    nombre: 'Dinero',    ir: () => irA('dinero') },
-  { clave: 'correo',    nombre: 'Correo',    ir: () => irA('correo') },
   { clave: 'tareas',    nombre: 'Tareas',    ir: () => { SECCION_EVENTO = 'tareas'; irA('evento', true); } },
+  { clave: 'evento',    nombre: 'Evento',    ir: () => irA('evento') },
+  { clave: 'correo',    nombre: 'Correo',    ir: () => irA('correo') },
   { clave: 'contactos', nombre: 'Contactos', ir: () => { SECCION_GENTE = 'contactos'; irA('invitados', true); } },
+  { clave: 'notas',     nombre: 'Notas',     ir: () => abrirHojaDeNota() },
 ];
+
+/**
+ * Engancha los accesos rápidos dentro de un contenedor cualquiera.
+ *
+ * Existe suelta porque ahora la misma rejilla se pinta en dos pantallas —
+ * Resumen y Hoy—, y tener el enganche en un solo sitio evita el clásico de
+ * agregar un acceso nuevo y que funcione en una pantalla y en la otra no.
+ *
+ * @param {HTMLElement} donde
+ * @returns {void}
+ */
+function engancharAccesosRapidos(donde) {
+  buscarTodos('[data-acceso]', donde).forEach(boton => {
+    const acceso = ACCESOS_RAPIDOS.find(a => a.clave === boton.dataset.acceso);
+    if (acceso) boton.addEventListener('click', () => acceso.ir());
+  });
+}
 
 /**
  * El HTML de la rejilla de accesos rápidos.
@@ -290,8 +318,16 @@ function bloqueInvitados(invitados) {
   return '' +
     '<div class="rejilla-datos">' +
       tarjetaDato(invitados.personas, 'Personas') +
-      tarjetaDato(invitados.si_asisten, 'Confirman') +
-      tarjetaDato(invitados.no_asisten, 'No pueden') +
+      // ⚡ (2026-08-30) Cupo sustractivo real: "Libres" resta contra
+      // SUM(mesas.capacidad) -140 hoy, pero calculado, no pisado a
+      // mano-, no contra cantidad de invitaciones ni de filas RSVP.
+      tarjetaDato(invitados.libres, 'Libres') +
+      // "Confirmaron" son los que contestaron (ver la nota de arriba);
+      // "Apartados" es el cupo reservado, que es lo que `si_asisten`
+      // siempre midió y lo que se le dice al salón.
+      tarjetaDato(invitados.contestaron || 0, 'Confirmaron') +
+      tarjetaDato(invitados.si_asisten, 'Apartados') +
+      tarjetaDato(invitados.no_asisten, 'No vienen') +
       tarjetaDato(invitados.adultos, 'Adultos') +
       tarjetaDato(invitados.ninos, 'Niños') +
     '</div>' +
@@ -380,7 +416,7 @@ function bloqueDinero(dinero) {
   if (!dinero.costo && !dinero.presupuestado) {
     return '' +
       '<div class="tarjeta">' +
-        '<div class="tarjeta__titulo">Presupuesto</div>' +
+        '<div class="tarjeta__titulo">Dinero</div>' +
         '<p class="vacio__texto">Todavía no cargaste ningún gasto. ' +
         'Empieza desde la pestaña Dinero.</p>' +
       '</div>';
@@ -394,18 +430,22 @@ function bloqueDinero(dinero) {
              '.</p>';
   }
 
-  const pendientes = dinero.padrinos_pendientes;
-  if (pendientes && pendientes.cuantos > 0) {
+  /* `padrinos_pendientes` es el monto y `_cuantos` la cantidad — dos
+     claves sueltas, la misma forma que devuelve presupuesto.php. Antes
+     acá era un objeto {monto, cuantos} y allá dos claves: el mismo dato
+     con dos formas según la pantalla. */
+  if (dinero.padrinos_pendientes_cuantos > 0) {
     // En ojo y no en rojo: no es un error, es algo que hay que seguir.
     extra += '<p class="vacio__texto" style="color:var(--ojo)">' +
-             seguro(comoDinero(pendientes.monto, false)) + ' de ' +
-             seguro(pluralizar(pendientes.cuantos, 'padrino', 'padrinos')) +
+             seguro(comoDinero(dinero.padrinos_pendientes, false)) + ' de ' +
+             seguro(pluralizar(dinero.padrinos_pendientes_cuantos,
+                               'padrino', 'padrinos')) +
              ' todavía sin entregar.</p>';
   }
 
   return '' +
     '<div class="tarjeta">' +
-      '<div class="tarjeta__titulo">Presupuesto</div>' +
+      '<div class="tarjeta__titulo">Dinero</div>' +
       '<div class="dinero-resumen">' +
         '<div class="dinero-resumen__mitad">' +
           '<div class="dinero-resumen__rotulo">Cuesta</div>' +
@@ -584,11 +624,9 @@ function engancharResumen(vista) {
   });
 
   // Los accesos rápidos, algunos con sub-sección propia (ver
-  // ACCESOS_RAPIDOS más arriba).
-  buscarTodos('[data-acceso]', vista).forEach(boton => {
-    const acceso = ACCESOS_RAPIDOS.find(a => a.clave === boton.dataset.acceso);
-    if (acceso) boton.addEventListener('click', () => acceso.ir());
-  });
+  // ACCESOS_RAPIDOS más arriba). El enganche está suelto porque Hoy pinta
+  // la misma rejilla.
+  engancharAccesosRapidos(vista);
 
   // Los hitos de la línea de tiempo llevan además a su sub-sección.
   buscarTodos('[data-hito]', vista).forEach(fila => {

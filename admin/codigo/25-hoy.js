@@ -38,17 +38,29 @@ function bloqueAQuienLlamar(gente) {
     '<div class="tarjeta">' +
       '<div class="tarjeta__titulo">A quién llamar</div>' +
       gente.map(p => {
-        const digitos = String(p.telefono).replace(/\D/g, '');
+        /* paraWhatsApp() y no un replace a mano: le pone la clave de
+           país a los diez dígitos mexicanos y descarta lo que no sirve.
+           Sin ella, un número guardado como "9611234567" abría el chat
+           de otra persona en otro país, y sin ningún aviso. */
+        const numero = paraWhatsApp(p.telefono);
+
         return '<div class="lista__fila">' +
           '<span class="lista__cuerpo">' +
             '<span class="lista__titulo">' + seguro(p.nombre) + '</span>' +
-            '<span class="lista__pie">' + seguro(p.porque) + '</span>' +
+            '<span class="lista__pie">' + seguro(p.porque) +
+              // Se dice ANTES del toque, no cuando WhatsApp abre vacío.
+              (numero ? '' :
+                '<br><span class="aviso-error">Ese teléfono no sirve para ' +
+                'WhatsApp: le falta la clave de país.</span>') +
+            '</span>' +
           '</span>' +
           /* Sin --chico: llamar y escribir son las dos cosas que se
              hacen apurada y sin mirar. 44 px, como manda el mínimo. */
           '<a class="boton" href="tel:' + seguro(p.telefono) + '">Llamar</a>' +
-          '<a class="boton" target="_blank" rel="noopener" ' +
-             'href="https://wa.me/' + seguro(digitos) + '">WhatsApp</a>' +
+          (numero
+            ? '<a class="boton" target="_blank" rel="noopener" ' +
+                 'href="https://wa.me/' + seguro(numero) + '">WhatsApp</a>'
+            : '') +
         '</div>';
       }).join('') +
     '</div>';
@@ -280,12 +292,24 @@ async function pintarBuscadorDePases(donde) {
           (asiste ? 'var(--bien)' : 'var(--alerta)') + ';font-weight:700">' +
           (asiste ? gente + (gente === 1 ? ' persona' : ' personas') : 'NO ASISTE') +
         '</div>' +
-        (f.codigo
-          ? '<div class="codigo-pase" style="font-size:14px">' +
-            seguro(f.codigo) + '</div>' : '') +
+        /* ⚡ LA MESA, EN GRANDE Y ANTES QUE EL CÓDIGO (2026-09-03). Esta
+           tarjeta se mira de pie, en la puerta, mientras alguien espera que
+           le digan dónde sentarse — y mostraba el código del pase pero no la
+           mesa. Había que salir de acá, ir a Gente, buscar de nuevo, abrir la
+           ficha y bajar hasta el final. El dato ya venía en la respuesta. */
+        (asiste
+          ? '<div class="etiqueta ' +
+              (f.mesa ? 'etiqueta--bien' : 'etiqueta--alerta') +
+              '" style="margin-top:6px;font-size:16px">' +
+              (f.mesa ? 'Mesa ' + seguro(f.mesa) : 'Sin mesa asignada') +
+            '</div>'
+          : '') +
         (f.alergias && !/^(ninguna|ninguno|no|-)$/i.test(f.alergias)
           ? '<div class="etiqueta etiqueta--ojo" style="margin-top:6px">⚠ ' +
             seguro(f.alergias) + '</div>' : '') +
+        (f.codigo
+          ? '<div class="codigo-pase" style="font-size:14px;margin-top:6px">' +
+            seguro(f.codigo) + '</div>' : '') +
       '</div>';
     }).join('');
   });
@@ -336,9 +360,15 @@ async function abrirCompartir() {
           'poder mandarle lo suyo desde aquí con un toque.</p>' +
         '</div>') +
 
-    /* ─── Y los paquetes sueltos, para copiar o elegir destinatario ── */
+    /* ─── Y los paquetes sueltos, para copiar o elegir destinatario ──
+     *
+     * Los que piden un contexto —UNA mesa, UN proveedor— no van acá:
+     * elegirlos en un desplegable, fuera de la pantalla donde se los
+     * está mirando, es más trabajo que llegar desde su propia ficha.
+     * Se ofrecen ahí: "Mandar esta mesa" en la mesa, "Mandarle su
+     * estado de cuenta" en el proveedor. */
     '<div class="indice__titulo">Armar un texto suelto</div>' +
-    opciones.map(o =>
+    opciones.filter(o => !o.pide_mesa && !o.pide_proveedor).map(o =>
       '<button class="lista__fila" data-compartir="' + seguro(o.clave) + '">' +
         '<span class="lista__cuerpo">' +
           '<span class="lista__titulo">' + seguro(o.nombre) + '</span>' +
@@ -400,19 +430,25 @@ function filaDeProveedorParaMandar(p, comoSeLlama) {
 /**
  * Arma el texto y ofrece mandarlo o copiarlo.
  *
- * @param {string} cual
+ * @param {string} cual - Qué paquete (ver compartir.php?accion=que_hay).
+ * @param {Object} [proveedor] - A quién se le manda: { id, nombre,
+ *   enviado_en, huella }. Los dos últimos son los que permiten avisar
+ *   "esto cambió desde que se lo mandaste".
+ * @param {number} [mesaId] - Solo para el paquete 'mesa'.
  * @returns {Promise<void>}
  */
-async function armarParaCompartir(cual, proveedor) {
+async function armarParaCompartir(cual, proveedor, mesaId) {
   const cuerpo = abrirHoja('Armando…', '<div class="esqueleto"></div>'.repeat(3));
 
   let datos;
   try {
     datos = await traer('compartir.php?accion=armar&cual=' + encodeURIComponent(cual) +
-                        (proveedor ? '&proveedor=' + encodeURIComponent(proveedor.id) : ''));
+                        (proveedor ? '&proveedor=' + encodeURIComponent(proveedor.id) : '') +
+                        // El paquete 'mesa' arma la hoja de UNA mesa.
+                        (mesaId ? '&mesa=' + encodeURIComponent(mesaId) : ''));
   } catch (error) {
     cuerpo.innerHTML = '';
-    pintarError(cuerpo, error.message, () => armarParaCompartir(cual, proveedor));
+    pintarError(cuerpo, error.message, () => armarParaCompartir(cual, proveedor, mesaId));
     return;
   }
 
@@ -438,8 +474,52 @@ async function armarParaCompartir(cual, proveedor) {
         seguro(comoFecha(String(proveedor.enviado_en).slice(0, 10))) +
         ' y no cambió nada desde entonces.</p>';
 
+  /* Sin un número que sirva, el enlace de WhatsApp abre el selector de
+     contactos vacío. Se dice antes, no después del toque. */
+  const sinNumero = proveedor && datos.proveedor && !datos.proveedor.sirve_whatsapp
+    ? '<p class="aviso-error">' + seguro(proveedor.nombre) + ' no tiene un ' +
+      'teléfono que sirva para WhatsApp. Puedes copiar el texto y ' +
+      'mandárselo por donde lo tengas.</p>'
+    : '';
+
+  /* ⚡ CUANDO EL TEXTO ES DEMASIADO LARGO PARA UN ENLACE (2026-09-03).
+   *
+   * `wa.me/…?text=` mete el mensaje entero DENTRO de la dirección. Con
+   * 110 invitados, el paquete "Lista de invitados" pasa los ocho mil
+   * caracteres una vez codificado (cada acento ocupa nueve), y Android
+   * lo corta sin decir nada: se abre WhatsApp con el mensaje a la
+   * mitad, y no hay forma de notarlo salvo leyéndolo entero del otro
+   * lado.
+   *
+   * El umbral es del texto SIN codificar y es conservador a propósito:
+   * más vale ofrecer copiar de más que mandar un mensaje cortado.
+   * Copiar no tiene ningún límite.
+   *
+   * No se esconde WhatsApp: se invierte cuál es el camino principal. */
+  const LARGO_SEGURO_DE_ENLACE = 1500;
+  const textoLargo = (datos.texto || '').length > LARGO_SEGURO_DE_ENLACE;
+
+  const botonWhatsapp =
+    '<a class="boton' + (textoLargo ? '' : ' boton--principal') + ' boton--ancho" ' +
+       'target="_blank" rel="noopener" id="comp-whatsapp" ' +
+       'href="' + seguro(datos.whatsapp) + '" style="margin-top:var(--esp-2)">' +
+      (proveedor ? 'Mandarle a ' + seguro(proveedor.nombre) : 'Mandar por WhatsApp') +
+    '</a>';
+
+  const botonCopiar =
+    '<button class="boton' + (textoLargo ? ' boton--principal' : '') + ' boton--ancho" ' +
+            'id="comp-copiar" style="margin-top:var(--esp-' +
+            (textoLargo ? '2' : '1') + ')">Copiar el texto</button>';
+
   cuerpo.innerHTML =
     aviso +
+    sinNumero +
+
+    (textoLargo
+      ? '<p class="aviso-error">Este texto es muy largo para mandarlo por el ' +
+        'enlace de WhatsApp: se cortaría por la mitad sin avisar. ' +
+        '<strong>Cópialo y pégalo</strong> en el chat.</p>'
+      : '') +
 
     /* Se muestra el texto completo antes de mandarlo. Nadie debería
        mandarle algo a un proveedor sin haberlo leído. */
@@ -448,20 +528,22 @@ async function armarParaCompartir(cual, proveedor) {
       seguro(datos.texto) +
     '</div>' +
 
-    '<a class="boton boton--principal boton--ancho" target="_blank" ' +
-       'rel="noopener" id="comp-whatsapp" href="' + seguro(datos.whatsapp) + '" ' +
-       'style="margin-top:var(--esp-2)">' +
-      (proveedor ? 'Mandarle a ' + seguro(proveedor.nombre) : 'Mandar por WhatsApp') +
-    '</a>' +
-
-    '<button class="boton boton--ancho" id="comp-copiar" ' +
-            'style="margin-top:var(--esp-1)">Copiar el texto</button>';
+    // El que está bien para este texto va primero y en oro.
+    (textoLargo ? botonCopiar + botonWhatsapp : botonWhatsapp + botonCopiar);
 
   /* Al tocar el botón se anota que se le mandó. Se anota que se ABRIÓ
      WhatsApp con el texto puesto: si después lo manda o no ya pasa
      adentro de WhatsApp, donde el panel no ve nada. Decir "enviado"
-     sería afirmar más de lo que se sabe. */
-  if (proveedor) {
+     sería afirmar más de lo que se sabe.
+
+     Y solo si HAY destinatario. Sin un número que sirva, el enlace abre
+     el selector de contactos vacío: no hay a quién mandárselo, y anotar
+     el envío igual dejaba marcado como avisado a un proveedor que nunca
+     recibió nada — que es peor que no tener el dato, porque después
+     nadie vuelve a mirarlo. */
+  const hayDestinatario = !!(datos.proveedor && datos.proveedor.sirve_whatsapp);
+
+  if (proveedor && hayDestinatario) {
     buscar('#comp-whatsapp', cuerpo).addEventListener('click', () => {
       mandar('compartir.php?accion=anotar_envio', {
         proveedor_id: proveedor.id,
@@ -476,7 +558,7 @@ async function armarParaCompartir(cual, proveedor) {
   buscar('#comp-copiar', cuerpo).addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(datos.texto);
-      avisar('Copiado. Pegalo donde quieras.');
+      avisar('Copiado. Pégalo donde quieras.');
     } catch (error) {
       /* En algunos navegadores el portapapeles solo funciona con
          permiso. Si falla, se selecciona el texto para copiarlo a mano
@@ -486,7 +568,7 @@ async function armarParaCompartir(cual, proveedor) {
       rango.selectNodeContents(bloque);
       window.getSelection().removeAllRanges();
       window.getSelection().addRange(rango);
-      avisar('Seleccionado: copialo con el menú del teléfono.', true);
+      avisar('Seleccionado: cópialo con el menú del teléfono.', true);
     }
   });
 }

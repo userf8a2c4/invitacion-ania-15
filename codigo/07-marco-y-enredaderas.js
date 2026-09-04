@@ -62,6 +62,30 @@
 
 (function preparaLasEnredaderasDelMarco() {
 
+  // Interruptor de diagnóstico: ver apagadoParaMedir() en 02-utilidades.js.
+  if (apagadoParaMedir('enredaderas')) return;
+
+  /* ── INTERRUPTORES FINOS, SOLO PARA MEDIR ──────────────────────────────
+     'sin=enredaderas' (arriba) apaga el módulo entero, y con eso los fps de
+     la máquina de referencia pasaron de 18 a 38. Pero adentro de este
+     archivo conviven tres cosas que cuestan por motivos distintos, y hasta
+     no saber cuál pesa, cualquier arreglo es una apuesta:
+
+       · las 24 trepadoras de los costados, que tienen física y se mecen;
+       · los 4 ramilletes de las esquinas, que son 140 de las 234 flores y
+         NO se mueven nunca (son puro dibujo);
+       · el meneo en sí — las ~400 escrituras de transform por cuadro.
+
+     Si apagar el meneo devuelve los fps, el costo es de la animación y se
+     arregla componiendo. Si NO los devuelve, el costo es de rasterizar el
+     dibujo mientras se hace scroll, que es otro problema y otro arreglo.
+     Estos tres interruptores separan esas facturas. Sin ?sin= en la
+     dirección no cambia absolutamente nada. */
+  const SIN_PLANTAS    = apagadoParaMedir('plantas');
+  const SIN_RAMILLETES = apagadoParaMedir('ramilletes');
+  const SIN_MENEO      = apagadoParaMedir('meneo');
+
+
   const enredaderaIzquierda = buscar('.marco__enredadera--izquierda');
   const enredaderaDerecha   = buscar('.marco__enredadera--derecha');
   if (!enredaderaIzquierda || !enredaderaDerecha) return;
@@ -96,6 +120,36 @@
    *  de reentrada que ahora sí tiene repartirPlantas() — pero el beneficio
    *  era chico (menos plantas en equipos flojos) y el riesgo visual, alto. */
   const SEPARACION_ENTRE_PLANTAS = 460;
+
+  /* ⚡ CUÁNTO RELLENO LLEVA CADA PLANTA, SEGÚN LA CALIDAD (2026-09-02).
+
+     QUÉ SE RECORTA Y QUÉ NO. No se quita ni una rosa, ni una planta: lo que
+     se aligera es el relleno — hojas, espinas y zarcillos— y la cantidad de
+     nudos del tallo. La silueta, la cantidad de flores y el ritmo de la
+     enredadera quedan idénticos; lo que baja es la densidad de detalle que,
+     a esa distancia y con la penumbra encima, casi no se lee.
+
+     POR QUÉ HACÍA FALTA. En un perfil real sobre un equipo modesto,
+     "Layerize" —el paso donde el navegador arma el árbol de capas— se
+     llevaba entre el 42 % y el 52 % del tiempo de cada cuadro. Ese costo lo
+     manda CUÁNTO hay que recorrer, y este archivo solo es la mitad de los
+     4.054 nodos del documento. Reducir el relleno saca ~700 elementos de
+     render sin tocar una sola flor.
+
+     ⚠️ SE DECIDE UNA SOLA VEZ, AL CONSTRUIR, Y NO SE VUELVE A TOCAR.
+     Acá está la lección del intento anterior que salió mal (ver la nota de
+     abajo): aquella vez la densidad se ataba al nivel de calidad Y se
+     reconstruía al cambiar de nivel — y el gobernador cambia de nivel a los
+     ~2,5 s, justo cuando la construcción todavía está en vuelo, así que dos
+     corridas se pisaban. Este archivo NO escucha 'calidad-cambio' para
+     geometría, y así debe seguir: el gobernador ajusta cadencias, nunca
+     cantidades. Por eso estos valores se leen una vez en
+     construirUnaSolaVez() y quedan fijos para toda la visita. */
+  const RELLENO_POR_CALIDAD = { 0: 1, 1: 0.6, 2: 0.45 };
+  const NUDOS_POR_CALIDAD   = { 0: 6, 1: 4,   2: 3    };
+
+  let rellenoDeEstaVisita = 1;
+  let nudosDeEstaVisita   = 6;
 
   /** Ancho del "lienzo" de cada planta, en unidades del dibujo. */
   const ANCHO_DEL_LIENZO = 120;
@@ -410,7 +464,7 @@
 
        Cada pieza que se dibuja se guarda en el nudo que le corresponde
        según a qué altura del tallo está enganchada. */
-    const CANTIDAD_DE_NUDOS = 6;
+    const CANTIDAD_DE_NUDOS = nudosDeEstaVisita;
     const ultimoIndice = recorrido.length - 1;
     const partesPorNudo = Array.from({ length: CANTIDAD_DE_NUDOS }, () => []);
 
@@ -451,7 +505,8 @@
     }
 
     // ── Espinas: solo en la mitad de abajo, que es la parte leñosa ──
-    const cuantasEspinas = azar.entero(4, 9);
+    const cuantasEspinas = Math.max(2,
+      Math.round(azar.entero(4, 9) * rellenoDeEstaVisita));
     for (let i = 0; i < cuantasEspinas; i++) {
       const indiceDeLaEspina = azar.entero(2, Math.floor(recorrido.length * 0.7));
       const punto = recorrido[indiceDeLaEspina];
@@ -559,7 +614,8 @@
        Repartidas sin regla: distinta cantidad, tamaño y giro en cada
        planta, y siempre apuntando hacia arriba y hacia afuera, como
        buscando la luz. */
-    const cuantasHojas = azar.entero(7, 13);
+    const cuantasHojas = Math.max(3,
+      Math.round(azar.entero(7, 13) * rellenoDeEstaVisita));
     for (let i = 0; i < cuantasHojas; i++) {
       const indiceDeLaHoja = azar.entero(2, recorrido.length - 2);
       const punto = recorrido[indiceDeLaHoja];
@@ -606,7 +662,8 @@
        Son la firma visual de una enredadera. Se dibujan como una espiral
        que va abriéndose, y se colocan cruzando la moldura, así parece que
        la planta se está trepando y sujetando al marco. */
-    const cuantosZarcillos = azar.entero(2, 4);
+    const cuantosZarcillos = Math.max(1,
+      Math.round(azar.entero(2, 4) * rellenoDeEstaVisita));
     for (let i = 0; i < cuantosZarcillos; i++) {
       const indiceDelZarcillo = azar.entero(4, recorrido.length - 2);
       const donde = recorrido[indiceDelZarcillo];
@@ -775,13 +832,29 @@
    * ni las zonas de relleno con sesgo geométrico que eran las que de
    * verdad generaban el enredo.
    *
-   * @param {number} semilla  - Define cómo será este ramillete.
-   * @param {number} densidad - Cuán ancha está la pantalla (ver
+   * @param {number} semilla    - Define cómo será este ramillete.
+   * @param {number} densidad   - Cuán ancha está la pantalla (ver
    *        colocarLosRamilletesDeEsquina). Acá solo mueve la cantidad de
    *        ramas dentro del límite fijo y el grosor del trazo.
-   * @returns {string} El SVG listo para insertar.
+   * @param {Function} alTerminar - Se llama con el SVG ya armado, cuando
+   *        terminan todas las ramas.
+   * @returns {void}
+   *
+   * ⚡ TROCEADA POR DENTRO, NO SOLO ENTRE LOS DOS RAMILLETES (2026-08-24).
+   * Antes esta función armaba TODO el SVG de un ramillete de una sola
+   * pasada síncrona, y lo que troceaba "un ramillete por cuadro" era
+   * quien la llamaba (ver crearRamillete/armarLosRamilletes). Eso alcanzaba
+   * con 14-22 ramas, pero al subir el techo a pedido de "quiero el doble
+   * de flores cerca del relicario", un solo ramillete de una sola pasada
+   * se acercaba otra vez a la tarea larga de "peor 1101 ms" que ya se
+   * había medido y resuelto para los DOS juntos (ver la nota grande en
+   * colocarLosRamilletesDeEsquina). Ahora el bucle de ramas de acá abajo
+   * también usa trabajarPorTandas() —el mismo criterio por presupuesto de
+   * tiempo que ya usa crearUnaPlanta más arriba—, así que duplicar la
+   * cantidad de ramas reparte el trabajo en más cuadros en vez de duplicar
+   * el tamaño de uno solo.
    */
-  function dibujarRamilleteDeEsquina(semilla, densidad) {
+  function armarRamilleteDeEsquinaPorTandas(semilla, densidad, sigoVigente, alTerminar) {
     const azar = crearAzarConSemilla(semilla);
 
     /* De dónde nacen todas las ramas: casi en el vértice, apenas
@@ -792,16 +865,22 @@
     const piezas = [];
     const flores = [];
 
-    /* ⚡ SUBIÓ FUERTE (era 6 a 9) A PEDIDO EXPLÍCITO: "quiero que esas de
-       las esquinas tengan mucho más... estas SÍ deben ser como
-       ramilletes". El primer intento, con la misma regla simple de una
-       rama-una flor, quedó demasiado parecido al resto del marco —una
-       continuación más de la enredadera, no un acento en la esquina.
-       Sigue siendo un LÍMITE FIJO (nunca una fórmula sin techo como los
-       46 tallos de las rondas viejas): la diferencia es que el techo
-       ahora es mucho más alto, porque acá el pedido es justamente que se
-       note la diferencia con el resto. */
-    const cuantasRamas = Math.round(limitar(14 + densidad * 6, 14, 22));
+    /* ⚡ SUBIÓ FUERTE (era 6 a 9, después 14 a 22) A PEDIDO EXPLÍCITO: primero
+       "quiero que esas de las esquinas tengan mucho más... estas SÍ deben
+       ser como ramilletes", y ahora "el doble de flores cerca del
+       relicario" para un momento dramático que se viene. Sigue siendo un
+       LÍMITE FIJO (nunca una fórmula sin techo como los 46 tallos de las
+       rondas viejas): la diferencia es que el techo ahora es el doble de
+       alto que la ronda anterior.
+
+       Esto es seguro para el cuadro a cuadro porque un ramillete NO tiene
+       nudos (ver colocarLosRamilletesDeEsquina: `nudos: []`) — el bucle de
+       física del tallo, el más caro de todo este archivo, itera cero veces
+       acá sea cual sea esta cantidad. Lo único que sí escala con más ramas
+       es la construcción (de ahí el troceado de esta función) y el chequeo
+       de distancia al mouse por flor, que además solo corre mientras se
+       está viendo cerca del relicario (ver `estaCerca` en dibujarCuadro). */
+    const cuantasRamas = Math.round(limitar(28 + densidad * 12, 28, 44));
 
     /* El trazo tiene que engrosar un poco en pantallas anchas o la punta
        queda en subpíxeles invisibles (mismo motivo que en las
@@ -810,7 +889,7 @@
     const ANGULO_MAS_HORIZONTAL = 0.1;
     const ANGULO_MAS_VERTICAL   = 1.45;
 
-    for (let i = 0; i < cuantasRamas; i++) {
+    function construirUnaRama(i) {
       const reparto = i / (cuantasRamas - 1);
       const anguloDeSalida =
         ANGULO_MAS_HORIZONTAL +
@@ -896,74 +975,319 @@
       }
     }
 
-    /* El acento: varias rosas más grandes justo en el origen, el "moño"
-       que tapa el nacimiento del abanico y hace que la esquina se sienta
-       CARGADA, como un ramillete de verdad y no solo una rama más larga.
-       Sigue siendo fijo (no escala con densidad) porque es un detalle,
-       no otra zona para sintonizar — pero subió de 2 a 4 junto con el
-       resto, a pedido de que la esquina se note bien distinta del resto
-       del marco. */
-    const orientacionesDelAcento = ['rosa-frente', 'rosa-tres-cuartos', 'rosa-media'];
-    for (let i = 0; i < 4; i++) {
-      const xFlor = xDeLaBase + azar.entre(6, 55);
-      const yFlor = yDeLaBase + azar.entre(6, 48);
-      piezas.push(
-        `<path d="M${xDeLaBase.toFixed(1)} ${yDeLaBase.toFixed(1)} Q ` +
-        `${(xDeLaBase + (xFlor - xDeLaBase) * 0.5 + azar.entre(-5, 5)).toFixed(1)} ` +
-        `${(yDeLaBase + (yFlor - yDeLaBase) * 0.5 + azar.entre(-5, 5)).toFixed(1)}, ` +
-        `${xFlor.toFixed(1)} ${yFlor.toFixed(1)}" fill="none" ` +
-        `stroke="url(#rosa-tallo)" stroke-width="${(2 * grosorDelTallo).toFixed(1)}" ` +
-        `stroke-linecap="round" stroke-opacity=".8"/>`
+    /**
+     * Cierra el ramillete: el acento del origen + las flores por encima,
+     * y arma el SVG final. Corre una sola vez, después de que
+     * trabajarPorTandas() terminó con TODAS las ramas — nunca antes, para
+     * no escribir un ramillete a medias (ver la nota de "flores voladoras"
+     * más abajo, en crearRamillete).
+     * @returns {void}
+     */
+    function alTerminarLasRamas() {
+      /* El acento: varias rosas más grandes justo en el origen, el "moño"
+         que tapa el nacimiento del abanico y hace que la esquina se sienta
+         CARGADA, como un ramillete de verdad y no solo una rama más larga.
+         Sigue siendo fijo (no escala con densidad) porque es un detalle,
+         no otra zona para sintonizar — subió de 2 a 4 en la ronda anterior,
+         y ahora de 4 a 8 junto con el resto de las ramas, mismo pedido de
+         "el doble de flores cerca del relicario". Es un bucle chico y fijo
+         (8 vueltas): no hace falta trocearlo aparte. */
+      const orientacionesDelAcento = ['rosa-frente', 'rosa-tres-cuartos', 'rosa-media'];
+      for (let i = 0; i < 8; i++) {
+        const xFlor = xDeLaBase + azar.entre(6, 55);
+        const yFlor = yDeLaBase + azar.entre(6, 48);
+        piezas.push(
+          `<path d="M${xDeLaBase.toFixed(1)} ${yDeLaBase.toFixed(1)} Q ` +
+          `${(xDeLaBase + (xFlor - xDeLaBase) * 0.5 + azar.entre(-5, 5)).toFixed(1)} ` +
+          `${(yDeLaBase + (yFlor - yDeLaBase) * 0.5 + azar.entre(-5, 5)).toFixed(1)}, ` +
+          `${xFlor.toFixed(1)} ${yFlor.toFixed(1)}" fill="none" ` +
+          `stroke="url(#rosa-tallo)" stroke-width="${(2 * grosorDelTallo).toFixed(1)}" ` +
+          `stroke-linecap="round" stroke-opacity=".8"/>`
+        );
+        flores.push({
+          x: xFlor, y: yFlor,
+          tipo: orientacionesDelAcento[i % orientacionesDelAcento.length],
+          escala: azar.entre(0.48, 0.64),
+          giro: azar.entre(-25, 25),
+        });
+      }
+
+      /* Las flores van al final para quedar por encima de tallos y hojas.
+         El apagado de las chicas es el mismo criterio de las enredaderas:
+         más chica se lee como más lejana, así que va más oscura. */
+      const ESCALA_MAS_LEJANA  = 0.28;
+      const ESCALA_MAS_CERCANA = 0.78;
+
+      for (const flor of flores) {
+        const cercania = limitar(
+          (flor.escala - ESCALA_MAS_LEJANA) / (ESCALA_MAS_CERCANA - ESCALA_MAS_LEJANA),
+          0, 1
+        );
+        // Mismo piso de brillo subido que en las enredaderas (.74), para
+        // que las flores chicas de las esquinas no se ennegrezcan.
+        const brillo = 0.74 + cercania * 0.26;
+
+        piezas.push(
+          `<g class="flor-de-enredadera ${tonoDeLaFlor(brillo)}"
+               data-escala="${flor.escala.toFixed(2)}"
+               data-x="${flor.x.toFixed(1)}" data-y="${flor.y.toFixed(1)}"
+               transform="translate(${flor.x.toFixed(1)} ${flor.y.toFixed(1)})">
+             <g class="flor-de-enredadera__movil">
+               <use href="#${flor.tipo}"
+                    transform="rotate(${flor.giro.toFixed(1)}) scale(${flor.escala.toFixed(2)})"/>
+             </g>
+           </g>`
+        );
+      }
+
+      alTerminar(
+        `<svg class="racimo-de-rosas racimo-de-rosas--esquina"
+              viewBox="0 0 ${ANCHO_DEL_RAMILLETE} ${ALTO_DEL_RAMILLETE}"
+              aria-hidden="true">${piezas.join('')}</svg>`
       );
-      flores.push({
-        x: xFlor, y: yFlor,
-        tipo: orientacionesDelAcento[i % orientacionesDelAcento.length],
-        escala: azar.entre(0.48, 0.64),
-        giro: azar.entre(-25, 25),
+    }
+
+    trabajarPorTandas(
+      cuantasRamas,
+      i => { if (!sigoVigente || sigoVigente()) construirUnaRama(i); },
+      () => { if (!sigoVigente || sigoVigente()) alTerminarLasRamas(); }
+    );
+  }
+
+
+  /* ─── 4C. LOS RAMILLETES INTERMEDIOS DE LA CENEFA SUPERIOR ───────────
+
+     PARA QUÉ ESTÁN (2026-08-24, a pedido explícito)
+     Con solo los dos ramilletes de esquina, todo el tramo de cenefa entre
+     cada esquina y el relicario queda pelado — justo el espacio que se
+     ve "vacío cerca del relicario". La respuesta NO es agrandar más los
+     ramilletes de esquina: ese camino ya se probó (54vw de ancho) y el
+     resultado fue "gigantesco... como jardín que descuidaste por meses"
+     (ver la nota de .marco__ramillete en 02-marco-victoriano.css) — así
+     que el ancho de esquina quedó deliberadamente congelado. En cambio,
+     se agregan DOS anclajes más, chicos, a mitad de camino entre cada
+     esquina y el centro: reparten la densidad a lo largo de todo el
+     borde en vez de concentrarla en dos puntas.
+
+     MISMO LENGUAJE, DISTINTA FORMA
+     Sigue siendo la regla de siempre —abanico con la masa en el origen,
+     nunca "un tallo solo con un bulto en la punta" (ver las 3 reglas más
+     arriba)— pero acá no hay ningún vértice que abrazar: es un borde
+     PLANO. Así que el abanico, en vez de abrirse de horizontal a
+     vertical como en la esquina, cuelga hacia ABAJO desde un punto del
+     borde — como una guirnalda colgada de la moldura. Además de evitar
+     la silueta prohibida, esto ya apunta hacia donde vive el relicario,
+     que es justo lo que hace falta para el efecto futuro que se busca
+     (ver el pedido: "las flores intentando acercarse al relicario").
+
+     POR QUÉ ES UNA FUNCIÓN APARTE Y NO EL MISMO GENERADOR PARAMETRIZADO
+     Comparte los mismos ladrillos de abajo (crecerTallo, siluetaDelTallo,
+     dibujarZarcillo, tonoDeLaFlor, trabajarPorTandas) pero NINGUNO de los
+     números — origen, ángulos, cantidad, escala— porque son geometrías
+     distintas (wrap de esquina vs. colgado de borde). Meterlas en un solo
+     generador con un objeto de configuración hubiera significado tocar
+     el generador de esquina —ya probado, ya verificado en el navegador
+     tras cazar un bug real— para agregar algo que no lo necesita. Repetir
+     la forma del bucle es más seguro acá que compartirla.
+
+     Solo se colocan en pantallas anchas (ver colocarLosRamilletesDeEsquina):
+     en celular la portada ya ocupa casi todo el ancho del marco y no hay
+     ningún "espacio vacío" real que llenar — agregarlos ahí sería
+     exactamente la maleza que este archivo lleva rondas enteras evitando.
+     ----------------------------------------------------------------- */
+
+  /** Medidas del lienzo del ramillete intermedio: bastante más chico que
+      el de esquina (regla 745) porque acá es un acento que se repite dos
+      veces, no la masa principal. */
+  const ANCHO_DEL_RAMILLETE_INTERMEDIO = 210;
+  const ALTO_DEL_RAMILLETE_INTERMEDIO  = 190;
+
+  /**
+   * Arma UN ramillete intermedio (guirnalda colgante), troceado por
+   * ramas igual que el de esquina. Misma forma de llamarse que
+   * armarRamilleteDeEsquinaPorTandas — así crearRamillete() puede usar
+   * cualquiera de las dos sin saber cuál es.
+   *
+   * @param {number} semilla
+   * @param {number} densidad
+   * @param {Function} sigoVigente
+   * @param {Function} alTerminar - Se llama con el SVG ya armado.
+   * @returns {void}
+   */
+  function armarRamilleteIntermedioPorTandas(semilla, densidad, sigoVigente, alTerminar) {
+    const azar = crearAzarConSemilla(semilla);
+
+    /* El origen va cerca del CENTRO horizontal del lienzo (no de una
+       esquina): de acá cuelga todo el abanico, como el broche de una
+       guirnalda. */
+    const xDeLaBase = azar.entre(95, 115);
+    const yDeLaBase = azar.entre(6, 16);
+
+    const piezas = [];
+    const flores = [];
+
+    /* Bastante menos ramas que un ramillete de esquina: es un acento
+       que se repite dos veces a los costados del relicario, no la masa
+       principal — si tuviera la misma densidad que la esquina, el tramo
+       de arriba se leería sobrecargado en vez de acompañado. */
+    const cuantasRamas = Math.round(limitar(9 + densidad * 4, 9, 15));
+    const grosorDelTallo = Math.max(densidad, 1.4);
+
+    /* Abanico que cuelga hacia abajo: de "abajo-y-a-la-derecha" a
+       "abajo-y-a-la-izquierda", centrado en la vertical (π/2). Sin este
+       centrado se parecería a un tallo apuntando a un solo lado, que es
+       justo la silueta que las reglas de más arriba prohíben. */
+    const ANGULO_INICIO = 0.75;
+    const ANGULO_FIN    = 2.4;
+
+    function construirUnaRama(i) {
+      const reparto = i / Math.max(1, cuantasRamas - 1);
+      const anguloDeSalida =
+        ANGULO_INICIO + reparto * (ANGULO_FIN - ANGULO_INICIO) + azar.entre(-0.08, 0.08);
+
+      const cercaniaAlCentro = 1 - Math.abs(reparto - 0.5) * 2;
+      const pasos = azar.entero(5, 7);
+      const largoDelPaso = azar.entre(14, 21) * (0.7 + cercaniaAlCentro * 0.4);
+
+      /* La raíz corre a lo largo del borde plano (en X, alrededor del
+         centro), no diagonal como en la esquina: acá no hay vértice que
+         abrazar, solo una línea recta de la que cuelga todo. */
+      const xRaiz = xDeLaBase + (reparto - 0.5) * azar.entre(70, 110);
+      const yRaiz = yDeLaBase + azar.entre(-3, 3);
+
+      const tallo = crecerTallo(azar, {
+        xInicial: xRaiz,
+        yInicial: yRaiz,
+        anguloInicial: anguloDeSalida,
+        pasos,
+        largoDelPaso,
+        giroMaximo: azar.entre(0.08, 0.16),
+        inercia: azar.entre(0.5, 0.75),
+        xObjetivo: ANCHO_DEL_RAMILLETE_INTERMEDIO * 0.5,
+        atraccion: azar.entre(0.0008, 0.002),
       });
-    }
 
-    /* Las flores van al final para quedar por encima de tallos y hojas.
-       El apagado de las chicas es el mismo criterio de las enredaderas:
-       más chica se lee como más lejana, así que va más oscura. */
-    const ESCALA_MAS_LEJANA  = 0.28;
-    const ESCALA_MAS_CERCANA = 0.78;
-
-    for (const flor of flores) {
-      const cercania = limitar(
-        (flor.escala - ESCALA_MAS_LEJANA) / (ESCALA_MAS_CERCANA - ESCALA_MAS_LEJANA),
-        0, 1
+      const dDelTallo = siluetaDelTallo(
+        tallo, azar,
+        azar.entre(2.6, 3.8) * grosorDelTallo,
+        1 * grosorDelTallo
       );
-      // Mismo piso de brillo subido que en las enredaderas (.74), para
-      // que las flores chicas de las esquinas no se ennegrezcan.
-      const brillo = 0.74 + cercania * 0.26;
-
       piezas.push(
-        `<g class="flor-de-enredadera ${tonoDeLaFlor(brillo)}"
-             data-escala="${flor.escala.toFixed(2)}"
-             data-x="${flor.x.toFixed(1)}" data-y="${flor.y.toFixed(1)}"
-             transform="translate(${flor.x.toFixed(1)} ${flor.y.toFixed(1)})">
-           <g class="flor-de-enredadera__movil">
-             <use href="#${flor.tipo}"
-                  transform="rotate(${flor.giro.toFixed(1)}) scale(${flor.escala.toFixed(2)})"/>
-           </g>
-         </g>`
+        `<path d="${dDelTallo}" fill="#6a5322"/>` +
+        `<path d="${dDelTallo}" fill="url(#rosa-tallo)" stroke="#241d0d" stroke-width=".6"/>`
+      );
+
+      // Como mucho una hoja por rama: acá el acento son las flores, no
+      // el follaje.
+      if (azar.numero() < 0.7) {
+        const punto = tallo[azar.entero(1, tallo.length - 2)];
+        const hacia = azar.signo();
+        const escala = azar.entre(0.35, 0.6);
+        const giro = (punto.angulo * 180 / Math.PI) + 90 + hacia * azar.entre(30, 70);
+        piezas.push(
+          `<use href="#rosa-hoja" transform="translate(${punto.x.toFixed(1)} ${punto.y.toFixed(1)})
+                rotate(${giro.toFixed(1)}) scale(${(hacia * escala).toFixed(2)} ${escala.toFixed(2)})"/>`
+        );
+      }
+
+      const punta = tallo[tallo.length - 1];
+      const orientaciones = ['rosa-frente', 'rosa-tres-cuartos', 'rosa-media', 'rosa-capullo'];
+      flores.push({
+        x: punta.x, y: punta.y,
+        tipo: orientaciones[azar.entero(0, orientaciones.length - 1)],
+        escala: azar.entre(0.36, 0.52),
+        giro: (punta.angulo * 180 / Math.PI) + 90 + azar.entre(-25, 25),
+      });
+
+      if (azar.numero() < 0.3) {
+        const donde = tallo[azar.entero(2, tallo.length - 1)];
+        piezas.push(
+          `<path d="${dibujarZarcillo(donde.x, donde.y, azar)}" fill="none"
+                 stroke="url(#rosa-tallo)" stroke-width="${azar.entre(.8, 1.3).toFixed(1)}"
+                 stroke-linecap="round" stroke-opacity=".75"/>`
+        );
+      }
+    }
+
+    function alTerminarLasRamas() {
+      /* Un acento chico en el origen — el broche de la guirnalda — para
+         que no se lea como puros tallos sueltos. Bastante menos que en
+         la esquina (3 en vez de 8): es un detalle, no la masa. */
+      const orientacionesDelAcento = ['rosa-frente', 'rosa-tres-cuartos', 'rosa-media'];
+      for (let i = 0; i < 3; i++) {
+        const xFlor = xDeLaBase + azar.entre(-28, 28);
+        const yFlor = yDeLaBase + azar.entre(4, 26);
+        piezas.push(
+          `<path d="M${xDeLaBase.toFixed(1)} ${yDeLaBase.toFixed(1)} Q ` +
+          `${(xDeLaBase + (xFlor - xDeLaBase) * 0.5 + azar.entre(-4, 4)).toFixed(1)} ` +
+          `${(yDeLaBase + (yFlor - yDeLaBase) * 0.5 + azar.entre(-4, 4)).toFixed(1)}, ` +
+          `${xFlor.toFixed(1)} ${yFlor.toFixed(1)}" fill="none" ` +
+          `stroke="url(#rosa-tallo)" stroke-width="${(1.8 * grosorDelTallo).toFixed(1)}" ` +
+          `stroke-linecap="round" stroke-opacity=".8"/>`
+        );
+        flores.push({
+          x: xFlor, y: yFlor,
+          tipo: orientacionesDelAcento[i % orientacionesDelAcento.length],
+          escala: azar.entre(0.4, 0.54),
+          giro: azar.entre(-25, 25),
+        });
+      }
+
+      const ESCALA_MAS_LEJANA  = 0.28;
+      const ESCALA_MAS_CERCANA = 0.78;
+
+      for (const flor of flores) {
+        const cercania = limitar(
+          (flor.escala - ESCALA_MAS_LEJANA) / (ESCALA_MAS_CERCANA - ESCALA_MAS_LEJANA),
+          0, 1
+        );
+        const brillo = 0.74 + cercania * 0.26;
+
+        piezas.push(
+          `<g class="flor-de-enredadera ${tonoDeLaFlor(brillo)}"
+               data-escala="${flor.escala.toFixed(2)}"
+               data-x="${flor.x.toFixed(1)}" data-y="${flor.y.toFixed(1)}"
+               transform="translate(${flor.x.toFixed(1)} ${flor.y.toFixed(1)})">
+             <g class="flor-de-enredadera__movil">
+               <use href="#${flor.tipo}"
+                    transform="rotate(${flor.giro.toFixed(1)}) scale(${flor.escala.toFixed(2)})"/>
+             </g>
+           </g>`
+        );
+      }
+
+      alTerminar(
+        `<svg class="racimo-de-rosas racimo-de-rosas--intermedio"
+              viewBox="0 0 ${ANCHO_DEL_RAMILLETE_INTERMEDIO} ${ALTO_DEL_RAMILLETE_INTERMEDIO}"
+              aria-hidden="true">${piezas.join('')}</svg>`
       );
     }
 
-    return `<svg class="racimo-de-rosas racimo-de-rosas--esquina"
-                 viewBox="0 0 ${ANCHO_DEL_RAMILLETE} ${ALTO_DEL_RAMILLETE}"
-                 aria-hidden="true">${piezas.join('')}</svg>`;
+    trabajarPorTandas(
+      cuantasRamas,
+      i => { if (!sigoVigente || sigoVigente()) construirUnaRama(i); },
+      () => { if (!sigoVigente || sigoVigente()) alTerminarLasRamas(); }
+    );
   }
 
   /**
-   * Coloca los dos ramilletes de las esquinas de arriba y los suma a la
-   * lista de plantas, para que respiren y reaccionen al mouse igual que
-   * las enredaderas de los costados.
+   * Coloca los ramilletes de arriba (los dos de esquina, y —en pantallas
+   * anchas— los dos intermedios de la cenefa) y los suma a la lista de
+   * plantas, para que respiren y reaccionen al mouse igual que las
+   * enredaderas de los costados.
    *
    * @returns {void}
    */
   function colocarLosRamilletesDeEsquina(alTerminar, sigoVigente) {
+    /* Interruptor de medición: se salta el armado Y el verificador tardío
+       (que vive adentro de esta misma función y volvería a dibujarlos a los
+       6 segundos), pero se sigue llamando a alTerminar para no cortar la
+       cadena de construcción que viene detrás. */
+    if (SIN_RAMILLETES) {
+      if (typeof alTerminar === 'function') alTerminar();
+      return;
+    }
+
     let semilla = 9100;
     // Si no se pasa control de corrida, se asume que siempre es vigente.
     const vigente = (typeof sigoVigente === 'function') ? sigoVigente : () => true;
@@ -986,17 +1310,47 @@
        ramilletes (ver la nota de SEPARACION_ENTRE_PLANTAS arriba). */
     const densidad = limitar(window.innerWidth / 1250, 0.55, 1.9);
 
-    /* ⚡ UN RAMILLETE POR CUADRO. Cada uno lleva entre 50 y 80 rosas con sus
-       tallos: los dos juntos, de una sola vez, era el bloque de construcción
-       más grande de toda la web. Hacer uno, dejar respirar al navegador y
-       hacer el otro da EXACTAMENTE el mismo resultado (mismas semillas,
-       mismo dibujo) sin congelar nada. */
-    const huecos = [buscar('.marco__ramillete--izquierdo'),
-                    buscar('.marco__ramillete--derecho')];
-    let indiceDeHueco = 0;
+    /* ── QUÉ ANCLAJES VAN, SEGÚN LA PANTALLA ──
+       Los dos de esquina van siempre. Los dos intermedios (la guirnalda
+       que rellena la cenefa entre cada esquina y el relicario, ver la
+       sección 4C más arriba) solo entran en pantallas anchas: en celular
+       la portada ya ocupa casi todo el ancho del marco —no hay ningún
+       "espacio vacío" real que llenar ahí—, y agregarlos habría sido
+       exactamente la maleza que este archivo lleva rondas evitando. El
+       corte de 720px es el mismo que ya usa el resto del marco para
+       "es celular" (ver la media query de .marco__ramillete en
+       02-marco-victoriano.css). */
+    const anclajes = [
+      { selector: '.marco__ramillete--izquierdo', lado: 'esquina-izq',
+        espejada: false, anchoLienzo: ANCHO_DEL_RAMILLETE, armar: armarRamilleteDeEsquinaPorTandas },
+      { selector: '.marco__ramillete--derecho', lado: 'esquina-der',
+        espejada: true, anchoLienzo: ANCHO_DEL_RAMILLETE, armar: armarRamilleteDeEsquinaPorTandas },
+    ];
+    if (window.innerWidth > 720) {
+      anclajes.push(
+        { selector: '.marco__ramillete--intermedio-izquierdo', lado: 'intermedio-izq',
+          espejada: false, anchoLienzo: ANCHO_DEL_RAMILLETE_INTERMEDIO, armar: armarRamilleteIntermedioPorTandas },
+        { selector: '.marco__ramillete--intermedio-derecho', lado: 'intermedio-der',
+          espejada: true, anchoLienzo: ANCHO_DEL_RAMILLETE_INTERMEDIO, armar: armarRamilleteIntermedioPorTandas }
+      );
+    }
+    anclajes.forEach(anclaje => { anclaje.elemento = buscar(anclaje.selector); });
+
+    /* ⚡ UN RAMILLETE POR CUADRO, Y CADA UNO, ADEMÁS, DE A RAMAS POR DENTRO.
+       Cada uno lleva bastantes más rosas con sus tallos desde que se
+       duplicó la cantidad cerca del relicario (ver
+       armarRamilleteDeEsquinaPorTandas): los dos de esquina juntos, de una
+       sola vez, ya era el bloque de construcción más grande de toda la web
+       ANTES de duplicar nada — y ahora se suman dos anclajes más. Hacer
+       uno, dejar respirar al navegador y hacer el siguiente sigue dando
+       EXACTAMENTE el mismo resultado (mismas semillas, mismo dibujo) sin
+       congelar nada — y ahora, adentro de cada uno, el propio bucle de
+       ramas también cede el hilo por presupuesto de tiempo, así que ni un
+       solo ramillete entero vuelve a ser una tarea larga de un tirón. */
+    let indiceDeAnclaje = 0;
 
     /**
-     * Arma los ramilletes, UNO POR CUADRO.
+     * Arma los ramilletes, UNO POR CUADRO (y cada uno, adentro, de a ramas).
      *
      * ⚠️ ESTO VOLVIÓ A SER UNO POR CUADRO, Y HAY UNA LECCIÓN.
      * Cuando el ramillete derecho desaparecía, culpé al troceado y los junté
@@ -1004,34 +1358,49 @@
      * que falta en el CSS (ver .marco__ramillete en
      * estilos/02-marco-victoriano.css). El troceado nunca tuvo la culpa.
      *
-     * Y juntarlos costaba caro: cada ramillete lleva entre 50 y 80 rosas con
-     * sus tallos, y los dos de corrido —más las plantas y las mediciones que
-     * vienen encadenadas— producían una tarea de más de un segundo. El
-     * medidor la cazó: «peor 1101 ms». Eso es la página congelada.
+     * Y juntarlos costaba caro: cada ramillete lleva bastantes rosas con sus
+     * tallos, y los cuatro de corrido —más las plantas y las mediciones que
+     * vienen encadenadas— producirían una tarea larguísima. El medidor ya
+     * había cazado «peor 1101 ms» solo con los dos de esquina.
      *
      * Ahora vuelven a ir de a uno, con el guardia de reentrada puesto: si
-     * entra una construcción más nueva, esta se apaga sola.
+     * entra una construcción más nueva, esta se apaga sola. Y crearRamillete
+     * es asincrónica (arma sus propias ramas de a tandas), así que acá se
+     * espera a su callback antes de pasar al siguiente anclaje — nunca se
+     * asume que ya terminó solo porque la llamada retornó.
      *
      * @returns {void}
      */
     function armarLosRamilletes() {
       if (!vigente()) return;
 
-      const hueco = huecos[indiceDeHueco];
-      const indice = indiceDeHueco;
-      indiceDeHueco++;
+      const anclaje = anclajes[indiceDeAnclaje];
+      indiceDeAnclaje++;
 
-      if (hueco) crearRamillete(hueco, indice);
+      function seguirConElSiguiente() {
+        if (indiceDeAnclaje < anclajes.length) { cederYSeguir(armarLosRamilletes); return; }
 
-      if (indiceDeHueco < huecos.length) { cederYSeguir(armarLosRamilletes); return; }
+        /* ⚡ cederYSeguir, no una llamada directa (2026-08-24): el último
+           ramillete acaba de escribir su `innerHTML` dos líneas atrás (ver
+           crearRamillete). revisarQueEstenTodos() lee getBoundingClientRect()
+           de cada anclaje para el diagnóstico — leer esa geometría en el
+           MISMO turno en que se acaba de escribir fuerza un reflow completo
+           (el mismo patrón de "reprocesamiento forzado" que ya se corrigió
+           en otros archivos de esta ronda). Cediendo un cuadro, el navegador
+           ya resolvió el layout solo y la lectura sale gratis. */
+        cederYSeguir(revisarQueEstenTodos);
+      }
 
-      revisarQueEstenLosDos();
-      if (typeof alTerminar === 'function') alTerminar();
+      if (anclaje.elemento) {
+        crearRamillete(anclaje, vigente, seguirConElSiguiente);
+      } else {
+        seguirConElSiguiente();
+      }
     }
 
     /**
-     * Comprueba que los DOS ramilletes hayan quedado dibujados y rehace el
-     * que falte.
+     * Comprueba que TODOS los ramilletes hayan quedado dibujados y rehace
+     * el que falte.
      *
      * ⚠️ POR QUÉ EXISTE ESTA FUNCIÓN. El ramillete de la esquina derecha
      * desapareció tres veces seguidas y cada intento de diagnosticarlo por
@@ -1042,57 +1411,96 @@
      * No es un parche que tape el problema: si hiciera falta, deja dicho en
      * consola cuál falló, y eso es información que hasta ahora no teníamos.
      *
+     * ⚡ Espera a que terminen los reintentos (crearRamillete es
+     * asincrónica) antes de publicar window.EstadoDeLosRamilletes y de
+     * avisar con `alTerminar` — antes, cuando todo era síncrono, alcanzaba
+     * con leer el DOM enseguida después de reconstruir; ahora ese
+     * diagnóstico tiene que esperar a que el reintento realmente termine,
+     * o reportaría "no existe" sobre un ramillete que en realidad ya está
+     * en camino.
+     *
      * @returns {void}
      */
-    function revisarQueEstenLosDos() {
-      huecos.forEach((hueco, indice) => {
-        if (!hueco) return;
+    function revisarQueEstenTodos() {
+      function publicarEstadoYAvisar() {
+        /* ⚠️ SE COMPRUEBA QUE ADEMÁS SE VEAN, no solo que existan.
+           El ramillete derecho desapareció cinco veces y ya descarté, con
+           medición, que sea el markup, el generador, la semilla o una
+           carrera de construcción. El problema, cuando pasaba, era que el
+           SVG se generaba bien pero no se RENDERIZABA.
 
-        if (!hueco.querySelector('.racimo-de-rosas')) {
-          /* Se rehace con la MISMA semilla que le tocaba, para que el dibujo
-             sea el que corresponde a esa esquina y no uno distinto. */
-          const semillaGuardada = semilla;
-          semilla = 9100 + indice;
-          crearRamillete(hueco, indice);
-          semilla = semillaGuardada;
-        }
+           Estas medidas se publican en el cartel de ?fps=1 para poder verlo
+           de un vistazo, sin abrir las herramientas del navegador. Si
+           alguno sale con ancho o alto 0, o con una posición fuera de la
+           pantalla, ahí está la respuesta. */
+        window.EstadoDeLosRamilletes = anclajes.map(anclaje => {
+          const hueco = anclaje.elemento;
+          if (!hueco) return { lado: anclaje.lado, existe: false };
+          const svg = hueco.querySelector('.racimo-de-rosas');
+          const caja = hueco.getBoundingClientRect();
+          return {
+            lado: anclaje.lado,
+            existe: !!svg,
+            rosas: svg ? svg.querySelectorAll('.flor-de-enredadera').length : 0,
+            x: Math.round(caja.left),
+            y: Math.round(caja.top),
+            ancho: Math.round(caja.width),
+            alto: Math.round(caja.height),
+          };
+        });
+
+        if (typeof alTerminar === 'function') alTerminar();
+      }
+
+      const faltantes = [];
+      anclajes.forEach((anclaje, indice) => {
+        if (anclaje.elemento && !anclaje.elemento.querySelector('.racimo-de-rosas')) faltantes.push(indice);
       });
 
-      /* ⚠️ Y AHORA SE COMPRUEBA QUE ADEMÁS SE VEAN, no solo que existan.
-         El ramillete derecho desapareció cinco veces y ya descarté, con
-         medición, que sea el markup, el generador, la semilla o una carrera
-         de construcción. Comprobé en Node que las semillas 9100 y 9101
-         producen ramilletes equivalentes (25 y 23 tallos, misma dispersión),
-         así que el SVG se genera bien: el problema es que no se RENDERIZA.
+      if (!faltantes.length) { publicarEstadoYAvisar(); return; }
 
-         Estas medidas se publican en el cartel de ?fps=1 para poder verlo de
-         un vistazo, sin abrir las herramientas del navegador. Si el derecho
-         sale con ancho o alto 0, o con una posición fuera de la pantalla,
-         ahí está la respuesta que llevo días sin poder ver. */
-      window.EstadoDeLosRamilletes = huecos.map((hueco, indice) => {
-        if (!hueco) return { lado: indice ? 'der' : 'izq', existe: false };
-        const svg = hueco.querySelector('.racimo-de-rosas');
-        const caja = hueco.getBoundingClientRect();
-        return {
-          lado: indice ? 'der' : 'izq',
-          existe: !!svg,
-          rosas: svg ? svg.querySelectorAll('.flor-de-enredadera').length : 0,
-          x: Math.round(caja.left),
-          y: Math.round(caja.top),
-          ancho: Math.round(caja.width),
-          alto: Math.round(caja.height),
-        };
+      let cuantosFaltanPorTerminar = faltantes.length;
+      faltantes.forEach(indice => {
+        /* Se rehace con la MISMA semilla que le tocaba, para que el dibujo
+           sea el que corresponde a ese anclaje y no uno distinto.
+           crearRamillete() lee `semilla` de forma síncrona, ANTES de entrar
+           en su propio troceado por ramas, así que restaurarla enseguida
+           acá abajo —sin esperar a que la construcción termine— sigue
+           siendo seguro. */
+        const semillaGuardada = semilla;
+        semilla = 9100 + indice;
+        crearRamillete(anclajes[indice], vigente, () => {
+          cuantosFaltanPorTerminar--;
+          if (cuantosFaltanPorTerminar === 0) publicarEstadoYAvisar();
+        });
+        semilla = semillaGuardada;
       });
     }
 
     /**
-     * Crea UN ramillete de esquina y lo suma a la lista de plantas.
-     * @param {Element} hueco
-     * @param {number} indice - 0 izquierdo, 1 derecho (el derecho va espejado).
+     * Crea UN ramillete (de esquina o intermedio, según lo que traiga el
+     * anclaje) y lo suma a la lista de plantas.
+     *
+     * ⚡ ASINCRÓNICA (2026-08-24): por dentro arma las ramas de a tandas por
+     * presupuesto de tiempo (ver armarRamilleteDeEsquinaPorTandas /
+     * armarRamilleteIntermedioPorTandas), así que ya NO deja el SVG escrito
+     * ni la planta sumada cuando retorna — avisa con `alTerminarEsteRamillete`
+     * recién cuando de verdad terminó.
+     *
+     * @param {Object} anclaje - Uno de los objetos de `anclajes`: trae el
+     *        elemento del DOM, si va espejado, el ancho de su lienzo y qué
+     *        función de dibujo usar.
+     * @param {Function} [sigoVigente] - Si se pasa y da false cuando termina
+     *        de construirse, no se escribe nada: una corrida más nueva ya
+     *        se hizo cargo de este mismo anclaje.
+     * @param {Function} [alTerminarEsteRamillete] - Se llama cuando el
+     *        ramillete ya quedó escrito en el DOM y sumado a `plantas`.
      * @returns {void}
      */
-    function crearRamillete(hueco, indice) {
-      /* ⚠️ SI ESTO SE LLAMA DE NUEVO SOBRE EL MISMO HUECO (revisarQueEstenLosDos
+    function crearRamillete(anclaje, sigoVigente, alTerminarEsteRamillete) {
+      const hueco = anclaje.elemento;
+
+      /* ⚠️ SI ESTO SE LLAMA DE NUEVO SOBRE EL MISMO HUECO (revisarQueEstenTodos
          reconstruyendo un ramillete que no salió bien), el innerHTML de abajo
          tira el SVG viejo — pero la entrada que ESE ramillete tenía en
          `plantas` seguía viva, animándose cada cuadro sobre un nodo que ya
@@ -1101,35 +1509,58 @@
         if (plantas[i].elemento && !plantas[i].elemento.isConnected) plantas.splice(i, 1);
       }
 
-      hueco.innerHTML = dibujarRamilleteDeEsquina(semilla++, densidad);
+      /* Las dos semillas se leen ACÁ, de forma síncrona, antes de entrar en
+         el troceado por ramas — igual que antes, cuando todo era síncrono.
+         Si se leyeran más abajo, dentro del callback de anclaje.armar(),
+         correrían el riesgo de leer un `semilla` que ya cambió por otra
+         llamada mientras tanto (revisarQueEstenTodos la restaura enseguida
+         después de llamar acá, sin esperar a que termine la construcción). */
+      const semillaDelDibujo = semilla;
+      semilla++;
+      const semillaDelMovimiento = semilla;
 
-      const azarDeMovimiento = crearAzarConSemilla(semilla * 7919);
+      anclaje.armar(semillaDelDibujo, densidad, sigoVigente, svg => {
+        /* Si entró una corrida más nueva mientras este ramillete se armaba
+           de a ramas, no se escribe nada — la corrida nueva ya se está
+           haciendo cargo de este mismo anclaje. Mismo criterio de reentrada
+           que ya usa el resto del archivo (corridaVigente en
+           repartirPlantas): esto es justo lo que evita, acá también, que un
+           ramillete quede a medio armar por una construcción vieja que
+           sigue escribiendo. */
+        if (typeof sigoVigente === 'function' && !sigoVigente()) return;
 
-      plantas.push({
-        elemento: hueco.querySelector('.racimo-de-rosas'),
-        flores: Array.from(hueco.querySelectorAll('.flor-de-enredadera')),
-        nudos: [],              // no se articula: es un ramo, no una trepadora
-        espejada: indice === 1,
-        /* Ancho del viewBox de ESTE dibujo. Sirve para pasar coordenadas del
-           dibujo a píxeles de pantalla sin medir elemento por elemento. */
-        anchoDelLienzo: ANCHO_DEL_RAMILLETE,
-        alturaEnLaPagina: 0,    // viven arriba de todo
+        hueco.innerHTML = svg;
 
-        inclinacion: 0,
-        velocidadDeLaInclinacion: 0,
+        const azarDeMovimiento = crearAzarConSemilla(semillaDelMovimiento * 7919);
 
-        /* Mucho menos sensible al scroll que una enredadera. Un ramo
-           apoyado en una esquina se mueve apenas; si se meciera como una
-           planta suelta, delataría que es un dibujo pegado encima. */
-        sensibilidad: azarDeMovimiento.entre(0.16, 0.3),
-        rigidez: RIGIDEZ_DE_LA_PLANTA * azarDeMovimiento.entre(0.8, 1.2),
-        amortiguacion: AMORTIGUACION_DE_LA_PLANTA * azarDeMovimiento.entre(1, 1.4),
+        plantas.push({
+          elemento: hueco.querySelector('.racimo-de-rosas'),
+          flores: Array.from(hueco.querySelectorAll('.flor-de-enredadera')),
+          nudos: [],              // no se articula: es un ramo, no una trepadora
+          espejada: anclaje.espejada,
+          /* Ancho del viewBox de ESTE dibujo. Sirve para pasar coordenadas del
+             dibujo a píxeles de pantalla sin medir elemento por elemento. */
+          anchoDelLienzo: anclaje.anchoLienzo,
+          alturaEnLaPagina: 0,    // viven arriba de todo
 
-        amplitudDeRespiracion: azarDeMovimiento.entre(0.25, 0.6),
-        velocidadDeRespiracion: azarDeMovimiento.entre(0.2, 0.4),
-        faseDeRespiracion: azarDeMovimiento.entre(0, Math.PI * 2),
+          inclinacion: 0,
+          velocidadDeLaInclinacion: 0,
 
-        estadoDeLasFlores: null,
+          /* Mucho menos sensible al scroll que una enredadera. Un ramo
+             apoyado en el marco se mueve apenas; si se meciera como una
+             planta suelta, delataría que es un dibujo pegado encima. */
+          sensibilidad: azarDeMovimiento.entre(0.16, 0.3),
+          rigidez: RIGIDEZ_DE_LA_PLANTA * azarDeMovimiento.entre(0.8, 1.2),
+          amortiguacion: AMORTIGUACION_DE_LA_PLANTA * azarDeMovimiento.entre(1, 1.4),
+
+          amplitudDeRespiracion: azarDeMovimiento.entre(0.25, 0.6),
+          velocidadDeRespiracion: azarDeMovimiento.entre(0.2, 0.4),
+          faseDeRespiracion: azarDeMovimiento.entre(0, Math.PI * 2),
+
+          estadoDeLasFlores: null,
+        });
+
+        if (typeof alTerminarEsteRamillete === 'function') alTerminarEsteRamillete();
       });
     }
 
@@ -1177,9 +1608,6 @@
   let corridaVigente = 0;
 
   function repartirPlantas() {
-    const miCorrida = ++corridaVigente;
-    const sigoVigente = () => miCorrida === corridaVigente;
-
     const altoDelDocumento = document.body.scrollHeight;
     const cuantasEntran = Math.max(3, Math.floor(altoDelDocumento / SEPARACION_ENTRE_PLANTAS));
 
@@ -1187,12 +1615,32 @@
        operación más cara de toda la web (ver la nota de troceado, abajo).
        Si la cantidad de plantas que entran no cambió, alcanza con volver a
        medir dónde quedó cada una —el ancho sí pudo cambiar—, sin recrear
-       ningún SVG. */
+       ningún SVG.
+
+       ⚡ ESTE CHEQUEO VA ANTES DE TOCAR corridaVigente (2026-09-01). Antes
+       ++corridaVigente vivía arriba de este if, así que CUALQUIER llamada
+       —incluso una que terminaba acá mismo sin reconstruir nada— invalidaba
+       la corrida anterior. Si un resize (la barra del navegador
+       apareciendo/ocultándose, o simplemente el layout asentándose en un
+       equipo lento) llegaba MIENTRAS las ~20 plantas todavía se estaban
+       armando en tandas —proceso que dura decenas de cuadros, ver la nota
+       de corridaVigente más abajo— y el ancho no alcanzaba a cambiar
+       cuántas plantas entran, esta función cortaba la corrida en curso
+       (vaciando enredaderaIzquierda/enredaderaDerecha) y no arrancaba
+       ninguna nueva: las enredaderas quedaban vacías para siempre, sin
+       ningún disparador que las reconstruyera. En un equipo lento, donde
+       la construcción tarda mucho más, la ventana para que esto pase es
+       mucho más ancha — es la causa confirmada de "las flores no
+       aparecen". Ahora solo se invalida una corrida en marcha cuando de
+       verdad va a arrancar una nueva. */
     if (cuantasEntran === ultimaCuantasEntran) {
       medirLasFlores();
       return;
     }
     ultimaCuantasEntran = cuantasEntran;
+
+    const miCorrida = ++corridaVigente;
+    const sigoVigente = () => miCorrida === corridaVigente;
 
     enredaderaIzquierda.innerHTML = '';
     enredaderaDerecha.innerHTML = '';
@@ -1344,7 +1792,7 @@
          cambió cuántas plantas entran), esta se apaga sin tocar nada. Se
          pregunta por planta y no por tanda porque ahora las tandas no tienen
          un tamaño fijo; la comprobación es una comparación de enteros. */
-      i => { if (sigoVigente()) crearUnaPlanta(tareas[i]); },
+      i => { if (sigoVigente() && !SIN_PLANTAS) crearUnaPlanta(tareas[i]); },
       /* Recién cuando TODAS las plantas de la enredadera existen se pasa a
          los ramilletes de esquina (uno por cuadro), y cuando ESOS terminan
          —de ahí el callback— se prepara el estado de las flores, que
@@ -1498,11 +1946,26 @@
     let indiceDePlanta = 0;
 
     function medirUnaTanda() {
-      const desplazamientoDelScroll = window.scrollY;
+      const desplazamientoDelScroll = scrollActualY();
       const limite = Math.min(indiceDePlanta + PLANTAS_MEDIDAS_POR_TANDA, plantas.length);
 
-      for (; indiceDePlanta < limite; indiceDePlanta++) {
-        medirUnaPlanta(plantas[indiceDePlanta], desplazamientoDelScroll);
+      /* ⚡ try/finally, PARA NO DEJAR LA BANDERA TRABADA (2026-09-02).
+         `medicionEnCurso` se pone en true antes de este recorrido y solo
+         vuelve a false al terminarlo entero. Si medirUnaPlanta() lanzaba,
+         la bandera quedaba en true PARA SIEMPRE y a partir de ahí toda
+         medición futura —la del resize, la de la construcción, la del
+         reintento— se iba en la primera línea sin hacer nada: las flores se
+         quedaban con posiciones viejas y sin reaccionar al mouse, sin ningún
+         error a la vista. Ahora un fallo en una planta no arrastra al resto
+         ni traba el sistema. */
+      try {
+        for (; indiceDePlanta < limite; indiceDePlanta++) {
+          medirUnaPlanta(plantas[indiceDePlanta], desplazamientoDelScroll);
+        }
+      } catch (error) {
+        console.error('Falló al medir una flor; se sigue con las demás:', error);
+        indiceDePlanta = limite;   // esa planta se saltea, no se reintenta en bucle
+        medicionEnCurso = false;
       }
 
       if (indiceDePlanta < plantas.length) {
@@ -1606,15 +2069,93 @@
   function construirUnaSolaVez() {
     if (yaSeConstruyo) return;
     yaSeConstruyo = true;
+
+    /* El presupuesto de relleno se fija ACÍ y no se toca nunca más (ver la
+       nota de RELLENO_POR_CALIDAD, arriba). Se lee recién ahora —y no al
+       evaluar el archivo— porque en este momento el nivel de calidad ya
+       incorpora lo que haya decidido el <head>, que es la mejor información
+       disponible antes de empezar a dibujar. */
+    const calidadAlConstruir = nivelDeCalidad();
+    rellenoDeEstaVisita = RELLENO_POR_CALIDAD[calidadAlConstruir] ?? 1;
+    nudosDeEstaVisita   = NUDOS_POR_CALIDAD[calidadAlConstruir]   ?? 6;
+    /* ⚡ EL SCROLL SE LEE ACÁ, NO AL EVALUAR EL SCRIPT (2026-08-30).
+       Antes esta lectura vivía en la línea de abajo, corriendo apenas
+       cargaba el archivo — con el sobre todavía cerrado y nadie mirando.
+       Ese es justo el "reprocesamiento forzado" que PageSpeed medía en
+       escritorio durante el TBT: scrollActualY() ya es barata (lee una
+       variable cacheada, ver 02-utilidades.js), pero forzarla mientras el
+       navegador todavía está resolviendo layout de la carga inicial no lo
+       es. Ahora se lee recién cuando de verdad hacen falta las
+       enredaderas: al abrir el sobre. */
+    posicionDeScrollAnterior = scrollActualY();
     repartirPlantas();
+    /* ⚡ EL BUCLE DE CUADRO TAMPOCO ARRANCA HASTA ACÁ (2026-08-30). Antes
+       `requestAnimationFrame(dibujarCuadro)` se pedía al evaluar el script,
+       "siempre", y dibujarCuadro se auto-reagendaba para siempre aunque
+       hayAlgoQueMirar() devolviera false —un cuadro vacío pedido de sobra
+       en cada vsync mientras el sobre tapaba todo—. Arrancarlo recién con
+       la invitación visible ahorra esos cuadros sin tocar el contrato de
+       hayAlgoQueMirar(): una vez arrancado, el bucle se sigue reagendando
+       igual que antes, animaciones-off incluido. */
+    requestAnimationFrame(dibujarCuadro);
   }
 
-  document.addEventListener('invitacion-visible', construirUnaSolaVez);
+  /* ⚡ escucharEventoQueQuizasYaPaso() Y NO addEventListener DIRECTO
+     (2026-09-01): este script se inyecta encadenado detrás de otros (ver
+     iniciarInyeccionDeLaEscena en 02-utilidades.js), e 'invitacion-visible'
+     se dispara a un plazo fijo tras el clic. En un equipo lento —o si un
+     script anterior en la cola tarda en construirse— este archivo puede
+     registrar su escucha DESPUÉS de que el evento ya pasó, y como es de
+     una sola vez, se pierde para siempre: las enredaderas y flores nunca
+     llegan a construirse. Confirmado en la práctica en un equipo real de
+     gama baja. Esta función se entera igual, tarde o no. */
+  escucharEventoQueQuizasYaPaso('invitacion-visible', construirUnaSolaVez);
+
+  /* ⚡ RED DE SEGURIDAD: SI DESPUÉS DE UN RATO NO HAY NADA, SE REHACE UNA
+     VEZ (2026-09-02).
+
+     POR QUÉ HACE FALTA
+     Armar las enredaderas no termina cuando construirUnaSolaVez() retorna:
+     sigue durante decenas de cuadros, en tandas. En todo ese rato hay varias
+     formas de que la cadena se corte y no quede nadie para reanudarla —un
+     paso que falla, una corrida que se invalida—, y el estado queda trabado
+     de manera que ningún camino vuelve a intentarlo: las banderas
+     `yaSeConstruyo` y `ultimaCuantasEntran` ya están marcadas. El resultado
+     es el peor posible: el marco vacío, para siempre, en la única visita que
+     esa persona va a hacer.
+
+     POR QUÉ ESTO NO ES EL "RESPALDO POR CRONÓMETRO" QUE SE QUITÓ
+     Aquel corría SIEMPRE, con el sobre todavía cerrado, y construía 354
+     flores que nadie estaba mirando: costó 2.790 ms de bloqueo medidos en
+     PageSpeed. Este es lo contrario: no construye nada por su cuenta, solo
+     MIRA —una vez, varios segundos después de que la invitación ya se ve— si
+     el resultado quedó vacío, y solo en ese caso rehace. Si todo salió bien,
+     que es lo normal, no hace absolutamente nada. */
+  escucharEventoQueQuizasYaPaso('invitacion-visible', () => {
+    setTimeout(() => {
+      const noHayPlantas = plantas.length === 0;
+      const faltanRamilletes = !window.EstadoDeLosRamilletes;
+      if (!noHayPlantas && !faltanRamilletes) return;
+
+      console.warn('Las enredaderas quedaron sin construir; se rehacen una vez.',
+        { plantas: plantas.length, ramilletes: !!window.EstadoDeLosRamilletes });
+
+      /* Se destraban las banderas que impedirían reintentar. Sin esto,
+         repartirPlantas() se iría por su salida temprana (cuantasEntran no
+         cambió) y no reconstruiría nada. */
+      ultimaCuantasEntran = -1;
+      medicionEnCurso = false;
+      repartirPlantas();
+    }, 6000);
+  });
 
 
   /* ─── 6. MOVIMIENTO ────────────────────────────────────────────── */
 
-  let posicionDeScrollAnterior = window.scrollY;
+  /* Arranca en 0: recién se lee el scroll de verdad dentro de
+     construirUnaSolaVez(), cuando se abre el sobre (ver arriba). Antes de
+     eso las plantas no existen, así que este valor no se usa para nada. */
+  let posicionDeScrollAnterior = 0;
   let mouseX = -9999;
   let mouseY = -9999;
 
@@ -1650,14 +2191,56 @@
      rama tarda un poquito más en reaccionar y se repinta con menos
      frecuencia —el mismo criterio que ya se usa para el titileo de las
      velas: una rama de verdad tampoco responde con precisión de cuadro. */
+  /* Cuánto más allá del borde de la pantalla se siguen meciendo las
+     plantas, en píxeles. Ver la nota en el culling de dibujarCuadro. */
+  const MARGEN_DE_CERCANIA_POR_CALIDAD = { 0: 500, 1: 300, 2: 150 };
+
   let calidad = nivelDeCalidad();
   const SALTO_DEL_RESORTE_POR_CALIDAD = { 0: 1, 1: 2, 2: 3 };
   let saltoDelResorte = SALTO_DEL_RESORTE_POR_CALIDAD[calidad] ?? 1;
   let contadorDeCuadro = 0;
   let dtAcumulado = 0;
+
+  /* ⚡ EN CALIDAD BAJA LAS PLANTAS DEJAN DE MECERSE, Y ES LA DECISIÓN MÁS
+     IMPORTANTE DE TODO ESTE ARCHIVO (2026-09-02).
+
+     LA MEDICIÓN QUE LA OBLIGA. Con el banco de herramientas/medir.mjs,
+     misma escena, mismas 234 flores en pantalla, mismo recorrido de
+     scroll:
+
+         con vaivén    7 fps
+         sin vaivén   60 fps
+
+     No es un ajuste del 10 %: es la diferencia entre una web rota y una
+     fluida, y todo el resto del dibujo queda EXACTAMENTE igual. El costo
+     no está en tener 234 rosas —eso se rasteriza una vez y se compone—,
+     está en ROTAR por cuadro unos SVG de cientos de `<path>`, cada uno
+     relleno con un `linearGradient` por url(): cada grado de giro obliga
+     a rasterizar todo ese vector otra vez.
+
+     POR QUÉ SOLO EN BAJA Y NO SIEMPRE. El vaivén es parte del encanto de
+     la invitación y en un equipo que lo aguanta no hay ningún motivo para
+     quitarlo. Quien decide es el gobernador de calidad
+     (codigo/21-monitor-de-rendimiento.js), que ya mide la actuación real:
+     si el equipo sostiene el ritmo, se mece; si no da abasto y cae a
+     BAJA, se congela. Un equipo modesto prefiere una escena quieta y
+     fluida a una que se mece a los tirones.
+
+     SE CONGELA DONDE ESTÁ, SIN VOLVER A CERO. Escribir un rotate(0) al
+     entrar en baja daría un salto visible de todas las plantas a la vez.
+     Como la inclinación en reposo es de pocos grados, dejarlas quietas en
+     la última posición no se nota — y además no cuesta ni una escritura.
+
+     ⚠️ NO CONFUNDIR CON `?sin=meneo`: aquel es un interruptor de
+     diagnóstico que apaga el vaivén siempre; esto es comportamiento
+     normal de la web, y solo en el nivel más bajo. */
+  const SE_MECE_POR_CALIDAD = { 0: true, 1: true, 2: false };
+  let seMece = SE_MECE_POR_CALIDAD[calidad] ?? true;
+
   document.addEventListener('calidad-cambio', evento => {
     calidad = (evento.detail && evento.detail.calidad) ?? 0;
     saltoDelResorte = SALTO_DEL_RESORTE_POR_CALIDAD[calidad] ?? 1;
+    seMece = SE_MECE_POR_CALIDAD[calidad] ?? true;
   });
 
   /**
@@ -1673,7 +2256,7 @@
        si se encienden las animaciones con el botón, vuelven a mecerse en el
        acto, sin recargar. Se actualiza el reloj para que al reanudar no dé
        un salto por el tiempo acumulado. */
-    if (!hayAlgoQueMirar()) {
+    if (!hayAlgoQueMirar() || SIN_MENEO || !seMece) {
       momentoAnterior = momentoActual;
       requestAnimationFrame(dibujarCuadro);
       return;
@@ -1704,9 +2287,50 @@
 
     for (const planta of plantas) {
       /* Si la planta está lejísimos de la pantalla no perdemos tiempo.
-         El margen de 500 px hace que ya venga meciéndose al aparecer. */
-      const estaCerca = planta.alturaEnLaPagina > arribaDeLaVentana - 500 &&
-                        planta.alturaEnLaPagina < abajoDeLaVentana + 500;
+         El margen hace que ya venga meciéndose al aparecer.
+
+         ⚡ EL MARGEN SE ACHICA EN CALIDAD MEDIA Y BAJA (2026-09-02). Era de
+         500 px fijos hacia arriba y hacia abajo: en una pantalla de 1300 px
+         eso significa recalcular casi DOS pantallas de plantas a la vez, y
+         cada planta cuesta un transform propio más los de sus seis nudos.
+         En un equipo con gráficos integrados esa cuenta es de las más caras
+         del cuadro. Con un margen menor, las plantas siguen entrando ya
+         meciéndose —solo empiezan a hacerlo un poco más cerca del borde— y
+         se dejan de mover las que están a una pantalla entera de distancia,
+         que nadie está mirando. En calidad alta no cambia nada. */
+      const margen = MARGEN_DE_CERCANIA_POR_CALIDAD[calidad] ?? 500;
+      const estaCerca = planta.alturaEnLaPagina > arribaDeLaVentana - margen &&
+                        planta.alturaEnLaPagina < abajoDeLaVentana + margen;
+
+      /* ⛔ ACÁ SE PROBÓ DARLE CAPA PROPIA A LA PLANTA QUE SE MECE, Y NO SIRVE.
+         (Puesto en v169, revertido en v170.)
+
+         El razonamiento parecía sólido: el giro se escribe más abajo sobre
+         planta.elemento, que es la RAÍZ del <svg>, y un elemento sin capa
+         propia no se compone — se REPINTA. Como el dibujo comparte los
+         mosaicos de 256 px con el fondo y la penumbra, cada grado de
+         inclinación arrastra a redibujar todo lo que tiene detrás. Y las
+         plantas respiran con un seno que nunca se detiene, así que eso
+         ocurría en todos los cuadros, para siempre. Apagar el meneo con
+         ?sin=meneo ahorraba 14,5 ms por cuadro: la mitad de lo que cuesta
+         este módulo entero.
+
+         Se promovieron solo las ~7 trepadoras dentro de la franja de
+         cercanía —no las 24— y sin los ramilletes, poniendo y sacando la
+         clase únicamente en la transición. La medición dijo que no:
+
+             con capas   16-18 fps   ·   Layerize 47-55 %
+             sin capas   19-22 fps   ·   Layerize 20-43 %
+
+         O sea que no era cuestión de cuántas capas eran. En esta gráfica
+         integrada, con memoria compartida, una capa cuesta más de lo que
+         ahorra el repintado que evita — incluso cuando son siete. La nota
+         vieja del CSS tenía razón, y por un motivo más fuerte del que
+         decía.
+
+         REGLA: en esta página, promover a capa NO es una optimización.
+         Antes de volver a intentarlo, medirlo con ?sin= en el mismo build. */
+
       if (!estaCerca) continue;
 
       /* ── a) La planta entera se mece con el scroll ──
@@ -1972,9 +2596,12 @@
     requestAnimationFrame(dibujarCuadro);
   }
 
-  /* El bucle arranca SIEMPRE (aunque las animaciones estén apagadas): se
-     queda en reposo hasta que se enciendan, para poder reanudar en vivo. */
-  requestAnimationFrame(dibujarCuadro);
+  /* ⛔ ACÁ YA NO VA `requestAnimationFrame(dibujarCuadro)` A SECAS.
+     El bucle arranca dentro de construirUnaSolaVez(), al recibir
+     'invitacion-visible' (ver más arriba) — no antes. Una vez arrancado
+     sigue reagendándose para siempre, animaciones-off incluido, igual que
+     antes: lo único que cambió es CUÁNDO se pide el primer cuadro, no el
+     contrato de hayAlgoQueMirar(). */
 
 
   /* Si cambia el tamaño de la ventana hay que rehacer todo. Se espera un
@@ -2005,7 +2632,9 @@
   /* Las posiciones se vuelven a medir cuando la página termina de cargar
      (las imágenes pueden haber corrido el contenido). */
   window.addEventListener('load', medirLasFlores);
-  document.addEventListener('invitacion-visible', () => setTimeout(medirLasFlores, 400));
+  // Mismo motivo que la escucha de construirUnaSolaVez, más arriba: el
+  // evento puede haber pasado antes de que este script cargara.
+  escucharEventoQueQuizasYaPaso('invitacion-visible', () => setTimeout(medirLasFlores, 400));
 
   /* (Acá hubo un IntersectionObserver que volvía a medir las flores cuando
      una planta o un ramillete reaparecía en pantalla. Existía para sostener

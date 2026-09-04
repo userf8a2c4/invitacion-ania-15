@@ -206,6 +206,35 @@ function aplicarPaleta(paleta) {
   raiz.setProperty('--texto-tenue', ajustarColor(textoLegibleSobre(base), textoLegibleSobre(base) === '#f5ecd8' ? -0.42 : 0.55));
 
   raiz.setProperty('--alerta', alerta);
+
+  /* ⚡ EL RESPLANDOR TAMBIÉN, QUE SE QUEDABA DEL COLOR ANTERIOR
+     (2026-09-03). --brillo-oro (01-fundamentos.css) es una sombra con el
+     morado de fábrica escrito en RGB a mano: rgba(107,63,160,.35). Como no
+     se recalculaba acá, elegir "Ciruela" o "Lavanda nocturna" cambiaba los
+     botones y los chips pero dejaba el halo morado del color viejo alrededor
+     — el tipo de detalle que no se sabe nombrar pero se ve sucio.
+
+     Se arma desde el color principal elegido, con la misma transparencia que
+     tenía. Lo mismo con el acento victoriano, que se usa en el filo de la
+     hoja, en el contador de días del encabezado y en los estados vacíos. */
+  raiz.setProperty('--brillo-oro', '0 0 20px ' + conAlfa(principal, 0.35));
+  raiz.setProperty('--acento-victoriano', ajustarColor(principal, -0.1));
+}
+
+/**
+ * El mismo color, con transparencia. Acepta '#rrggbb'.
+ *
+ * @param {string} hex
+ * @param {number} alfa - De 0 a 1.
+ * @returns {string} Un rgba() listo para CSS.
+ */
+function conAlfa(hex, alfa) {
+  const limpio = String(hex).replace('#', '');
+  if (limpio.length !== 6) return hex;
+  const r = parseInt(limpio.slice(0, 2), 16);
+  const g = parseInt(limpio.slice(2, 4), 16);
+  const b = parseInt(limpio.slice(4, 6), 16);
+  return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + alfa + ')';
 }
 
 /**

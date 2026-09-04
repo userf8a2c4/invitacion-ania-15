@@ -41,7 +41,7 @@ const ETIQUETAS_EDITABLES = {
     ['nav.resumen',    'Resumen'],
     ['nav.invitados',  'Gente'],
     ['nav.correo',     'Correo'],
-    ['nav.dinero',     'Presupuesto'],
+    ['nav.dinero',     'Dinero'],
     ['nav.evento',     'Evento'],
   ],
   'Dentro de Presupuesto': [
@@ -125,14 +125,30 @@ async function cargarEtiquetas() {
  * @returns {void}
  */
 function aplicarEtiquetas() {
+  /* ⚠️ ESTA TABLA PISABA EL RENOMBRADO A "DINERO", Y POR ESO EL CAMBIO NUNCA
+     SE VIO (2026-09-03). El 2 de septiembre se unificó el nombre de la vista
+     en "Dinero" (ver la nota en 05-navegacion.js), con el argumento correcto
+     de que dos nombres para el mismo lugar obligan a traducir mentalmente
+     cada vez. Pero el arranque llama a aplicarEtiquetas() DESPUÉS de armar
+     VISTAS, y acá el valor de fábrica seguía diciendo 'Presupuesto': la
+     última palabra la tenía esta línea, no la otra.
+
+     Resultado en la pantalla de Lucila: el mismo destino se llamaba "Dinero"
+     en el acceso rápido del Resumen y "Presupuesto" en el encabezado, en el
+     índice de Planificar y en el atajo del icono. El valor de fábrica de acá
+     ahora es el mismo que el de VISTAS; si algún día se quiere cambiar, se
+     cambia en los dos o se vuelve a partir en dos. */
   const deFabrica = {
     resumen: 'Resumen', invitados: 'Gente', correo: 'Correo',
-    dinero: 'Presupuesto', evento: 'Evento',
+    dinero: 'Dinero', evento: 'Evento',
   };
 
   Object.keys(deFabrica).forEach(clave => {
     const nombre = et('nav.' + clave, deFabrica[clave]);
 
+    /* Solo tienen botón propio las vistas que están en la barra de abajo; las
+       demás cuelgan de otra (ver PADRE_DE_VISTA en 05-navegacion.js) y este
+       buscar() devuelve null, que es lo esperado. */
     const boton = buscar('[data-ir=' + clave + '] span');
     if (boton) boton.textContent = nombre;
 
@@ -218,7 +234,7 @@ function abrirEtiquetas() {
   });
 
   buscar('#et-restaurar', cuerpo).addEventListener('click', async () => {
-    if (!confirmarAccion('¿Volver a los nombres originales?')) return;
+    if (!await confirmarAccion('¿Volver a los nombres originales?')) return;
 
     try {
       const r = await mandar('etiquetas.php?accion=restaurar', {});

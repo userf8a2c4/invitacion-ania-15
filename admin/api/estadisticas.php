@@ -20,6 +20,7 @@
 require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
+require_once __DIR__ . '/_lib/dinero.php';
 
 $yo = exigirSesion();
 exigirMetodo('GET');
@@ -62,17 +63,64 @@ if (existeTabla('confirmaciones')) {
 
     $adultos = (int) ($totales['adultos'] ?? 0);
     $ninos   = (int) ($totales['ninos'] ?? 0);
+    $personas = $adultos + $ninos;
+
+    // ⚡ (2026-08-30) Cupo sustractivo real: hasta acá este archivo
+    // calculaba "personas que asisten" pero nunca lo restaba contra la
+    // capacidad de verdad del salón. `capacidad` sale de SUM(mesas.capacidad)
+    // -misma fuente que ya usa invitaciones.php?accion=listar, no se
+    // reinventa- y nunca de una constante 140 pisada a mano: si algún día
+    // cambian las mesas, este número se actualiza solo. Quien declina
+    // (asiste=0) no resta, tal como pide la regla de negocio.
+    $capacidad = existeTabla('mesas')
+        ? (int) (consultarUno('SELECT COALESCE(SUM(capacidad),0) AS total FROM mesas')['total'] ?? 0)
+        : 0;
+    $libres = max(0, $capacidad - $personas);
+
+    /* ⚠️ `si_asisten` NO ES "CONFIRMARON" (2026-09-04).
+       Cuenta `asiste = 1`, y una confirmación NACE con asiste = 1: el
+       cupo se aparta desde el día uno para que el bot de mesas pueda
+       acomodar antes de que nadie conteste. La pantalla Resumen mostraba
+       ese número bajo el rótulo "Confirmaron" —dos veces— con la
+       invitación todavía sin mandar.
+
+       `contestaron` usa el mismo criterio que la lista de Gente, el
+       asistente y ahora la tarjeta de Hoy: yaRespondio()
+       (08-vista-invitados.js). `si_asisten` se deja: sigue siendo el
+       cupo apartado, que es lo que se le dice al salón. */
+    $contestaron = 0;
+    if ($tieneAsiste && existeTabla('invitaciones')) {
+        $colsInv = columnasDe('invitaciones');
+
+        // `respondida_en` es de una ronda posterior a la que creó la
+        // tabla: sin ella se cuenta solo por estado.
+        $yaContesto = in_array('respondida_en', $colsInv, true)
+            ? "(i.respondida_en IS NOT NULL OR i.estado IN ('confirmada', 'declinada'))"
+            : "i.estado IN ('confirmada', 'declinada')";
+
+        $filaContestaron = consultarUno(
+            'SELECT COUNT(*) AS n
+             FROM confirmaciones c
+             JOIN invitaciones i ON i.confirmacion_id = c.id
+             WHERE c.asiste = 1 AND ' . $yaContesto
+        );
+        $contestaron = (int) ($filaContestaron['n'] ?? 0);
+    }
 
     $resultado['invitados'] = [
         'hay'         => true,
         'respuestas'  => (int) ($totales['respuestas'] ?? 0),
         'si_asisten'  => (int) ($totales['si_asisten'] ?? 0),
+        // Grupos que de verdad contestaron y vienen. Ver la nota de arriba.
+        'contestaron' => $contestaron,
         'no_asisten'  => (int) ($totales['no_asisten'] ?? 0),
         'adultos'     => $adultos,
         'ninos'       => $ninos,
         // Este es EL número: cuántas sillas y cuántos platos hay que
         // pedirle al salón y al banquete.
-        'personas'    => $adultos + $ninos,
+        'personas'    => $personas,
+        'capacidad'   => $capacidad,
+        'libres'      => $libres,
     ];
 
     /* Desglose de menús. Se cuenta sobre la columna resumen_menus, que
@@ -136,54 +184,64 @@ $resultado['dinero'] = ['hay' => false];
 /* Sin permiso no se consulta siquiera: lo que no se lee no se puede
    filtrar por error más adelante. */
 if ($vePlata && existeTabla('gastos')) {
-    /* Las dos cifras que de verdad importan, y son distintas:
-         · costo   = lo que sale la fiesta entera.
-         · propio  = lo que pone la familia, o sea el costo menos lo que
-                     cubren los padrinos.
-       Un presupuesto que solo muestra el costo asusta de más; uno que
-       solo muestra lo propio esconde que alguien puede echarse atrás. */
-    $totales = consultarUno(
-        'SELECT
-           COALESCE(SUM(presupuestado), 0) AS presupuestado,
-           COALESCE(SUM(monto_real), 0)    AS costo,
-           COALESCE(SUM(CASE WHEN padrino_id IS NULL THEN monto_real ELSE 0 END), 0) AS propio,
-           COALESCE(SUM(CASE WHEN padrino_id IS NOT NULL THEN monto_real ELSE 0 END), 0) AS de_padrinos
-         FROM gastos'
+    /* ⚡ ESTA PANTALLA YA NO CALCULA SU PROPIO DINERO (2026-09-03).
+     *
+     * Acá se sumaba `SUM(monto_real)` a secas: sin el fallback al
+     * estimado que usa Dinero, y sin filtrar por presupuesto activo, o
+     * sea sumando todos los escenarios juntos. Inicio y Dinero daban
+     * dos respuestas distintas a "¿cuánto llevamos?", en dos pantallas
+     * seguidas, y no había forma de saber cuál creer.
+     *
+     * Ahora las dos piden las MISMAS cifras a cifrasDelPresupuesto()
+     * (_lib/dinero.php). Las claves que ya devolvía esta pantalla se
+     * conservan con su nombre de siempre para no romper a quien las
+     * lee, pero salen todas del mismo cálculo.
+     *
+     * Las dos que de verdad importan, y son distintas:
+     *   · costo   = lo que sale la fiesta entera.
+     *   · propio  = lo que pone la familia, o sea el costo menos lo que
+     *               cubren los padrinos.
+     * Un presupuesto que solo muestra el costo asusta de más; uno que
+     * solo muestra lo propio esconde que alguien puede echarse atrás. */
+    /* Las MISMAS tres condiciones que presupuesto.php, no dos: esto se
+       le pasa a categoriasConGasto(), que emite `presupuesto_id` sobre
+       `gastos` Y sobre `categorias_gasto`. Con la comprobación a medias,
+       si el ALTER de una tabla funcionó y el de la otra no, Inicio
+       reventaba mientras Dinero degradaba bien — el mismo dato, dos
+       comportamientos, según por qué puerta se entrara. */
+    $tienePresupuestos = existeTabla('presupuestos')
+                       && in_array('presupuesto_id', columnasDe('gastos'), true)
+                       && in_array('presupuesto_id', columnasDe('categorias_gasto'), true);
+    $cifras = cifrasDelPresupuesto(
+        $tienePresupuestos ? presupuestoActivo() : null,
+        $tienePresupuestos
     );
 
-    $resultado['dinero'] = [
+    $resultado['dinero'] = array_merge($cifras, [
         'hay'           => true,
-        'presupuestado' => (float) $totales['presupuestado'],
-        'costo'         => (float) $totales['costo'],
-        'propio'        => (float) $totales['propio'],
-        'de_padrinos'   => (float) $totales['de_padrinos'],
-    ];
+        // El nombre viejo de `planeado`, para no romper a quien lo lee.
+        'presupuestado' => $cifras['planeado'],
+    ]);
 
-    /* Categorías pasadas de su techo. Es el aviso de sobregiro. */
-    if (existeTabla('categorias_gasto')) {
-        $resultado['dinero']['categorias'] = consultarTodo(
-            'SELECT c.id, c.nombre, c.techo,
-                    COALESCE(SUM(g.monto_real), 0) AS gastado
-             FROM categorias_gasto c
-             LEFT JOIN gastos g ON g.categoria_id = c.id
-             GROUP BY c.id, c.nombre, c.techo
-             HAVING c.techo > 0 OR gastado > 0
-             ORDER BY c.orden, c.nombre'
-        );
-    }
+    /* Categorías pasadas de su techo. Es el aviso de sobregiro, y sale
+       del mismo desglose que usa Dinero — incluido el renglón "Sin
+       categoría", que antes no existía en ningún lado. */
+    $resultado['dinero']['categorias'] = array_values(array_filter(
+        categoriasConGasto($tienePresupuestos ? presupuestoActivo() : null,
+                           $tienePresupuestos),
+        function ($c) { return $c['techo'] > 0 || $c['gastado'] > 0; }
+    ));
 
-    /* Lo que un padrino prometió pero todavía no entregó. */
-    if (existeTabla('padrinos')) {
-        $pendiente = consultarUno(
-            "SELECT COALESCE(SUM(monto), 0) AS monto, COUNT(*) AS cuantos
-             FROM padrinos
-             WHERE estado <> 'entregado' AND tipo_aporte = 'dinero'"
-        );
-        $resultado['dinero']['padrinos_pendientes'] = [
-            'monto'   => (float) $pendiente['monto'],
-            'cuantos' => (int) $pendiente['cuantos'],
-        ];
-    }
+    /* Lo que un padrino prometió pero todavía no entregó ya viene en
+       $cifras, como `padrinos_pendientes` (monto) y
+       `padrinos_pendientes_cuantos`. Antes acá era un objeto
+       {monto, cuantos} y en presupuesto.php dos claves sueltas: el
+       mismo dato con dos formas según de qué pantalla venía. Ahora es
+       uno solo, con la forma de presupuesto.php.
+
+       Y cuenta bien las entregas parciales: con `monto_entregado`,
+       quien prometió $30,000 y entregó $10,000 queda pendiente por
+       $20,000, no por los $30,000 enteros ni por nada. */
 }
 
 

@@ -90,23 +90,25 @@ function panoramaDeMesas() {
        comparando letra por letra. */
     $mesas = existeTabla('mesas') ? consultarTodo('SELECT * FROM mesas') : [];
 
-    /* Primero las MEJORES mesas, después las peores; a igualdad, por
-       nombre natural ("Mesa 2" antes que "Mesa 10", que es lo que uno
-       espera y lo que el ORDER BY de MySQL haría al revés).
+    /* ⚡ (2026-08-30) ORDEN NEUTRAL, A PROPÓSITO — antes se ordenaba por
+       `prioridad` (derivada de la fila: pista primero, fondo al final),
+       y como mejorMesaPara() nunca desempata "hacia atrás" en un empate
+       total, esa posición terminaba siendo el desempate final. Resultado
+       real: sin ninguna etiqueta puesta, el grupo de `grupos_invitados.orden`
+       más bajo se llevaba SIEMPRE la mesa de pista, solo por procesarse
+       primero contra una lista que ya la traía de punta — exactamente la
+       regla rígida ("familia cerca de la pista por número de orden") que
+       el acomodo por etiquetas (Entrega 2 + esta ronda) viene a reemplazar.
 
-       ⚠️ EL ORDEN DE ESTA LISTA NO ES COSMÉTICO. mejorMesaPara() la
-       recorre en este orden y, a igualdad de lugares sobrantes, se queda
-       con la primera. O sea que esto es lo que decide qué significa "la
-       mejor mesa" cuando un grupo de orden bajo elige.
-
-       Antes se ordenaba SOLO por nombre, así que la promesa de que "los
-       grupos de orden más bajo se quedan con las mejores mesas" se
-       cumplía dándoles la que se llamaba Mesa 1 — que puede estar en el
-       fondo, al lado del baño. */
+       Ahora el orden es neutral (nombre natural), y quién se sienta cerca
+       del escenario lo decide la AFINIDAD de etiquetas en mejorMesaPara()
+       (zona de la mesa vs. etiquetas del paquete) — no la posición en esta
+       lista. `grupos_invitados.orden` sigue decidiendo qué familia ELIGE
+       PRIMERO entre las mesas disponibles (ver `porGrupo` en
+       repartirEnMesas() más abajo, sin cambios) — eso es otra cosa, y el
+       prompt no pide tocarla. La columna `prioridad` queda sin usar acá
+       a propósito: no se borra, por si se le encuentra otro uso después. */
     usort($mesas, function ($a, $b) {
-        $pa = (int) ($a['prioridad'] ?? 50);
-        $pb = (int) ($b['prioridad'] ?? 50);
-        if ($pa !== $pb) return $pa - $pb;
         return strnatcasecmp($a['nombre'], $b['nombre']);
     });
 
@@ -564,7 +566,20 @@ function movimientosDelPlan($plan, $unidades, $mesas) {
  */
 function mejorMesaPara($lugares, $quienes, $estado, $peleas) {
     $mejor = 0;
+    $mejorAfinidad = -1;
     $sobraMenos = PHP_INT_MAX;
+
+    /* ENTREGA 2 · AFINIDAD POR ETIQUETAS. Unión de las etiquetas de
+       todos los que se quieren sentar juntos ("Familia paterna",
+       "Jóvenes"…) — se calcula una sola vez acá afuera, no adentro del
+       foreach de mesas, porque es la misma para las catorce. */
+    $etiquetasDelGrupo = [];
+    foreach ($quienes as $quien) {
+        $etiquetasDelGrupo = array_merge(
+            $etiquetasDelGrupo, etiquetasDeUnidad($quien['tipo'], $quien['id'])
+        );
+    }
+    $etiquetasDelGrupo = array_unique($etiquetasDelGrupo);
 
     foreach ($estado as $mesa) {
         if ($mesa['libres'] < $lugares) continue;
@@ -580,14 +595,109 @@ function mejorMesaPara($lugares, $quienes, $estado, $peleas) {
         }
         if (!$seLlevanTodos) continue;
 
+        /* Cuántas etiquetas comparte el grupo con esta mesa ("Mesa
+           ruidosa" + persona etiquetada "Jóvenes"). Es una PREFERENCIA,
+           no una regla dura: a igual afinidad sigue ganando la mesa que
+           deja menos lugares sueltos (el criterio de siempre, y el
+           único que existía antes de esto). Sin ninguna etiqueta puesta
+           en todo el evento, $afinidad siempre da 0 en todas las mesas
+           y este bloque no cambia un solo resultado de los de antes. */
+        $afinidad = $etiquetasDelGrupo
+            ? count(array_intersect($etiquetasDelGrupo, etiquetasDeMesa($mesa['id'])))
+            : 0;
+
         $sobra = $mesa['libres'] - $lugares;
-        if ($sobra < $sobraMenos) {
+
+        if ($afinidad > $mejorAfinidad ||
+            ($afinidad === $mejorAfinidad && $sobra < $sobraMenos)) {
+            $mejorAfinidad = $afinidad;
             $sobraMenos = $sobra;
             $mejor = $mesa['id'];
         }
     }
 
     return $mejor;
+}
+
+/**
+ * Las etiquetas (ids) puestas en una mesa. Cache estática por
+ * ejecución: la misma mesa se consulta una vez por cada grupo que se
+ * evalúa durante un reparto entero (decenas de veces), y no cambia
+ * mientras dura.
+ *
+ * @param int $mesaId
+ * @return int[]
+ */
+function etiquetasDeMesa($mesaId) {
+    static $cache = [];
+    if (isset($cache[$mesaId])) return $cache[$mesaId];
+
+    $cache[$mesaId] = existeTabla('etiquetas_asignadas')
+        ? array_map('intval', array_column(consultarTodo(
+            "SELECT etiqueta_id FROM etiquetas_asignadas
+             WHERE atado_a_tipo = 'mesa' AND atado_a_id = :i",
+            [':i' => $mesaId]
+          ), 'etiqueta_id'))
+        : [];
+
+    return $cache[$mesaId];
+}
+
+/**
+ * Las etiquetas (ids) de una unidad para sentar. De un ACOMPAÑANTE
+ * suelto (Fase 9), las suyas propias. De una CONFIRMACIÓN (la familia
+ * en bloque), la unión de las de todos sus integrantes nombrados — las
+ * etiquetas de Entrega 2 solo se pegan a personas o a mesas, nunca a
+ * una confirmación entera, así que "la familia tiene la etiqueta X"
+ * significa "alguien nombrado adentro la tiene".
+ *
+ * @param string $tipo 'confirmacion' | 'acompanante'
+ * @param int    $id
+ * @return int[]
+ */
+function etiquetasDeUnidad($tipo, $id) {
+    static $cache = [];
+    $clave = $tipo . $id;
+    if (isset($cache[$clave])) return $cache[$clave];
+
+    if (!existeTabla('etiquetas_asignadas')) return $cache[$clave] = [];
+
+    if ($tipo === 'acompanante') {
+        $ids = array_column(consultarTodo(
+            "SELECT etiqueta_id FROM etiquetas_asignadas
+             WHERE atado_a_tipo = 'acompanante' AND atado_a_id = :i",
+            [':i' => $id]
+        ), 'etiqueta_id');
+    } else {
+        /* ⚡ (2026-08-30) Para un paquete (confirmación), la afinidad
+           ahora es la UNIÓN de dos fuentes, no solo la heredada:
+             (a) etiquetas puestas DIRECTO al paquete — hace falta para
+                 la mayoría de la lista real, que no tiene a nadie
+                 nombrado todavía (ver el prompt de cupo/etiquetas);
+             (b) heredadas de sus acompañantes nombrados, como ya hacía
+                 esta función antes de este cambio.
+           Aditivo a propósito: un paquete que ya tenía afinidad por (b)
+           sigue teniendo exactamente la misma, más lo que se le sume
+           por (a). */
+        $directas = array_column(consultarTodo(
+            "SELECT etiqueta_id FROM etiquetas_asignadas
+             WHERE atado_a_tipo = 'confirmacion' AND atado_a_id = :i",
+            [':i' => $id]
+        ), 'etiqueta_id');
+
+        $heredadas = existeTabla('acompanantes') ? array_column(consultarTodo(
+            "SELECT DISTINCT ea.etiqueta_id
+             FROM acompanantes a
+             JOIN etiquetas_asignadas ea
+               ON ea.atado_a_tipo = 'acompanante' AND ea.atado_a_id = a.id
+             WHERE a.confirmacion_id = :c",
+            [':c' => $id]
+        ), 'etiqueta_id') : [];
+
+        $ids = array_merge($directas, $heredadas);
+    }
+
+    return $cache[$clave] = array_values(array_unique(array_map('intval', $ids)));
 }
 
 /**
@@ -603,90 +713,103 @@ function mejorMesaPara($lugares, $quienes, $estado, $peleas) {
 function guardarPlanDeMesas($plan, $respetarFijados = true) {
     bd()->beginTransaction();
 
+    /* intentando() (ver _lib/bd.php) hace que un fallo de la base LANCE
+       en vez de cortar la petición. Sin eso este try/catch no atrapaba
+       nada: insertar() salía por responderMal(), que hace exit, y la
+       transacción quedaba abierta hasta que el motor la deshacía al
+       morir la conexión — sin rollBack propio, sin línea en el log y sin
+       el "0" de vuelta que este catch promete devolver. */
     try {
-        if ($respetarFijados) {
-            ejecutar('DELETE FROM asignacion_mesas WHERE fijada = 0');
-            if (existeTabla('asignacion_mesas_persona')) {
-                ejecutar('DELETE FROM asignacion_mesas_persona WHERE fijada = 0');
-            }
-        } else {
-            ejecutar('DELETE FROM asignacion_mesas');
-            if (existeTabla('asignacion_mesas_persona')) {
-                ejecutar('DELETE FROM asignacion_mesas_persona');
-            }
-        }
-
-        $cuantos = 0;
-
-        foreach ($plan as $entrada) {
-            $tipo   = $entrada['tipo'];
-            $id     = (int) $entrada['id'];
-            $mesaId = (int) $entrada['mesa_id'];
-
-            if ($tipo === 'acompanante') {
-                $yaEsta = consultarUno(
-                    'SELECT id FROM asignacion_mesas_persona WHERE acompanante_id = :a',
-                    [':a' => $id]
-                );
-                if ($yaEsta) { $cuantos++; continue; }
-
-                insertar('asignacion_mesas_persona', [
-                    'acompanante_id' => $id,
-                    'mesa_id'        => $mesaId,
-                    'fijada'         => 0,
-                ]);
-                $cuantos++;
-                continue;
-            }
-
-            // Las fijadas ya están en la base: no se vuelven a escribir.
-            $yaEsta = consultarUno(
-                'SELECT id FROM asignacion_mesas WHERE confirmacion_id = :c',
-                [':c' => $id]
-            );
-            if ($yaEsta) { $cuantos++; continue; }
-
-            $gente = consultarUno(
-                'SELECT c.adultos, c.ninos, p.sillas_extra
-                 FROM confirmaciones c
-                 LEFT JOIN preferencias_invitado p ON p.confirmacion_id = c.id
-                 WHERE c.id = :id',
-                [':id' => $id]
-            );
-
-            /* El total de la familia, MENOS los que se sentaron aparte
-               en este mismo plan (mismo criterio que panoramaDeMesas()
-               al armar la unidad: no volver a contar a quien ya tiene
-               su propia silla en otro lado). */
-            $sacadosDeEstaFamilia = 0;
-            foreach ($plan as $otra) {
-                if ($otra['tipo'] !== 'acompanante') continue;
-                $familiaDeEsa = consultarUno(
-                    'SELECT confirmacion_id FROM acompanantes WHERE id = :a',
-                    [':a' => (int) $otra['id']]
-                );
-                if ($familiaDeEsa && (int) $familiaDeEsa['confirmacion_id'] === $id) {
-                    $sacadosDeEstaFamilia++;
+        $cuantos = intentando(function () use ($plan, $respetarFijados) {
+            if ($respetarFijados) {
+                ejecutar('DELETE FROM asignacion_mesas WHERE fijada = 0');
+                if (existeTabla('asignacion_mesas_persona')) {
+                    ejecutar('DELETE FROM asignacion_mesas_persona WHERE fijada = 0');
+                }
+            } else {
+                ejecutar('DELETE FROM asignacion_mesas');
+                if (existeTabla('asignacion_mesas_persona')) {
+                    ejecutar('DELETE FROM asignacion_mesas_persona');
                 }
             }
 
-            $totalFamilia = lugaresQueOcupa($gente ?: []);
-            $lugares = max(1, $totalFamilia - $sacadosDeEstaFamilia);
+            $cuantos = 0;
 
-            insertar('asignacion_mesas', [
-                'confirmacion_id' => $id,
-                'mesa_id'         => $mesaId,
-                'lugares'         => $lugares,
-                'fijada'          => 0,
-            ]);
-            $cuantos++;
-        }
+            foreach ($plan as $entrada) {
+                $tipo   = $entrada['tipo'];
+                $id     = (int) $entrada['id'];
+                $mesaId = (int) $entrada['mesa_id'];
+
+                if ($tipo === 'acompanante') {
+                    $yaEsta = consultarUno(
+                        'SELECT id FROM asignacion_mesas_persona WHERE acompanante_id = :a',
+                        [':a' => $id]
+                    );
+                    if ($yaEsta) { $cuantos++; continue; }
+
+                    insertar('asignacion_mesas_persona', [
+                        'acompanante_id' => $id,
+                        'mesa_id'        => $mesaId,
+                        'fijada'         => 0,
+                    ]);
+                    $cuantos++;
+                    continue;
+                }
+
+                // Las fijadas ya están en la base: no se vuelven a escribir.
+                $yaEsta = consultarUno(
+                    'SELECT id FROM asignacion_mesas WHERE confirmacion_id = :c',
+                    [':c' => $id]
+                );
+                if ($yaEsta) { $cuantos++; continue; }
+
+                $gente = consultarUno(
+                    'SELECT c.adultos, c.ninos, p.sillas_extra
+                     FROM confirmaciones c
+                     LEFT JOIN preferencias_invitado p ON p.confirmacion_id = c.id
+                     WHERE c.id = :id',
+                    [':id' => $id]
+                );
+
+                /* El total de la familia, MENOS los que se sentaron aparte
+                   en este mismo plan (mismo criterio que panoramaDeMesas()
+                   al armar la unidad: no volver a contar a quien ya tiene
+                   su propia silla en otro lado). */
+                $sacadosDeEstaFamilia = 0;
+                foreach ($plan as $otra) {
+                    if ($otra['tipo'] !== 'acompanante') continue;
+                    $familiaDeEsa = consultarUno(
+                        'SELECT confirmacion_id FROM acompanantes WHERE id = :a',
+                        [':a' => (int) $otra['id']]
+                    );
+                    if ($familiaDeEsa && (int) $familiaDeEsa['confirmacion_id'] === $id) {
+                        $sacadosDeEstaFamilia++;
+                    }
+                }
+
+                $totalFamilia = lugaresQueOcupa($gente ?: []);
+                $lugares = max(1, $totalFamilia - $sacadosDeEstaFamilia);
+
+                insertar('asignacion_mesas', [
+                    'confirmacion_id' => $id,
+                    'mesa_id'         => $mesaId,
+                    'lugares'         => $lugares,
+                    'fijada'          => 0,
+                ]);
+                $cuantos++;
+            }
+
+            return $cuantos;
+        });
 
         bd()->commit();
         return $cuantos;
 
     } catch (Exception $e) {
-        bd()->rollBack();
+        // inTransaction() antes de deshacer: si lo que falló fue el
+        // propio commit, la transacción ya no está y rollBack() tiraría
+        // una segunda excepción, esta sí sin nadie que la atrape.
+        if (bd()->inTransaction()) bd()->rollBack();
         error_log('[Ania XV · mesas] Falló el guardado del plan: ' . $e->getMessage());
         return 0;
     }
@@ -717,30 +840,36 @@ const CUANTOS_RESPALDOS = 5;
 function guardarFotoDelAcomodo($motivo, $usuarioId = 0) {
     if (!existeTabla('acomodo_respaldo') || !existeTabla('asignacion_mesas')) return;
 
+    /* intentando() (ver _lib/bd.php): sin esto el catch de abajo era
+       decorativo — un fallo al escribir la foto salía por responderMal()
+       y cortaba la petición, o sea que no poder respaldar SÍ impedía
+       acomodar, justo lo contrario de lo que dice el comentario. */
     try {
-        $filas = consultarTodo('SELECT * FROM asignacion_mesas');
-        $filasPersona = existeTabla('asignacion_mesas_persona')
-            ? consultarTodo('SELECT * FROM asignacion_mesas_persona')
-            : [];
+        intentando(function () use ($motivo, $usuarioId) {
+            $filas = consultarTodo('SELECT * FROM asignacion_mesas');
+            $filasPersona = existeTabla('asignacion_mesas_persona')
+                ? consultarTodo('SELECT * FROM asignacion_mesas_persona')
+                : [];
 
-        insertar('acomodo_respaldo', [
-            'contenido'  => json_encode(
-                ['familias' => $filas, 'personas' => $filasPersona],
-                JSON_UNESCAPED_UNICODE
-            ),
-            'motivo'     => $motivo,
-            'cuantos'    => count($filas) + count($filasPersona),
-            'usuario_id' => $usuarioId ?: null,
-        ]);
+            insertar('acomodo_respaldo', [
+                'contenido'  => json_encode(
+                    ['familias' => $filas, 'personas' => $filasPersona],
+                    JSON_UNESCAPED_UNICODE
+                ),
+                'motivo'     => $motivo,
+                'cuantos'    => count($filas) + count($filasPersona),
+                'usuario_id' => $usuarioId ?: null,
+            ]);
 
-        /* Se dejan solo las últimas. Sin esto la tabla crece para
-           siempre con copias que nadie va a mirar. */
-        $viejas = consultarTodo(
-            'SELECT id FROM acomodo_respaldo ORDER BY cuando DESC, id DESC LIMIT 50'
-        );
-        foreach (array_slice($viejas, CUANTOS_RESPALDOS) as $v) {
-            ejecutar('DELETE FROM acomodo_respaldo WHERE id = :id', [':id' => $v['id']]);
-        }
+            /* Se dejan solo las últimas. Sin esto la tabla crece para
+               siempre con copias que nadie va a mirar. */
+            $viejas = consultarTodo(
+                'SELECT id FROM acomodo_respaldo ORDER BY cuando DESC, id DESC LIMIT 50'
+            );
+            foreach (array_slice($viejas, CUANTOS_RESPALDOS) as $v) {
+                ejecutar('DELETE FROM acomodo_respaldo WHERE id = :id', [':id' => $v['id']]);
+            }
+        });
     } catch (Exception $e) {
         /* Que no se pueda respaldar no puede impedir acomodar. Se avisa
            al log y se sigue: lo peor es quedarse sin deshacer. */
@@ -757,7 +886,8 @@ function guardarFotoDelAcomodo($motivo, $usuarioId = 0) {
  * lista plana, se lo trata como "familias" y "personas" queda vacío —
  * así una foto tomada la semana pasada se puede seguir restaurando.
  *
- * @return array ['ok' => bool, 'cuantos' => int, 'error' => string]
+ * @return array ['ok' => bool, 'cuantos' => int, 'salteadas' => int,
+ *                'error' => string]
  */
 function volverAlAcomodoAnterior() {
     if (!existeTabla('acomodo_respaldo')) {
@@ -778,41 +908,75 @@ function volverAlAcomodoAnterior() {
     $filasFamilias = $esFormatoViejo ? $contenido : ($contenido['familias'] ?? []);
     $filasPersonas = $esFormatoViejo ? [] : ($contenido['personas'] ?? []);
 
+    /* Una foto guarda mesas y personas por id, y entre la foto y el
+       deshacer se pudo borrar cualquiera de las dos. Restaurar a ciegas
+       choca contra la clave foránea y tumba la transacción entera: el
+       acomodo NO vuelve y el mensaje es "No se pudo volver atrás".
+       Se restaura entonces lo que todavía existe, y se dice cuánto no. */
+    $mesasVivas = [];
+    foreach (consultarTodo('SELECT id FROM mesas') as $m) {
+        $mesasVivas[(int) $m['id']] = true;
+    }
+
+    $sigueViva = function ($fila) use ($mesasVivas) {
+        return isset($mesasVivas[(int) $fila['mesa_id']]);
+    };
+
+    $familiasVivas = array_values(array_filter($filasFamilias, $sigueViva));
+    $personasVivas = array_values(array_filter($filasPersonas, $sigueViva));
+    $salteadas = (count($filasFamilias) - count($familiasVivas))
+               + (count($filasPersonas) - count($personasVivas));
+
     bd()->beginTransaction();
+
+    /* intentando() (ver _lib/bd.php): sin esto, un fallo a mitad del
+       deshacer salía por responderMal() sin pasar por el rollBack de
+       abajo — y "volver atrás" dejaba el salón con las familias medio
+       borradas y medio restauradas, que es peor que no haber tocado
+       nada. Este catch existía desde el principio y nunca corrió. */
     try {
-        ejecutar('DELETE FROM asignacion_mesas');
+        intentando(function () use ($familiasVivas, $personasVivas, $ultimo) {
+            ejecutar('DELETE FROM asignacion_mesas');
 
-        foreach ($filasFamilias as $f) {
-            insertar('asignacion_mesas', [
-                'confirmacion_id' => (int) $f['confirmacion_id'],
-                'mesa_id'         => (int) $f['mesa_id'],
-                'lugares'         => (int) $f['lugares'],
-                'fijada'          => (int) $f['fijada'],
-                'notas'           => (string) ($f['notas'] ?? ''),
-            ]);
-        }
-
-        if (existeTabla('asignacion_mesas_persona')) {
-            ejecutar('DELETE FROM asignacion_mesas_persona');
-            foreach ($filasPersonas as $f) {
-                insertar('asignacion_mesas_persona', [
-                    'acompanante_id' => (int) $f['acompanante_id'],
-                    'mesa_id'        => (int) $f['mesa_id'],
-                    'fijada'         => (int) $f['fijada'],
-                    'notas'          => (string) ($f['notas'] ?? ''),
+            foreach ($familiasVivas as $f) {
+                insertar('asignacion_mesas', [
+                    'confirmacion_id' => (int) $f['confirmacion_id'],
+                    'mesa_id'         => (int) $f['mesa_id'],
+                    'lugares'         => (int) $f['lugares'],
+                    'fijada'          => (int) $f['fijada'],
+                    'notas'           => (string) ($f['notas'] ?? ''),
                 ]);
             }
-        }
 
-        /* El respaldo usado se descarta: si quedara, tocar deshacer dos
-           veces volvería a lo mismo y parecería que no funciona. */
-        ejecutar('DELETE FROM acomodo_respaldo WHERE id = :id', [':id' => $ultimo['id']]);
+            if (existeTabla('asignacion_mesas_persona')) {
+                ejecutar('DELETE FROM asignacion_mesas_persona');
+                foreach ($personasVivas as $f) {
+                    insertar('asignacion_mesas_persona', [
+                        'acompanante_id' => (int) $f['acompanante_id'],
+                        'mesa_id'        => (int) $f['mesa_id'],
+                        'fijada'         => (int) $f['fijada'],
+                        'notas'          => (string) ($f['notas'] ?? ''),
+                    ]);
+                }
+            }
+
+            /* El respaldo usado se descarta: si quedara, tocar deshacer dos
+               veces volvería a lo mismo y parecería que no funciona. */
+            ejecutar('DELETE FROM acomodo_respaldo WHERE id = :id', [':id' => $ultimo['id']]);
+        });
 
         bd()->commit();
-        return ['ok' => true, 'cuantos' => count($filasFamilias) + count($filasPersonas)];
+        return [
+            'ok'        => true,
+            'cuantos'   => count($familiasVivas) + count($personasVivas),
+            'salteadas' => $salteadas,
+        ];
 
     } catch (Exception $e) {
-        bd()->rollBack();
+        // Si lo que falló fue el commit, la transacción ya no está:
+        // rollBack() tiraría una segunda excepción sin nadie que la
+        // atrape.
+        if (bd()->inTransaction()) bd()->rollBack();
         error_log('[Ania XV · mesas] Falló el deshacer: ' . $e->getMessage());
         return ['ok' => false, 'error' => 'No se pudo volver atrás.'];
     }

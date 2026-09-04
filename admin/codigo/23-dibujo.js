@@ -251,8 +251,8 @@ function prepararLienzo(cuerpo, opciones) {
     imagen.src = anterior;
   });
 
-  buscar('#lienzo-limpiar', cuerpo).addEventListener('click', () => {
-    if (!confirmarAccion('¿Borrar todo el dibujo?')) return;
+  buscar('#lienzo-limpiar', cuerpo).addEventListener('click', async () => {
+    if (!await confirmarAccion('¿Borrar todo el dibujo?')) return;
     guardarEnHistorial();
     const caja = lienzo.getBoundingClientRect();
     pincel.clearRect(0, 0, caja.width, caja.height);
@@ -294,7 +294,7 @@ function prepararLienzo(cuerpo, opciones) {
 
       // Se le pone nombre para que en la lista de archivos se entienda
       // qué es sin tener que abrirlo.
-      blob.name = 'dibujo-' + new Date().toISOString().slice(0, 10) + '.png';
+      blob.name = 'dibujo-' + hoyEnFecha() + '.png';
 
       const salio = await subirArchivo(blob, {
         tipo: opciones.tipo,

@@ -43,9 +43,6 @@ let VISTA_DE_MESAS = recordado('vista-de-mesas', 'plano');
     sin querer al abrir la pantalla (Fase 5 del rediseño). */
 let MODO_PLANO = 'ver';
 
-/** El zoom y desplazamiento actuales del plano, en pantalla. */
-let ZOOM_PLANO = { escala: 1, x: 0, y: 0 };
-
 /** Estado del arrastre en curso desde "Sin mesa" hacia una mesa, o null
     si no se está arrastrando nada. */
 let ARRASTRE_PLANO = null;
@@ -169,11 +166,6 @@ function bloqueDelPlano(mesas) {
       '<div class="plano-lienzo" id="plano-lienzo">' +
         '<div class="plano" style="grid-template-columns:repeat(' +
              salon.columnas + ',1fr)">' + celdas + '</div>' +
-      '</div>' +
-      '<div class="plano-controles">' +
-        '<button class="boton-icono" id="plano-acercar" aria-label="Acercar">+</button>' +
-        '<button class="boton-icono" id="plano-alejar" aria-label="Alejar">−</button>' +
-        '<button class="boton-icono" id="plano-restablecer" aria-label="Restablecer">⟲</button>' +
       '</div>' +
     '</div>' +
 
@@ -382,7 +374,7 @@ function bloqueBotonesDeMesas() {
   return '' +
     '<div style="display:flex;gap:var(--esp-2);margin-bottom:var(--esp-2)">' +
       '<button class="boton boton--principal" style="flex:2" id="mesa-auto">' +
-        'Acomodar solo' +
+        'Acomodar a todos' +
       '</button>' +
       '<span style="display:flex;align-items:center">' +
         ayuda('mesas.acomodar') + '</span>' +
@@ -633,9 +625,9 @@ function engancharMesas(cuerpo) {
 
   buscarTodos('[data-editar-mesa]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
-      const mesa = (EVENTO.mesas || []).find(m =>
-        String(m.id) === boton.dataset.editarMesa);
+      const mesa = mesaParaEditar(boton.dataset.editarMesa);
       if (mesa) formularioEvento('mesas', mesa);
+      else avisar('Esa mesa ya no está. Actualiza la pantalla.', true);
     });
   });
 
@@ -651,113 +643,25 @@ function engancharMesas(cuerpo) {
 
   const lienzoExterior = buscar('#plano-lienzo-exterior', cuerpo);
   if (lienzoExterior) {
-    engancharZoomYPanDelPlano(cuerpo);
     if (MODO_PLANO === 'editar') engancharArrastreHaciaElPlano(cuerpo, refrescar);
   }
 }
 
 
-/* ─── 1C. ZOOM, DESPLAZAMIENTO Y ARRASTRE DEL PLANO (Fase 5) ───────── */
+/* ⚡ ACÁ YA NO HAY ZOOM NI DESPLAZAMIENTO DEL PLANO (2026-09-02).
 
-/**
- * Zoom y pan del plano con el dedo: un dedo para mover, dos para
- * pinchar y acercar. Se usan Pointer Events y no el scroll nativo del
- * navegador porque la grilla del plano se autoajusta y el
- * overflow:auto normal no da un zoom fluido y controlado.
- *
- * @param {Element} cuerpo
- * @returns {void}
- */
-function engancharZoomYPanDelPlano(cuerpo) {
-  const exterior = buscar('#plano-lienzo-exterior', cuerpo);
-  const lienzo   = buscar('#plano-lienzo', cuerpo);
-  if (!exterior || !lienzo) return;
+   El plano tenía pellizco para acercar (de 0,5x a 3x), arrastre para
+   moverse y tres botones de control. Eso convertía el plano en algo que
+   hay que MANEJAR antes de poder consultarlo: para saber quién está en la
+   mesa 7 había que acercar, buscar, y después volver a encuadrar.
 
-  ZOOM_PLANO = { escala: 1, x: 0, y: 0 };
-  aplicarTransformDelPlano(lienzo);
+   La pregunta real nunca fue "¿cómo agrando el plano?" sino "¿quién está
+   en esta mesa y qué come?". Para eso alcanza con tocar la mesa: se abre
+   su detalle, con cada persona, su plato y su alergia. Un gesto que nadie
+   tiene que aprender, en lugar de dos que hay que descubrir.
 
-  const punteros = new Map();
-  let distanciaInicial = 0;
-  let escalaInicial = 1;
-  let ultimoPunto = null;
-
-  const distanciaEntre = () => {
-    const pts = Array.from(punteros.values());
-    return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-  };
-
-  exterior.addEventListener('pointerdown', evento => {
-    // Si el toque empezó sobre una mesa o un botón, se deja que ese
-    // elemento reciba el toque normal (abrir la mesa, arrastrar, etc.):
-    // el pan solo actúa cuando se toca el fondo del plano.
-    if (evento.target.closest('.plano__mesa, .plano-controles')) return;
-
-    exterior.setPointerCapture(evento.pointerId);
-    punteros.set(evento.pointerId, { x: evento.clientX, y: evento.clientY });
-
-    if (punteros.size === 1) {
-      ultimoPunto = { x: evento.clientX, y: evento.clientY };
-    } else if (punteros.size === 2) {
-      distanciaInicial = distanciaEntre();
-      escalaInicial = ZOOM_PLANO.escala;
-    }
-  });
-
-  exterior.addEventListener('pointermove', evento => {
-    if (!punteros.has(evento.pointerId)) return;
-    punteros.set(evento.pointerId, { x: evento.clientX, y: evento.clientY });
-
-    if (punteros.size === 2) {
-      const nueva = distanciaEntre();
-      if (distanciaInicial > 0) {
-        ZOOM_PLANO.escala = Math.min(3, Math.max(0.5,
-          escalaInicial * (nueva / distanciaInicial)));
-        aplicarTransformDelPlano(lienzo);
-      }
-    } else if (punteros.size === 1 && ultimoPunto) {
-      ZOOM_PLANO.x += evento.clientX - ultimoPunto.x;
-      ZOOM_PLANO.y += evento.clientY - ultimoPunto.y;
-      ultimoPunto = { x: evento.clientX, y: evento.clientY };
-      aplicarTransformDelPlano(lienzo);
-    }
-  });
-
-  const soltar = evento => {
-    punteros.delete(evento.pointerId);
-    if (punteros.size < 2) distanciaInicial = 0;
-    if (punteros.size === 1) {
-      const restante = Array.from(punteros.values())[0];
-      ultimoPunto = restante;
-    } else {
-      ultimoPunto = null;
-    }
-  };
-  exterior.addEventListener('pointerup', soltar);
-  exterior.addEventListener('pointercancel', soltar);
-
-  const cambiarZoom = factor => {
-    ZOOM_PLANO.escala = Math.min(3, Math.max(0.5, ZOOM_PLANO.escala * factor));
-    aplicarTransformDelPlano(lienzo);
-  };
-
-  buscar('#plano-acercar', cuerpo).addEventListener('click', () => cambiarZoom(1.25));
-  buscar('#plano-alejar', cuerpo).addEventListener('click', () => cambiarZoom(0.8));
-  buscar('#plano-restablecer', cuerpo).addEventListener('click', () => {
-    ZOOM_PLANO = { escala: 1, x: 0, y: 0 };
-    aplicarTransformDelPlano(lienzo);
-  });
-}
-
-/**
- * Aplica el zoom y desplazamiento actuales al lienzo del plano.
- *
- * @param {Element} lienzo
- * @returns {void}
- */
-function aplicarTransformDelPlano(lienzo) {
-  lienzo.style.transform =
-    'translate(' + ZOOM_PLANO.x + 'px,' + ZOOM_PLANO.y + 'px) scale(' + ZOOM_PLANO.escala + ')';
-}
+   Se quitaron también ZOOM_PLANO y aplicarTransformDelPlano(): sin gestos
+   que lo cambien, el lienzo se dibuja siempre en su tamaño natural. */
 
 /**
  * Arrastrar a alguien de "Sin mesa" hasta una mesa del plano, solo en
@@ -915,7 +819,7 @@ async function acomodarSolo(refrescar) {
       : '<p class="vacio__texto" style="color:var(--bien)">' +
         'No se mueve de mesa nadie que ya estuviera sentado.</p>';
 
-  const cuerpo = abrirHoja('Acomodar solo',
+  const cuerpo = abrirHoja('Acomodar a todos',
     '<p style="margin-bottom:var(--esp-2)">' +
       'Se van a sentar <strong>' + seguro(Object.keys(previa.plan || {}).length) +
       '</strong> confirmaciones.' +
@@ -981,7 +885,7 @@ async function armarElSalon(refrescar) {
     prioridad: salon.prioridadPorFila[m.fila] || 50,
   }));
 
-  if (!confirmarAccion(
+  if (!await confirmarAccion(
     'Se van a crear ' + mesas.length + ' mesas de ' + salon.capacidad +
     ' lugares, cada una en su sitio del plano.\n\n' +
     'Las que ya existan con ese nombre no se duplican: solo se les ' +
@@ -1005,6 +909,74 @@ async function armarElSalon(refrescar) {
  * @param {Function} refrescar
  * @returns {void}
  */
+/**
+ * Quién se sienta en esta mesa, persona por persona, con su plato y su
+ * alergia.
+ *
+ * POR QUÉ EXISTE
+ * El plano y la ficha de la mesa listan FAMILIAS ("Alan, Ania +3") y
+ * cuántos lugares ocupan. Eso alcanza para acomodar, pero no para servir:
+ * el día de la fiesta hace falta saber que en esta mesa hay dos
+ * vegetarianos y alguien alérgico a los mariscos, y quiénes son. Ese
+ * cruce no existía en ningún lado — había que entrar invitado por
+ * invitado, con la fiesta encima.
+ *
+ * @param {number} mesaId
+ * @param {Element} donde
+ * @returns {Promise<void>}
+ */
+async function pintarQuienComeQue(mesaId, donde) {
+  if (!donde) return;
+  donde.innerHTML = '<div class="esqueleto"></div>';
+
+  let gente;
+  try {
+    const r = await traer('mesas.php?accion=detalle_mesa&mesa_id=' + mesaId);
+    gente = (r && r.gente) || [];
+  } catch (error) {
+    donde.innerHTML = '<p class="vacio__texto">No se pudo cargar qué come cada quien.</p>';
+    return;
+  }
+
+  if (!gente.length) { donde.innerHTML = ''; return; }
+
+  const conAlergia = gente.filter(p => p.alergias).length;
+  const vegetarianos = gente.filter(p => /vegetarian/i.test(p.menu || '')).length;
+
+  /* El resumen va ARRIBA de la lista: es lo que se necesita de un vistazo
+     al pasar por la mesa con los platos. El detalle queda abajo, para
+     cuando hay que saber de quién se trata. */
+  const resumen = [];
+  if (vegetarianos) resumen.push(pluralizar(vegetarianos, 'vegetariano', 'vegetarianos'));
+  if (conAlergia)   resumen.push(pluralizar(conAlergia, 'alergia', 'alergias'));
+
+  donde.innerHTML =
+    '<span class="campo__rotulo">Qué come cada quien</span>' +
+    (resumen.length
+      ? '<p class="vacio__texto" style="margin:.2rem 0 .6rem">' +
+          seguro(resumen.join(' · ')) + '</p>'
+      : '') +
+    gente.map(p =>
+      '<div class="lista__fila" style="cursor:default">' +
+        '<span class="lista__cuerpo">' +
+          '<span class="lista__titulo">' +
+            seguro(p.nombre || (p.tipo === 'nino' ? 'Niño' : 'Adulto')) +
+          '</span>' +
+          '<span class="lista__pie">' +
+            seguro([
+              p.tipo === 'nino' ? 'Menú infantil' : (p.menu || 'Sin menú elegido'),
+              p.familia || '',
+            ].filter(Boolean).join(' · ')) +
+          '</span>' +
+        '</span>' +
+        (p.alergias
+          ? '<span class="etiqueta etiqueta--alerta lista__lado">⚠ ' +
+              seguro(p.alergias) + '</span>'
+          : '') +
+      '</div>'
+    ).join('');
+}
+
 function abrirLaMesa(mesaId, refrescar) {
   const mesa = (MESAS.mesas || []).find(m => Number(m.id) === mesaId);
   if (!mesa) return;
@@ -1049,20 +1021,65 @@ function abrirLaMesa(mesaId, refrescar) {
 
     gente +
 
+    /* Quién come qué en esta mesa. Se pide al servidor al abrir, porque el
+       plano solo trae familias y cuántos lugares ocupan — no el detalle por
+       persona. Ver 'detalle_mesa' en admin/api/mesas.php. */
+    '<div id="mesa-quien-come" style="margin-top:var(--esp-3)"></div>' +
+
+    // Etiquetas (Entrega 2): "Mesa ruidosa", "Jóvenes", "Familia
+    // materna"… — el bot las cruza con las de cada persona para
+    // preferir sentarla acá (ver mejorMesaPara() en _lib/mesas.php).
+    '<div class="campo" id="mesa-etiquetas" style="margin-top:var(--esp-3)"></div>' +
+
+    /* La hoja de la mesa para el mesero y la coordinadora: quién se
+       sienta, qué come cada uno y las alergias. El cruce ya estaba
+       hecho en esta misma pantalla y no tenía forma de salir del
+       teléfono — había que dictarlo o mandar una foto. */
+    '<button class="boton boton--ancho" id="mesa-compartir" ' +
+            'style="margin-top:var(--esp-2)">Mandar esta mesa por WhatsApp</button>' +
+
     '<button class="boton boton--ancho" id="mesa-editar" ' +
-            'style="margin-top:var(--esp-3)">Cambiar nombre o capacidad</button>'
+            'style="margin-top:var(--esp-1)">Cambiar nombre o capacidad</button>'
   );
+
+  pintarEtiquetasDe('mesa', mesaId, buscar('#mesa-etiquetas', cuerpo));
+  pintarQuienComeQue(mesaId, buscar('#mesa-quien-come', cuerpo));
 
   buscarTodos('[data-mover-de-mesa]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () =>
       elegirMesaPara(Number(boton.dataset.moverDeMesa), refrescar));
   });
 
-  buscar('#mesa-editar', cuerpo).addEventListener('click', () => {
-    const cruda = (EVENTO && EVENTO.mesas || []).find(m => Number(m.id) === mesaId);
-    if (cruda) formularioEvento('mesas', cruda);
-    else avisar('Abre la sección Mesas de Evento para editarla.', true);
+  buscar('#mesa-compartir', cuerpo).addEventListener('click', () => {
+    // armarParaCompartir abre su propia hoja encima de esta.
+    armarParaCompartir('mesa', null, mesaId);
   });
+
+  buscar('#mesa-editar', cuerpo).addEventListener('click', () => {
+    const cruda = mesaParaEditar(mesaId);
+    if (cruda) formularioEvento('mesas', cruda);
+    else avisar('Esa mesa ya no está. Actualiza la pantalla.', true);
+  });
+}
+
+/**
+ * La mesa con la que hay que abrir el formulario de edición.
+ *
+ * POR QUÉ EXISTE
+ * Esto buscaba en `EVENTO.mesas`, que es la lista de la pestaña Evento
+ * y en esta pantalla está vacía desde que Mesas se fusionó con Gente:
+ * tocar una mesa recién creada no hacía absolutamente nada por un
+ * camino, y por el otro mandaba a "abre la sección Mesas de Evento",
+ * que ya no existe. Se busca en `MESAS`, que es lo que se está viendo,
+ * y que además trae `fila` y `columna` — los dos campos que el
+ * formulario necesita para poder ubicarla en el plano.
+ *
+ * @param {number|string} mesaId
+ * @returns {Object|null}
+ */
+function mesaParaEditar(mesaId) {
+  return (MESAS && MESAS.mesas || []).find(m =>
+    String(m.id) === String(mesaId)) || null;
 }
 
 
@@ -1176,6 +1193,19 @@ function elegirMesaPara(confirmacionId, refrescar) {
   const quitar = buscar('#mesa-quitar', cuerpo);
   if (quitar) {
     quitar.addEventListener('click', async () => {
+      /* Se pregunta, y quitar una regla de "no sentar juntos" también:
+         antes esto no preguntaba nada y quitar la regla sí, o sea que
+         la app protegía lo leve y no lo grave. Sacar a alguien de su
+         mesa deshace un acomodo hecho a mano y no tiene deshacer
+         propio. */
+      const nombreMesa = (MESAS.mesas || []).find(m => m.id === mesaActual);
+      if (!await confirmarAccion(
+        '¿Sacar a ' + quien.nombre + ' de la mesa?\n\n' +
+        'Vuelve a «sin mesa»' +
+        (nombreMesa ? ' y deja ' + pluralizar(quien.lugares, 'lugar libre', 'lugares libres') +
+                      ' en ' + nombreMesa.nombre : '') + '.',
+        { confirmar: 'Sacar de la mesa', peligro: true })) return;
+
       try {
         await mandar('mesas.php?accion=sentar',
                      { confirmacion_id: confirmacionId, mesa_id: 0 });
@@ -1316,7 +1346,7 @@ function abrirPreferenciasDe(quien, refrescar) {
          abajo. Y es peor equivocarse acá: el motivo por el que dos
          personas no se pueden sentar juntas rara vez se vuelve a
          escribir, y el error recién se descubre en la fiesta. */
-      if (!confirmarAccion('¿Quitar esta regla?\n\n' +
+      if (!await confirmarAccion('¿Quitar esta regla?\n\n' +
                            'Estas dos personas van a poder quedar en la ' +
                            'misma mesa.')) return;
       try {
@@ -1499,8 +1529,8 @@ function abrirReglasDeAcomodo(refrescar) {
       'Volver al acomodo anterior' +
     '</button>' +
     '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
-      'Antes de cada acomodo automático se guarda cómo estaba. Esto ' +
-      'devuelve todo a la última foto.</p>' +
+      'Antes de cada acomodo automático, y antes de borrar una mesa, se ' +
+      'guarda cómo estaba. Esto devuelve todo a la última foto.</p>' +
 
     '<button class="boton boton--ancho boton--peligro" id="mesa-vaciar" ' +
             'style="margin-bottom:var(--esp-1)">' +
@@ -1528,7 +1558,7 @@ function abrirReglasDeAcomodo(refrescar) {
 
   buscarTodos('[data-borrar-grupo]', cuerpo).forEach(boton => {
     boton.addEventListener('click', async () => {
-      if (!confirmarAccion('¿Borrar este grupo? Sus invitados quedan sin grupo.')) return;
+      if (!await confirmarAccion('¿Borrar este grupo? Sus invitados quedan sin grupo.')) return;
       try {
         await mandar('mesas.php?accion=borrar_grupo', { id: boton.dataset.borrarGrupo });
         cerrarHoja(true);
@@ -1571,7 +1601,7 @@ function abrirReglasDeAcomodo(refrescar) {
 
   buscarTodos('[data-quitar-pelea-hub]', cuerpo).forEach(boton => {
     boton.addEventListener('click', async () => {
-      if (!confirmarAccion('¿Quitar esta regla?\n\n' +
+      if (!await confirmarAccion('¿Quitar esta regla?\n\n' +
                            'Estas dos personas van a poder quedar en la misma mesa.')) return;
       try {
         await mandar('mesas.php?accion=borrar_pelea', { id: boton.dataset.quitarPeleaHub });
@@ -1603,6 +1633,20 @@ function abrirReglasDeAcomodo(refrescar) {
   });
 
   buscar('#mesa-deshacer', cuerpo).addEventListener('click', async () => {
+    /* Esto no preguntaba nada, y es de lo más destructivo que hay acá:
+       vuelve a la última foto y con eso pisa TODO lo que se acomodó a
+       mano después de ella. La pregunta dice de cuándo es la foto —el
+       dato con el que se decide— en vez de un "¿estás seguro?". */
+    const foto = MESAS.ultimo_respaldo;
+    if (!await confirmarAccion(
+      '¿Volver al acomodo anterior?\n\n' +
+      (foto
+        ? 'Se vuelve a como estaba el ' + comoFecha(String(foto.cuando).slice(0, 10)) +
+          (foto.motivo ? ' (' + foto.motivo + ')' : '') + '. '
+        : '') +
+      'Todo lo que hayas acomodado a mano después de esa foto se pierde.',
+      { confirmar: 'Volver atrás', peligro: true })) return;
+
     try {
       const r = await mandar('mesas.php?accion=deshacer', {});
       cerrarHoja(true);
@@ -1612,7 +1656,7 @@ function abrirReglasDeAcomodo(refrescar) {
   });
 
   buscar('#mesa-vaciar', cuerpo).addEventListener('click', async () => {
-    if (!confirmarAccion('¿Sacar a todos de las mesas?\n\n' +
+    if (!await confirmarAccion('¿Sacar a todos de las mesas?\n\n' +
                          'Lo que fijaste con el candado queda como está.')) return;
     try {
       const r = await mandar('mesas.php?accion=vaciar', {});
@@ -1623,7 +1667,7 @@ function abrirReglasDeAcomodo(refrescar) {
   });
 
   buscar('#mesa-vaciar-todo', cuerpo).addEventListener('click', async () => {
-    if (!confirmarAccion('¿Vaciar TODO, incluso lo que fijaste a mano?\n\n' +
+    if (!await confirmarAccion('¿Vaciar TODO, incluso lo que fijaste a mano?\n\n' +
                          'Esto no se puede deshacer.')) return;
     try {
       const r = await mandar('mesas.php?accion=vaciar', { todo: true });
@@ -1744,7 +1788,7 @@ function pintarFormularioDeReglaDePersona(cuerpo, persona, refrescar) {
   const devolver = buscar('#rp-devolver', cuerpo);
   if (devolver) {
     devolver.addEventListener('click', async () => {
-      if (!confirmarAccion(persona.nombre + ' vuelve a viajar con su familia. ¿Seguro?')) return;
+      if (!await confirmarAccion(persona.nombre + ' vuelve a viajar con su familia. ¿Seguro?')) return;
       try {
         await mandar('mesas.php?accion=regla_persona', {
           acompanante_id: persona.id, grupo_id: 0, mesa_preferida: 0, notas: '',

@@ -122,6 +122,19 @@ function arrancarLaApp() {
   prepararGuardadoParaLaSesion().then(() => {
     actualizarBannerConexion();
     sincronizarCola();
+
+    /* Limpia los rechazos de telemetría que quedaron guardados de antes
+       (ver purgarRechazosDeTelemetria en 26-sincronizacion.js). Si sacó
+       alguno, se repinta la burbuja: si no, la campana seguiría
+       mostrando un número que ya no corresponde a nada hasta el
+       próximo motivo para actualizarla. */
+    if (typeof purgarRechazosDeTelemetria === 'function') {
+      purgarRechazosDeTelemetria().then(cuantos => {
+        if (cuantos && typeof actualizarBurbujaCampana === 'function') {
+          actualizarBurbujaCampana();
+        }
+      });
+    }
   });
 
   // F1: refresca sola la vista que se esté mirando cada 60-120s con
@@ -144,18 +157,33 @@ function arrancarLaApp() {
   const parametros = new URLSearchParams(location.search);
   const atajo = parametros.get('ir');
 
+  /* ⚡ LA APP ABRE EN "HOY" (2026-09-03). Abría en Resumen, aunque el HTML
+     marcaba Hoy como la vista activa y tres comentarios distintos del código
+     afirmaban que "Hoy es la puerta de entrada". Nadie lo había notado
+     porque la contradicción estaba repartida en dos archivos.
+
+     No es un detalle: el día de la fiesta, TODA tarea empezaba pagando un
+     toque para llegar a la pantalla que se hizo justamente para ese día
+     —marcar llegadas, buscar a alguien, ver el plano—, y el objetivo ahí son
+     dos toques en total. Ese peaje se lo comía uno de los dos. */
   if (atajo === 'nota') {
-    irA('resumen');
+    irA('hoy');
     abrirHojaDeNota();
   } else if (atajo && VISTAS[atajo]) {
     irA(atajo);
   } else {
-    irA('resumen');
+    irA('hoy');
   }
 
-  // Se limpia el parámetro de la barra de direcciones para que al
-  // recargar no vuelva a abrirse el atajo.
-  if (atajo) history.replaceState(null, '', location.pathname);
+  /* Se limpia el parámetro de la barra de direcciones para que al recargar
+     no vuelva a abrirse el atajo.
+
+     ⚠️ SE CONSERVA history.state (2026-09-03). Acá se pasaba `null` como
+     estado, lo que borraba la marca de vista que deja irA() para que el
+     gesto de "atrás" de Android funcione (ver la nota en 05-navegacion.js).
+     El resultado era que el atrás quedaba roto justamente al entrar por un
+     atajo del icono, que es la forma más rápida de abrir el panel. */
+  if (atajo) history.replaceState(history.state, '', location.pathname);
 }
 
 
@@ -371,7 +399,8 @@ async function abrirHojaDeRespaldo() {
         '<button type="button" class="boton boton--principal boton--ancho" ' +
                 'id="respaldo-correr" style="margin-top:var(--esp-3)">' +
           'Respaldar ahora' +
-        '</button>';
+        '</button>' +
+        bloqueDeDescargarTodo();
     } else {
       const dias = diasHasta(String(estado.cuando).slice(0, 10));
       const haceCuanto = dias === 0 ? 'hoy'
@@ -405,7 +434,8 @@ async function abrirHojaDeRespaldo() {
         '<button type="button" class="boton boton--principal boton--ancho" ' +
                 'id="respaldo-correr" style="margin-top:var(--esp-3)">' +
           'Respaldar ahora' +
-        '</button>';
+        '</button>' +
+        bloqueDeDescargarTodo();
     }
 
     buscar('#respaldo-correr', donde).addEventListener('click', async () => {
@@ -423,9 +453,84 @@ async function abrirHojaDeRespaldo() {
         boton.textContent = 'Respaldar ahora';
       }
     });
+
+    engancharDescargarTodo(donde);
   };
 
   pintar();
+}
+
+/**
+ * El bloque "Descargar todo", que va debajo de "Respaldar ahora".
+ *
+ * POR QUÉ SON DOS BOTONES Y NO UNO
+ * Hacen cosas distintas y se usan en momentos distintos:
+ *
+ *   · Respaldar ahora   → manda el correo semanal a mano. Entra la base
+ *     entera y hasta 12 MB de archivos, que es lo que tolera un correo.
+ *     Es la red de seguridad de todas las semanas.
+ *   · Descargar todo    → se baja acá, ahora, la base entera MÁS TODOS
+ *     los archivos, sin tope. Es lo que hay que hacer antes de tocar el
+ *     hosting o de subir una versión nueva.
+ *
+ * El texto de abajo lo dice con esas palabras a propósito: si hay que
+ * adivinar cuál de los dos usar, el que sabe no está en la pantalla.
+ *
+ * @returns {string} HTML
+ */
+function bloqueDeDescargarTodo() {
+  return '' +
+    '<div style="margin-top:var(--esp-4);padding-top:var(--esp-3);' +
+                'border-top:1px solid var(--borde)">' +
+      '<button type="button" class="boton boton--ancho" id="respaldo-bajar">' +
+        'Descargar todo' +
+      '</button>' +
+      '<p class="vacio__texto" style="margin-top:var(--esp-2);font-size:13px">' +
+        'Se baja a este dispositivo un ZIP con la base entera y ' +
+        '<strong>todos</strong> los archivos, sin el tope de peso del correo. ' +
+        'Hazlo antes de subir una versión nueva o de tocar el hosting.<br>' +
+        'Se abre con la misma contraseña que los respaldos del correo.' +
+      '</p>' +
+    '</div>';
+}
+
+/**
+ * Engancha el botón "Descargar todo".
+ *
+ * Pasa por bajarDelServidor() (03-servidor.js) y no por window.open()
+ * ni por un enlace: la sesión del panel viaja en la cabecera
+ * `Authorization`, y una pestaña nueva sale sin ella — el servidor
+ * contestaría 401 y la descarga no funcionaría nunca.
+ *
+ * @param {Element} donde
+ * @returns {void}
+ */
+function engancharDescargarTodo(donde) {
+  const boton = buscar('#respaldo-bajar', donde);
+  if (!boton) return;
+
+  boton.addEventListener('click', async () => {
+    if (!navigator.onLine) {
+      avisar('Necesitas conexión para bajar el respaldo.', true);
+      return;
+    }
+
+    boton.disabled = true;
+    boton.textContent = 'Armando el archivo…';
+
+    try {
+      await bajarDelServidor(
+        'cron_respaldo.php?accion=descargar',
+        'ania-xv-completo-' + hoyEnFecha() + '.zip'
+      );
+      avisar('Listo, revisa tus descargas.');
+    } catch (error) {
+      avisar(error.message, true);
+    } finally {
+      boton.disabled = false;
+      boton.textContent = 'Descargar todo';
+    }
+  });
 }
 
 /* La gestión de avisos y la instalación viven en 15-instalar-y-avisos.js:
@@ -480,7 +585,13 @@ async function encender() {
     // leer su localStorage.
     cargarSandwichGuardadoEnElTelefono();
     cargarFrasesAprendidasEnElTelefono();
-    cargarDiccionarioCarinosoEnElTelefono();
+    // ⚡ (2026-08-30) Vive en 46-agente-motivador.js, que dejó de
+    // cargarse (MegaBot lo reemplaza) — el archivo queda en el repo por
+    // si hace falta volver atrás, pero esta llamada tiene que
+    // sobrevivir a que no esté, o el login entero tira ReferenceError.
+    if (typeof cargarDiccionarioCarinosoEnElTelefono === 'function') {
+      cargarDiccionarioCarinosoEnElTelefono();
+    }
 
     arrancarLaApp();
 
@@ -493,7 +604,11 @@ async function encender() {
     sincronizarPaletaConServidor();
     sincronizarSandwichConServidor();
     sincronizarFrasesConServidor();
-    sincronizarDiccionarioCarinosoConServidor();
+    // ⚡ (2026-08-30) Mismo motivo que arriba: 46-agente-motivador.js
+    // dejó de cargarse.
+    if (typeof sincronizarDiccionarioCarinosoConServidor === 'function') {
+      sincronizarDiccionarioCarinosoConServidor();
+    }
 
     // Deja guardada una copia de cada sección por si se corta la señal
     // más tarde (Fase 8 del rediseño). Mismo criterio: no se espera, no

@@ -30,6 +30,7 @@
      GET  ?accion=ver&id=7  devuelve el archivo
      GET  ?accion=listar&tipo=gasto&id=3
      POST ?accion=borrar
+     GET  ?accion=huerfanos (solo admin) — archivos sin dueño vivo
    ══════════════════════════════════════════════════════════════════════ */
 
 require_once __DIR__ . '/_lib/bd.php';
@@ -41,7 +42,10 @@ exigirPermiso($yo, 'archivos', ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' ?
 $accion = (string) ($_GET['accion'] ?? 'listar');
 
 /** Dónde viven los archivos. */
-$CARPETA = dirname(__DIR__) . '/archivos';
+// carpetaDeArchivos() (_lib/entorno.php): se puede mover fuera del
+// árbol del despliegue con CARPETA_ARCHIVOS en el .env. Sin esa
+// línea devuelve `admin/archivos`, igual que antes.
+$CARPETA = carpetaDeArchivos();
 
 /** Cuánto puede pesar cada uno. 8 MB alcanza para una foto de teléfono. */
 const PESO_MAXIMO = 8388608;
@@ -231,15 +235,21 @@ case 'ver':
     header('Content-Type: ' . $fila['tipo_mime']);
     header('Content-Length: ' . filesize($ruta));
 
-    /* inline para las imágenes (se ven en la app) y attachment para los
-       PDF (se descargan). El nombre va entre comillas y sin comillas
-       internas, para que un nombre raro no rompa la cabecera. */
+    /* inline para las imágenes y los PDF (se ven en la app, en su visor
+       nativo del navegador) y attachment para cualquier otro tipo (Word,
+       Excel, lo que sea — eso el navegador no sabe mostrarlo, así que se
+       descarga). Antes solo las imágenes eran inline: los recibos y
+       contratos (PDF) se descargaban de una en vez de abrirse, y no
+       había forma de "verlos" sin buscar el archivo descargado a mano
+       (2026-08-27). El nombre va entre comillas y sin comillas internas,
+       para que un nombre raro no rompa la cabecera. */
     /* Se sacan también los saltos de línea, no solo las comillas. Un \r
        o un \n en el nombre parte la cabecera en dos y deja meter otras
        cabeceras inventadas debajo. El nombre lo escribe quien sube el
        archivo, así que no es un dato de confianza. */
     $nombre = preg_replace('/[\r\n"]/', '', $fila['nombre_real']);
-    $como   = strpos($fila['tipo_mime'], 'image/') === 0 ? 'inline' : 'attachment';
+    $esVisible = strpos($fila['tipo_mime'], 'image/') === 0 || $fila['tipo_mime'] === 'application/pdf';
+    $como = $esVisible ? 'inline' : 'attachment';
     header("Content-Disposition: $como; filename=\"$nombre\"");
 
     // Privado: que no lo guarde ningún intermediario, solo el navegador.
@@ -297,6 +307,60 @@ case 'borrar':
     anotarEnBitacora($yo, 'borró un archivo', 'archivos', $id, $fila['nombre_real']);
 
     responderBien(['mensaje' => 'Archivo eliminado.']);
+    break;
+
+
+/* ─── HUÉRFANOS: archivos que quedaron sin dueño ────────────────────────
+   POR QUÉ HACE FALTA
+   `atado_a_tipo`/`atado_a_id` es una atadura lógica, no una foreign key
+   de verdad — no hay ninguna que lo sea, porque un archivo puede atarse
+   a diez tablas distintas y MySQL no permite una FK a "la que
+   corresponda". Eso significa que borrar un proveedor, un gasto o un
+   pago NO borra ni avisa de sus contratos/recibos/comprobantes: se
+   quedan apuntando a un id que ya no existe, invisibles para siempre
+   (y viajando igual en cada respaldo semanal). Esto es solo un
+   diagnóstico de lectura — nunca borra nada solo. */
+
+case 'huerfanos':
+    exigirMetodo('GET');
+    exigirAdministrador();
+
+    // A qué tabla real corresponde cada valor de atado_a_tipo. 'nota'
+    // apunta a una tabla que existe en la migración pero que ningún
+    // módulo usa todavía — se deja afuera para no generar ruido de una
+    // funcionalidad que nunca llegó a construirse.
+    $tablaDeCadaTipo = [
+        'gasto'      => 'gastos',
+        'pago'       => 'pagos',
+        'proveedor'  => 'proveedores',
+        'padrino'    => 'padrinos',
+        'categoria'  => 'categorias_gasto',
+        'cotizacion' => 'cotizaciones',
+        'tarea'      => 'tareas',
+        'regalo'     => 'regalos',
+        // 'confirmaciones' es una tabla que ya existía antes de este
+        // proyecto y no vive en migracion.sql (ver la nota grande de
+        // columnasDe() en _lib/bd.php) — por eso se comprueba con
+        // existeTabla() más abajo antes de usarla, como con cualquier
+        // otra.
+        'invitado'   => 'confirmaciones',
+    ];
+
+    $huerfanos = [];
+    foreach ($tablaDeCadaTipo as $tipo => $tabla) {
+        if (!existeTabla($tabla)) continue;
+
+        $filas = consultarTodo(
+            "SELECT a.id, a.nombre_real, a.atado_a_tipo, a.atado_a_id, a.creado_en
+             FROM archivos a
+             LEFT JOIN `$tabla` t ON t.id = a.atado_a_id
+             WHERE a.atado_a_tipo = :tipo AND t.id IS NULL",
+            [':tipo' => $tipo]
+        );
+        foreach ($filas as $fila) $huerfanos[] = $fila;
+    }
+
+    responderBien($huerfanos);
     break;
 
 

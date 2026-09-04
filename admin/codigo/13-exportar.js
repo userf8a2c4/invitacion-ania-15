@@ -350,9 +350,9 @@ function exportarPresupuesto(formato) {
     {
       titulo: 'Proveedores',
       encabezados: ['Nombre', 'Servicio', 'Total (' + moneda + ')',
-                    'Anticipo (' + moneda + ')', 'Estado', 'Teléfono'],
+                    'Pagado (' + moneda + ')', 'Estado', 'Teléfono'],
       filas: DINERO.proveedores.map(p => [
-        p.nombre, p.servicio || '', monto(p.monto_total), monto(p.anticipo),
+        p.nombre, p.servicio || '', monto(p.monto_total), monto(p.pagado_real),
         p.estado, p.telefono || '',
       ]),
     },
@@ -437,18 +437,23 @@ async function exportarResumenEjecutivoDinero() {
    * gasto puntual. Las tres cuentan una parte distinta de la misma
    * historia y ver solo una desorienta.
    *
-   * "De tu bolsillo si nadie más entrega" usa `entregadoTotal` (calculado
-   * acá mismo) y NO `t.bolsillo_si_nadie_mas_entrega` (que manda el
-   * servidor): ese número del servidor resta solo lo YA APLICADO a un
-   * gasto puntual, así que con aportes entregados pero todavía sin
-   * asignar a un gasto (el caso más común: el padrino ya pagó, falta
-   * cargar en qué se usó) mostraba el costo total completo como si nadie
-   * hubiera entregado nada — contradecía a la propia fila de arriba. */
+   * ⚡ EL SERVIDOR YA NO CONTRADICE A ESTE REPORTE (2026-09-03). Acá se
+   * calculaba `entregadoTotal` a mano y se evitaba a propósito el
+   * `t.bolsillo_si_nadie_mas_entrega` del servidor, porque ese restaba
+   * solo lo YA APLICADO a un gasto puntual: con aportes entregados pero
+   * todavía sin asignar (el caso más común — el padrino ya pagó, falta
+   * cargar en qué se usó) mostraba el costo entero como si nadie
+   * hubiera entregado nada. Ahora el servidor usa este mismo criterio
+   * (ver cifrasDelPresupuesto en _lib/dinero.php), así que los dos dan
+   * lo mismo. Se sigue calculando acá porque el desglose por capas
+   * —prometido / entregado / aplicado— es propio de este reporte.
+   *
+   * `monto_entregado` es la columna nueva: una entrega parcial cuenta
+   * por lo que se entregó, no por todo o nada como hacía `estado`. */
   const padrinosDinero = (DINERO.padrinos || []).filter(p => p.tipo_aporte === 'dinero');
   const prometidoTotal = padrinosDinero.reduce((s, p) => s + (Number(p.monto) || 0), 0);
   const entregadoTotal = padrinosDinero
-    .filter(p => p.estado === 'entregado')
-    .reduce((s, p) => s + (Number(p.monto) || 0), 0);
+    .reduce((s, p) => s + (Number(p.monto_entregado) || 0), 0);
   const coberturaPct = t.costo > 0 ? Math.round((prometidoTotal / t.costo) * 100) : null;
 
   const padrinos = prometidoTotal > 0 || (t.de_padrinos > 0) ? [

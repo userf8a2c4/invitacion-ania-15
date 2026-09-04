@@ -39,6 +39,7 @@
 require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
+require_once __DIR__ . '/_lib/dinero.php';
 
 $yo     = exigirAdministrador();
 $accion = (string) ($_GET['accion'] ?? 'servicios');
@@ -198,12 +199,12 @@ case 'comparar':
 
     /* Si no dijeron cuántas personas, se usa la cantidad real de
        confirmados: es el número con el que hay que decidir. */
-    if ($personas <= 1 && existeTabla('confirmaciones')) {
-        $fila = consultarUno(
-            'SELECT COALESCE(SUM(adultos + ninos), 0) AS n
-             FROM confirmaciones WHERE asiste = 1'
-        );
-        $personas = max(1, (int) ($fila['n'] ?? 0));
+    // genteQueAsiste() (_lib/dinero.php): la MISMA cuenta que usa el
+    // costo por invitado de Dinero. Antes acá era `SUM(adultos + ninos)`
+    // y allá `SUM(adultos) + SUM(ninos)`: dos divisores para comparar lo
+    // mismo.
+    if ($personas <= 1) {
+        $personas = max(1, genteQueAsiste());
     }
 
     $cotizaciones = consultarTodo(
@@ -223,25 +224,43 @@ case 'comparar':
         return $a['total'] <=> $b['total'];
     });
 
-    /* ─── Cuánto pesa en el presupuesto ──────────────────────────────── */
+    /* ─── Cuánto pesa en el presupuesto ────────────────────────────────
+     *
+     * ⚡ ESTA PANTALLA CONTABA CON OTRA REGLA (2026-09-03)
+     * Acá se sumaba `SUM(monto_real)` a secas: sin el fallback al
+     * estimado y sin filtrar por plan, o sea sumando todos los
+     * escenarios juntos. Es exactamente el bug que _lib/dinero.php
+     * describe como corregido, sobreviviendo en el comparador — que
+     * mostraba tres cifras que no coincidían con ninguna otra pantalla,
+     * justo mientras se decide cuál salón contratar.
+     *
+     * Ahora sale de la MISMA fuente que Dinero e Inicio. */
     $presupuesto = null;
     if (existeTabla('gastos')) {
-        $totales = consultarUno(
-            'SELECT COALESCE(SUM(monto_real), 0) AS gastado,
-                    COALESCE(SUM(CASE WHEN padrino_id IS NULL
-                                      THEN monto_real ELSE 0 END), 0) AS propio
-             FROM gastos'
-        );
+        $porPlan = existeTabla('presupuestos')
+                 && in_array('presupuesto_id', columnasDe('gastos'), true)
+                 && in_array('presupuesto_id', columnasDe('categorias_gasto'), true);
 
+        $cifras = cifrasDelPresupuesto($porPlan ? presupuestoActivo() : null, $porPlan);
+
+        /* El techo, con el mismo filtro de plan que todo lo demás: sumar
+           los techos de los dos escenarios daba un límite que no existe
+           en ninguno de los dos. */
         $techo = 0;
         if (existeTabla('categorias_gasto')) {
-            $t = consultarUno('SELECT COALESCE(SUM(techo), 0) AS n FROM categorias_gasto');
+            $t = consultarUno(
+                'SELECT COALESCE(SUM(techo), 0) AS n FROM categorias_gasto' .
+                ($porPlan ? ' WHERE presupuesto_id = :activo' : ''),
+                $porPlan ? [':activo' => presupuestoActivo()] : []
+            );
             $techo = (float) ($t['n'] ?? 0);
         }
 
         $presupuesto = [
-            'gastado' => (float) $totales['gastado'],
-            'propio'  => (float) $totales['propio'],
+            // `gastado` conserva su nombre —lo lee 21-cotizador.js— pero
+            // ahora es el costo con la regla de siempre.
+            'gastado' => $cifras['costo'],
+            'propio'  => $cifras['propio'],
             'techo'   => $techo,
         ];
     }
@@ -371,7 +390,11 @@ case 'a_presupuesto':
               ]);
     }
 
-    $gastoId = insertar('gastos', [
+    /* conPresupuestoActivo: el gasto nace en el plan que se está
+       mirando. Sin eso, pasar una cotización al presupuesto teniendo
+       abierto un segundo escenario la mandaba al Plan 1 y no aparecía
+       en el que se estaba armando. */
+    $gastoId = insertar('gastos', conPresupuestoActivo([
         'concepto'      => $cotizacion['servicio'] . ' · ' . $cotizacion['proveedor'],
         'proveedor_id'  => $proveedorId,
         'presupuestado' => $calculo['total'],
@@ -379,7 +402,7 @@ case 'a_presupuesto':
         'notas'         => 'Desde la cotización, calculado para ' . $personas .
                            ' personas. Base ' . number_format($calculo['base'], 2) .
                            ', extras ' . number_format($calculo['extras'], 2) . '.',
-    ]);
+    ]));
 
     // Y queda marcada como la elegida, desmarcando las otras del rubro.
     ejecutar('UPDATE cotizaciones SET elegida = 0 WHERE servicio = :s',

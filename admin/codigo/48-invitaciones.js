@@ -1,0 +1,1151 @@
+/* ══════════════════════════════════════════════════════════════════════
+   48-INVITACIONES.JS · LISTA PRECARGADA, LINK PERSONAL, BOLETOS LIMITADOS
+
+   QUÉ HACE ESTE ARCHIVO
+   Pinta la sección "Invitaciones" dentro de la pestaña Gente. Es el
+   modelo sustractivo: se precarga cada grupo familiar con un cupo fijo
+   de lugares y —opcionalmente— los nombres de quienes lo integran; el
+   bot de mesas (admin/api/mesas.php) los ve como asistentes desde el
+   día uno. Ver la nota grande en admin/api/invitaciones.php.
+
+   DOS VERDADES SEPARADAS, A PROPÓSITO
+   "Apartados" (cupo reservado, para el acomodo) nunca se muestra como
+   sinónimo de "Confirmados" (quien de verdad contestó que sí). Ver la
+   fila de totales de dibujarInvitaciones().
+
+   NADIE ES "TITULAR". Una invitación es del GRUPO. Cualquiera de sus
+   integrantes puede ser a quien se le mande el link — nunca se dice
+   "titular" ni "acompañante" en la interfaz.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Última respuesta de invitaciones.php?accion=listar, para no volver a
+    pedirla en cada filtro. */
+let INVITACIONES = [];
+let FILTRO_INVITACIONES = 'todas';
+
+/** La fecha límite para confirmar, en texto — viene del servidor
+    (ajuste `fecha_limite_confirmar`), NUNCA de `CONFIGURACION.fiesta`:
+    ese dato vive en el sitio público (codigo/01-configuracion.js), que
+    es una app completamente separada y nunca se carga acá. */
+let FECHA_LIMITE_TEXTO = '';
+
+/**
+ * Los huecos que se pueden poner en el texto de la invitación.
+ *
+ * Se insertan con botones, nunca escribiendo las llaves a mano: escribir
+ * `{lugares}` bien, con la llave y sin acento y sin plural equivocado,
+ * es exactamente la clase de detalle que no se puede pedir. El botón lo
+ * pone bien siempre.
+ */
+const HUECOS_DE_LA_INVITACION = [
+  { marca: '{nombre}',       rotulo: 'el nombre',       ejemplo: 'Familia Zelaya' },
+  { marca: '{lugares}',      rotulo: 'los lugares',     ejemplo: '4 lugares' },
+  { marca: '{link}',         rotulo: 'el link',         ejemplo: 'https://aniaxv.com/?i=…' },
+  { marca: '{fecha_limite}', rotulo: 'la fecha límite', ejemplo: '10 de octubre' },
+  /* No es un hueco que se rellena: son las DOS formas de decir lo
+     mismo. La primera va a las invitaciones de un solo pase; la
+     segunda, a las de dos o más. Ver resolverSingularPlural(). */
+  { marca: '[tu|su]',        rotulo: 'uno o varios',   ejemplo: 'su' },
+];
+
+/**
+ * El texto con el que se manda la invitación si nadie lo cambió.
+ *
+ * Tuteo mexicano, igual palabra por palabra en WhatsApp y en correo (ver
+ * la nota grande del plan sobre la voz). Es el que devuelve el botón
+ * "Volver al texto original" del editor.
+ */
+const TEXTO_INVITACION_ORIGINAL =
+  '✦ Ania cumple quince años ✦\n\n' +
+  '{nombre}:\n\n' +
+  'Hay fechas que uno quiere recordar acompañado, y esta es una de ellas. ' +
+  'Nos dará mucha alegría contar [contigo|con ustedes].\n\n' +
+  'Hemos reservado {lugares} a [tu|su] nombre.\n\n' +
+  'Aquí está [tu|su] invitación. Ahí mismo [puedes|pueden] confirmar y elegir [tu|su] menú:\n' +
+  '{link}\n\n' +
+  '[Te|Les] pedimos confirmar antes del {fecha_limite}. ' +
+  '[Puedes|Pueden] modificar [tu|su] respuesta cuantas veces [gustes|gusten] hasta esa fecha.';
+
+/**
+ * Los textos por omisión ANTERIORES, palabra por palabra.
+ *
+ * El texto es editable y hay una copia guardada en `ajustes`. Si esa
+ * copia es una versión vieja del texto por omisión —o sea, nadie lo
+ * editó nunca de verdad— cambiar el de arriba no serviría de nada: se
+ * seguiría mandando el viejo, en plural para todos. Comparándola contra
+ * esta lista se puede actualizar esa copia sin pisarle el texto a nadie
+ * que lo haya escrito a mano.
+ *
+ * TIENE QUE SER IDÉNTICA a textosPorOmisionAnteriores() en
+ * admin/api/invitaciones.php.
+ */
+const TEXTOS_INVITACION_ANTERIORES = [
+  // El original, con la palabra "lugares" pegada al marcador.
+  '✦ Ania cumple quince años ✦\n\n' +
+  '{nombre}:\n\n' +
+  'Hay fechas que uno quiere recordar acompañado, y esta es una de ellas. ' +
+  'Nos dará mucha alegría contar con ustedes.\n\n' +
+  'Hemos reservado {lugares} lugares a su nombre.\n\n' +
+  'Aquí está su invitación. Ahí mismo pueden confirmar y elegir su menú:\n' +
+  '{link}\n\n' +
+  'Les pedimos confirmar antes del {fecha_limite}. ' +
+  'Pueden modificar su respuesta cuantas veces gusten hasta esa fecha.',
+
+  // El del 2026-09-04 por la mañana, ya sin la palabra pegada.
+  '✦ Ania cumple quince años ✦\n\n' +
+  '{nombre}:\n\n' +
+  'Hay fechas que uno quiere recordar acompañado, y esta es una de ellas. ' +
+  'Nos dará mucha alegría contar con ustedes.\n\n' +
+  'Hemos reservado {lugares} a su nombre.\n\n' +
+  'Aquí está su invitación. Ahí mismo pueden confirmar y elegir su menú:\n' +
+  '{link}\n\n' +
+  'Les pedimos confirmar antes del {fecha_limite}. ' +
+  'Pueden modificar su respuesta cuantas veces gusten hasta esa fecha.',
+];
+
+/** El texto que se está usando: el guardado en ajustes, o el original. */
+let TEXTO_INVITACION = TEXTO_INVITACION_ORIGINAL;
+
+/**
+ * Deja `FECHA_LIMITE_TEXTO` cargada antes de que haga falta.
+ *
+ * POR QUÉ SE ESPERA Y NO SE PIDE "DE PASO"
+ * Esto era un `.then()` suelto disparado al entrar a Gente. Entrar y
+ * tocar "Mandar por WhatsApp" enseguida —con mala señal, lo más
+ * probable— armaba el texto antes de que la respuesta llegara, y la
+ * invitación salía SIN el párrafo que pide confirmar. No fallaba nada
+ * ni se veía distinto: simplemente faltaba el pedido.
+ *
+ * Se espera acá, mientras se pinta la lista, y no en el toque del
+ * botón: un `await` dentro del click le haría perder el gesto del
+ * usuario y el navegador bloquearía la ventana de WhatsApp.
+ *
+ * @param {boolean} [forzar] - Volver a pedirla aunque ya esté cargada.
+ * @returns {Promise<void>}
+ */
+async function asegurarFechaLimiteDeConfirmacion(forzar) {
+  if (FECHA_LIMITE_TEXTO && !forzar) return;
+
+  try {
+    const r = await traer('ajustes.php?accion=obtener&clave=fecha_limite_confirmar');
+    if (r && r.valor) FECHA_LIMITE_TEXTO = formatearFechaLimiteLarga(r.valor);
+  } catch (error) {
+    /* No es crítico: el mensaje sale sin la fecha límite, que es
+       exactamente lo que pasaba antes de que esto existiera. */
+  }
+}
+
+/** Si ya se pidió el texto guardado en esta sesión. */
+let TEXTO_INVITACION_CARGADO = false;
+
+/**
+ * Deja `TEXTO_INVITACION` cargado desde ajustes.
+ *
+ * Igual que la fecha límite, se ESPERA mientras se pinta la lista y no
+ * en el toque del botón: un `await` dentro del click le haría perder el
+ * gesto del usuario y el navegador bloquearía la ventana de WhatsApp.
+ *
+ * Si falla, se usa el texto original: mandar la invitación de siempre es
+ * infinitamente mejor que no poder mandar ninguna.
+ *
+ * @param {boolean} [forzar]
+ * @returns {Promise<void>}
+ */
+async function asegurarTextoDeInvitacion(forzar) {
+  if (TEXTO_INVITACION_CARGADO && !forzar) return;
+
+  try {
+    const r = await traer('ajustes.php?accion=obtener&clave=texto_invitacion');
+    const guardado = (r && r.valor) ? r.valor : '';
+
+    /* Una copia guardada que es palabra por palabra un texto por
+       omisión VIEJO significa que nadie lo editó nunca: se usa el nuevo,
+       que trae los [uno|varios]. Un texto escrito a mano se respeta. */
+    TEXTO_INVITACION = (guardado && !TEXTOS_INVITACION_ANTERIORES.includes(guardado))
+      ? guardado
+      : TEXTO_INVITACION_ORIGINAL;
+    TEXTO_INVITACION_CARGADO = true;
+  } catch (error) {
+    TEXTO_INVITACION = TEXTO_INVITACION_ORIGINAL;
+  }
+}
+
+/**
+ * Rellena los huecos de una plantilla con los datos de una invitación.
+ *
+ * LA REGLA DE LA FECHA LÍMITE
+ * Si todavía no hay fecha límite cargada, el RENGLÓN ENTERO donde va
+ * `{fecha_limite}` desaparece. Reemplazarla por vacío dejaría "Les
+ * pedimos confirmar antes del ." en la invitación de alguien, que es
+ * peor que no pedirlo. Es la única regla de este tipo, y el editor la
+ * explica.
+ *
+ * @param {string} plantilla
+ * @param {Object} inv - { nombre, pases, link }
+ * @returns {string}
+ */
+/**
+ * Resuelve los `[uno|varios]` del texto.
+ *
+ * ⚠️ POR QUÉ EXISTE (2026-09-04)
+ * El texto le hablaba a un grupo de punta a punta — "contar con
+ * ustedes", "a su nombre", "pueden confirmar", "Les pedimos" — aunque
+ * la invitación fuera de UN SOLO pase. Son nueve palabras, no una: el
+ * arreglo del plural de "lugares" resolvió la primera y dejó las ocho
+ * restantes, y el mensaje siguió sonando raro para quien viene solo.
+ *
+ * TIENE QUE DECIR LO MISMO QUE resolverSingularPlural() en
+ * admin/api/invitaciones.php: son los dos canales de la misma
+ * invitación.
+ *
+ * @param {string} texto
+ * @param {boolean} esUno
+ * @returns {string}
+ */
+function resolverSingularPlural(texto, esUno) {
+  // Sin corchetes ni barras adentro de cada lado: así un corchete
+  // suelto en el texto no se come media frase.
+  return String(texto).replace(/\[([^\[\]|]*)\|([^\[\]|]*)\]/g,
+                               (todo, uno, varios) => (esUno ? uno : varios));
+}
+
+/**
+ * "1 lugar" / "4 lugares", con el número adelante.
+ *
+ * TIENE QUE DECIR LO MISMO QUE lugaresEnPalabras() en
+ * admin/api/invitaciones.php: son los dos canales de la misma
+ * invitación, y la vista previa de acá tiene que mostrar exactamente lo
+ * que va a mandar el servidor.
+ *
+ * @param {number} cuantos
+ * @returns {string}
+ */
+function lugaresEnPalabras(cuantos) {
+  const n = Number(cuantos) || 0;
+  return n + (n === 1 ? ' lugar' : ' lugares');
+}
+
+/**
+ * Quita la palabra "lugares" pegada después de `{lugares}`.
+ *
+ * ⚠️ Una plantilla GUARDADA desde antes del 2026-09-04 trae la palabra
+ * escrita a mano ("{lugares} lugares"), que es lo que hacía que a una
+ * familia de un solo pase le llegara "Hemos reservado 1 lugares". Ahora
+ * el marcador ya trae la palabra, así que la pegada sobra. Se limpia al
+ * leer, no en la base: mismo criterio que conLugaresSinPluralPegado()
+ * en admin/api/invitaciones.php.
+ *
+ * @param {string} texto
+ * @returns {string}
+ */
+function conLugaresSinPluralPegado(texto) {
+  return String(texto).replace(/\{lugares\}\s+lugar(?:es)?\b/gu, '{lugares}');
+}
+
+function rellenarHuecosDeInvitacion(plantilla, inv) {
+  let texto = String(plantilla);
+
+  if (!FECHA_LIMITE_TEXTO) {
+    texto = texto
+      .split('\n')
+      .filter(renglon => !renglon.includes('{fecha_limite}'))
+      .join('\n');
+  }
+
+  return resolverSingularPlural(conLugaresSinPluralPegado(texto),
+                                Number(inv.pases) === 1)
+    .split('{nombre}').join(inv.nombre || '')
+    .split('{lugares}').join(inv.pases == null ? '' : lugaresEnPalabras(inv.pases))
+    .split('{link}').join(inv.link || '')
+    .split('{fecha_limite}').join(FECHA_LIMITE_TEXTO)
+    // Un hueco quitado puede dejar tres saltos seguidos donde había dos.
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * Pinta la sección "Invitaciones".
+ *
+ * @param {Element} cuerpo
+ * @returns {Promise<void>}
+ */
+async function dibujarInvitaciones(cuerpo) {
+  pintarCargando(cuerpo, 4);
+
+  try {
+    const respuesta = await traer('invitaciones.php?accion=listar');
+    INVITACIONES = respuesta.filas || [];
+    FECHA_LIMITE_TEXTO = respuesta.fecha_limite_texto || '';
+    pintarListaDeInvitaciones(cuerpo, respuesta.totales, respuesta.capacidad);
+  } catch (error) {
+    pintarError(cuerpo, error.message, () => dibujarInvitaciones(cuerpo));
+  }
+}
+
+/**
+ * Arma el HTML de la lista + fila de totales + filtros.
+ *
+ * @param {Element} cuerpo
+ * @param {Object} totales
+ * @param {number} capacidad
+ * @returns {void}
+ */
+function pintarListaDeInvitaciones(cuerpo, totales, capacidad) {
+  const t = totales || {};
+
+  const filtros = [
+    ['todas',        'Todas'],
+    ['sin_enviar',   'Sin enviar'],
+    ['sin_responder','Sin responder'],
+    ['confirmada',   'Confirmadas'],
+    ['declinada',    'No vienen'],
+    ['sin_telefono', 'Sin teléfono'],
+  ];
+
+  const visibles = INVITACIONES.filter(filtroDeInvitacionPasa);
+
+  cuerpo.innerHTML =
+    '<div class="tarjeta" style="padding:var(--esp-3);margin-bottom:var(--esp-3)">' +
+      '<p class="vacio__texto" style="margin:0">' +
+        'Apartados <strong>' + seguro(t.apartados || 0) + '</strong> · ' +
+        'Confirmados <strong>' + seguro(t.confirmadas || 0) + '</strong> · ' +
+        'Sin responder <strong>' + seguro(t.sin_responder || 0) + '</strong> · ' +
+        'No vienen <strong>' + seguro(t.declinadas || 0) + '</strong>' +
+        (capacidad ? ' · Capacidad de mesas <strong>' + seguro(capacidad) + '</strong>' : '') +
+      '</p>' +
+    '</div>' +
+
+    '<button type="button" class="lista__fila" id="inv-configurar" ' +
+      'style="margin-bottom:var(--esp-2)">⚙️ Fecha límite para confirmar</button>' +
+
+    /* Mandar a todos, sin entrar de a una. Los botones aparecen solo
+       si hay a quién mandarle: con todo respondido, no tienen nada que
+       hacer ahí ocupando la pantalla que se usa para revisar. */
+    (pendientesDeInvitar().length
+      ? '<div class="acciones" style="margin-bottom:var(--esp-2);flex-wrap:wrap">' +
+          (pendientesConCorreo().length
+            ? '<button class="boton" id="inv-todos-correo">Mandar a todos por correo</button>'
+            : '') +
+          (pendientesConWhatsApp().length
+            ? '<button class="boton" id="inv-todos-whatsapp">WhatsApp, uno por uno</button>'
+            : '') +
+        '</div>'
+      : '') +
+
+    '<div class="filtros" style="margin-bottom:var(--esp-2);flex-wrap:wrap">' +
+      filtros.map(f =>
+        '<button class="filtro' + (FILTRO_INVITACIONES === f[0] ? ' activo' : '') +
+        '" data-filtro-inv="' + f[0] + '">' + seguro(f[1]) + '</button>'
+      ).join('') +
+    '</div>' +
+
+    '<div id="lista-invitaciones"></div>' +
+    botonAgregar('Nueva invitación');
+
+  buscar('#inv-configurar', cuerpo).addEventListener('click', abrirConfiguracionDeInvitaciones);
+
+  const botonTodosCorreo = buscar('#inv-todos-correo', cuerpo);
+  if (botonTodosCorreo) {
+    botonTodosCorreo.addEventListener('click', () =>
+      mandarInvitacionesPorCorreoATodos(cuerpo, botonTodosCorreo));
+  }
+
+  const botonTodosWhatsApp = buscar('#inv-todos-whatsapp', cuerpo);
+  if (botonTodosWhatsApp) {
+    botonTodosWhatsApp.addEventListener('click', () => abrirColaDeWhatsApp(cuerpo));
+  }
+
+  buscarTodos('[data-filtro-inv]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', () => {
+      FILTRO_INVITACIONES = boton.dataset.filtroInv;
+      pintarListaDeInvitaciones(cuerpo, totales, capacidad);
+    });
+  });
+
+  const listaEl = buscar('#lista-invitaciones', cuerpo);
+
+  if (!visibles.length) {
+    pintarVacio(listaEl, 'No hay invitaciones aquí',
+      'Cambia el filtro o crea la primera con el botón de abajo.');
+  } else {
+    listaEl.innerHTML = visibles.map(filaDeInvitacion).join('');
+    buscarTodos('[data-inv]', listaEl).forEach(fila => {
+      fila.addEventListener('click', () => {
+        const inv = INVITACIONES.find(i => String(i.id) === fila.dataset.inv);
+        if (inv) abrirDetalleDeInvitacion(inv);
+      });
+    });
+  }
+
+  buscar('#agregar', cuerpo).addEventListener('click', () => abrirFormularioDeInvitacion());
+}
+
+/**
+ * Si una invitación pasa el filtro activo.
+ *
+ * @param {Object} inv
+ * @returns {boolean}
+ */
+/* ─── MANDAR A TODOS ────────────────────────────────────
+
+   POR QUÉ SON DOS CAMINOS Y NO UNO
+   El correo se puede mandar de verdad a todos: el servidor recibe una
+   lista de ids y los manda él (invitaciones.php, acción enviar_correo).
+
+   WhatsApp NO. Abrir un chat es `window.open('https://wa.me/…')`, y el
+   navegador solo lo permite dentro del gesto de una persona: un bucle
+   abriría una ventana y el resto quedarían bloqueadas. No hay forma de
+   automatizarlo desde el navegador, y prometerlo sería peor que no
+   ofrecerlo. Lo que sí se puede es sacarle la parte tediosa: una cola
+   que lleva la cuenta, arma el texto y marca cada uno como enviado, de
+   modo que el trabajo se reduzca a tocar dos botones por invitado.
+*/
+
+/**
+ * Las invitaciones a las que todavía hay que mandarles algo.
+ *
+ * Mismo criterio que el filtro "Sin responder" de la lista
+ * (filtroDeInvitacionPasa), para que el botón y el filtro nunca digan
+ * números distintos.
+ *
+ * @returns {Array}
+ */
+function pendientesDeInvitar() {
+  return INVITACIONES.filter(inv =>
+    inv.estado === 'sin_enviar' || inv.estado === 'enviada');
+}
+
+/** Las pendientes que tienen correo cargado. @returns {Array} */
+function pendientesConCorreo() {
+  return pendientesDeInvitar().filter(inv => String(inv.correo || '').trim() !== '');
+}
+
+/** Las pendientes con un teléfono que sirve para WhatsApp. @returns {Array} */
+function pendientesConWhatsApp() {
+  return pendientesDeInvitar().filter(inv => sirveParaWhatsApp(inv.telefono));
+}
+
+/** De a cuántos se manda por vez. Ver la nota de abajo. */
+const CORREOS_POR_TANDA = 5;
+
+/**
+ * Manda la invitación por correo a todos los que faltan.
+ *
+ * ⚠️ SE MANDA POR TANDAS, Y NO TODO DE UNA (2026-09-04)
+ * El servidor manda los correos DENTRO de la petición, uno tras otro,
+ * con hasta 35 segundos de espera por cada conexión SMTP. Con 51
+ * invitaciones, una sola petición superaría el tiempo máximo de PHP y
+ * moriría a mitad: correos ya salidos, respuesta perdida, y ninguna
+ * forma de saber cuáles llegaron.
+ *
+ * De a cinco, cada petición dura pocos segundos, se ve el avance de
+ * verdad, y si una tanda falla las anteriores ya quedaron registradas.
+ *
+ * @param {Element} cuerpo
+ * @param {Element} boton
+ * @returns {Promise<void>}
+ */
+async function mandarInvitacionesPorCorreoATodos(cuerpo, boton) {
+  const conCorreo = pendientesConCorreo();
+  const sinCorreo = pendientesDeInvitar().length - conCorreo.length;
+
+  if (!conCorreo.length) {
+    avisar('No hay a quién mandarle: los que faltan no tienen correo cargado.', true);
+    return;
+  }
+
+  if (!await confirmarAccion(
+    '¿Mandar la invitación por correo a ' +
+      pluralizar(conCorreo.length, 'grupo', 'grupos') + '?\n\n' +
+    'Van solo los que todavía no respondieron.' +
+    (sinCorreo
+      ? ' Quedan ' + pluralizar(sinCorreo, 'grupo', 'grupos') +
+        ' sin correo cargado: a esos hay que mandarles por WhatsApp.'
+      : ''),
+    { confirmar: 'Mandar a ' + conCorreo.length })) return;
+
+  const rotulo = boton.textContent;
+  boton.disabled = true;
+
+  let mandados = 0;
+  let fallidos = 0;
+  let corte = '';
+
+  for (let desde = 0; desde < conCorreo.length; desde += CORREOS_POR_TANDA) {
+    const tanda = conCorreo.slice(desde, desde + CORREOS_POR_TANDA);
+    boton.textContent = 'Mandando… ' + desde + ' de ' + conCorreo.length;
+
+    try {
+      const r = await mandar('invitaciones.php?accion=enviar_correo',
+                             { ids: tanda.map(inv => inv.id) });
+      mandados += Number(r && r.mandados) || 0;
+      fallidos += Number(r && r.fallidos) || 0;
+    } catch (error) {
+      /* Se corta acá: si el servidor dejó de contestar, seguir
+         insistiendo con las tandas que faltan solo suma correos a medio
+         mandar. Lo que ya salió quedó registrado. */
+      corte = error.message;
+      break;
+    }
+  }
+
+  boton.disabled = false;
+  boton.textContent = rotulo;
+
+  if (mandados) registrarEvento('accion', 'invitaciones_por_correo', { cuantos: mandados });
+
+  avisar(
+    corte
+      ? 'Se mandaron ' + mandados + ' de ' + conCorreo.length + ' y se cortó: ' + corte
+      : (fallidos
+          ? 'Se mandaron ' + mandados + '. ' +
+            pluralizar(fallidos, 'correo no salió', 'correos no salieron') + '.'
+          : 'Listo: ' + pluralizar(mandados, 'invitación enviada', 'invitaciones enviadas') + '.'),
+    !!(corte || fallidos)
+  );
+
+  await dibujarInvitaciones(cuerpo);
+}
+
+/**
+ * Abre la cola guiada de WhatsApp.
+ *
+ * Muestra de a uno: el nombre, cuántos van y cuántos faltan, y un botón
+ * que abre el chat con el texto ya puesto. Al volver, se elige si se
+ * mandó (se marca como enviada y pasa al siguiente) o si se saltea.
+ *
+ * El estado vive acá adentro, en una variable de la función: si se
+ * cierra la hoja se pierde, y eso está bien — al reabrirla, los que ya
+ * se marcaron no vuelven a aparecer, porque la lista se recalcula.
+ *
+ * @param {Element} cuerpo
+ * @returns {void}
+ */
+function abrirColaDeWhatsApp(cuerpo) {
+  const cola = pendientesConWhatsApp();
+  if (!cola.length) {
+    avisar('No hay a quién mandarle por WhatsApp: a los que faltan no les ' +
+           'falta teléfono o ya respondieron.', true);
+    return;
+  }
+
+  let enCual = 0;
+  let mandados = 0;
+
+  const hoja = abrirHoja('Mandar por WhatsApp', '<div id="cola-wa"></div>');
+  const donde = buscar('#cola-wa', hoja);
+
+  const pintar = () => {
+    if (enCual >= cola.length) {
+      donde.innerHTML =
+        '<div class="vacio">' +
+          '<p class="vacio__titulo">Terminaste la vuelta</p>' +
+          '<p class="vacio__texto">' +
+            seguro(pluralizar(mandados, 'invitación marcada como enviada',
+                              'invitaciones marcadas como enviadas')) + '.' +
+          '</p>' +
+        '</div>';
+      return;
+    }
+
+    const inv = cola[enCual];
+
+    donde.innerHTML =
+      '<p class="vacio__texto" style="margin:0 0 var(--esp-1)">' +
+        seguro((enCual + 1) + ' de ' + cola.length) +
+        (mandados ? ' · ' + seguro(mandados) + ' marcadas' : '') +
+      '</p>' +
+
+      '<div class="tarjeta" style="padding:var(--esp-3);margin-bottom:var(--esp-3)">' +
+        '<p style="margin:0 0 var(--gota);font-size:16px">' + seguro(inv.nombre) + '</p>' +
+        '<p class="vacio__texto" style="margin:0">' +
+          seguro(inv.telefono || '') + ' · ' +
+          seguro(pluralizar(Number(inv.pases) || 0, 'pase', 'pases')) +
+        '</p>' +
+      '</div>' +
+
+      '<div class="acciones" style="flex-wrap:wrap">' +
+        '<button class="boton boton--principal" id="wa-abrir">Abrir el chat</button>' +
+      '</div>' +
+
+      /* Los dos de abajo aparecen desde el principio, no después de
+         abrir: si WhatsApp no abre por lo que sea, tiene que haber
+         forma de seguir sin quedarse trabado en este. */
+      '<div class="acciones" style="margin-top:var(--esp-2);flex-wrap:wrap">' +
+        '<button class="boton" id="wa-listo">Ya lo mandé → siguiente</button>' +
+        '<button class="boton" id="wa-saltar">Saltar</button>' +
+      '</div>';
+
+    buscar('#wa-abrir', donde).addEventListener('click', () => {
+      /* window.open TIENE que correr dentro del gesto, sin ningún await
+         antes: con una espera de por medio el navegador lo bloquea. */
+      const texto = textoDeInvitacion(inv);
+      window.open('https://wa.me/' + paraWhatsApp(inv.telefono) +
+                  '?text=' + encodeURIComponent(texto), '_blank');
+    });
+
+    buscar('#wa-listo', donde).addEventListener('click', async () => {
+      try {
+        await mandar('invitaciones.php?accion=marcar_enviada', { id: inv.id });
+        mandados++;
+      } catch (error) {
+        // Que no se pueda anotar no puede frenar la vuelta: lo importante
+        // es el mensaje, y el estado se puede corregir después a mano.
+        avisar('Se abrió el chat pero no se pudo anotar como enviada.', true);
+      }
+      enCual++;
+      pintar();
+    });
+
+    buscar('#wa-saltar', donde).addEventListener('click', () => {
+      enCual++;
+      pintar();
+    });
+  };
+
+  pintar();
+
+  /* Al cerrar la hoja se repinta la lista de atrás: las que se marcaron
+     tienen que verse con su estado nuevo. */
+  AL_CERRAR_HOJA = () => dibujarInvitaciones(cuerpo);
+}
+
+
+function filtroDeInvitacionPasa(inv) {
+  switch (FILTRO_INVITACIONES) {
+    case 'sin_telefono':    return !inv.telefono;
+    case 'sin_responder':   return inv.estado === 'sin_enviar' || inv.estado === 'enviada';
+    case 'sin_enviar':
+    case 'confirmada':
+    case 'declinada':       return inv.estado === FILTRO_INVITACIONES;
+    default:                return true;
+  }
+}
+
+/** Etiqueta visual de cada estado — mismo patrón de clases que ya usa
+    09-vista-dinero.js (etiqueta--bien / etiqueta--alerta / etiqueta--tenue). */
+// (2026-08-30) "Enviada" pasa de gris a azul (etiqueta--info) para que
+// coincida con el punto de color de la lista de Invitados: gris =
+// nadie la tocó todavía, azul = se mandó y espera respuesta.
+const ETIQUETA_DE_ESTADO_INV = {
+  sin_enviar:  '<span class="etiqueta etiqueta--tenue">Sin enviar</span>',
+  enviada:     '<span class="etiqueta etiqueta--info">Enviada</span>',
+  confirmada:  '<span class="etiqueta etiqueta--bien">Confirmada</span>',
+  declinada:   '<span class="etiqueta etiqueta--alerta">No viene</span>',
+};
+
+/** Mismos cuatro estados, en texto plano — para donde hace falta el
+    valor solo (la ficha de detalle), sin el <span> de la lista. */
+const TEXTO_DE_ESTADO_INV = {
+  sin_enviar: 'Sin enviar',
+  enviada:    'Enviada, sin responder',
+  confirmada: 'Confirmada',
+  declinada:  'No viene',
+};
+
+/**
+ * Una fila de la lista de invitaciones.
+ *
+ * @param {Object} inv
+ * @returns {string}
+ */
+function filaDeInvitacion(inv) {
+  const pie = seguro(inv.pases) + ' ' + (Number(inv.pases) === 1 ? 'lugar' : 'lugares') +
+    (inv.grupo_nombre ? ' · ' + seguro(inv.grupo_nombre) : '') +
+    (!inv.telefono ? ' · Sin teléfono' : '');
+
+  return '' +
+    '<button class="lista__fila" data-inv="' + seguro(inv.id) + '">' +
+      '<span class="lista__cuerpo">' +
+        '<span class="lista__titulo">' + seguro(inv.nombre) + '</span>' +
+        '<span class="lista__pie">' + pie + '</span>' +
+      '</span>' +
+      (ETIQUETA_DE_ESTADO_INV[inv.estado] || '') +
+    '</button>';
+}
+
+/**
+ * Ficha de una invitación: link, y las acciones de envío/edición/borrado.
+ *
+ * @param {Object} inv
+ * @returns {void}
+ */
+function abrirDetalleDeInvitacion(inv) {
+  const detalle = [
+    ['Grupo', inv.nombre],
+    ['Lugares apartados', inv.pases],
+    ['Estado', TEXTO_DE_ESTADO_INV[inv.estado] || inv.estado],
+    ['Teléfono', inv.telefono || '—'],
+    ['Correo', inv.correo || '—'],
+  ].map(r =>
+    '<span class="detalle__rotulo">' + seguro(r[0]) + '</span>' +
+    '<span class="detalle__valor">' + seguro(r[1]) + '</span>'
+  ).join('');
+
+  const cuerpo = abrirHoja(inv.nombre,
+    '<div class="detalle">' + detalle + '</div>' +
+    '<div class="campo" style="margin-top:var(--esp-3)">' +
+      '<span class="campo__rotulo">Link personal</span>' +
+      '<input type="text" id="inv-link" class="campo__control" value="' +
+        seguro(inv.link) + '" readonly>' +
+    '</div>' +
+    '<div class="acciones" style="margin-top:var(--esp-2);flex-wrap:wrap">' +
+      /* ⚡ (2026-08-28) Antes se mostraba con cualquier `telefono` no
+         vacío, aunque no sirviera para WhatsApp (muy corto, un interno,
+         etc.) — el botón abría wa.me/?text=… sin destinatario y encima
+         se marcaba como "enviada". sirveParaWhatsApp() (02-utilidades.js)
+         es la misma comprobación que ya usa paraWhatsApp() más abajo. */
+      (sirveParaWhatsApp(inv.telefono)
+        ? '<button class="boton boton--principal" id="inv-whatsapp">Mandar por WhatsApp</button>'
+        : '') +
+      '<button class="boton" id="inv-copiar">Copiar link</button>' +
+      (inv.correo
+        ? '<button class="boton" id="inv-correo">Mandar por correo</button>'
+        : '') +
+    '</div>' +
+    '<div class="acciones" style="margin-top:var(--esp-2)">' +
+      '<button class="boton boton--peligro" id="inv-borrar">Borrar</button>' +
+      '<button class="boton boton--principal" id="inv-editar">Editar</button>' +
+    '</div>'
+  );
+
+  const marcarEnviadaSiHaceFalta = async () => {
+    try { await mandar('invitaciones.php?accion=marcar_enviada', { id: inv.id }); }
+    catch (error) { /* no bloquea el envío si esto falla */ }
+  };
+
+  const botonWhatsapp = buscar('#inv-whatsapp', cuerpo);
+  if (botonWhatsapp) {
+    botonWhatsapp.addEventListener('click', async () => {
+      const texto = textoDeInvitacion(inv);
+      const numero = paraWhatsApp(inv.telefono);
+      window.open('https://wa.me/' + numero + '?text=' + encodeURIComponent(texto), '_blank');
+      await marcarEnviadaSiHaceFalta();
+    });
+  }
+
+  buscar('#inv-copiar', cuerpo).addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(inv.link);
+    } catch (error) {
+      const campo = buscar('#inv-link', cuerpo);
+      campo.removeAttribute('readonly');
+      campo.select();
+      document.execCommand('copy');
+      campo.setAttribute('readonly', 'readonly');
+    }
+    avisar('Link copiado.');
+    await marcarEnviadaSiHaceFalta();
+  });
+
+  const botonCorreo = buscar('#inv-correo', cuerpo);
+  if (botonCorreo) {
+    botonCorreo.addEventListener('click', async () => {
+      if (!await confirmarAccion('¿Mandar la invitación por correo a ' + inv.nombre + '?')) return;
+      try {
+        const r = await mandar('invitaciones.php?accion=enviar_correo', {
+          ids: [inv.id],
+        });
+        avisar(r.mandados ? 'Correo enviado.' : 'No se pudo mandar.', !r.mandados);
+        // ⚡ (2026-08-28) Sin cerrar la hoja primero, la ficha vieja
+        // quedaba encima del fondo recién repintado por dibujarGente().
+        cerrarHoja(true);
+        dibujarGente();
+      } catch (error) { avisar(error.message, true); }
+    });
+  }
+
+  buscar('#inv-editar', cuerpo).addEventListener('click', () => abrirFormularioDeInvitacion(inv));
+
+  buscar('#inv-borrar', cuerpo).addEventListener('click', async () => {
+    if (!await confirmarAccion('¿Borrar esta invitación y su confirmación? No se puede deshacer.')) return;
+    mandar('invitaciones.php?accion=borrar', { id: inv.id })
+      .then(() => { cerrarHoja(true); avisar('Invitación eliminada.'); dibujarGente(); })
+      .catch(error => avisar(error.message, true));
+  });
+}
+
+/**
+ * El texto de WhatsApp/correo — tuteo mexicano, igual palabra por
+ * palabra en los dos canales (ver la nota grande del plan sobre voz).
+ *
+ * @param {Object} inv
+ * @returns {string}
+ */
+function textoDeInvitacion(inv) {
+  return rellenarHuecosDeInvitacion(TEXTO_INVITACION, inv);
+}
+
+
+/* ─── FORMULARIO: CREAR/EDITAR ────────────────────────────────────────── */
+
+/** Personas cargadas en el formulario abierto (se arma en memoria y se
+    manda entero al guardar — nunca se sincroniza fila por fila con el
+    servidor mientras se edita, solo al tocar Guardar). */
+let PERSONAS_DEL_FORMULARIO = [];
+
+/**
+ * Abre el formulario de alta/edición de una invitación.
+ *
+ * @param {Object} [inv]
+ * @returns {Promise<void>}
+ */
+function abrirFormularioDeInvitacion(inv) {
+  const d = inv || {};
+  PERSONAS_DEL_FORMULARIO = (d.personas || []).slice();
+
+  /* ⚡ (2026-08-28) Antes el `await traer('mesas.php?accion=todo')` corría
+     ACÁ, antes de abrirHoja(): con red lenta no pasaba nada visible en
+     pantalla por varios segundos, y un doble toque impaciente disparaba
+     dos veces esta función, cada una pisando la misma global
+     PERSONAS_DEL_FORMULARIO. Ahora la hoja se abre de inmediato (el
+     selector de grupo arranca con solo "Sin grupo") y los grupos reales
+     se cargan y se agregan al selector después, en segundo plano. */
+  const cuerpo = abrirHoja(inv ? 'Editar invitación' : 'Nueva invitación',
+    campoTexto({ id: 'inv-nombre', rotulo: 'Nombre del grupo', valor: d.nombre,
+                 pista: 'Familia Zelaya, Ana y Miguel…' }) +
+
+    campoTelefono({ id: 'inv-telefono', rotulo: 'Teléfono (para WhatsApp)', valor: d.telefono }) +
+    campoTexto({ id: 'inv-correo', rotulo: 'Correo', tipo: 'email', valor: d.correo }) +
+
+    campoListaAmpliable({
+      id: 'inv-grupo',
+      rotulo: 'Grupo (para sentarlos juntos)',
+      valor: d.grupo_id ? String(d.grupo_id) : '',
+      textoAgregar: 'Crear grupo nuevo…',
+      // Arranca solo con "Sin grupo"; los grupos reales se agregan más
+      // abajo, apenas responde mesas.php?accion=todo (ver cargarGrupos()).
+      opciones: [{ valor: '', texto: 'Sin grupo' }],
+    }) +
+
+    '<div class="campo">' +
+      '<span class="campo__rotulo">Personas del grupo (opcional)</span>' +
+      '<p class="vacio__texto" style="margin:4px 0 8px">' +
+        'Si no sabes los nombres todavía, déjalo vacío y pon solo cuántos lugares apartas.' +
+      '</p>' +
+      '<div id="inv-personas"></div>' +
+      '<button type="button" class="boton boton--chico" id="inv-agregar-persona" ' +
+        'style="margin-top:var(--esp-1)">Agregar persona</button>' +
+    '</div>' +
+
+    '<div id="inv-caja-pases">' +
+      campoTexto({ id: 'inv-pases', rotulo: 'Lugares apartados', tipo: 'number',
+                   valor: d.pases || 1 }) +
+    '</div>' +
+
+    /* ⚡ (2026-08-28) `pieDeFormulario(texto, conBorrar)` pintaba un botón
+       "Borrar" acá con `!!inv`, pero nunca se le enganchó ningún listener
+       — un botón muerto. El borrado real ya vive en la ficha de detalle
+       (#inv-borrar, con su confirmación); acá siempre va `false`. */
+    pieDeFormulario('Guardar', false)
+  );
+
+  engancharListaAmpliable('inv-grupo', cuerpo);
+
+  // Carga los grupos reales en segundo plano y los agrega al selector,
+  // sin bloquear la apertura de la hoja. Si para cuando responde el
+  // usuario ya cerró la hoja, document.contains() lo detecta y no toca
+  // nada — cuerpo es el <section> que abrirHoja() ya sacó del DOM.
+  (async () => {
+    let grupos = [];
+    try {
+      const datosDeMesas = await traer('mesas.php?accion=todo');
+      grupos = datosDeMesas.grupos || [];
+    } catch (error) { return; /* sin grupos, se sigue igual */ }
+    if (!grupos.length || !document.contains(cuerpo)) return;
+
+    const selectorGrupo = buscar('#inv-grupo', cuerpo);
+    if (!selectorGrupo) return;
+    const opcionAgregar = selectorGrupo.querySelector('option[value="__nuevo__"]');
+    grupos.forEach(g => {
+      const opcion = document.createElement('option');
+      opcion.value = String(g.id);
+      opcion.textContent = g.nombre;
+      if (d.grupo_id && String(d.grupo_id) === String(g.id)) opcion.selected = true;
+      selectorGrupo.insertBefore(opcion, opcionAgregar);
+    });
+  })();
+
+  const listaPersonas = buscar('#inv-personas', cuerpo);
+  const cajaPases     = buscar('#inv-caja-pases', cuerpo);
+
+  const actualizarCajaPases = () => {
+    const hayPersonas = PERSONAS_DEL_FORMULARIO.some(p => (p.nombre || '').trim() !== '');
+    cajaPases.classList.toggle('oculto', hayPersonas);
+  };
+
+  const repintarPersonas = () => {
+    listaPersonas.innerHTML = PERSONAS_DEL_FORMULARIO.map((p, i) =>
+      '<div class="campo-par" data-persona-fila="' + i + '" style="align-items:flex-end;margin-bottom:var(--esp-1)">' +
+        '<label class="campo" style="flex:2">' +
+          '<input type="text" class="campo__control" data-persona-nombre placeholder="Nombre" ' +
+                 'value="' + seguro(p.nombre || '') + '">' +
+        '</label>' +
+        '<label class="campo" style="flex:1">' +
+          '<select class="campo__control" data-persona-tipo>' +
+            '<option value="adulto"' + (p.tipo !== 'nino' ? ' selected' : '') + '>Adulto</option>' +
+            '<option value="nino"' + (p.tipo === 'nino' ? ' selected' : '') + '>Niño</option>' +
+          '</select>' +
+        '</label>' +
+        '<button type="button" class="boton boton--chico" data-persona-quitar>Quitar</button>' +
+      '</div>'
+    ).join('');
+
+    buscarTodos('[data-persona-nombre]', listaPersonas).forEach((input, i) => {
+      input.addEventListener('input', () => {
+        PERSONAS_DEL_FORMULARIO[i].nombre = input.value;
+        actualizarCajaPases();
+      });
+    });
+    buscarTodos('[data-persona-tipo]', listaPersonas).forEach((select, i) => {
+      select.addEventListener('change', () => { PERSONAS_DEL_FORMULARIO[i].tipo = select.value; });
+    });
+    buscarTodos('[data-persona-quitar]', listaPersonas).forEach((boton, i) => {
+      boton.addEventListener('click', () => {
+        PERSONAS_DEL_FORMULARIO.splice(i, 1);
+        repintarPersonas();
+        actualizarCajaPases();
+      });
+    });
+  };
+
+  buscar('#inv-agregar-persona', cuerpo).addEventListener('click', () => {
+    PERSONAS_DEL_FORMULARIO.push({ nombre: '', tipo: 'adulto' });
+    repintarPersonas();
+    actualizarCajaPases();
+    const ultimo = listaPersonas.querySelector('[data-persona-fila]:last-child [data-persona-nombre]');
+    if (ultimo) ultimo.focus();
+  });
+
+  repintarPersonas();
+  actualizarCajaPases();
+
+  buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
+    const nombre = valorDe('inv-nombre', cuerpo);
+    if (!nombre) { avisar('Falta el nombre del grupo.', true); return; }
+
+    let grupoElegido = valorDe('inv-grupo', cuerpo);
+    let grupoId = 0;
+
+    if (grupoElegido === '__nuevo__') {
+      const nombreNuevo = valorDe('inv-grupo-nuevo', cuerpo);
+      if (!nombreNuevo) { avisar('Escribe el nombre del grupo nuevo.', true); return; }
+      try {
+        const r = await mandar('mesas.php?accion=guardar_grupo', { nombre: nombreNuevo });
+        grupoId = r.id;
+      } catch (error) { avisar(error.message, true); return; }
+    } else if (grupoElegido) {
+      grupoId = Number(grupoElegido);
+    }
+
+    const personasValidas = PERSONAS_DEL_FORMULARIO
+      .filter(p => (p.nombre || '').trim() !== '')
+      .map(p => ({ id: p.id, nombre: p.nombre.trim(), tipo: p.tipo === 'nino' ? 'nino' : 'adulto' }));
+
+    const carga = {
+      nombre: nombre,
+      telefono: valorTelefonoDe('inv-telefono', cuerpo),
+      correo: valorDe('inv-correo', cuerpo),
+      grupo_id: grupoId,
+      personas: personasValidas,
+    };
+    /* Sin nombres cargados, los lugares salen del número puesto a mano.
+       El invitado los ve como "Adulto 1", "Niño 2" hasta que se carguen
+       los nombres reales — ver la nota en admin/api/invitaciones.php. */
+    if (!personasValidas.length) {
+      carga.pases = Math.max(1, Number(valorDe('inv-pases', cuerpo)) || 1);
+    }
+    if (inv) carga.id = inv.id;
+
+    try {
+      const r = await mandar('invitaciones.php?accion=guardar', carga);
+      cerrarHoja(true);
+      avisar('Guardado.');
+      // ⚡ (2026-08-30) Cupo sustractivo: se avisa, no se bloquea — la
+      // decisión de sobre-reservar es de Lucila, no del formulario.
+      if (r && r.se_excede) avisar(r.aviso, true);
+      // ⚡ (2026-08-28) Si el filtro activo era, por ejemplo, "Confirmadas"
+      // y se crea una invitación nueva (nace "Sin enviar"), sin este
+      // reset la lista repintada la esconde y parece que no se guardó
+      // nada. Volver siempre a "Todas" tras guardar.
+      FILTRO_INVITACIONES = 'todas';
+      dibujarGente();
+    } catch (error) { avisar(error.message, true); }
+  });
+}
+
+
+/* ─── CONFIGURACIÓN: FECHA LÍMITE Y TEXTO DE LA INVITACIÓN ───────────── */
+
+/**
+ * Cuándo se cierran las ediciones (?i=TOKEN deja de poder cambiarse
+ * después de esta fecha; una primera respuesta tardía sigue
+ * aceptándose — ver la nota grande en confirmar.php), y con qué texto
+ * se manda la invitación.
+ *
+ * Las dos cosas se guardan en `ajustes` (mismo patrón que
+ * admin/codigo/47-config-documentos.js). La fecha va en formato
+ * AAAA-MM-DD para poder compararla contra la de hoy del lado del
+ * servidor — nunca como texto libre en español.
+ *
+ * POR QUÉ EL TEXTO SE EDITA ACÁ
+ * Vivía fijo en el código. Cambiar una palabra —"lugares" por "pases",
+ * agregar el código de vestimenta, corregir un tuteo— era pedirle a
+ * Carlos que tocara un archivo y volviera a subir la web. El texto de
+ * la invitación es de Lucila, no del programa.
+ *
+ * @returns {Promise<void>}
+ */
+async function abrirConfiguracionDeInvitaciones() {
+  let valorActual = '2026-10-01';
+  try {
+    const r = await traer('ajustes.php?accion=obtener&clave=fecha_limite_confirmar');
+    if (r && r.valor) valorActual = r.valor;
+  } catch (error) { /* se usa el respaldo */ }
+
+  await asegurarTextoDeInvitacion(true);
+
+  /* La vista previa se arma con un invitado REAL de la lista: con datos
+     de mentira no se ve si el texto queda bien con un nombre largo de
+     verdad, ni se puede tocar el link para comprobar que abre.
+
+     Sale de INVITADOS (08-vista-invitados.js) y no de INVITACIONES:
+     esta última la llena dibujarInvitaciones(), que quedó inalcanzable
+     cuando la sección se fusionó con Gente, así que siempre está vacía.
+     Si todavía no hay ninguno con link, se usa uno de muestra. */
+  const real = (typeof INVITADOS !== 'undefined' ? INVITADOS : [])
+    .find(f => f.invitacion_link);
+
+  const muestra = real
+    ? { nombre: real.nombre, pases: real.invitacion_pases, link: real.invitacion_link }
+    : { nombre: 'Familia Zelaya', pases: 4,
+        link: 'https://aniaxv.com/?i=EJEMPLO' };
+
+  const cuerpo = abrirHoja('Invitaciones',
+    '<div class="tarjeta__titulo">Fecha límite para confirmar</div>' +
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+      'Hasta esta fecha, cada grupo puede entrar a su link y cambiar su ' +
+      'respuesta cuantas veces quiera. Después de esa fecha, ya no se ' +
+      'puede editar una respuesta ya dada — pero contestar por primera ' +
+      'vez, aunque sea tarde, sigue aceptándose.' +
+    '</p>' +
+    campoTexto({ id: 'cfg-inv-fecha-limite', rotulo: 'Fecha límite', tipo: 'date',
+                 valor: valorActual }) +
+
+    '<div style="border-top:1px solid var(--borde);margin:var(--esp-4) 0 var(--esp-3)"></div>' +
+
+    '<div class="tarjeta__titulo">El texto de la invitación</div>' +
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+      'Es el mismo por WhatsApp y por correo. Toca un botón para poner ' +
+      'un dato que cambia en cada invitación — no escribas las llaves a ' +
+      'mano.' +
+    '</p>' +
+
+    '<div class="acciones" style="flex-wrap:wrap;margin-bottom:var(--esp-2)">' +
+      HUECOS_DE_LA_INVITACION.map(h =>
+        '<button type="button" class="boton" data-hueco="' + seguro(h.marca) + '">' +
+          '+ ' + seguro(h.rotulo) +
+        '</button>'
+      ).join('') +
+    '</div>' +
+
+    campoLargo({ id: 'cfg-inv-texto', rotulo: 'Texto', valor: TEXTO_INVITACION }) +
+
+    '<div class="tarjeta__titulo" style="margin-top:var(--esp-2)">' +
+      'Así le va a llegar a ' + seguro(muestra.nombre) +
+    '</div>' +
+    '<div class="tarjeta" id="cfg-inv-previa" ' +
+         'style="white-space:pre-wrap;font-size:13px;line-height:1.5"></div>' +
+
+    '<button class="boton boton--ancho" id="cfg-inv-original" ' +
+            'style="margin-top:var(--esp-2)">Volver al texto original</button>' +
+
+    pieDeFormulario('Guardar')
+  );
+
+  const campoTextoInv = buscar('#cfg-inv-texto', cuerpo);
+  const previa        = buscar('#cfg-inv-previa', cuerpo);
+
+  /* La vista previa se rehace con cada tecla: es lo que convierte
+     "{lugares}" de una fórmula que hay que imaginar en una frase que se
+     lee. Sin ella, el editor pide entender el mecanismo. */
+  const repintarPrevia = () => {
+    previa.textContent = rellenarHuecosDeInvitacion(campoTextoInv.value, muestra);
+  };
+  campoTextoInv.addEventListener('input', repintarPrevia);
+  repintarPrevia();
+
+  buscarTodos('[data-hueco]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', () => {
+      insertarEnElCursor(campoTextoInv, boton.dataset.hueco);
+      repintarPrevia();
+    });
+  });
+
+  buscar('#cfg-inv-original', cuerpo).addEventListener('click', async () => {
+    if (!await confirmarAccion(
+      '¿Volver al texto original?\n\nSe pierde lo que hayas escrito acá.',
+      { confirmar: 'Volver al original', peligro: true })) return;
+
+    campoTextoInv.value = TEXTO_INVITACION_ORIGINAL;
+    repintarPrevia();
+  });
+
+  buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
+    const valor = valorDe('cfg-inv-fecha-limite', cuerpo);
+    if (!valor) { avisar('Elige una fecha.', true); return; }
+
+    const texto = campoTextoInv.value.trim();
+    if (!texto) { avisar('El texto no puede quedar vacío.', true); return; }
+
+    /* Sin el link, la invitación no invita a nada: es un mensaje lindo
+       sin forma de confirmar. Se impide y se explica, en vez de dejar
+       mandar cien mensajes inútiles. */
+    if (!texto.includes('{link}')) {
+      avisar('Falta el link: sin él nadie puede confirmar. ' +
+             'Toca "+ el link" para ponerlo.', true);
+      return;
+    }
+
+    try {
+      await mandar('ajustes.php?accion=guardar',
+        { clave: 'fecha_limite_confirmar', valor: valor });
+      await mandar('ajustes.php?accion=guardar',
+        { clave: 'texto_invitacion', valor: texto });
+
+      /* Sin esto, las globales se quedaban con lo viejo hasta la próxima
+         recarga completa de la app: se cambiaba la fecha límite, se
+         mandaban las invitaciones, y salían todas pidiendo confirmar
+         antes de la fecha anterior. */
+      FECHA_LIMITE_TEXTO = formatearFechaLimiteLarga(valor);
+      TEXTO_INVITACION   = texto;
+
+      cerrarHoja(true);
+      avisar('Guardado.');
+    } catch (error) { avisar(error.message, true); }
+  });
+}
+
+/**
+ * Mete un texto donde está el cursor de un campo, sin pisar lo escrito.
+ *
+ * POR QUÉ NO ES UN `valor += marca`
+ * Agregar siempre al final obliga a escribir el texto en el orden en
+ * que van los huecos, o a cortar y pegar. Insertando en el cursor, se
+ * escribe la frase y se pone el hueco donde va.
+ *
+ * @param {HTMLTextAreaElement|HTMLInputElement} campo
+ * @param {string} texto
+ * @returns {void}
+ */
+function insertarEnElCursor(campo, texto) {
+  const desde = campo.selectionStart != null ? campo.selectionStart : campo.value.length;
+  const hasta = campo.selectionEnd   != null ? campo.selectionEnd   : campo.value.length;
+
+  campo.value = campo.value.slice(0, desde) + texto + campo.value.slice(hasta);
+
+  // El cursor queda después de lo insertado, listo para seguir escribiendo.
+  const nuevo = desde + texto.length;
+  campo.focus();
+  campo.setSelectionRange(nuevo, nuevo);
+}

@@ -292,6 +292,11 @@ const SECCIONES = {
       { id: 'capacidad', rotulo: 'Cuántos caben', tipo: 'number' },
       { id: 'ubicacion', rotulo: 'Dónde está' },
       { id: 'notas',     rotulo: 'Notas', largo: true },
+      /* Dónde cae en el plano. Sin estos dos, una mesa creada a mano no
+         se podía ubicar por ninguna vía: el arrastre del plano solo
+         mueve lo que ya tiene lugar. En 0 = todavía sin ubicar. */
+      { id: 'fila',    rotulo: 'Fila en el plano (0 = sin ubicar)',    tipo: 'number' },
+      { id: 'columna', rotulo: 'Columna en el plano (0 = sin ubicar)', tipo: 'number' },
     ],
     fila: r => {
       // La ocupación viene calculada aparte, cruzando con las mesas.
@@ -304,6 +309,45 @@ const SECCIONES = {
         pie: r.ubicacion || '',
         lado: '<span class="etiqueta etiqueta--' + (lleno ? 'alerta' : 'tenue') + '">' +
               usados + ' / ' + seguro(r.capacidad) + '</span>',
+      };
+    },
+
+    /* Borrar una mesa levanta a todos sus sentados por CASCADE, candado
+       incluido, y hasta ahora la pregunta era la misma que para borrar
+       una canción: "¿Borrar esto?". Se dice a cuántos afecta y qué les
+       pasa — que es el dato con el que se decide. */
+    avisoAlBorrar: r => {
+      /* El registro puede venir de dos lados: de `MESAS` cuando se
+         borra desde la pantalla de Mesas —y ahí ya trae quién se
+         sienta— o de `EVENTO.mesas`, que no lo trae y hay que cruzarlo
+         con la ocupación. Se prefiere lo que venga en el registro
+         porque es lo que la persona tiene delante en ese momento. */
+      const oc = (EVENTO.ocupacion || []).find(o => String(o.id) === String(r.id));
+
+      const sentados = Array.isArray(r.invitados)
+        ? Number(r.ocupados || 0)
+        : (oc ? Number(oc.ocupados) : 0);
+
+      const fijados = Array.isArray(r.invitados)
+        ? r.invitados.filter(i => i.fijada).length
+        : (oc ? Number(oc.fijadas || 0) : 0);
+
+      if (!sentados) {
+        return { detalle: 'No hay nadie sentado en ella.',
+                 confirmar: 'Borrar la mesa' };
+      }
+
+      return {
+        detalle:
+          'Se sientan ' + sentados +
+          (sentados === 1 ? ' persona' : ' personas') +
+          (fijados ? ', ' + fijados + (fijados === 1
+                      ? ' fijada con candado' : ' fijadas con candado') : '') +
+          '. Si la borras, ' + (sentados === 1 ? 'vuelve' : 'vuelven') +
+          ' a «sin mesa».\n\n' +
+          'Se guarda una foto del acomodo: puedes recuperarlo desde ' +
+          'Reglas → Volver al acomodo anterior, salvo lo de esta mesa.',
+        confirmar: 'Borrar la mesa',
       };
     },
   },
@@ -354,7 +398,7 @@ const SECCIONES = {
     rotulo: 'Foráneos',
     titulo: 'Invitados de fuera',
     vacio: ['Todavía no hay nadie de fuera',
-            'Quién viene de otra ciudad, dónde se queda y cómo llega — se va a ver acá.'],
+            'Quién viene de otra ciudad, dónde se queda y cómo llega — se va a ver aquí.'],
     campos: [
       { id: 'nombre',     rotulo: 'Nombre' },
       { id: 'ciudad',     rotulo: 'De dónde viene' },
@@ -781,7 +825,10 @@ function elegirRegaloParaLaCompra(c) {
           precio:        item.precio || 0,
           enlace:        item.enlace || '',
           recibido_en:   item.recibido_en || '',
-          comprado_en:   c.fecha ? c.fecha.slice(0, 10) : new Date().toISOString().slice(0, 10),
+          // hoyEnFecha() y no toISOString(): en UTC, marcar un regalo
+          // como comprado después de las 18:00 lo guardaba con la fecha
+          // de mañana. Ver la nota en 02-utilidades.js.
+          comprado_en:   c.fecha ? c.fecha.slice(0, 10) : hoyEnFecha(),
           agradecido:    Number(item.agradecido) === 1,
           correo_origen: c.huella,
           notas:         item.notas || '',
@@ -916,10 +963,16 @@ function abrirDetalleGenerico(clave, registro) {
     '<span class="detalle__valor">' + seguro(comoTexto(campo)) + '</span>'
   ).join('');
 
+  /* Borrar es de administradora: una cuenta de entrada trabaja en la
+     puerta el día del evento y puede consultar, no destruir. El botón
+     no se pinta en vez de pintarlo y contestar 403 al tocarlo — mismo
+     criterio que Gente ya usa con INVITADOS_EDITABLES. */
   const cuerpo = abrirHoja(registro.id ? (config.fila(registro).titulo || config.titulo) : config.titulo,
     '<div class="detalle">' + detalle + '</div>' +
     '<div class="acciones" style="margin-top:var(--esp-3)">' +
-      '<button class="boton boton--peligro" id="detalle-borrar">Borrar</button>' +
+      (puedeBorrar()
+        ? '<button class="boton boton--peligro" id="detalle-borrar">Borrar</button>'
+        : '') +
       '<button class="boton boton--principal" id="detalle-editar">Editar</button>' +
     '</div>'
   );
@@ -928,8 +981,11 @@ function abrirDetalleGenerico(clave, registro) {
     formularioEvento(clave, registro);
   });
 
-  buscar('#detalle-borrar', cuerpo).addEventListener('click', async () => {
-    if (!confirmarAccion('¿Borrar esto? No se puede deshacer.')) return;
+  const botonBorrar = buscar('#detalle-borrar', cuerpo);
+  if (!botonBorrar) return;
+
+  botonBorrar.addEventListener('click', async () => {
+    if (!await preguntarAntesDeBorrar(clave, registro)) return;
     try {
       await mandar('evento.php?accion=borrar&que=' + clave, { id: registro.id });
       cerrarHoja(true);
@@ -939,6 +995,37 @@ function abrirDetalleGenerico(clave, registro) {
       avisar(error.message, true);
     }
   });
+}
+
+/**
+ * Pregunta antes de borrar un registro de cualquier sección de Evento.
+ *
+ * POR QUÉ NO ES UN confirmarAccion() SUELTO
+ * Las nueve secciones compartían la misma pregunta —"¿Borrar esto? No
+ * se puede deshacer."— y borrar una canción no se parece en nada a
+ * borrar una mesa con diez personas sentadas. La sección que tiene algo
+ * que advertir declara `avisoAlBorrar` y la pregunta cuenta qué se
+ * pierde; el resto sigue con la de siempre.
+ *
+ * @param {string} clave
+ * @param {Object} registro
+ * @returns {Promise<boolean>}
+ */
+async function preguntarAntesDeBorrar(clave, registro) {
+  const config = SECCIONES[clave];
+  const aviso  = config.avisoAlBorrar ? config.avisoAlBorrar(registro) : null;
+
+  const nombre = (config.fila && registro && registro.id)
+    ? (config.fila(registro).titulo || 'esto')
+    : 'esto';
+
+  if (!aviso) {
+    return confirmarAccion('¿Borrar ' + nombre + '?\n\nNo se puede deshacer.',
+                           { confirmar: 'Borrar', peligro: true });
+  }
+
+  return confirmarAccion('¿Borrar ' + nombre + '?\n\n' + aviso.detalle,
+                         { confirmar: aviso.confirmar || 'Borrar', peligro: true });
 }
 
 /**
@@ -984,7 +1071,10 @@ function formularioEvento(clave, registro) {
        —los datos sugeridos de un correo de Amazon— es un alta, y el
        botón Borrar no tiene qué borrar. */
     (registro && registro.id) ? 'Editar' : config.titulo,
-    campos + pieDeFormulario('Guardar', !!(registro && registro.id))
+    // Borrar solo si la fila existe Y esta cuenta puede borrar (ver
+    // puedeBorrar() en 04-sesion.js).
+    campos + pieDeFormulario('Guardar',
+      !!(registro && registro.id && puedeBorrar()))
   );
 
   buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
@@ -1024,7 +1114,7 @@ function formularioEvento(clave, registro) {
   const borrar = buscar('#pie-borrar', cuerpo);
   if (borrar) {
     borrar.addEventListener('click', async () => {
-      if (!confirmarAccion('¿Borrar esto? No se puede deshacer.')) return;
+      if (!await preguntarAntesDeBorrar(clave, registro)) return;
       try {
         await mandar('evento.php?accion=borrar&que=' + clave, { id: registro.id });
         cerrarHoja(true);

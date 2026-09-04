@@ -62,7 +62,27 @@ function registrarEvento(tipo, nombre, payload) {
       payload || {}
     );
 
-    mandar('metricas.php?accion=registrar', {
+    /* ⚡ LA TELEMETRÍA NO VIAJA EN LA COLA (2026-09-03)
+     *
+     * QUÉ PASABA
+     * Esto usaba mandar(), que sin señal ENCOLA la escritura junto a los
+     * pagos y los invitados. Un rato sin conexión acumulaba decenas de
+     * eventos de métrica; al volver la señal se mandaban todos de golpe,
+     * agotaban el techo de peticiones del servidor (300 cada 5 minutos
+     * por IP) y volvían con 429 — y cada rechazo se apartaba en "Cambios
+     * que el servidor rechazó", la bandeja donde Lucila tiene que ver
+     * los cambios de VERDAD que se perdieron.
+     *
+     * Resultado: una lista de "metricas.php?accion=registrar ·
+     * Demasiadas peticiones seguidas" que no le dice nada a nadie, y que
+     * de paso empujaba fuera de la cuota a las peticiones que sí
+     * importan.
+     *
+     * Un renglón de telemetría que no llega no es un cambio perdido: es
+     * un renglón de telemetría que no llega. Sin cola, falla y se pierde
+     * en silencio — que es exactamente lo que dice el comentario de
+     * arriba de esta función, y lo que no estaba pasando. */
+    mandarSinCola('metricas.php?accion=registrar', {
       tipo: tipo,
       nombre: nombre,
       payload: carga,

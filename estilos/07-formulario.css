@@ -153,16 +153,50 @@
   letter-spacing: .05em;
 }
 
+/* ⚡ TRES ZONAS EN LA MISMA FILA (2026-09-02): el plato a la izquierda y
+   la alergia de esa misma persona a la derecha. Antes la alergia colgaba
+   debajo del bloque y se leía como una nota suelta, sin quedar claro de
+   quién era. */
 .fila-persona__opciones {
+  display: grid;
+  grid-template-columns: 1fr minmax(150px, .8fr);
+  align-items: center;
+  gap: .5rem;
+}
+
+.fila-persona__menus {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: .5rem;
 }
 
-/* En celular, el nombre se pone arriba y las opciones abajo */
+.fila-persona__alergia {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.fila-persona__alergia-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .85em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* La caja del "¿cuál?" no se estira más de lo que hace falta. */
+.fila-persona__alergia input[type="text"] {
+  min-width: 0;
+  padding: .45rem .6rem;
+  font-size: .85em;
+}
+
+/* En celular todo se apila: nombre, plato y alergia, uno debajo del otro. */
 @media (max-width: 560px) {
   .fila-persona { grid-template-columns: 1fr; gap: .5rem; }
   .fila-persona__opciones { grid-template-columns: 1fr; }
+  .fila-persona__menus { grid-template-columns: 1fr; }
 }
 
 
@@ -352,3 +386,137 @@
   text-underline-offset: 3px;
 }
 .enlace-sutil:hover { color: var(--color-oro); }
+
+
+/* ─── CASILLAS DE LA LISTA DE PERSONAS ────────────────────────────────
+   Son dos preguntas de sí/no: "¿viene esta persona?" y "¿tiene alergia?".
+   Las dos van CUADRADAS, para que se lean distinto de los menús —que son
+   excluyentes y por eso llevan casilla redonda (.opcion-menu--unica)—.
+   Esa diferencia de forma no es decorativa: es la señal de que en una
+   fila se puede marcar todo lo que corresponda y en la otra hay que
+   elegir una sola cosa.
+
+   ⚠️ SIN ESTO NO SE VEÍAN. La regla genérica de más arriba
+   (.campo input) les pone `appearance: none` —que borra el tilde que
+   dibuja el sistema— y `width: 100%` —que las estira a lo ancho de la
+   fila—. O sea que la casilla de "viene" quedaba como un rectángulo
+   vacío que no cambiaba al tocarlo: la única señal de haber marcado a
+   alguien era que aparecían sus menús más abajo. Acá se les devuelve
+   forma, tamaño y, sobre todo, una marca inequívoca al elegirlas. */
+.fila-persona__nombre input[type="checkbox"],
+.fila-persona__alergia-check input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--borde-oro-fuerte);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .03);
+  cursor: pointer;
+  transition: all .25s;
+}
+
+/* La tilde vive siempre, transparente, para que al marcar no salte nada
+   de tamaño: solo aparece el color. */
+.fila-persona__nombre input[type="checkbox"]::after,
+.fila-persona__alergia-check input[type="checkbox"]::after {
+  content: '✓';
+  font-size: .95rem;
+  font-weight: bold;
+  line-height: 1;
+  color: transparent;
+  transition: color .2s;
+}
+
+.fila-persona__nombre input[type="checkbox"]:checked,
+.fila-persona__alergia-check input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, var(--color-oro), var(--color-oro-claro));
+  border-color: var(--color-oro-claro);
+  box-shadow: 0 0 10px rgba(201, 168, 76, .45);
+}
+.fila-persona__nombre input[type="checkbox"]:checked::after,
+.fila-persona__alergia-check input[type="checkbox"]:checked::after {
+  color: var(--color-negro);
+}
+
+/* Al navegar con el teclado tiene que verse cuál está enfocada. */
+.fila-persona__nombre input[type="checkbox"]:focus-visible,
+.fila-persona__alergia-check input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--color-oro-claro);
+  outline-offset: 2px;
+}
+
+/* Toda la fila se enciende cuando esa persona queda confirmada: así se ve
+   de un vistazo quiénes vienen, sin tener que leer casilla por casilla. */
+.fila-persona:has(input[data-persona-marcada]:checked) {
+  border-color: var(--color-oro);
+  background: rgba(201, 168, 76, .06);
+}
+.fila-persona:has(input[data-persona-marcada]:checked) .fila-persona__nombre {
+  color: var(--color-oro-claro);
+}
+
+
+/* ─── HERRAMIENTAS DE PRUEBA (solo en pbe.) ───────────────────────────
+   El contador de respuestas y el botón para reiniciar la invitación.
+   Se dibuja discreto y separado del formulario: no es parte de la
+   invitación, es andamio para poder probar. Va al final de la sección
+   y con el color apagado, para que nunca compita con lo que el invitado
+   tiene que leer.
+
+   ⚠️ Estas clases existen porque la primera versión reusó las del panel
+   de administración ('boton boton--fantasma'), que en esta web no están:
+   el botón salía como un control gris del navegador, en medio de una
+   página que cuida cada detalle. Son dos hojas de estilo distintas. */
+.herramientas-de-prueba {
+  /* ⚠️ ACÁ HABÍA UN TOKEN DEL PANEL (corregido 2026-09-03): decía
+     `var(--esp-4, 2rem)`, y --esp-4 es una variable de admin/estilos/, que
+     esta web no declara en ningún lado — era la única aparición de --esp- en
+     todo estilos/. Siempre caía al respaldo de 2rem, así que no se veía roto,
+     pero es exactamente el mismo error que este bloque documenta arriba:
+     escribir una pieza de la invitación con el vocabulario del panel. Se deja
+     el valor literal que de hecho se estaba usando. */
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px dashed rgba(201, 168, 76, .25);
+  text-align: center;
+}
+
+.herramientas-de-prueba__cuenta,
+.herramientas-de-prueba__rotulo {
+  margin: 0 0 .4rem;
+  font-family: var(--tipo-detalle);
+  font-size: .72rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--color-oro-texto);
+  opacity: .75;
+}
+
+.herramientas-de-prueba__boton {
+  font-family: var(--tipo-detalle);
+  font-size: .75rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--color-oro-claro);
+  background: transparent;
+  border: 1px solid var(--borde-oro-tenue);
+  border-radius: 4px;
+  padding: .5rem 1rem;
+  cursor: pointer;
+  transition: border-color .25s, color .25s;
+}
+.herramientas-de-prueba__boton:hover:not(:disabled) {
+  border-color: var(--color-oro);
+  color: var(--color-oro);
+}
+.herramientas-de-prueba__boton:disabled {
+  opacity: .5;
+  cursor: default;
+}

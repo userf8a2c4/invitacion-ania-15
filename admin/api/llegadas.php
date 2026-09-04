@@ -35,10 +35,10 @@ if (in_array($accion, ['consultar', 'marcar'], true) && !tieneEspecial($yo, 'esc
 }
 
 if (!existeTabla('confirmaciones')) {
-    responderMal('La tabla de confirmaciones no existe en esta base de datos.', 500);
+    responderMal('No encuentro la lista de invitados. Avísale a quien instaló el panel.', 500);
 }
 if (!existeTabla('llegadas')) {
-    responderMal('Falta correr la migración: no existe la tabla llegadas.', 500);
+    responderMal('Falta una parte de la instalación del panel. Avísale a quien lo instaló.', 500);
 }
 
 
@@ -88,13 +88,20 @@ case 'marcar':
         error_log('[Ania XV · llegadas] Pase reintentado tras ya haber entrado: ' .
                   ($fila['nombre'] ?? $codigo));
     } else {
+        /* intentando() (ver _lib/bd.php): sin esto el catch de abajo
+           era decorativo — el choque contra el UNIQUE KEY salía por
+           responderMal() con un 500, y la persona de la puerta veía
+           "no se pudo guardar" en un pase que SÍ había entrado. Es el
+           caso que este bloque dice atender desde que se escribió. */
         try {
-            insertar('llegadas', [
-                'confirmacion_id' => $fila['id'],
-                'marcado_por'     => (int) ($yo['id'] ?? 0),
-            ]);
-            anotarEnBitacora($yo, 'marcó una llegada', 'llegadas', $fila['id'],
-                             (string) ($fila['nombre'] ?? ''));
+            intentando(function () use ($fila, $yo) {
+                insertar('llegadas', [
+                    'confirmacion_id' => $fila['id'],
+                    'marcado_por'     => (int) ($yo['id'] ?? 0),
+                ]);
+                anotarEnBitacora($yo, 'marcó una llegada', 'llegadas', $fila['id'],
+                                 (string) ($fila['nombre'] ?? ''));
+            });
         } catch (Throwable $e) {
             // Choque por el UNIQUE KEY: alguien más lo marcó un instante
             // antes. No es un error del que haya que avisar como tal.
@@ -121,8 +128,24 @@ case 'resumen':
     $filaAsistian = consultarUno(
         "SELECT COALESCE(SUM(adultos + ninos), 0) AS n FROM confirmaciones WHERE asiste = 1"
     );
+    /* ⚠️ ACÁ SE CONTABAN FAMILIAS Y SE COMPARABAN CONTRA PERSONAS
+       (corregido 2026-09-03). Este COUNT(*) devolvía confirmaciones marcadas
+       —una familia de cuatro que cruza junta se marca una vez— y la pantalla
+       Hoy lo pintaba como fracción de `personas_esperadas`, con barra de
+       progreso al porcentaje (30-vista-hoy.js). Son unidades distintas: con
+       120 personas repartidas en 40 familias, el contador nunca podía pasar
+       de 40/120 y la barra decía 33 % con el salón lleno. Era la cifra más
+       grande de la pantalla del día del evento, y siempre estaba mal.
+
+       Marcar el pase de una familia significa que esa familia entró: sumar
+       sus `adultos + ninos` es la lectura honesta del dato que ya se tiene,
+       sin preguntarle nada más a nadie en la puerta. Las familias se siguen
+       devolviendo aparte, porque son el número que de verdad describe
+       cuántas veces se escaneó. */
     $filaLlegaron = consultarUno(
-        'SELECT COUNT(*) AS n FROM llegadas l
+        'SELECT COALESCE(SUM(c.adultos + c.ninos), 0) AS personas,
+                COUNT(*) AS grupos
+         FROM llegadas l
          JOIN confirmaciones c ON c.id = l.confirmacion_id
          WHERE c.asiste = 1'
     );
@@ -131,13 +154,13 @@ case 'resumen':
         'SELECT COUNT(*) AS n FROM llegadas WHERE intentos > 0'
     );
 
-    // "llegaron" cuenta CONFIRMACIONES marcadas, no personas: una familia
-    // de 4 que cruza junta se marca una vez. Para el contador grande de
-    // Hoy alcanza con eso — contar personas exigiría saber cuántas de
-    // cada grupo entraron por separado, que el escáner no pregunta.
     responderBien([
-        'confirmaciones_llegaron' => (int) ($filaLlegaron['n'] ?? 0),
+        'personas_llegaron'       => (int) ($filaLlegaron['personas'] ?? 0),
         'personas_esperadas'      => (int) ($filaAsistian['n'] ?? 0),
+        'grupos_llegaron'         => (int) ($filaLlegaron['grupos'] ?? 0),
+        // Se mantiene el nombre viejo un tiempo por si alguna pantalla
+        // quedó sin actualizar: mismo valor que grupos_llegaron.
+        'confirmaciones_llegaron' => (int) ($filaLlegaron['grupos'] ?? 0),
         'pases_reintentados'      => (int) ($filaReintentos['n'] ?? 0),
     ]);
     break;
