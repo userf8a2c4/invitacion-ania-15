@@ -91,6 +91,29 @@ case 'guardar':
         'telefono_contacto' => campoTexto($datos, 'telefono_contacto', 40),
     ];
 
+    /* ─── EL PUNTO EN EL MAPA ─────────────────────────────────────────
+       Va junto a la dirección escrita, no en vez de ella. Las dos cosas
+       sirven para algo distinto: la escrita la lee una persona, el punto
+       es el que abre bien en un mapa.
+
+       Se guarda NULL —no un cero— cuando no hay punto: 0,0 es un lugar
+       real en el Atlántico, y un repartidor mandado ahí no vuelve. */
+    $lat = isset($datos['lat']) && $datos['lat'] !== '' && $datos['lat'] !== null
+        ? (float) $datos['lat'] : null;
+    $lng = isset($datos['lng']) && $datos['lng'] !== '' && $datos['lng'] !== null
+        ? (float) $datos['lng'] : null;
+
+    // O están los dos o no está ninguno: media coordenada no ubica nada.
+    if ($lat === null || $lng === null) {
+        $lat = null;
+        $lng = null;
+    } elseif ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+        responderMal('Ese punto del mapa no es válido. Vuelve a marcarlo.', 400);
+    }
+
+    $valores['lat'] = $lat;
+    $valores['lng'] = $lng;
+
     if ($id > 0) {
         if (!consultarUno('SELECT id FROM direcciones_entrega WHERE id = :i', [':i' => $id])) {
             responderMal('Esa dirección ya no existe.', 404);

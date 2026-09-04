@@ -5,7 +5,7 @@
    Cuando se agrega algo nuevo al panel (un botón, una pantalla), un
    globito chico apunta a ESE elemento puntual y lo explica en una
    frase — nada de un tour de bienvenida con diez pasos ni un manual.
-   "1/3 ahora podés hacer esto", "2/3 para eso, tocá acá"…, terminando
+   "1/3 ahora puedes hacer esto", "2/3 para eso, toca aquí"…, terminando
    en un botón "Entendido". La próxima vez que se abra la app, esas
    mismas novedades ya no vuelven a aparecer.
 

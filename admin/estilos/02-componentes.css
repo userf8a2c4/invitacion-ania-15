@@ -872,6 +872,31 @@ select.campo__control {
   margin-bottom: var(--esp-2);
 }
 
+/* Los otros dos tonos del mismo cartel. Hasta ahora solo existía el rojo,
+   así que cualquier mensaje que NO fuera un error tenía que disfrazarse
+   de error o quedarse sin caja. Mismo molde, distinto color:
+     .aviso     algo que conviene mirar, pero no está mal (ámbar)
+     .aviso-ok  algo que quedó bien y vale decirlo (verde) */
+.aviso {
+  padding: var(--esp-1) var(--esp-2);
+  background: color-mix(in srgb, var(--ojo) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ojo) 40%, transparent);
+  border-radius: var(--redondeo-chico);
+  color: var(--ojo);
+  font-size: 13px;
+  margin-bottom: var(--esp-2);
+}
+
+.aviso-ok {
+  padding: var(--esp-1) var(--esp-2);
+  background: color-mix(in srgb, var(--bien) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bien) 40%, transparent);
+  border-radius: var(--redondeo-chico);
+  color: var(--bien);
+  font-size: 13px;
+  margin-bottom: var(--esp-2);
+}
+
 .tostada {
   position: fixed;
   left: 50%;
