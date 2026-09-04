@@ -293,6 +293,9 @@ $dia = [
     'llegaron'   => 0,   // PERSONAS que ya entraron (no familias: ver abajo)
     'grupos_llegaron' => 0,
     'esperados'  => 0,
+    // Los que de verdad contestaron. Ver la nota larga más abajo.
+    'confirmados' => 0,
+    'grupos_confirmados' => 0,
     'mesas_ocupadas' => 0,
     'mesas_total'     => 0,
     'alergias_activas' => 0,
@@ -327,6 +330,44 @@ if (existeTabla('llegadas') && existeTabla('confirmaciones')) {
     $dia['grupos_llegaron'] = (int) ($filaLlegaron['grupos'] ?? 0);
     $dia['esperados']  = (int) ($filaEsperados['n'] ?? 0);
     $dia['pases_reintentados'] = (int) ($filaReintentos['n'] ?? 0);
+
+    /* ⚠️ "APARTADOS" NO ES "CONFIRMADOS" (2026-09-04).
+       `esperados` cuenta `asiste = 1`, y una confirmación NACE con
+       asiste = 1: el cupo se reserva desde el día uno para que el bot de
+       mesas pueda acomodar antes de que nadie conteste (ver la nota del
+       modelo sustractivo en migracion.sql). O sea que ese número nunca
+       fue "confirmaron" — es "invitados", y la tarjeta de Hoy decía
+       "114 CONFIRMARON" con la invitación todavía sin mandar.
+
+       Quien de verdad CONTESTÓ es el mismo criterio que ya usan la lista
+       de Gente y el asistente: yaRespondio() (08-vista-invitados.js) —
+       tiene fecha de respuesta, o su invitación quedó confirmada o
+       declinada. Se replica acá, en SQL, para no obligar al teléfono a
+       bajarse la lista entera solo para contar.
+
+       `esperados` se deja como está: sigue siendo el total apartado, y
+       ahora es la mitad chica de "X de Y". */
+    if (existeTabla('invitaciones')) {
+        $colsInv = columnasDe('invitaciones');
+
+        // `respondida_en` es de una ronda posterior a la que creó la
+        // tabla: sin ella se cuenta solo por estado, que es lo que hacía
+        // yaRespondio() antes de que existiera.
+        $contesto = in_array('respondida_en', $colsInv, true)
+            ? "(i.respondida_en IS NOT NULL OR i.estado IN ('confirmada', 'declinada'))"
+            : "i.estado IN ('confirmada', 'declinada')";
+
+        $filaConfirmados = consultarUno(
+            'SELECT COALESCE(SUM(c.adultos + c.ninos), 0) AS personas,
+                    COUNT(*) AS grupos
+             FROM confirmaciones c
+             JOIN invitaciones i ON i.confirmacion_id = c.id
+             WHERE c.asiste = 1 AND ' . $contesto
+        );
+
+        $dia['confirmados'] = (int) ($filaConfirmados['personas'] ?? 0);
+        $dia['grupos_confirmados'] = (int) ($filaConfirmados['grupos'] ?? 0);
+    }
 }
 
 if (existeTabla('mesas')) {

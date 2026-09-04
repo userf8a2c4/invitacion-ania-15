@@ -39,7 +39,7 @@ let FECHA_LIMITE_TEXTO = '';
  */
 const HUECOS_DE_LA_INVITACION = [
   { marca: '{nombre}',       rotulo: 'el nombre',       ejemplo: 'Familia Zelaya' },
-  { marca: '{lugares}',      rotulo: 'los lugares',     ejemplo: '4' },
+  { marca: '{lugares}',      rotulo: 'los lugares',     ejemplo: '4 lugares' },
   { marca: '{link}',         rotulo: 'el link',         ejemplo: 'https://aniaxv.com/?i=…' },
   { marca: '{fecha_limite}', rotulo: 'la fecha límite', ejemplo: '10 de octubre' },
 ];
@@ -56,7 +56,7 @@ const TEXTO_INVITACION_ORIGINAL =
   '{nombre}:\n\n' +
   'Hay fechas que uno quiere recordar acompañado, y esta es una de ellas. ' +
   'Nos dará mucha alegría contar con ustedes.\n\n' +
-  'Hemos reservado {lugares} lugares a su nombre.\n\n' +
+  'Hemos reservado {lugares} a su nombre.\n\n' +
   'Aquí está su invitación. Ahí mismo pueden confirmar y elegir su menú:\n' +
   '{link}\n\n' +
   'Les pedimos confirmar antes del {fecha_limite}. ' +
@@ -136,6 +136,39 @@ async function asegurarTextoDeInvitacion(forzar) {
  * @param {Object} inv - { nombre, pases, link }
  * @returns {string}
  */
+/**
+ * "1 lugar" / "4 lugares", con el número adelante.
+ *
+ * TIENE QUE DECIR LO MISMO QUE lugaresEnPalabras() en
+ * admin/api/invitaciones.php: son los dos canales de la misma
+ * invitación, y la vista previa de acá tiene que mostrar exactamente lo
+ * que va a mandar el servidor.
+ *
+ * @param {number} cuantos
+ * @returns {string}
+ */
+function lugaresEnPalabras(cuantos) {
+  const n = Number(cuantos) || 0;
+  return n + (n === 1 ? ' lugar' : ' lugares');
+}
+
+/**
+ * Quita la palabra "lugares" pegada después de `{lugares}`.
+ *
+ * ⚠️ Una plantilla GUARDADA desde antes del 2026-09-04 trae la palabra
+ * escrita a mano ("{lugares} lugares"), que es lo que hacía que a una
+ * familia de un solo pase le llegara "Hemos reservado 1 lugares". Ahora
+ * el marcador ya trae la palabra, así que la pegada sobra. Se limpia al
+ * leer, no en la base: mismo criterio que conLugaresSinPluralPegado()
+ * en admin/api/invitaciones.php.
+ *
+ * @param {string} texto
+ * @returns {string}
+ */
+function conLugaresSinPluralPegado(texto) {
+  return String(texto).replace(/\{lugares\}\s+lugar(?:es)?\b/gu, '{lugares}');
+}
+
 function rellenarHuecosDeInvitacion(plantilla, inv) {
   let texto = String(plantilla);
 
@@ -146,9 +179,9 @@ function rellenarHuecosDeInvitacion(plantilla, inv) {
       .join('\n');
   }
 
-  return texto
+  return conLugaresSinPluralPegado(texto)
     .split('{nombre}').join(inv.nombre || '')
-    .split('{lugares}').join(String(inv.pases == null ? '' : inv.pases))
+    .split('{lugares}').join(inv.pases == null ? '' : lugaresEnPalabras(inv.pases))
     .split('{link}').join(inv.link || '')
     .split('{fecha_limite}').join(FECHA_LIMITE_TEXTO)
     // Un hueco quitado puede dejar tres saltos seguidos donde había dos.
