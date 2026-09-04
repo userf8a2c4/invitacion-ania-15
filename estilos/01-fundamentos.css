@@ -665,8 +665,38 @@ h2 {
   cursor: pointer;
   opacity: .75;
   box-shadow: 0 4px 18px rgba(0, 0, 0, .5);
-  transition: opacity .25s, color .25s, border-color .25s;
+  transition: opacity .25s, transform .25s, visibility .25s,
+              color .25s, border-color .25s;
 }
+
+/* ⚡ SE APARTA AL BAJAR, Y VUELVE AL SUBIR (2026-09-04)
+ *
+ * Este botón está FIJO sobre el contenido, así que pisa lo que quede
+ * arriba mientras se hace scroll. En el teléfono de una invitada tapaba
+ * a medias el rótulo «NUESTROS CORAZONES AL TUYO» — y ese rótulo es de
+ * las primeras cosas que ve alguien que abre la invitación.
+ *
+ * Se aparta al bajar y vuelve al subir, como la barra de cualquier app.
+ * Sigue alcanzable en el momento en que se lo busca (que es subiendo),
+ * y deja de estorbar mientras se lee.
+ *
+ * ⚠️ EL ESCONDITE LO PONE EL JAVASCRIPT, NO ESTE ARCHIVO, Y ES A
+ * PROPÓSITO. Acá el botón es VISIBLE por omisión; 20-boton-de-
+ * animaciones.js agrega `.esta-oculto` cuando corresponde. Si ese
+ * archivo no baja, se pierde el apartarse — nunca el botón.
+ *
+ * Es exactamente el error que costó media invitación en blanco el mismo
+ * día que se escribió esto: el CSS escondía por su cuenta y el JS era el
+ * único que sabía desesconder. Cuando las dos mitades viajan por caminos
+ * distintos, la que esconde tiene que ser la que muestra. Ver la nota de
+ * `.revelar` más abajo en este mismo archivo. */
+#boton-animaciones.esta-oculto {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-10px);
+  pointer-events: none;
+}
+
 #boton-animaciones:hover,
 #boton-animaciones:focus-visible { opacity: 1; color: var(--color-oro); border-color: var(--color-oro-apagado); }
 

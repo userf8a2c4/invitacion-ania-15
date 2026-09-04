@@ -806,6 +806,124 @@ function exportarInvitados(formato) {
   exportar(formato, 'invitados-ania-xv', 'Invitados · XV de Ania', bloques);
 }
 
+/* ─── LA MUDANZA DE UN ENTORNO A OTRO ───────────────────────────────
+
+   PARA QUÉ SIRVE
+   Bajar la lista de invitados con la forma EXACTA que entiende
+   admin/api/importar.php, para poder pasarla de PBE a producción sin que
+   nadie tenga que reescribir 51 familias a mano.
+
+   POR QUÉ NO SIRVE exportarInvitados()
+   Esa baja la vista de Confirmaciones —Asiste, Menús, Alergias, Código—
+   que es lo que hace falta para trabajar el día del evento. Pero NO trae
+   el grupo, y el grupo es justo lo que el importador necesita para
+   rearmar los 51 grupos del otro lado. Son dos descargas con dos
+   propósitos distintos; mezclarlas haría que ninguna de las dos sirva
+   del todo.
+
+   POR QUÉ NO PASA POR exportar()
+   Porque en CSV esa función escribe una línea con el título del bloque
+   ANTES de los encabezados, para que se entienda cuando hay varias
+   tablas en un mismo archivo. Acá hay una sola tabla y el archivo lo va
+   a leer un importador, no una persona: una línea de más arriba del
+   encabezado es una manera fácil de que adivine mal qué fila es cuál.
+   Se arma con armarCsv() directo — una tabla y nada más.
+
+   SIN BOM, Y A PROPÓSITO
+   El archivo está pensado para subirse tal cual, no para abrirlo. Si se
+   abre en Excel y se vuelve a guardar, Excel le cambia la codificación y
+   los acentos se rompen. Ver el aviso de la pantalla de importar.
+*/
+
+/**
+ * Baja la lista completa con la forma que entiende el importador.
+ *
+ * NO respeta el filtro de la pantalla, a propósito: una mudanza es todo
+ * o no es nada. Bajar media lista porque había un filtro puesto sería el
+ * error más fácil de cometer y el más difícil de notar.
+ *
+ * @returns {Promise<void>}
+ */
+async function exportarParaMudanza() {
+  if (!INVITADOS || !INVITADOS.length) {
+    avisar('Todavía no hay invitados que mudar.', true);
+    return;
+  }
+
+  avisar('Preparando la lista…');
+
+  /* Los integrantes de TODAS las familias, en UNA consulta. Ver por qué
+     no se piden de a uno en admin/api/acompanantes.php (listar_todos). */
+  const porFamilia = new Map();
+  let hubosIntegrantes = true;
+
+  try {
+    const r = await traer('acompanantes.php?accion=listar_todos');
+    (r.filas || []).forEach(persona => {
+      const suNombre = String(persona.nombre || '').trim();
+      if (suNombre === '') return;
+
+      const clave = String(persona.confirmacion_id);
+      if (!porFamilia.has(clave)) porFamilia.set(clave, []);
+
+      /* El tipo va DELANTE del nombre y no se deduce del orden: si una
+         familia tiene cargado solo al niño, deducirlo por posición lo
+         convertiría en adulto del otro lado, y con él su menú y su
+         lugar en la mesa. Ver COLUMNAS_CONOCIDAS en importar.php. */
+      porFamilia.get(clave).push(
+        (String(persona.tipo) === 'nino' ? 'nino:' : 'adulto:') + suNombre);
+    });
+  } catch (error) {
+    hubosIntegrantes = false;
+  }
+
+  const filas = INVITADOS.map(f => [
+    f.nombre || '',
+    f.invitacion_grupo_nombre || '',
+    contactoParaMudanza(f),
+    Number(f.adultos) || 0,
+    Number(f.ninos) || 0,
+    (porFamilia.get(String(f.id)) || []).join('; '),
+    f.notas || '',
+  ]);
+
+  const csv = armarCsv(
+    ['Nombre', 'Grupo', 'Contacto', 'Adultos', 'Niños', 'Integrantes', 'Notas'],
+    filas
+  );
+
+  const ahora = new Date();
+  const dos = n => String(n).padStart(2, '0');
+  bajarArchivo(
+    'lista-invitados-' + ahora.getFullYear() + dos(ahora.getMonth() + 1) +
+      dos(ahora.getDate()) + '.csv',
+    csv, 'text/csv');
+
+  avisar(hubosIntegrantes
+    ? 'Listo: ' + pluralizar(filas.length, 'familia', 'familias') + ' con sus integrantes.'
+    : 'Bajé ' + pluralizar(filas.length, 'familia', 'familias') + ', pero SIN los nombres ' +
+      'de cada integrante: no se pudieron traer.',
+    !hubosIntegrantes);
+}
+
+/**
+ * El teléfono y el correo en una sola celda, que es como los lee el
+ * importador (busca cada uno con su propio patrón, ver importar.php).
+ *
+ * @param {Object} f - Una fila de INVITADOS.
+ * @returns {string}
+ */
+function contactoParaMudanza(f) {
+  const partes = [];
+  const telefono = String(f.invitacion_telefono || '').trim();
+  const correo = String(f.correo || f.invitacion_correo || '').trim();
+
+  if (telefono) partes.push(telefono);
+  if (correo) partes.push(correo);
+  return partes.join(' / ');
+}
+
+
 /**
  * Ofrece los cuatro formatos para una pantalla cualquiera.
  *
