@@ -270,7 +270,17 @@ html.calidad-baja #marco-victoriano::after { display: none; }
   overflow: visible;
 }
 
-/* ⚡ ACÁ ARRIBA YA NO HAY `will-change`, Y ES A PROPÓSITO.
+/* ⚡ ACÁ ARRIBA NO HAY `will-change`, Y ES A PROPÓSITO — MEDIDO DOS VECES.
+
+   La segunda vez fue en v169: se probó promover SOLO las ~7 trepadoras que
+   están de verdad dentro de la franja de cercanía (las que se mecen), sin
+   los ramilletes, poniendo y sacando la capa nada más que en la
+   transición. Con capas: 16-18 fps y Layerize en 47-55 %. Sin capas: 19-22
+   fps y Layerize en 20-43 %. Revertido en v170.
+
+   O sea que no era cuestión de cuántas capas eran. En esta gráfica
+   integrada, con memoria compartida, una capa cuesta más de lo que ahorra
+   el repintado que evita — incluso cuando son siete.
    Antes esta regla pedía una capa de GPU propia para CADA .racimo-de-rosas,
    y esa clase la llevan las ~20 plantas de la enredadera MÁS los 2
    ramilletes de esquina: 22 SVG promovidos, uno de ellos con 341 nodos
@@ -373,11 +383,44 @@ html.calidad-baja #marco-victoriano::after { display: none; }
    un ramo apoyado en el vértice y no como un cuadro colgado torcido. */
 .racimo-de-rosas--esquina { transform-origin: 0% 0%; }
 
+/* ─── 4C. LOS RAMILLETES INTERMEDIOS DE LA CENEFA (2026-08-24) ─────────
+   Rellenan el tramo de cenefa que queda pelado entre cada esquina y el
+   relicario — ver la nota grande de la sección 4C en
+   codigo/07-marco-y-enredaderas.js. Bastante más chicos que los de
+   esquina (ancho aparte, ver más abajo) y ubicados a mitad de camino
+   entre cada esquina y el centro, no pegados a un vértice: por eso NO
+   heredan `left`/`right` de .marco__ramillete--izquierdo/derecho, llevan
+   los suyos propios. */
+.marco__ramillete--intermedio-izquierdo,
+.marco__ramillete--intermedio-derecho {
+  width: min(13vw, 190px);
+}
+.marco__ramillete--intermedio-izquierdo { left: 27%; }
+.marco__ramillete--intermedio-derecho {
+  right: 27%;
+  transform: scaleX(-1);  /* el mismo dibujo, reflejado */
+}
+
+/* Pivota arriba-al-centro, no en una esquina: acá no hay vértice que
+   abrazar, el ramo cuelga de un punto del borde plano (ver la nota de
+   4C en el JS). */
+.racimo-de-rosas--intermedio { transform-origin: 50% 0%; }
+
 /* En el celular el marco es finito y la portada ocupa casi todo: un ramo
    grande le comería el nombre de Ania. Se achica bastante. */
 @media (max-width: 720px) {
   /* Misma reducción del 50% que en escritorio (ver la nota de arriba). */
   .marco__ramillete { width: min(25vw, 125px); }
+
+  /* Los intermedios ni se piden acá (colocarLosRamilletesDeEsquina no los
+     construye por debajo de 720px: no hay "espacio vacío" real que
+     llenar en un marco tan angosto), pero se ocultan también por CSS
+     como red de seguridad — por si algún día quedara un elemento sin
+     limpiar de un ancho de ventana anterior. */
+  .marco__ramillete--intermedio-izquierdo,
+  .marco__ramillete--intermedio-derecho {
+    display: none;
+  }
 }
 
 

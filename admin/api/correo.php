@@ -297,7 +297,7 @@ case 'no_leido':
         $salio  = $buzon->marcar($carpeta, $uid, $marcar);
         $buzon->cerrar();
 
-        if (!$salio) responderMal('No se pudo cambiar la marca.', 502);
+        if (!$salio) responderMal('No se pudo marcar el correo. Intenta de nuevo.', 502);
         responderBien([
             'marcado' => $marcar,
             'mensaje' => $marcar ? 'Marcado como importante.' : 'Marca quitada.',

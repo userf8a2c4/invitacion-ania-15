@@ -36,10 +36,26 @@ $accion = (string) ($_GET['accion'] ?? 'listar');
 /* ─── AVERIGUAR CÓMO ES LA TABLA ──────────────────────────────────────── */
 
 if (!existeTabla('confirmaciones')) {
-    responderMal('La tabla de confirmaciones no existe en esta base de datos.', 500);
+    responderMal('No encuentro la lista de invitados. Avísale a quien instaló el panel.', 500);
 }
 
 $COLUMNAS = columnasDe('confirmaciones');
+
+/**
+ * El link completo que le corresponde a un token de invitación. Copia
+ * exacta de la de invitaciones.php (mismo nombre, mismo cuerpo) — se
+ * duplica en vez de compartirse porque cada admin/api/*.php es un
+ * endpoint HTTP independiente que solo carga UN archivo top-level; no
+ * hay riesgo de redeclaración, y no vale la pena una librería
+ * compartida para tres líneas.
+ *
+ * @param string $token
+ * @return string
+ */
+function linkDeInvitacion($token) {
+    $host = preg_replace('/[^a-z0-9.\-]/i', '', $_SERVER['HTTP_HOST'] ?? 'aniaxv.com');
+    return 'https://' . $host . '/?i=' . $token;
+}
 
 /**
  * Dice si la tabla tiene una columna.
@@ -109,17 +125,31 @@ case 'listar':
     // Búsqueda por nombre, correo o código de pase.
     $busca = trim((string) ($_GET['busca'] ?? ''));
     if ($busca !== '') {
+        /* ⚠️ UN MARCADOR POR COLUMNA, NO UNO COMPARTIDO (2026-09-04).
+           Antes las tres columnas usaban el mismo `:busca` y se enviaba
+           UN solo valor. Con PDO::ATTR_EMULATE_PREPARES en false (ver
+           _lib/bd.php) las preparadas las arma MySQL, y ahí un marcador
+           repetido necesita un valor por aparición: faltaban dos y la
+           consulta moría con SQLSTATE[HY093].
+
+           O sea que ESCRIBIR UNA SOLA LETRA en el buscador de Gente
+           devolvía 500 y vaciaba la lista. Es el mismo bug que ya se
+           arregló en planificador.php:90, en la otra pantalla. */
         $trozos = [];
+        $cuantos = 0;
         foreach (['nombre', 'correo', 'codigo'] as $columna) {
             // Con el LEFT JOIN de mesas hay que aclarar de qué tabla es
             // cada columna: "mesas" también tiene "nombre".
-            if (hay($columna)) $trozos[] = "confirmaciones.`$columna` LIKE :busca";
+            if (!hay($columna)) continue;
+
+            $marca = ':busca' . (++$cuantos);
+            $trozos[] = "confirmaciones.`$columna` LIKE $marca";
+            // Los comodines van en el VALOR, nunca pegados al SQL: así
+            // sigue siendo una consulta preparada de verdad.
+            $parametros[$marca] = '%' . $busca . '%';
         }
         if ($trozos) {
             $condiciones[] = '(' . implode(' OR ', $trozos) . ')';
-            // Los comodines van en el VALOR, nunca pegados al SQL: así
-            // sigue siendo una consulta preparada de verdad.
-            $parametros[':busca'] = '%' . $busca . '%';
         }
     }
 
@@ -143,10 +173,73 @@ case 'listar':
           ' LEFT JOIN mesas m ON m.id = am.mesa_id'
         : '';
 
+    /* ⚡ (2026-08-28) FUSIÓN DE "INVITADOS" E "INVITACIONES", A PEDIDO DEL
+       USUARIO: dos pestañas para la misma info repartida confundían más
+       de lo que ayudaban ("comparten raíz, se leen como la misma tarea
+       dos veces" — literal). El link, el teléfono, el grupo y el estado
+       de envío vivían solo en `invitaciones`; ahora viajan en la MISMA
+       fila que el resto, con un LEFT JOIN — así el panel arma una sola
+       ficha por persona sin tener que pedir dos listados y cruzarlos a
+       mano. Sigue siendo opcional: una confirmación vieja sin invitación
+       (del formulario abierto, antes de este modelo) simplemente trae
+       estos campos en NULL, y el panel ofrece "Generar link". */
+    $conInvitacion = $TIENE_ID && existeTabla('invitaciones');
+    // ⚡ (2026-08-30) BUG REAL: `veces_enviado` se agregó a `invitaciones`
+    // en una ronda posterior a la que creó esta tabla (ver migracion.sql),
+    // y esta consulta la pedía sin comprobar que existiera — a diferencia
+    // de TODO el resto de este archivo, que sí se cuida con existeTabla()/
+    // hay(). En cualquier instalación donde no se haya vuelto a correr
+    // instalar.php después de esa ronda, "columna desconocida" tumbaba
+    // esta consulta entera — y esta es la que carga "Gente". Mismo
+    // criterio que columnasDe()/hay() usan en todo el archivo.
+    $columnasInv = $conInvitacion ? columnasDe('invitaciones') : [];
+    $selectVecesEnviado = in_array('veces_enviado', $columnasInv, true)
+        ? 'inv.veces_enviado' : 'NULL';
+    /* ⚡ respondida_en viaja al panel para poder decir "quién falta" sin
+       adivinar (2026-09-02). El filtro "Sin responder" se calculaba solo
+       con inv.estado, y una fila sin invitación (las importadas, que son
+       la mayoría) tenía estado NULL y pasaba SIEMPRE — la lista filtrada
+       quedaba idéntica a "Todos". Con esto el panel puede distinguir
+       "contestó" de "todavía no" en los dos casos. Se consulta con el
+       mismo criterio defensivo que veces_enviado, por si la columna no
+       existe en una base vieja. */
+    $selectRespondidaEn = in_array('respondida_en', $columnasInv, true)
+        ? 'inv.respondida_en' : 'NULL';
+    $selectInv = $conInvitacion
+        /* `invitacion_correo` es el correo de la INVITACIÓN, que no es
+           el mismo campo que confirmaciones.correo: es a donde se manda
+           el link. Sin él, la ficha no podía saber si ofrecer "Mandar
+           por correo" (ver invitaciones.php?accion=enviar_correo). */
+        ? ', inv.id AS invitacion_id, inv.token AS invitacion_token,
+            inv.telefono AS invitacion_telefono, inv.pases AS invitacion_pases,
+            inv.correo AS invitacion_correo,
+            inv.estado AS invitacion_estado, inv.grupo_id AS invitacion_grupo_id,
+            ' . $selectVecesEnviado . ' AS invitacion_veces_enviado,
+            ' . $selectRespondidaEn . ' AS invitacion_respondida_en,
+            g.nombre AS invitacion_grupo_nombre'
+        : '';
+    $joinInv = $conInvitacion
+        ? ' LEFT JOIN invitaciones inv ON inv.confirmacion_id = confirmaciones.id' .
+          (existeTabla('grupos_invitados')
+              ? ' LEFT JOIN grupos_invitados g ON g.id = inv.grupo_id'
+              : '')
+        : '';
+
     $filas = consultarTodo(
-        "SELECT confirmaciones.* $selectMesa FROM confirmaciones $joinMesa $donde $orden",
+        "SELECT confirmaciones.* $selectMesa $selectInv
+         FROM confirmaciones $joinMesa $joinInv $donde $orden",
         $parametros
     );
+
+    // El link se arma acá (mismo host que ya usa invitaciones.php), no
+    // en el navegador: así el panel nunca tiene que adivinar el dominio.
+    if ($conInvitacion) {
+        foreach ($filas as &$fila) {
+            $fila['invitacion_link'] = $fila['invitacion_token']
+                ? linkDeInvitacion($fila['invitacion_token']) : null;
+        }
+        unset($fila);
+    }
 
     responderBien([
         'filas'    => $filas,
@@ -162,7 +255,7 @@ case 'listar':
 
 case 'ver':
     exigirMetodo('GET');
-    if (!$TIENE_ID) responderMal('Esta tabla no tiene columna id.', 400);
+    if (!$TIENE_ID) responderMal('Esta lista es de solo lectura.', 400);
 
     $fila = consultarUno(
         'SELECT * FROM confirmaciones WHERE id = :id',
@@ -178,7 +271,7 @@ case 'ver':
 
 case 'editar':
     exigirMetodo('POST');
-    if (!$TIENE_ID) responderMal('Esta tabla no tiene columna id: no se puede editar.', 400);
+    if (!$TIENE_ID) responderMal('Esta lista es de solo lectura: no se puede editar.', 400);
 
     $datos = cuerpoJson();
     $id    = campoEntero($datos, 'id', 1);
@@ -193,7 +286,12 @@ case 'editar':
     anotarEnBitacora($yo, 'editó una confirmación', 'confirmaciones', $id,
                      (string) ($antes['nombre'] ?? ''));
 
-    responderBien(['mensaje' => 'Confirmación actualizada.']);
+    $excesoDeCupo = calcularExcesoDeCupo();
+    responderBien([
+        'mensaje'   => 'Confirmación actualizada.',
+        'se_excede' => $excesoDeCupo['excede'],
+        'aviso'     => $excesoDeCupo['aviso'],
+    ]);
     break;
 
 
@@ -218,7 +316,12 @@ case 'crear':
     anotarEnBitacora($yo, 'dio de alta a un invitado', 'confirmaciones', $id,
                      (string) ($cambios['nombre'] ?? ''));
 
-    responderBien(['id' => $id], 201);
+    $excesoDeCupo = calcularExcesoDeCupo();
+    responderBien([
+        'id'        => $id,
+        'se_excede' => $excesoDeCupo['excede'],
+        'aviso'     => $excesoDeCupo['aviso'],
+    ], 201);
     break;
 
 
@@ -230,7 +333,7 @@ case 'borrar':
        puerta el día del evento: puede consultar, no destruir. */
     exigirAdministrador();
 
-    if (!$TIENE_ID) responderMal('Esta tabla no tiene columna id: no se puede borrar.', 400);
+    if (!$TIENE_ID) responderMal('Esta lista es de solo lectura: no se puede borrar.', 400);
 
     $datos = cuerpoJson();
     $id    = campoEntero($datos, 'id', 1);
@@ -296,6 +399,33 @@ default:
 /**
  * Toma los campos del invitado que vinieron, y solo los que existen.
  *
+ * ⚡ (2026-08-30) Cupo sustractivo: nunca bloquea (alta/edición a mano
+ * la ve Lucila antes de guardar, puede haber sobre-reserva intencional),
+ * solo informa. La capacidad sale de SUM(mesas.capacidad) -misma
+ * cuenta que ya usa admin/api/estadisticas.php-, nunca de una
+ * constante 140 pisada a mano. Se llama DESPUÉS de escribir el
+ * cambio, así "personas que asisten" ya lo incluye.
+ *
+ * @return array{excede: bool, aviso: string}
+ */
+function calcularExcesoDeCupo() {
+    if (!existeTabla('mesas') || !hay('asiste') || !hay('adultos') || !hay('ninos')) {
+        return ['excede' => false, 'aviso' => ''];
+    }
+    $ocupadas = (int) (consultarUno(
+        'SELECT COALESCE(SUM(adultos+ninos),0) AS t FROM confirmaciones WHERE asiste = 1'
+    )['t'] ?? 0);
+    $capacidadTotal = (int) (consultarUno(
+        'SELECT COALESCE(SUM(capacidad),0) AS t FROM mesas'
+    )['t'] ?? 0);
+    $excede = $capacidadTotal > 0 && $ocupadas > $capacidadTotal;
+    return [
+        'excede' => $excede,
+        'aviso'  => $excede ? 'Ojo: ya se pasan de la capacidad del salón.' : '',
+    ];
+}
+
+/**
  * @param array    $datos     Lo que mandó la app.
  * @param string[] $editables Columnas que existen y se pueden tocar.
  * @param array    $antes     La fila actual, para calcular el total.

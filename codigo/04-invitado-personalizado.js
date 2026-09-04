@@ -50,6 +50,18 @@
  */
 let NOMBRE_DEL_INVITADO = null;
 
+/**
+ * Los datos de la invitación personalizada (?i=TOKEN), o null si nadie
+ * usó un link de ese tipo. Los llena aplicarInvitacionPersonalizada()
+ * de forma asíncrona (invitacion.php es un fetch, no puede estar listo
+ * en el mismo instante en que corre este archivo) — codigo/11-formulario-
+ * confirmacion.js escucha el evento 'invitacion-lista' en vez de leer
+ * esta variable directamente, para no depender de una carrera de
+ * tiempos entre los dos archivos.
+ * @type {Object|null}
+ */
+let INVITACION = null;
+
 
 (function rellenaLaPagina() {
 
@@ -143,6 +155,137 @@ let NOMBRE_DEL_INVITADO = null;
   const campoNombre = buscar('#campo-nombre');
   if (campoNombre && NOMBRE_DEL_INVITADO && campoNombre.value === '') {
     campoNombre.value = NOMBRE_DEL_INVITADO;
+  }
+
+  /* ─── 3b. INVITACIÓN PERSONALIZADA (?i=TOKEN) ──────────────────────
+     A diferencia de ?invitado= (arriba), esto SÍ consulta el servidor:
+     el token identifica un grupo real precargado desde el panel, con
+     su cupo de lugares y —si se cargaron— los nombres de quienes lo
+     integran. Ver admin/api/invitaciones.php e invitacion.php (raíz).
+
+     Es aditivo: si no hay ?i= en el enlace, nada de este bloque corre y
+     la página se comporta exactamente igual que siempre. */
+  const token = parametrosDelEnlace.get('i');
+
+  if (token && /^[a-f0-9]{8,}$/i.test(token)) {
+    /* ⚡ EL FETCH SE CORRE UN CUADRO DESPUÉS (2026-08-30), NO EN LA MISMA
+       EVALUACIÓN DEL SCRIPT. En Slow 4G, esta petición competía por ancho
+       de banda contra la única descarga que de verdad bloquea el primer
+       pintado: Cinzel Decorative 400 (ver codigo/03-sobre-de-apertura.js).
+       Un requestAnimationFrame no cambia nada del resultado —el token no
+       tiene apuro real, el saludo genérico ya se puso arriba y este fetch
+       solo lo corrige cuando llega— pero le da a la fuente un cuadro de
+       ventaja para arrancar primero. */
+    /* ⚡ UN PROBLEMA DEL SERVIDOR NO ES UN LINK ROTO (2026-09-03)
+     *
+     * Antes acá solo se miraba `datos.ok !== true`, así que CUALQUIER
+     * respuesta que no fuera un éxito —el freno por IP (429), una caída
+     * de la base (500), un mantenimiento— le decía al invitado:
+     *
+     *     "No encontramos esta invitación. Vuelve a abrirlo desde el
+     *      mensaje que te enviamos."
+     *
+     * Y volver a abrirlo generaba otra petición, que fallaba igual, con
+     * el mismo cartel. Un callejón sin salida, y encima acusándolo a él
+     * de tener mal el enlace cuando el problema era nuestro.
+     *
+     * Ahora se mira el código HTTP. Los errores pasajeros se reintentan
+     * solos —dos veces, espaciando— y si igual no salen, el mensaje dice
+     * la verdad y ofrece recargar. El 404 sigue siendo el único caso en
+     * el que se le habla del enlace, porque es el único en el que el
+     * enlace tiene de verdad algo que ver.
+     */
+    const ESPERAS_ENTRE_INTENTOS = [2000, 5000];
+
+    /**
+     * Pide la invitación al servidor, reintentando los fallos pasajeros.
+     *
+     * @param {number} intento - 0 el primero; crece con cada reintento.
+     * @returns {void}
+     */
+    function pedirLaInvitacion(intento) {
+      fetch('invitacion.php?accion=ver&token=' + encodeURIComponent(token))
+        .then(respuesta => {
+          const ocupado = respuesta.status === 429;
+          const caido = respuesta.status >= 500;
+
+          if (ocupado || caido) {
+            const esperar = ESPERAS_ENTRE_INTENTOS[intento];
+            if (esperar !== undefined) {
+              setTimeout(() => pedirLaInvitacion(intento + 1), esperar);
+              // Se corta la cadena: el reintento se encarga del resultado.
+              return null;
+            }
+            dispararEventoQueQuizasLleguenTarde('invitacion-sin-acceso',
+              { motivo: ocupado ? 'servidor-ocupado' : 'servidor-caido' });
+            return null;
+          }
+
+          return respuesta.json();
+        })
+        .then(datos => {
+          // null = ya se resolvió arriba (reintento en curso o aviso dado).
+          if (datos === null) return;
+
+          if (!datos || datos.ok !== true) {
+            // El token no corresponde a ninguna invitación viva.
+            dispararEventoQueQuizasLleguenTarde('invitacion-sin-acceso',
+              { motivo: 'no-encontrada' });
+            return;
+          }
+
+          INVITACION = datos;
+
+          // El saludo del sobre se corrige con el nombre real del grupo,
+          // pisando el genérico (o el de ?invitado=) que ya se puso arriba.
+          if (saludoDelSobre) {
+            saludoDelSobre.innerHTML = 'Para ' + limpiarTexto(datos.nombre);
+          }
+
+          /* 11-formulario-confirmacion.js escucha esto para reemplazar el
+             formulario en blanco por la lista de personas del grupo.
+
+             ⚡ SE DISPARA CON MEMORIA (2026-09-02), Y ESTO ARREGLA UN BUG
+             REAL. Este archivo es "core": corre al abrir la página, mucho
+             antes del clic. El 11, en cambio, se inyecta RECIÉN en el clic
+             (ver iniciarInyeccionDeLaEscena en 02-utilidades.js). O sea que
+             para cuando el 11 registraba su escucha, este evento ya había
+             pasado hacía rato y se lo perdía: el invitado abría su link
+             personal y veía igual el formulario genérico en blanco, sin sus
+             nombres ni sus lugares. El comentario del 11 que justificaba
+             escuchar el evento ("todavía no hay respuesta del fetch")
+             describía cómo cargaban los archivos ANTES de diferir la
+             escena al clic; quedó viejo y nadie lo notó. */
+          dispararEventoQueQuizasLleguenTarde('invitacion-lista', datos);
+        })
+        .catch(error => {
+          /* Sin conexión. NO es lo mismo que "este link no vale": puede ser
+             un invitado legítimo con una red mala, así que se lo trata
+             aparte para no acusarlo de nada y pedirle que recargue. */
+          console.warn('No se pudo cargar la invitación personalizada:', error);
+
+          // La red también se reintenta: el wifi que parpadea un segundo
+          // es más común que el que se cae del todo.
+          const esperar = ESPERAS_ENTRE_INTENTOS[intento];
+          if (esperar !== undefined) {
+            setTimeout(() => pedirLaInvitacion(intento + 1), esperar);
+            return;
+          }
+
+          dispararEventoQueQuizasLleguenTarde('invitacion-sin-acceso',
+            { motivo: 'sin-conexion' });
+        });
+    }
+
+    requestAnimationFrame(() => pedirLaInvitacion(0));
+  } else {
+    /* ⚡ SIN LINK PERSONAL NO HAY FORMULARIO (2026-09-02). Las invitaciones
+       son nominales y con cupo real: cada grupo familiar tiene su propio
+       enlace. Un formulario en blanco donde cualquiera con la dirección
+       puede anotarse contradice las dos cosas. Se avisa acá y el 11
+       reemplaza el formulario por un mensaje. */
+    dispararEventoQueQuizasLleguenTarde('invitacion-sin-acceso',
+      { motivo: 'sin-link' });
   }
 
 

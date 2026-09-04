@@ -21,7 +21,7 @@ $yo     = exigirSesion();
 $accion = (string) ($_GET['accion'] ?? 'listar');
 
 if (!existeTabla('comandos_usuario')) {
-    responderMal('Falta correr la migración: no existe la tabla comandos_usuario.', 500);
+    responderMal('Falta una parte de la instalación del panel. Avísale a quien lo instaló.', 500);
 }
 
 

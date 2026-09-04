@@ -147,6 +147,58 @@ function comoDinero(cantidad, conDecimales) {
 }
 
 /**
+ * Hoy, en AAAA-MM-DD, según el reloj DEL TELÉFONO.
+ *
+ * POR QUÉ NO ES `new Date().toISOString().slice(0, 10)`
+ * Ese patrón —repetido en varios formularios— devuelve la fecha en UTC.
+ * México va seis horas atrás: a partir de las 18:00 hora local, UTC ya
+ * está en el día siguiente. Un pago cargado el martes a la noche se
+ * fechaba el miércoles, y un recibo generado después de cenar salía con
+ * la fecha de mañana impresa en el PDF.
+ *
+ * Acá se arman las tres partes con los getters locales, que es lo que
+ * la persona tiene delante en su calendario.
+ *
+ * @returns {string} "2026-10-24"
+ */
+function hoyEnFecha() {
+  const ahora = new Date();
+  const mes = String(ahora.getMonth() + 1).padStart(2, '0');
+  const dia = String(ahora.getDate()).padStart(2, '0');
+  return ahora.getFullYear() + '-' + mes + '-' + dia;
+}
+
+/**
+ * Cuánto cuesta un gasto. UNA sola definición, para toda la app.
+ *
+ * LA REGLA
+ * Si se cargó el costo real, ese es el costo. Si todavía no, lo
+ * presupuestado. Un gasto tiene UN costo, no dos.
+ *
+ * POR QUÉ ES UNA FUNCIÓN Y NO UNA LÍNEA REPETIDA
+ * Estaba escrita como `monto_real || presupuestado` en tres lugares. En
+ * JavaScript la cadena `"0.00"` —que es como PDO devuelve un DECIMAL en
+ * cero— es verdadera, así que un gasto de $50.000 sin costo real
+ * cargado se mostraba como **$0** en la lista y en el buscador,
+ * mientras el total de arriba lo contaba bien. Dos números para lo
+ * mismo, en la misma pantalla.
+ *
+ * El servidor ahora manda números de verdad (conMontosNumericos en
+ * _lib/dinero.php), y acá se compara como número igual: es la clase de
+ * dato que llega de tres endpoints distintos y basta uno sin castear
+ * para que vuelva el problema.
+ *
+ * @param {Object} gasto
+ * @returns {number} En pesos.
+ */
+function costoDelGasto(gasto) {
+  if (!gasto) return 0;
+
+  const real = Number(gasto.monto_real) || 0;
+  return real !== 0 ? real : (Number(gasto.presupuestado) || 0);
+}
+
+/**
  * Convierte a pesos lo que se escribió en un campo de monto.
  *
  * Es el camino inverso de comoDinero(): si se están viendo dólares, lo
@@ -244,6 +296,35 @@ function aFecha(valor) {
   if (valor instanceof Date) return isNaN(valor) ? null : valor;
 
   const texto = String(valor);
+
+  /* ⚡ UNA FECHA QUE YA DICE SU HUSO SE RESPETA (2026-09-03)
+   *
+   * La expresión de abajo no está anclada al final, así que un ISO
+   * completo —'2026-09-03T01:00:00.000Z', lo que devuelve
+   * toISOString()— también entraba, y el 'Z' se descartaba en silencio.
+   * El resultado se rearmaba con el constructor de tres números, que es
+   * hora LOCAL: en México (UTC−6) toda fecha en UTC quedaba corrida seis
+   * horas hacia adelante.
+   *
+   * Se veía así: `30-vista-hoy.js` le pasa `new Date().toISOString()`,
+   * de modo que **a partir de las 18:00 el subtítulo de Hoy anunciaba el
+   * día siguiente** — en la pantalla que se usa en la puerta, la noche
+   * del evento. Mismo corrimiento al marcar un regalo como comprado
+   * (quedaba guardado con la fecha de mañana) y en el corte de mes de
+   * Dinero.
+   *
+   * Si el texto trae huso propio —'Z' o '+05:30'— no hay nada que
+   * adivinar: lo parsea `new Date`, que sabe leerlo, y lo convierte a
+   * local correctamente. La rama de abajo queda para lo que de verdad
+   * viene sin huso, que es lo que devuelve MySQL.
+   */
+  const TRAE_HUSO =
+    /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?(\.\d+)?([Zz]|[+-]\d{2}:?\d{2})$/;
+
+  if (TRAE_HUSO.test(texto)) {
+    const conHuso = new Date(texto);
+    if (!isNaN(conHuso)) return conHuso;
+  }
 
   /* Se acepta AAAA-MM-DD con hora opcional. La hora se conserva si
      viene: MySQL devuelve "2026-08-03 14:30:00" para las alarmas, y

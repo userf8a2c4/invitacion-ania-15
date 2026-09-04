@@ -51,6 +51,37 @@
 html.sobre-visible,
 body.sobre-visible { overflow: hidden; }
 
+/* PageSpeed mide el aterrizaje (sobre cerrado). display:none: no son LCP
+   y no disparan Cormorant / IM Fell / Cinzel 700 — el navegador solo
+   calcula la fuente que necesita un elemento si está en el flujo de
+   render, y estos IDs seguían ahí (solo tapados por z-index) mientras el
+   sobre estaba cerrado. visibility:hidden no alcanza: igual pide las
+   fuentes. El botón de animaciones se queda: no está dentro de estos
+   ids. Al quitar .sobre-visible (mismo instante en que el sobre se
+   oculta) esto vuelve. */
+body.sobre-visible #capa-fondo,
+body.sobre-visible #portada,
+body.sobre-visible #contenido,
+body.sobre-visible #pie-de-pagina,
+body.sobre-visible #controles-flotantes,
+body.sobre-visible #marco-victoriano {
+  display: none;
+}
+
+#sobre-de-apertura {
+  font-family: var(--tipo-titulos);
+}
+
+/* #boton-animaciones (01-fundamentos.css) usa IM Fell y no entra en la
+   lista de arriba a propósito: Lucila tiene que poder apagar el
+   movimiento ANTES de abrir el sobre, así que nunca se oculta. Pero con
+   el sobre cerrado no hace falta que dispare esa fuente — solo la
+   tipografía, nunca su visibilidad. */
+body.sobre-visible #boton-animaciones {
+  font-family: var(--tipo-titulos);
+  font-weight: 400;
+}
+
 /* Cuando termina la animación, el sobre desaparece por completo. */
 #sobre-de-apertura.oculto {
   opacity: 0;
@@ -129,7 +160,7 @@ body.sobre-visible { overflow: hidden; }
 }
 
 .sobre__cargando {
-  font-family: var(--tipo-detalle);
+  font-family: var(--tipo-titulos);
   font-size: .8rem;
   letter-spacing: .35em;
   text-transform: uppercase;
@@ -224,6 +255,7 @@ body.sobre-visible { overflow: hidden; }
 /* ─── 4. SALUDO Y BOTÓN ────────────────────────────────────────────── */
 .sobre__saludo {
   font-family: var(--tipo-titulos);
+  font-weight: 400;
   font-size: clamp(1.1rem, 3.4vw, 1.6rem);
   color: var(--color-oro-claro);
   margin: 0;
@@ -231,7 +263,7 @@ body.sobre-visible { overflow: hidden; }
 }
 
 .sobre__indicacion {
-  font-family: var(--tipo-detalle);
+  font-family: var(--tipo-titulos);
   font-size: .82rem;
   letter-spacing: .3em;
   text-transform: uppercase;
@@ -299,4 +331,81 @@ body.sobre-visible { overflow: hidden; }
 }
 @keyframes desvanecer-hacia-abajo {
   to { opacity: 0; transform: translateY(18px); }
+}
+
+
+/* ─── SIN JAVASCRIPT ────────────────────────────────────────────────── */
+/*
+ * Se muestra por encima de la capa de carga (z-index 2000) porque esa
+ * capa solo la quita JavaScript: sin él, quedaría tapando esto.
+ * Ver el <noscript> de index.html y el porqué que lleva escrito.
+ */
+.sin-js {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px 24px;
+  text-align: center;
+  background: #0a0605;
+  color: #f5e6c8;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.sin-js__titulo {
+  color: #d4a843;
+  font-size: 20px;
+  letter-spacing: .06em;
+  margin: 0 0 8px;
+}
+
+.sin-js p { margin: 0; max-width: 34ch; }
+
+.sin-js__datos {
+  margin-top: 12px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(212, 168, 67, .35);
+  color: #d4a843;
+}
+
+
+/* ─── EL RESCATE DE CARGA ───────────────────────────────────────────── */
+/* Aparece a los 15 s si la carga nunca terminó. Ver el script inline de
+   index.html y el porqué que lleva escrito. */
+.sobre__rescate {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  /* `aparecer-desde-abajo` vive en 01-fundamentos.css. Se usa ese y no
+     uno nuevo: es exactamente el mismo gesto. */
+  animation: aparecer-desde-abajo 400ms ease;
+}
+
+.sobre__rescate p {
+  margin: 0;
+  max-width: 30ch;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(245, 230, 200, .7);
+}
+
+.sobre__rescate-boton {
+  min-height: 44px;
+  padding: 10px 22px;
+  border: 1px solid var(--oro, #d4a843);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--oro, #d4a843);
+  font-family: inherit;
+  font-size: 15px;
+  letter-spacing: .04em;
+  cursor: pointer;
 }

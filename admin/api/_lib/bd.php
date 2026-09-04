@@ -62,6 +62,95 @@ function bd() {
     return $pdo;
 }
 
+/* ─── CUANDO EL QUE LLAMA QUIERE ATRAPAR EL ERROR ─────────────────────── */
+
+/*
+   EL PROBLEMA QUE RESUELVE ESTO (2026-09-04)
+
+   Los atajos de acá abajo atrapan el PDOException y salen por
+   responderMal(), que hace exit. Es lo correcto el 99 % de las veces: un
+   fallo de base no debe seguir de largo con datos a medias.
+
+   Pero tiene una consecuencia que nadie había notado: como el proceso
+   MUERE dentro del atajo, un try/catch puesto MÁS AFUERA nunca llega a
+   ejecutarse. Los try/catch que rodean llamadas a la base en este
+   proyecto —el que borra el PDF huérfano de un recibo, el que deshace el
+   acomodo, el que atrapa el choque de dos escaneos en la puerta— estaban
+   escritos, pero ninguno atrapó nada jamás. Cada vez que alguien puso
+   una red de seguridad, la red no estaba.
+
+   POR QUÉ UN INTERRUPTOR Y NO FUNCIONES NUEVAS
+
+   La otra salida era duplicar cada atajo en una variante "OFallar" que
+   lanzara en vez de salir. No alcanza: chat.php envuelve
+   panoramaDeMesas(), y llegadas.php envuelve anotarEnBitacora() —
+   funciones que por dentro llaman a estos atajos varios niveles más
+   abajo. Habría que reescribir esas funciones también, y elegir para
+   cada una de sus llamadas cuál de las dos variantes usar.
+
+   Con el interruptor, el que quiere atrapar dice "en este pedazo, los
+   errores de base me los das a mí", y vale para todo lo que ocurra
+   adentro, por hondo que sea. Fuera de esos pedazos NO CAMBIA NADA: las
+   438 llamadas del resto del panel siguen saliendo por responderMal()
+   exactamente igual que antes.
+*/
+
+/**
+ * Corre un pedazo de código con los errores de base "en modo lanzar".
+ *
+ * Adentro de $tarea, un fallo de la base tira PDOException en vez de
+ * cortar la petición — así el try/catch de quien llama puede deshacer lo
+ * que haya quedado a medias antes de contestar.
+ *
+ * Se cuenta con un número y no con un booleano para que anidar dos
+ * intentando() no apague el de afuera al terminar el de adentro.
+ *
+ * @param callable $tarea
+ * @return mixed Lo que devuelva $tarea.
+ * @throws PDOException Si falla la base adentro de $tarea.
+ *
+ * @example
+ *   try {
+ *       $id = intentando(function () use ($fila) {
+ *           return insertar('recibos', $fila);
+ *       });
+ *   } catch (Throwable $e) {
+ *       bd()->rollBack();
+ *       @unlink($rutaDelPdf);
+ *       responderMal('No se pudo guardar el recibo.', 500);
+ *   }
+ */
+function intentando(callable $tarea) {
+    $GLOBALS['BD_ERRORES_SE_LANZAN'] = ($GLOBALS['BD_ERRORES_SE_LANZAN'] ?? 0) + 1;
+    try {
+        return $tarea();
+    } finally {
+        // finally y no una línea después del return: si $tarea lanza, el
+        // contador tiene que bajar igual o el resto de la petición
+        // quedaría en modo lanzar sin que nadie lo pidiera.
+        $GLOBALS['BD_ERRORES_SE_LANZAN']--;
+    }
+}
+
+/**
+ * Qué hacer cuando la base falla: lanzar o cortar la petición.
+ *
+ * Un solo lugar, para que los tres atajos no se desincronicen.
+ *
+ * @param PDOException $e
+ * @param string       $mensaje Texto humano si toca cortar.
+ * @return void
+ * @throws PDOException Si estamos dentro de intentando().
+ */
+function fallaDeBase(PDOException $e, $mensaje) {
+    if (!empty($GLOBALS['BD_ERRORES_SE_LANZAN'])) throw $e;
+
+    // El detalle técnico va al log del servidor (3er parámetro), nunca
+    // al navegador: un "Table 'gastos' doesn't exist" le dibuja el
+    // esquema a cualquiera que mire la respuesta.
+    responderMal($mensaje, 500, $e->getMessage());
+}
+
 /* ─── ATAJOS DE CONSULTA ──────────────────────────────────────────────── */
 
 /**
@@ -83,7 +172,7 @@ function consultarTodo($sql, $parametros = []) {
         $sentencia->execute($parametros);
         return $sentencia->fetchAll();
     } catch (PDOException $e) {
-        responderMal('Falló una consulta a la base de datos.', 500, $e->getMessage());
+        fallaDeBase($e, 'Falló una consulta a la base de datos.');
     }
 }
 
@@ -101,7 +190,7 @@ function consultarUno($sql, $parametros = []) {
         $fila = $sentencia->fetch();
         return $fila === false ? null : $fila;
     } catch (PDOException $e) {
-        responderMal('Falló una consulta a la base de datos.', 500, $e->getMessage());
+        fallaDeBase($e, 'Falló una consulta a la base de datos.');
     }
 }
 
@@ -118,7 +207,12 @@ function ejecutar($sql, $parametros = []) {
         $sentencia->execute($parametros);
         return $sentencia->rowCount();
     } catch (PDOException $e) {
-        responderMal('No se pudo guardar el cambio.', 500, $e->getMessage());
+        // (2026-08-28) El diagnóstico temporal que exponía $e->getMessage()
+        // en el mensaje visible ya cumplió su propósito (encontrar la
+        // tabla `confirmaciones` faltante y cargar la lista real). El
+        // detalle sigue yendo al log del servidor vía el 3er parámetro de
+        // responderMal() — solo se saca del mensaje que ve el navegador.
+        fallaDeBase($e, 'No se pudo guardar el cambio.');
     }
 }
 
@@ -199,6 +293,70 @@ function borrar($tabla, $id) {
     $tabla = preg_replace('/[^a-zA-Z0-9_]/', '', $tabla);
     return ejecutar("DELETE FROM `$tabla` WHERE id = :id", [':id' => (int) $id]);
 }
+
+/* ─── UN NÚMERO DE DOCUMENTO POR VEZ ──────────────────────────────────── */
+
+/*
+   EL PROBLEMA QUE RESUELVE ESTO (2026-09-04)
+
+   Recibos y contratos calculan su número leyendo el último de la serie
+   con `FOR UPDATE`, y el encabezado de los dos archivos declara ese
+   FOR UPDATE como la garantía de que dos no se lleven el mismo número.
+
+   Pero FOR UPDATE bloquea FILAS, y el PRIMER documento de una serie no
+   tiene ninguna fila que bloquear: la consulta no devuelve nada, y qué
+   se traba exactamente depende de cómo el motor haya resuelto ese plan.
+   O sea que justo al estrenar la numeración —o el 1 de enero, o al
+   cambiar el prefijo, que abre serie nueva— dos pestañas podían
+   calcular el mismo número. El UNIQUE de la tabla lo atrapa, pero para
+   quien está generando el recibo eso es "no se pudo, probá de nuevo"
+   con el PDF ya armado.
+
+   GET_LOCK no depende de que exista ninguna fila: es un turno con
+   nombre, para toda la base. Se pide antes de mirar el último número y
+   se suelta después del commit.
+*/
+
+/** Cuántos segundos se espera el turno antes de seguir igual. */
+const SEGUNDOS_DE_ESPERA_DE_NUMERACION = 8;
+
+/**
+ * Pide el turno para numerar una serie de documentos.
+ *
+ * Si el turno no llega a tiempo NO corta nada: se sigue, y el UNIQUE de
+ * la tabla queda como red final. Un recibo que no se puede emitir es
+ * peor que un recibo que hay que reintentar.
+ *
+ * @param string $serie Ej. 'recibos', 'contratos'.
+ * @return string El nombre del turno, para soltarlo después.
+ */
+function pedirTurnoDeNumeracion($serie) {
+    $nombre = 'ania_xv_num_' . preg_replace('/[^a-zA-Z0-9_]/', '', $serie);
+
+    $fila = consultarUno('SELECT GET_LOCK(:n, :s) AS turno',
+                         [':n' => $nombre, ':s' => SEGUNDOS_DE_ESPERA_DE_NUMERACION]);
+
+    if ((int) ($fila['turno'] ?? 0) !== 1) {
+        error_log('[Ania XV · bd] No se consiguió el turno de numeración de ' . $serie .
+                  '; se sigue igual y el UNIQUE de la tabla queda de red.');
+    }
+
+    return $nombre;
+}
+
+/**
+ * Suelta el turno. Llamar DESPUÉS del commit.
+ *
+ * No hace falta en los caminos de error: cada petición PHP tiene su
+ * propia conexión y MySQL suelta los turnos solos al cerrarla.
+ *
+ * @param string $nombre El que devolvió pedirTurnoDeNumeracion().
+ * @return void
+ */
+function soltarTurnoDeNumeracion($nombre) {
+    consultarUno('SELECT RELEASE_LOCK(:n) AS listo', [':n' => $nombre]);
+}
+
 
 /* ─── QUE NADA SE GUARDE DOS VECES ────────────────────────────────────── */
 
@@ -297,6 +455,53 @@ function existeTabla($tabla) {
         [':t' => $tabla]
     );
     return $fila && (int) $fila['n'] > 0;
+}
+
+/**
+ * Deja de un arreglo columna=>valor SOLO las columnas que la tabla tiene
+ * hoy, y avisa al log de las que descartó.
+ *
+ * POR QUÉ EXISTE (2026-09-04)
+ * `migracion.sql` fue creciendo por rondas y no toda instalación corrió
+ * la última. Una escritura que nombra una columna que todavía no está
+ * sale por responderMal() y CORTA LA PETICIÓN: el envío masivo de
+ * invitaciones mandaba el primer correo, moría al anotar
+ * `veces_enviado` y contestaba 500 — los correos salidos y ninguno
+ * registrado, así que reintentar mandaba todo de nuevo.
+ *
+ * El resto del panel ya se cuida así con hay() y columnasDe(); esto es
+ * lo mismo, en una línea, para las ESCRITURAS.
+ *
+ * NO LO USA instalar.php a propósito: ese archivo agrega columnas en
+ * mitad de la petición, y el recuerdo de abajo le quedaría viejo.
+ *
+ * @param string $tabla
+ * @param array  $valores Columna => valor.
+ * @return array Los pares cuya columna existe.
+ */
+function soloColumnasQueExisten($tabla, $valores) {
+    static $recuerdo = [];
+    if (!isset($recuerdo[$tabla])) $recuerdo[$tabla] = columnasDe($tabla);
+
+    $columnas = $recuerdo[$tabla];
+    // Una tabla que no existe devuelve lista vacía; en ese caso no se
+    // descarta nada, porque el problema es otro y lo tiene que ver el
+    // existeTabla() de quien llama, no este filtro.
+    if (empty($columnas)) return $valores;
+
+    $quedan  = [];
+    $sobran  = [];
+    foreach ($valores as $columna => $valor) {
+        if (in_array($columna, $columnas, true)) $quedan[$columna] = $valor;
+        else                                     $sobran[] = $columna;
+    }
+
+    if ($sobran) {
+        error_log('[Ania XV · bd] `' . $tabla . '` no tiene ' . implode(', ', $sobran) .
+                  ' — falta correr instalar.php. Se guardó el resto.');
+    }
+
+    return $quedan;
 }
 
 /**

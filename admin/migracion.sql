@@ -243,7 +243,15 @@ CREATE TABLE IF NOT EXISTS padrinos (
   apadrina     VARCHAR(120) NOT NULL DEFAULT '',
   -- 'dinero' = aporta una cantidad. 'especie' = aporta la cosa en sí.
   tipo_aporte  ENUM('dinero','especie') NOT NULL DEFAULT 'dinero',
+  -- Cuánto PROMETIÓ poner.
   monto        DECIMAL(12,2) NOT NULL DEFAULT 0,
+  -- Y cuánto ENTREGÓ de verdad. Son dos cosas distintas: `estado` es un
+  -- sí/no, así que una entrega parcial —"de los $30,000 me dio $10,000
+  -- y el resto en octubre", que es lo más común— era irrepresentable:
+  -- había que elegir entre mentir diciendo que ya entregó todo o mentir
+  -- diciendo que no entregó nada. instalar.php rellena esta columna con
+  -- `monto` para los que ya estaban marcados 'entregado'.
+  monto_entregado DECIMAL(12,2) NOT NULL DEFAULT 0,
   -- 'hablado'   = dijo que sí, nada firme todavía
   -- 'confirmado'= comprometido en firme
   -- 'entregado' = ya puso el dinero o la cosa
@@ -330,6 +338,80 @@ CREATE TABLE IF NOT EXISTS cotizacion_items (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+-- Recibos de pago a proveedores. Existen SOLOS: un recibo no necesita
+-- ningún contrato para existir. contrato_id queda para cuando se quiera
+-- vincular uno a mano (Fase C), nunca como requisito.
+--
+-- POR QUÉ EL NÚMERO SE GUARDA ACÁ Y NO SE CALCULA AL VUELO
+-- Si el número de recibo se calculara como "el más alto + 1" en el
+-- momento de generar, dos clics casi al mismo tiempo (o un doble toque
+-- por mala señal) podrían leer el mismo máximo y repetir el número. Acá
+-- se guarda la fila completa dentro de la misma transacción que la
+-- calcula (ver admin/api/recibos.php), así que el UNIQUE de abajo es la
+-- red de seguridad real: si algo se repite, MySQL lo rechaza en vez de
+-- guardar dos recibos con el mismo número.
+-- POR QUÉ proveedor_id ES OPCIONAL
+-- Un recibo es un comprobante de pago a un BENEFICIARIO — que puede ser
+-- un proveedor ya cargado, un padrino (por ejemplo, para reembolsarle
+-- algo que adelantó), o alguien sin ficha propia. Exigir proveedor_id
+-- obligaba a inventar un proveedor falso para poder darle un recibo a
+-- cualquier otra persona. `beneficiario` es el nombre de verdad que
+-- va impreso en el PDF; se autocompleta al elegir un proveedor o un
+-- padrino, o se escribe a mano si no hay ficha.
+CREATE TABLE IF NOT EXISTS recibos (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  numero        VARCHAR(30) NOT NULL,
+  proveedor_id  INT DEFAULT NULL,
+  padrino_id    INT DEFAULT NULL,
+  beneficiario  VARCHAR(200) NOT NULL DEFAULT '',
+  contrato_id   INT DEFAULT NULL,
+  -- Opcional, igual que contrato_id: si Lucila elige "también registrar
+  -- como pago" al generar el recibo, acá queda el pago real de
+  -- Presupuesto que este recibo respalda (ver admin/api/recibos.php).
+  -- Un recibo sigue existiendo perfectamente sin esto.
+  pago_id       INT DEFAULT NULL,
+  fecha         DATE NOT NULL,
+  concepto      VARCHAR(300) NOT NULL DEFAULT '',
+  monto         DECIMAL(12,2) NOT NULL DEFAULT 0,
+  forma_pago    VARCHAR(60) NOT NULL DEFAULT '',
+  -- Solo para seguimiento propio: no bloquea nada ni cambia el PDF ya
+  -- generado. "pendiente" es "todavía no lo entregué/mandé".
+  estado        ENUM('pendiente','enviado','firmado') NOT NULL DEFAULT 'pendiente',
+  archivo_id    INT DEFAULT NULL,
+  creado_por    INT DEFAULT NULL,
+  creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY numero_unico (numero),
+  KEY por_proveedor (proveedor_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Contratos formales de prestación de servicios. Son OPCIONALES por
+-- completo: un proveedor puede tener cero, uno o varios recibos sin
+-- haber pasado nunca por acá (ver `recibos` más arriba). Nunca se exige
+-- ni se comprueba su existencia antes de dejar generar un recibo.
+CREATE TABLE IF NOT EXISTS contratos (
+  id                    INT AUTO_INCREMENT PRIMARY KEY,
+  numero                VARCHAR(30) DEFAULT NULL,
+  proveedor_id          INT NOT NULL,
+  descripcion_servicio  TEXT,
+  fecha_inicio          DATE DEFAULT NULL,
+  fecha_firma           DATE NOT NULL,
+  monto_total           DECIMAL(12,2) NOT NULL DEFAULT 0,
+  forma_pago            VARCHAR(300) NOT NULL DEFAULT '',
+  lugar                 VARCHAR(200) NOT NULL DEFAULT '',
+  horario               VARCHAR(150) NOT NULL DEFAULT '',
+  clausulas_adicionales TEXT,
+  penalizaciones        TEXT,
+  cancelacion           TEXT,
+  jurisdiccion          VARCHAR(150) NOT NULL DEFAULT '',
+  archivo_id            INT DEFAULT NULL,
+  creado_por            INT DEFAULT NULL,
+  creado_en             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY numero_unico (numero),
+  KEY por_proveedor (proveedor_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 -- Gastos. padrino_id es lo que separa "lo que cuesta" de "lo que pago".
 CREATE TABLE IF NOT EXISTS gastos (
   id             INT AUTO_INCREMENT PRIMARY KEY,
@@ -391,6 +473,13 @@ CREATE TABLE IF NOT EXISTS tareas (
   fecha_limite  DATE DEFAULT NULL,
   prioridad     ENUM('baja','media','alta') NOT NULL DEFAULT 'media',
   estado        ENUM('pendiente','haciendo','hecha') NOT NULL DEFAULT 'pendiente',
+  -- A qué registro pertenece, si pertenece a alguno — mismo patrón y
+  -- mismas opciones que ya usa `notas` (ver guardar_nota en
+  -- planificador.php). Antes de esta columna, una tarea como "Llamar
+  -- al salón" no tenía forma de saber cuál es "el salón" en
+  -- `proveedores`; había que adivinarlo por el título.
+  atada_a_tipo  VARCHAR(30) NOT NULL DEFAULT '',
+  atada_a_id    INT NOT NULL DEFAULT 0,
   creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY por_estado_y_fecha (estado, fecha_limite)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -966,4 +1055,223 @@ CREATE TABLE IF NOT EXISTS eventos_uso (
   KEY por_tipo_y_nombre (tipo, nombre),
   CONSTRAINT fk_eventos_uso
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Invitaciones nominales (modelo sustractivo).
+--
+-- POR QUÉ ESTA TABLA EXISTE APARTE DE `confirmaciones`
+-- `confirmaciones` se creó a mano fuera de este archivo y su esquema
+-- exacto es desconocido (ver la nota del encabezado): todo el panel la
+-- lee con columnasDe() en runtime y nadie la altera. Esta tabla guarda
+-- lo que hacía falta para invitar de verdad —identidad, teléfono, cupo
+-- y estado del envío— sin tocar ni una columna de aquella.
+--
+-- POR QUÉ NO HAY FOREIGN KEY A `confirmaciones`
+-- Mismo motivo que en `asignacion_mesas`: no se le puede poner una FK a
+-- una tabla cuyo motor y tipos no controlamos. El vínculo es lógico.
+--
+-- EL TOKEN ES LA IDENTIDAD QUE NUNCA HUBO
+-- Hasta ahora el "código" del pase lo inventaba el navegador del propio
+-- invitado (codigo/12-pase-de-acceso.js) y el servidor lo aceptaba sin
+-- mirar. Este token lo genera el servidor con random_bytes: no se puede
+-- adivinar, y es lo que hace posible un link personal por familia.
+CREATE TABLE IF NOT EXISTS invitaciones (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  token           VARCHAR(32) NOT NULL,
+  -- Cómo se le habla a este grupo: "Familia Zelaya", "Ana y Miguel".
+  nombre          VARCHAR(150) NOT NULL,
+  telefono        VARCHAR(40) NOT NULL DEFAULT '',
+  correo          VARCHAR(190) NOT NULL DEFAULT '',
+  -- Cuántos lugares se le reservan. Es el tope que el invitado puede
+  -- confirmar: los "boletos limitados" del pedido original.
+  pases           INT NOT NULL DEFAULT 1,
+  -- Reusa la etiqueta que el bot de mesas YA usa para sentar juntos.
+  grupo_id        INT DEFAULT NULL,
+  -- La fila de `confirmaciones` que representa a este grupo. Se crea
+  -- junto con la invitación (con asiste=1) para que el bot de mesas
+  -- pueda acomodar desde antes de que nadie conteste.
+  confirmacion_id INT DEFAULT NULL,
+  -- La realidad del envío, separada a propósito de `asiste` (que es el
+  -- supuesto para sentar). Ver la nota grande del plan.
+  estado          ENUM('sin_enviar','enviada','confirmada','declinada')
+                  NOT NULL DEFAULT 'sin_enviar',
+  enviada_en      DATETIME DEFAULT NULL,
+  respondida_en   DATETIME DEFAULT NULL,
+  notas           TEXT,
+  -- Cuántas veces se tocó "Mandar por WhatsApp" o se mandó por correo
+  -- con éxito. Con WhatsApp es un conteo optimista: el botón solo ABRE
+  -- la app con el texto puesto, no hay forma de saber si adentro se
+  -- tocó enviar de verdad — mismo límite ya documentado para
+  -- envios_proveedor más arriba en este archivo.
+  veces_enviado   INT NOT NULL DEFAULT 0,
+  -- Cuántas veces el invitado contestó desde su enlace (distinto de
+  -- veces_enviado, que cuenta cuántas veces se MANDÓ la invitación).
+  veces_respondida INT NOT NULL DEFAULT 0,
+  creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY token_unico (token),
+  KEY por_estado (estado),
+  KEY por_confirmacion (confirmacion_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Los invitados y su respuesta. UNA FILA = UN GRUPO (una familia, una
+-- pareja, alguien solo), no una persona: `adultos` y `ninos` dicen
+-- cuántos son. Los nombres de cada integrante, cuando se conocen, van
+-- en `acompanantes`.
+--
+-- ⚠️ POR QUÉ ESTE CREATE TABLE APARECIÓ RECIÉN AHORA (2026-08-28)
+-- Esta tabla se había creado a mano en producción antes de que
+-- existiera el panel, y este archivo la daba por hecha ("no se toca
+-- acá", ver el encabezado). Eso funcionó mientras solo existió esa
+-- base. Al montar el entorno de pruebas (PBE) desde cero, la tabla
+-- nunca se creó y el panel entero quedó roto: Invitados, Invitaciones,
+-- Mesas, Evento, Contactos, el formulario público y mi-pase.php
+-- dependen de ella.
+--
+-- El IF NOT EXISTS es lo que hace esto seguro: en producción, donde la
+-- tabla ya está con su esquema heredado, esta instrucción no hace
+-- absolutamente nada. Solo crea la tabla donde falta.
+--
+-- Las columnas salen de lo que el código realmente usa, no de una
+-- suposición: el INSERT de confirmar.php (raíz) fija las 11 primeras,
+-- y `fecha_hora` está comprobada en phpMyAdmin (ver el comentario de
+-- $COL_FECHA en admin/api/confirmaciones.php).
+CREATE TABLE IF NOT EXISTS confirmaciones (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  nombre         VARCHAR(150) NOT NULL,
+  correo         VARCHAR(190) NOT NULL DEFAULT '',
+  asiste         TINYINT(1) NOT NULL DEFAULT 0,
+  adultos        INT NOT NULL DEFAULT 0,
+  ninos          INT NOT NULL DEFAULT 0,
+  total          INT NOT NULL DEFAULT 0,
+  -- Detalle por persona, texto plano: "Adulto 1: Estándar | Niño 1: Infantil".
+  menus          TEXT,
+  -- Resumen corto: "2 estándar · 1 infantil". mi-pase.php lo limita a 300.
+  resumen_menus  VARCHAR(300) NOT NULL DEFAULT '',
+  alergias       VARCHAR(500) NOT NULL DEFAULT '',
+  notas          TEXT,
+  -- El código del pase (QR y entrada). NO lleva UNIQUE a propósito: el
+  -- importador y el alta manual crean filas sin código (cadena vacía), y
+  -- varias cadenas vacías chocarían contra un UNIQUE. La unicidad la
+  -- garantiza quien lo genera (admin/api/invitaciones.php reintenta
+  -- hasta que no se repita).
+  codigo         VARCHAR(32) NOT NULL DEFAULT '',
+  fecha_hora     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_codigo (codigo),
+  KEY por_asiste (asiste)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ─────────────────────────────────────────────────────────────────────
+-- ENTREGA 2 · ETIQUETAS LIBRES (personas Y mesas)
+--
+-- QUÉ SON
+-- Palabras que la organizadora inventa sobre la marcha para describir
+-- gente o mesas -"Familia paterna", "Jóvenes", "Compañeros de baile",
+-- "Mesa ruidosa"- y que sirven de pista para el acomodo automático: si
+-- una persona y una mesa comparten etiquetas, el bot las prefiere entre
+-- sí (ver mejorMesaPara() en _lib/mesas.php). NO son una relación fija
+-- como "familia materna/paterna" -eso ya existe en `grupos_invitados`-
+-- sino texto libre y múltiple: una persona puede tener tres etiquetas a
+-- la vez, o ninguna.
+--
+-- POR QUÉ DOS TABLAS Y NO UNA COLUMNA
+-- Mismo patrón polimórfico que ya usa el proyecto para archivos, notas y
+-- alarmas (atada_a_tipo + atada_a_id): una etiqueta puede colgar de un
+-- ACOMPAÑANTE o de una MESA, y una persona/mesa puede tener varias
+-- etiquetas a la vez -ninguna de las dos cosas entra en una sola
+-- columna sin repetir texto o inventar un separador frágil.
+--
+-- SIN FOREIGN KEY EN atado_a_id A PROPÓSITO -mismo motivo que
+-- notas.atada_a_id/archivos.atado_a_id: apunta a DOS tablas distintas
+-- según atado_a_tipo, y una FK solo puede apuntar a una.
+CREATE TABLE IF NOT EXISTS etiquetas (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  nombre     VARCHAR(60) NOT NULL,
+  creado_en  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY por_nombre (nombre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS etiquetas_asignadas (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  etiqueta_id   INT NOT NULL,
+  -- 'acompanante' | 'mesa' | 'confirmacion' (2026-08-30: un paquete sin
+  -- nombres cargados todavía necesitaba poder tener etiqueta propia, no
+  -- solo heredada de sus acompañantes -ver etiquetasDeUnidad() en
+  -- _lib/mesas.php).
+  atado_a_tipo  VARCHAR(20) NOT NULL,
+  atado_a_id    INT NOT NULL,
+  UNIQUE KEY una_vez (etiqueta_id, atado_a_tipo, atado_a_id),
+  KEY por_atadura (atado_a_tipo, atado_a_id),
+  CONSTRAINT etq_asig_etiqueta FOREIGN KEY (etiqueta_id)
+    REFERENCES etiquetas(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- MEGABOT: EL CHAT DEL PANEL (2026-08-30)
+-- ══════════════════════════════════════════════════════════════════════
+--
+-- Reemplaza a las reglas fijas de los agentes 40-44/46 (que quedan en el
+-- repo, sin cargarse — ver admin/index.html): Lucila ya no habla con un
+-- matcher de frases, habla con "MegaBot", un solo hilo persistente por
+-- cuenta. El "cerebro" de MegaBot vive AFUERA de este repo (un
+-- Orquestador ajeno, equipo Cursor) — estas tablas son solo el buzón:
+-- lo que Lucila escribe, lo que MegaBot contesta, y las propuestas de
+-- acción que ella puede aceptar o rechazar. Ver admin/api/chat.php.
+--
+-- POR QUÉ TRES TABLAS Y NO UNA
+-- Un hilo por cuenta (chat_hilos), sus mensajes en orden (chat_mensajes,
+-- rol lucila/megabot/sistema), y las propuestas que puede traer un
+-- mensaje de megabot COMO FILAS APARTE (chat_propuestas) en vez de
+-- json suelto sin id propio -así cada propuesta se puede marcar
+-- aceptada/rechazada/ejecutada/fallida una por una, sin tener que
+-- reescribir el mensaje entero para cambiar el estado de una sola.
+--
+-- SIN FK DE chat_propuestas.mensaje_id A PROPÓSITO -es una relación
+-- 1 a N normal, se podría poner, pero mensaje_id nunca se borra desde
+-- el panel (no hay 'borrar mensaje' en el chat) así que no hace falta
+-- la garantía de integridad referencial para este caso.
+
+CREATE TABLE IF NOT EXISTS chat_hilos (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id    INT NOT NULL,
+  creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY un_hilo_por_usuario (usuario_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS chat_mensajes (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  hilo_id         INT NOT NULL,
+  rol             ENUM('lucila','megabot','sistema') NOT NULL,
+  texto           TEXT NOT NULL,
+  -- Las propuestas de ESTE mensaje van en chat_propuestas (mensaje_id);
+  -- esta columna queda para lo que el Orquestador haya mandado crudo,
+  -- por si hace falta depurar sin ir a reconstruirlo desde las filas.
+  propuestas_json TEXT NULL,
+  estado          ENUM('pendiente','enviado','error','visto') NOT NULL DEFAULT 'enviado',
+  creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_hilo (hilo_id, id),
+  CONSTRAINT chat_msg_hilo FOREIGN KEY (hilo_id)
+    REFERENCES chat_hilos(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS chat_propuestas (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  mensaje_id    INT NOT NULL,
+  titulo        VARCHAR(200) NOT NULL,
+  detalle       VARCHAR(500) NOT NULL DEFAULT '',
+  -- 'mesas.php?accion=autoasignar' -mismo string que usa mandar() en el
+  -- browser, validado contra la whitelist en admin/api/chat.php.
+  accion        VARCHAR(120) NOT NULL,
+  -- El payload exacto que mandar() le pasa a esa acción cuando Lucila
+  -- confirma -texto JSON, no columnas sueltas: cada acción de la
+  -- whitelist tiene su propia forma de cuerpo.
+  cuerpo_json   TEXT,
+  estado        ENUM('abierta','aceptada','rechazada','ejecutada','fallida')
+                NOT NULL DEFAULT 'abierta',
+  creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_mensaje (mensaje_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

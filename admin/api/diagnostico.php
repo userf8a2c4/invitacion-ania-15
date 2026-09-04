@@ -117,16 +117,174 @@ if ($conexion) {
 
 /* ─── 4. CARPETA DE ARCHIVOS ──────────────────────────────────────────── */
 
-$carpetaArchivos = dirname(__DIR__) . '/archivos';
+$carpetaArchivos = carpetaDeArchivos();
 $archivos = [
     'ruta'      => $carpetaArchivos,
+    // Si dice false, los adjuntos siguen dentro del árbol que el
+    // despliegue reconstruye. Ver carpetaDeArchivos() en
+    // _lib/entorno.php.
+    'fuera_del_despliegue' => $carpetaArchivos !== carpetaDeArchivosPorOmision(),
     'existe'    => is_dir($carpetaArchivos),
     'escribible' => is_dir($carpetaArchivos) && is_writable($carpetaArchivos),
 ];
 
+/* ─── 4B. MONTOS SOSPECHOSOS DE HABERSE GUARDADO MAL ─────────────────── */
+
+/*
+   POR QUÉ EXISTE ESTA REVISIÓN
+   Hasta el 2026-09-03, campoMonto() (_lib/responder.php) borraba los
+   separadores en vez de interpretarlos: un monto escrito en formato
+   local —"1.500,50", el que sale de cualquier hoja de cálculo en
+   español— se guardaba como 1.50. Una milésima del valor, sin un solo
+   aviso.
+
+   La entrada ya está arreglada, pero lo que se cargó ANTES sigue mal en
+   la base. Esto lo busca y lo LISTA. No corrige nada: el dinero no se
+   reescribe de oficio, y algunos de estos van a ser montos legítimos
+   —una propina de $50 es un gasto real de $50—. La decisión de cuál
+   corregir es de quien conoce el evento.
+
+   Qué se considera sospechoso: un monto chico (menos de $100) que
+   convive con una referencia mucho mayor. Es la firma que deja el bug:
+   el valor queda entre mil y un millón de veces por debajo.
+*/
+
+$montosSospechosos = [];
+
+if (existeTabla('gastos') && existeTabla('proveedores')) {
+    /* Un gasto de menos de $100 cuyo proveedor tiene un monto total
+       mucho mayor. Si el proveedor vale $15,000 y su gasto dice $1.50,
+       casi seguro es un "1.500,50" mal leído. */
+    foreach (consultarTodo(
+        "SELECT g.id, g.concepto, g.presupuestado, g.monto_real,
+                pr.nombre AS proveedor, pr.monto_total
+         FROM gastos g
+         JOIN proveedores pr ON pr.id = g.proveedor_id
+         WHERE pr.monto_total > 100
+           AND GREATEST(g.presupuestado, g.monto_real) > 0
+           AND GREATEST(g.presupuestado, g.monto_real) < 100
+           AND pr.monto_total / GREATEST(g.presupuestado, g.monto_real) > 100
+         ORDER BY pr.monto_total DESC
+         LIMIT 50"
+    ) as $g) {
+        $montosSospechosos[] = [
+            'que'     => 'gasto',
+            'id'      => (int) $g['id'],
+            'nombre'  => $g['concepto'],
+            'monto'   => (float) max($g['presupuestado'], $g['monto_real']),
+            'porque'  => 'Su proveedor «' . $g['proveedor'] . '» vale ' .
+                         number_format((float) $g['monto_total'], 2),
+        ];
+    }
+}
+
+if (existeTabla('pagos') && existeTabla('gastos')) {
+    // Un pago de menos de $100 contra un gasto muchísimo mayor.
+    foreach (consultarTodo(
+        "SELECT p.id, p.concepto, p.monto, g.concepto AS gasto,
+                GREATEST(g.presupuestado, g.monto_real) AS costo
+         FROM pagos p
+         JOIN gastos g ON g.id = p.gasto_id
+         WHERE p.monto > 0 AND p.monto < 100
+           AND GREATEST(g.presupuestado, g.monto_real) > 100
+           AND GREATEST(g.presupuestado, g.monto_real) / p.monto > 100
+         ORDER BY costo DESC
+         LIMIT 50"
+    ) as $p) {
+        $montosSospechosos[] = [
+            'que'    => 'pago',
+            'id'     => (int) $p['id'],
+            'nombre' => $p['concepto'] ?: $p['gasto'],
+            'monto'  => (float) $p['monto'],
+            'porque' => 'Su gasto «' . $p['gasto'] . '» cuesta ' .
+                        number_format((float) $p['costo'], 2),
+        ];
+    }
+}
+
+if (existeTabla('padrinos')) {
+    // Un padrino que prometió menos de $100 en dinero: raro de verdad.
+    foreach (consultarTodo(
+        "SELECT id, nombre, monto FROM padrinos
+         WHERE tipo_aporte = 'dinero' AND monto > 0 AND monto < 100
+         ORDER BY monto LIMIT 50"
+    ) as $pa) {
+        $montosSospechosos[] = [
+            'que'    => 'padrino',
+            'id'     => (int) $pa['id'],
+            'nombre' => $pa['nombre'],
+            'monto'  => (float) $pa['monto'],
+            'porque' => 'Un aporte en dinero de menos de $100',
+        ];
+    }
+}
+
+
+/* ─── 4C. ¿EL RESPALDO PUEDE SIQUIERA GUARDAR ALGO? ───────────────────── */
+/*
+ * ⚡ AGREGADO EN LA AUDITORÍA FINAL (2026-09-04)
+ *
+ * El respaldo semanal puede llegar VACÍO sin que nadie se entere. Son
+ * dos condiciones que se comprueban recién cuando el cron corre, a las
+ * tres de la mañana de un domingo, y cuyo único rastro es una línea en
+ * el error_log del servidor que del lado de Lucila nadie lee:
+ *
+ *   · Sin RESPALDO_CLAVE en el .env no se adjunta NADA. El correo llega
+ *     igual, con su tabla de registros y todo — parece que funcionó.
+ *   · Sin ZipArchive tampoco, por el mismo camino.
+ *
+ * O sea que se puede pasar meses recibiendo un correo semanal que dice
+ * "respaldo" y no tener ni una copia. Que es, con otra ropa, exactamente
+ * lo que ya pasó en agosto de 2026.
+ *
+ * Acá se contestan las dos, más la fecha del último respaldo y cuántos
+ * archivos hay en la base que ya no están en el disco — el síntoma de
+ * aquel incidente.
+ */
+$claveDeRespaldo = (string) env('RESPALDO_CLAVE', '');
+$puedeCifrar = class_exists('ZipArchive') &&
+               method_exists('ZipArchive', 'setEncryptionName');
+
+$ultimoRespaldo = null;
+if (existeTabla('ajustes')) {
+    $filaUltimo = consultarUno(
+        "SELECT valor FROM ajustes WHERE clave = 'ultimo_respaldo'");
+    if ($filaUltimo) $ultimoRespaldo = json_decode((string) $filaUltimo['valor'], true);
+}
+
+/* Filas que apuntan a un archivo que ya no está. No es un problema del
+   respaldo: es la prueba de que algo se perdió y de que hace falta. */
+$archivosHuerfanos = 0;
+$carpetaDeArchivos = carpetaDeArchivos();
+if (existeTabla('archivos')) {
+    foreach (consultarTodo('SELECT nombre_disco FROM archivos') as $f) {
+        if (!is_file($carpetaDeArchivos . '/' . basename($f['nombre_disco']))) {
+            $archivosHuerfanos++;
+        }
+    }
+}
+
+$respaldoSirve = $claveDeRespaldo !== '' && $puedeCifrar;
+
+$diasSinRespaldo = null;
+if ($ultimoRespaldo && !empty($ultimoRespaldo['cuando'])) {
+    $cuando = strtotime((string) $ultimoRespaldo['cuando']);
+    if ($cuando) $diasSinRespaldo = (int) floor((time() - $cuando) / 86400);
+}
+
+
 /* ─── 5. RESPUESTA ────────────────────────────────────────────────────── */
 
 responderBien([
+    /* Ver la sección 4B: montos que pueden haber quedado mal guardados
+       por el bug de separadores, para revisarlos A MANO. Lista vacía =
+       no se encontró ninguno. */
+    'montos_a_revisar' => [
+        'cuantos' => count($montosSospechosos),
+        'filas'   => $montosSospechosos,
+        'que_es'  => 'Montos chicos junto a referencias mucho mayores. ' .
+                     'Pueden ser correctos: revisar uno por uno antes de tocar nada.',
+    ],
     'php' => [
         'version'      => PHP_VERSION,
         'pdo_mysql'    => extension_loaded('pdo_mysql'),
@@ -147,4 +305,22 @@ responderBien([
         'conexion_directa' => $socketImap,
     ],
     'archivos' => $archivos,
+
+    /* Ver la sección 4C. `puede_respaldar` en false significa que el
+       correo semanal llega SIN adjunto: hay que arreglarlo antes que
+       cualquier otra cosa de esta lista. */
+    'respaldo' => [
+        'puede_respaldar'      => $respaldoSirve,
+        'tiene_clave'          => $claveDeRespaldo !== '',
+        'puede_cifrar_zip'     => $puedeCifrar,
+        'ultimo'               => $ultimoRespaldo ? ($ultimoRespaldo['cuando'] ?? null) : null,
+        'dias_sin_respaldo'    => $diasSinRespaldo,
+        'archivos_huerfanos'   => $archivosHuerfanos,
+        'que_es'               => $respaldoSirve
+            ? 'El respaldo puede adjuntar y cifrar. Revisá "dias_sin_respaldo".'
+            : ($claveDeRespaldo === ''
+                ? 'FALTA RESPALDO_CLAVE en el .env: el correo semanal llega SIN adjunto.'
+                : 'Este servidor no puede cifrar ZIP: el respaldo NO se adjunta, ' .
+                  'a propósito, para no mandar datos privados en claro.'),
+    ],
 ]);

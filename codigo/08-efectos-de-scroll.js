@@ -3,7 +3,7 @@
    ══════════════════════════════════════════════════════════════════════
 
    QUÉ HACE ESTE ARCHIVO
-   Tres efectos que dependen de por dónde va la página:
+   Dos efectos que dependen de por dónde va la página:
 
      1. PARALLAX del fondo — el dibujo del fondo se mueve más lento que
         el contenido. Es el mismo truco que usaban los dibujos animados:
@@ -15,19 +15,26 @@
 
    (Antes había un tercer efecto: el óvalo de la portada se desvanecía al
    bajar. Se quitó a pedido: el relicario es una PIEZA SÓLIDA de joyería y
-   tiene que verse maciza siempre, también mientras se va con el scroll.)
+   tiene que verse maciza siempre, también mientras se va con el scroll.
 
-   ÍNDICE
-     1. Parallax del fondo y marco de la portada
+   Y había un CUARTO efecto acá mismo: la enredadera que rodea el óvalo
+   giraba lentísimo con el scroll —"le da vida sin distraer", decía este
+   mismo comentario—. Se quitó a pedido explícito (2026-08-24): a simple
+   vista se leía como que una parte del relicario se despegaba y se movía
+   sola, justo lo contrario de "pieza sólida de joyería" que ya vale para
+   el óvalo. Ver estilos/04-portada.css por qué además se le sacó el
+   `will-change` que tenía: ya no anima, así que ya no le hace falta.) */
+
+   /* ÍNDICE
+     1. Parallax del fondo
      2. Aparición de las secciones
    ══════════════════════════════════════════════════════════════════════ */
 
 
-/* ═══ 1. PARALLAX DEL FONDO Y MARCO DE LA PORTADA ═════════════════════ */
+/* ═══ 1. PARALLAX DEL FONDO ════════════════════════════════════════════ */
 (function preparaLosEfectosDeScroll() {
 
   const capaDeFondo    = buscar('#capa-fondo');
-  const enredaderaDelMarco = buscar('#enredadera-de-la-portada');
 
   /**
    * Qué fracción del scroll recorre el fondo.
@@ -71,45 +78,8 @@
     if (capaDeFondo) sobranteDisponible = capaDeFondo.offsetHeight - window.innerHeight;
   }
 
-  /* Punto de giro de la enredadera del marco, fijado una sola vez (mismo
-     arreglo que ya tienen los nudos/plantas/flores de 07-marco-y-
-     enredaderas.js y las joyas colgantes: style.transform en vez de
-     setAttribute('transform'), para que el giro lo resuelva el compositor
-     y no pase por LAYOUT).
-
-     ⚡ '0px 0px', NO 'center'. El <g> de la enredadera vive adentro de otro
-     <g transform="translate(430 408)"> (index.html) — su dibujo ya está
-     centrado en SU PROPIO origen local. El `rotate(deg)` de SVG que tenía
-     antes giraba ahí, en (0,0), sin ambigüedad. El keyword `center` con
-     transform-box:view-box depende de que el motor resuelva bien esa caja
-     de referencia A TRAVÉS del translate del padre — es una zona con
-     diferencias conocidas entre navegadores. Un punto explícito en píxeles
-     no necesita resolver nada: es exactamente el mismo (0,0) de siempre. */
-  if (enredaderaDelMarco) {
-    enredaderaDelMarco.style.transformBox = 'view-box';
-    enredaderaDelMarco.style.transformOrigin = '0px 0px';
-  }
-
   /** Evita hacer cuentas de más: solo una por cuadro de animación. */
   let hayUnCuadroPendiente = false;
-
-  /* ⚡ POR QUÉ LA ENREDADERA NECESITA SU PROPIO "¿CAMBIÓ DE VERDAD?".
-     La enredadera vive dentro de <svg class="portada__marco"> (index.html),
-     que tiene un filter: drop-shadow fijo (estilos/04-portada.css) para el
-     resplandor del relicario entero. Un filtro necesita el píxel final de
-     TODO su subárbol —igual que el filter="url(#mo-relieve)" que ya se le
-     sacó a las joyas colgantes, ver el comentario ahí—, así que escribir
-     el rotate() de la enredadera en CADA evento de scroll (decenas por
-     segundo en un gesto rápido) forzaba recomponer el SVG entero una y
-     otra vez. Acá no se puede sacar el elemento del filtro sin partir el
-     SVG en dos coordenadas distintas (mucho más riesgo para un giro que
-     ya de por sí es casi imperceptible), así que se ataca por el otro
-     lado: escribir MENOS seguido. Redondeando a un cuarto de grado, la
-     rotación (0,018°/px) recién cambia de valor escrito cada ~14 px de
-     scroll en vez de en cada evento — invisible para el ojo (es un giro
-     "lentísimo" a propósito), pero muchas menos veces que el navegador
-     tiene que rehacer esos 209 nodos. */
-  let ultimoCuartoDeGradoEscrito = null;
 
   /**
    * Recalcula todos los efectos que dependen del scroll.
@@ -136,22 +106,12 @@
        El relicario es una pieza sólida: se va con el scroll como cualquier
        contenido, pero SIEMPRE opaco. No se le toca ni la opacidad ni el
        tamaño (un scale haría "respirar" el marco y el texto al hacer
-       scroll). Su opacidad la maneja solo el CSS (la animación de entrada). */
+       scroll). Su opacidad la maneja solo el CSS (la animación de entrada).
 
-    /* ── Enredadera que rodea el óvalo de la portada ────────────────
-       Gira lentísimo a medida que se baja: le da vida sin distraer.
-       Se escribe solo si el cuarto de grado cambió (ver la nota de
-       ultimoCuartoDeGradoEscrito, arriba): el filtro del relicario hace
-       que cada escritura sea cara, y a esta velocidad de giro nadie
-       nota la diferencia entre actualizar cada scroll y cada 14 px. */
-    if (enredaderaDelMarco) {
-      const anguloActual = posicionDelScroll * 0.018;
-      const cuartoDeGrado = Math.round(anguloActual * 4);
-      if (cuartoDeGrado !== ultimoCuartoDeGradoEscrito) {
-        ultimoCuartoDeGradoEscrito = cuartoDeGrado;
-        enredaderaDelMarco.style.transform = `rotate(${anguloActual.toFixed(2)}deg)`;
-      }
-    }
+       Tampoco gira la enredadera que rodea el óvalo (#enredadera-de-la-
+       portada, index.html): giraba lentísimo con el scroll, pero a pedido
+       explícito (2026-08-24) se dejó fija — ver la nota grande al principio
+       de este archivo. */
 
     hayUnCuadroPendiente = false;
   }
@@ -188,6 +148,28 @@
   const elementosQueAparecen = buscarTodos('.revelar');
   if (elementosQueAparecen.length === 0) return;
 
+  /* ⚡ RECIÉN ACÁ SE ESCONDE LO QUE VA A APARECER (2026-09-03)
+   *
+   * El CSS ya no arranca con `opacity: 0`: si este archivo no bajara,
+   * diez bloques de la invitación —el formulario de confirmar incluido—
+   * quedaban invisibles para siempre, en una página que se ve cargada.
+   *
+   * La clase se pone acá, cuando ya está garantizado que hay quien la
+   * saque. Y se pone ANTES de observar, en la misma tarea, para que no
+   * haya un parpadeo de contenido visible.
+   *
+   * Si el navegador no tiene IntersectionObserver (muy viejo), no se
+   * esconde nada y se ve todo de una: sin animación, pero completo. */
+  if (!('IntersectionObserver' in window)) return;
+
+  /* Quien pidió menos movimiento en su sistema no necesita que las
+     secciones aparezcan: se muestran y ya. Antes esto no se respetaba
+     acá —el CSS de `prefers-reduced-motion` solo acortaba duraciones—,
+     así que igual dependía del observador para ver el formulario. */
+  if (typeof prefiereMenosMovimiento === 'function' && prefiereMenosMovimiento()) return;
+
+  document.documentElement.classList.add('con-revelado');
+
   /*
      IntersectionObserver ("observador de intersección") es una
      herramienta del navegador que avisa cuando un elemento entra o sale
@@ -206,9 +188,17 @@
       observador.unobserve(entrada.target);
     });
   }, {
-    /* threshold 0.15 = se activa cuando ya se ve el 15 % del elemento.
-       Así aparece cuando de verdad entró, no cuando asoma un píxel. */
-    threshold: 0.15,
+    /* ⚡ threshold 0 + rootMargin, NO 0.15 (2026-09-03).
+       Con 0.15 hacía falta que se viera el 15 % del elemento — y un
+       bloque más alto que unas seis pantallas y media NO PUEDE llegar a
+       esa proporción nunca, así que no aparecía jamás. El formulario de
+       un grupo grande, con una fila por persona y el texto agrandado por
+       accesibilidad, entra justo en ese caso.
+       Con threshold 0 alcanza con que asome, y el margen negativo
+       conserva la intención original: que aparezca cuando de verdad
+       entró en pantalla, no cuando asoma el primer píxel. */
+    threshold: 0,
+    rootMargin: '0px 0px -12% 0px',
   });
 
   elementosQueAparecen.forEach(elemento => observador.observe(elemento));

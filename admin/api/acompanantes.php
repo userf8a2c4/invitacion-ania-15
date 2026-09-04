@@ -29,7 +29,7 @@ exigirPermiso($yo, 'invitados', ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' 
 $accion = (string) ($_GET['accion'] ?? 'listar');
 
 if (!existeTabla('acompanantes')) {
-    responderMal('Falta correr la migración: no existe la tabla acompanantes.', 500);
+    responderMal('Falta una parte de la instalación del panel. Avísale a quien lo instaló.', 500);
 }
 
 
@@ -58,7 +58,11 @@ case 'agregar':
     exigirMetodo('POST');
     $datos = cuerpoJson();
 
-    $confirmacionId = campoEntero($datos, 'confirmacion_id', 1);
+    // ⚡ (2026-08-28) El 3er parámetro de campoEntero() es el MÍNIMO, no
+    // un respaldo -mismo bug ya encontrado en confirmar.php/invitaciones.php:
+    // un confirmacion_id ausente o en 0 se elevaba a 1, agregando el
+    // acompañante a la confirmación #1 en vez de fallar.
+    $confirmacionId = campoEntero($datos, 'confirmacion_id', 0);
     $nombre         = campoTexto($datos, 'nombre', 150);
 
     if ($confirmacionId < 1) responderMal('Falta decir de qué confirmación.', 400);
@@ -101,7 +105,10 @@ case 'agregar':
 case 'editar':
     exigirMetodo('POST');
     $datos = cuerpoJson();
-    $id    = campoEntero($datos, 'id', 1);
+    // Mismo motivo que en 'agregar': el mínimo de campoEntero() no es
+    // un respaldo -un id ausente editaría al acompañante #1 en silencio.
+    $id = campoEntero($datos, 'id', 0);
+    if ($id < 1) responderMal('Falta decir a quién.', 400);
 
     $antes = consultarUno('SELECT * FROM acompanantes WHERE id = :id', [':id' => $id]);
     if (!$antes) responderMal('Ese acompañante no existe.', 404);
@@ -130,7 +137,10 @@ case 'editar':
 case 'borrar':
     exigirMetodo('POST');
     $datos = cuerpoJson();
-    $id    = campoEntero($datos, 'id', 1);
+    // ⚡ El más peligroso de los tres: sin esta guarda, un POST sin
+    // id borraba al acompañante #1 -no un error cualquiera, un DELETE.
+    $id = campoEntero($datos, 'id', 0);
+    if ($id < 1) responderMal('Falta decir a quién.', 400);
 
     $fila = consultarUno('SELECT * FROM acompanantes WHERE id = :id', [':id' => $id]);
     if (!$fila) responderMal('Ese acompañante no existe.', 404);

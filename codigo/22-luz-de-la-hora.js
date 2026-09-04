@@ -473,7 +473,10 @@
      había terminado al cargar, se vuelve a aplicar cuando la invitación se
      hace visible. Es barato y garantiza que nada quede con el color de
      reserva del CSS. */
-  document.addEventListener('invitacion-visible', () => setTimeout(ponerLaLuzDeLaHora, 300));
+  // escucharEventoQueQuizasYaPaso() (02-utilidades.js): este script se
+  // inyecta encadenado detrás de otros — el evento puede haber pasado
+  // antes de que cargara.
+  escucharEventoQueQuizasYaPaso('invitacion-visible', () => setTimeout(ponerLaLuzDeLaHora, 300));
 
   /* Cada diez minutos alcanza: entre un cálculo y el siguiente el color se
      mueve poquísimo, y el cambio queda suavizado por la transición de

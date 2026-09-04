@@ -70,7 +70,13 @@
    * @returns {void}
    */
   function revisarSiCorresponde() {
-    boton.classList.toggle('visible', window.scrollY > DESDE_CUANTO_APARECE);
+    /* scrollActualY() y no window.scrollY: esta función se llama una vez
+       de entrada (línea de más abajo, corriendo apenas carga el script,
+       justo después de que otros módulos ya invalidaron estilos) — una
+       lectura cruda ahí fuerza el reflow completo que PageSpeed midió
+       atribuido a este archivo. scrollActualY() es la copia cacheada que
+       el proyecto ya usa para esto (02-utilidades.js). */
+    boton.classList.toggle('visible', scrollActualY() > DESDE_CUANTO_APARECE);
   }
 
   /* El scroll dispara muchísimas veces por segundo. Sin este freno se

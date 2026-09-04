@@ -18,6 +18,33 @@
    por eso sube tres niveles con dirname() para encontrarlo en la raíz.
    ══════════════════════════════════════════════════════════════════════ */
 
+
+/* ─── LA HORA ES LA DE LA FIESTA, NO LA DEL SERVIDOR ──────────────────
+ *
+ * ⚡ NO HABÍA NINGUNA ZONA HORARIA EN TODO EL PROYECTO (2026-09-03).
+ *
+ * El hosting corre en UTC y la fiesta es en Toluca (UTC−6). Todo lo que
+ * usa date() se corría seis horas, y en dos lugares eso tenía
+ * consecuencias de verdad:
+ *
+ *   · confirmar.php e invitacion.php comparan `date('Y-m-d')` contra la
+ *     fecha límite para decidir si todavía se puede editar una
+ *     respuesta. A las 18:00 del día límite, hora de México, el servidor
+ *     ya creía que era el día siguiente y contestaba "las confirmaciones
+ *     ya se cerraron" a alguien que llegaba a tiempo.
+ *   · El correo que le llega a Lucila con cada confirmación traía la
+ *     hora en UTC, seis horas adelantada.
+ *
+ * Va acá porque este archivo lo carga TODO: el panel entra por bd.php,
+ * y la invitación y confirmar.php lo piden directo. Un solo lugar, antes
+ * de que nadie llame a date().
+ *
+ * `@` porque en algún hosting muy cerrado date_default_timezone_set()
+ * puede estar deshabilitada: si no se puede, se sigue con la del
+ * servidor —que es lo que había hasta ahora— en vez de tirar un aviso
+ * en medio del JSON. */
+@date_default_timezone_set('America/Mexico_City');
+
 /**
  * Carga el .env de la raíz del sitio. Se puede llamar varias veces sin
  * problema: la segunda vez y las siguientes no hacen nada.
@@ -60,6 +87,63 @@ function env($clave, $respaldo = null) {
     cargarEntorno();
     $valor = getenv($clave);
     return ($valor === false || $valor === '') ? $respaldo : $valor;
+}
+
+/* ─── DÓNDE VIVEN LOS ADJUNTOS ──────────────────────────────── */
+
+/*
+   EL PROBLEMA QUE RESUELVE ESTO (2026-09-04)
+
+   Los PDF de recibos y contratos, y todo lo que Lucila sube a mano,
+   vivían en `admin/archivos/`, que está DENTRO del árbol que maneja el
+   repositorio pero NO está en el repositorio: `.gitignore` deja pasar
+   solo su `.htaccess`.
+
+   Eso significa que ninguna promoción los lleva ni los trae, y que cada
+   despliegue reconstruye esa carpeta a partir de un origen donde no
+   están. En el mejor caso nunca viajan entre entornos; en el peor
+   desaparecen, y las filas de `archivos`, `recibos` y `contratos` quedan
+   apuntando a un `nombre_disco` que ya no existe en el disco. Son las
+   filas huérfanas del incidente de agosto de 2026.
+
+   La cura de fondo es sacar el almacén del camino del despliegue: una
+   carpeta HERMANA de public_html, que ninguna herramienta de publicación
+   toca. Se configura con CARPETA_ARCHIVOS en el .env del servidor:
+
+       CARPETA_ARCHIVOS=/home/USUARIO/adjuntos-ania
+
+   ⚠️ SIN ESA LÍNEA NO CAMBIA NADA. El respaldo es la carpeta de
+   siempre, así que una instalación que no configure nada se comporta
+   exactamente igual que antes de este cambio. Eso es a propósito: mover
+   archivos es la clase de operación que no puede ocurrir sola.
+*/
+
+/**
+ * Donde estuvieron siempre los adjuntos: `admin/archivos`.
+ *
+ * Sirve de respaldo y de origen para la migración de instalar.php.
+ *
+ * @return string Sin barra final.
+ */
+function carpetaDeArchivosPorOmision() {
+    // entorno.php → admin/api/_lib → admin/api → admin
+    return dirname(__DIR__, 2) . '/archivos';
+}
+
+/**
+ * La carpeta donde se guardan y se leen los adjuntos.
+ *
+ * Un solo lugar: antes esta ruta estaba escrita a mano en nueve puntos
+ * de seis archivos distintos, que es exactamente cómo se desincroniza
+ * una cosa así.
+ *
+ * @return string Sin barra final.
+ */
+function carpetaDeArchivos() {
+    $propia = trim((string) env('CARPETA_ARCHIVOS', ''));
+    if ($propia === '') return carpetaDeArchivosPorOmision();
+
+    return rtrim($propia, "/\\");
 }
 
 /**

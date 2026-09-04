@@ -284,6 +284,35 @@
     drop-shadow(0 26px 30px rgba(0, 0, 0, .55));
 }
 
+/* ⚡ SIN FILTRO MIENTRAS EL SOBRE TAPA TODO (2026-08-24). El sobre de
+   apertura es fixed/inset:0/z-index:2000: mientras está puesto, NADIE
+   puede ver esta sombra —son tres `drop-shadow` sobre ~150 nodos de SVG,
+   pagados igual aunque estén cien por ciento tapados—. `html.sobre-visible`
+   ya existe (03-sobre-de-apertura.js la pone y la saca), así que apagar
+   el filtro mientras esa clase está puesta no le cuesta nada nuevo al
+   proyecto: en cuanto se abre el sobre, la clase se saca y el filtro
+   vuelve solo, en el mismo instante, sin ningún salto que notar —nunca
+   hubo nada que ver hasta ese momento. Si el navegador ya lo estaba
+   salteando solo por estar tapado, esto no cambia nada; si no lo estaba
+   salteando (que es lo que sugirió un perfil real), esto es pintura
+   pura que se dejaba de pagar por algo invisible. */
+html.sobre-visible .marco__sombra-exterior {
+  filter: none;
+}
+
+/* ⚡ SIN LOS DOS drop-shadow EN MEDIA Y BAJA (2026-09-01). Son un blur de
+   45px y otro de 30px sobre 3 envoltorios de ~150 nodos SVG; en una
+   pantalla de 2400px eso es enorme, y cada vez que el subárbol se
+   re-rasteriza hay que rehacerlos. codigo/17-joyas-colgantes.js:328-333 ya
+   documenta este filtro como causa de "Layerize" en un perfil real. En
+   calidad alta se conserva intacto: el equipo que llega a alta lo aguanta.
+   En media y baja el relicario pierde el halo dorado y la sombra de peso,
+   y conserva todo lo demás (forma, gemas, oro, joyas colgantes). */
+html.calidad-media .marco__sombra-exterior,
+html.calidad-baja  .marco__sombra-exterior {
+  filter: none;
+}
+
 /* ⚡ EL FAST-FOLLOW QUE HABÍA QUEDADO PENDIENTE, MEDIDO Y APLICADO
    (2026-08-20): cuando se sacó el filtro exterior de encima de la
    enredadera/borlas/cadena, quedó anotado que agregar `will-change:
@@ -295,14 +324,19 @@
 
    Se cumplen las mismas condiciones que ya funcionaron con .petalo (ver
    estilos/10-cursor-y-petalos.css): se mueven solo por transform
-   (rotate), no viven dentro de ningún mix-blend-mode, y las tres cosas
-   se animan de forma CONTINUA mientras el relicario está en pantalla
-   (las borlas y la cadena en cada cuadro; la enredadera en cada scroll)
+   (rotate), no viven dentro de ningún mix-blend-mode, y se animan de
+   forma CONTINUA mientras el relicario está en pantalla (en cada cuadro)
    — exactamente el perfil para el que sirve reservarles una capa propia
    del compositor, en vez de recomponerlas contra el resto de la escena
    en cada giro. Es la sección más pesada de la página; esto le da un
-   margen más sin tocar ni un tallo del dibujo. */
-#enredadera-de-la-portada,
+   margen más sin tocar ni un tallo del dibujo.
+
+   ⚡ #enredadera-de-la-portada SALIÓ DE ACÁ (2026-08-24): ya no gira con
+   el scroll —a pedido explícito, se veía como si una parte del relicario
+   se despegara y se moviera sola (ver la nota grande en
+   codigo/08-efectos-de-scroll.js)—, así que reservarle una capa propia
+   del compositor ya no tiene ningún efecto que pagar: es exactamente el
+   "will-change puesto de más" que este proyecto evita en todos lados. */
 .joya-colgante,
 .cadena-colgante .eslabon {
   will-change: transform;

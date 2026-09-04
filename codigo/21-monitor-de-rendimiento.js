@@ -72,6 +72,9 @@
      más rápidos que el refresco físico), con un piso de 6 ms para no
      envenenar la medida con algún cuadro raro. */
   let intervaloIdeal = 16.7;
+  /** Muestras recientes de duración de cuadro, para deducir el ritmo real
+      de la pantalla sin dejar que un solo cuadro anómalo lo envenene. */
+  const muestrasDeIntervalo = [];
 
   /* Cuántos cuadros seguidos en zona de degradar/mejorar hacen falta.
      Degradar es rápido (proteger la fluidez YA); mejorar (confiar en que
@@ -104,6 +107,25 @@
    */
   function cuadrosNecesariosParaMejorar() {
     const fallos = intentosFallidos[calidad - 1] || 0;
+
+    /* ⚡ SE BAJA UNA VEZ Y NO SE SUBE NUNCA MÁS EN TODA LA VISITA
+       (2026-09-03). Primero esto fue "a la tercera no se intenta más", y no
+       alcanzó: en un teléfono real seguía viéndose el parpadeo, porque hasta
+       llegar a ese tope todavía quedaban dos ciclos de subir-y-caer, y cada
+       ciclo son varios segundos de haces prendiéndose y apagándose.
+
+       Y el parpadeo no es un detalle estético: el CSS esconde haces enteros
+       por nivel (estilos/12-haces-de-luz.css:557-561) y los pétalos cambian
+       de cantidad, así que cada cambio de calidad es un cambio VISIBLE en la
+       portada. Un invitado no ve "el gobernador ajustando": ve la web
+       fallando.
+
+       La calidad de más se puede recuperar en la próxima visita (esto se
+       reinicia al recargar). El parpadeo, en cambio, arruina ESTA. Entre las
+       dos, se elige la escena quieta: un solo cambio, temprano, y después
+       nada se mueve nunca más. Infinity = jamás se junta la racha. */
+    if (fallos >= 1) return Infinity;
+
     return Math.min(CUADROS_PARA_MEJORAR * Math.pow(2, fallos), 1800);
   }
 
@@ -123,8 +145,31 @@
 
     /* Saltos enormes = la pestaña estuvo en segundo plano (el navegador
        congela el rAF). No es lentitud real: se ignora ese cuadro. Tampoco se
-       mide durante el calentamiento inicial. */
-    if (delta > 100 || momentoActual - arranque < CALENTAMIENTO_MS) {
+       mide durante el calentamiento inicial.
+
+       ⚠️ ESTE UMBRAL ESTABA EN 100 ms Y DEJABA CIEGO AL GOBERNADOR JUSTO
+       EN LOS EQUIPOS QUE MÁS LO NECESITAN (2026-09-02).
+
+       Un cuadro de más de 100 ms se descartaba por considerarlo "pestaña
+       en segundo plano". Pero 100 ms POR CUADRO son 10 fps: cualquier
+       equipo que fuera más lento que eso tenía TODOS sus cuadros
+       descartados, el promedio se quedaba clavado en el 16,7 ms del
+       arranque, y el gobernador no degradaba nunca. Medido con
+       herramientas/medir.mjs: la escena a 7 fps sostenidos y la calidad
+       seguía en "media" indefinidamente, sin un solo intento de bajar.
+
+       Es decir: la protección pensada para no leer mal una pestaña oculta
+       terminaba protegiendo de la medición a los equipos que se estaban
+       ahogando. Cuanto peor iba el equipo, más invisible era para el
+       único sistema que podía ayudarlo.
+
+       La pregunta correcta no es "¿este cuadro tardó mucho?" sino "¿la
+       pestaña estaba oculta?", y eso el navegador lo dice directamente
+       con document.hidden. El umbral de tiempo queda como red de
+       seguridad para saltos absurdos (una suspensión del equipo, un
+       punto de interrupción del depurador), no para lentitud real. */
+    if (document.hidden || delta > 2000 ||
+        momentoActual - arranque < CALENTAMIENTO_MS) {
       requestAnimationFrame(medir);
       return;
     }
@@ -142,7 +187,24 @@
     /* Se aprende cuál es el cuadro "perfecto" de ESTA pantalla: ningún cuadro
        puede ser más rápido que su refresco físico, así que el más rápido que
        se vea es una buena estimación (60 Hz → ~16,7 ms; 120 Hz → ~8,3 ms). */
-    if (delta > 6 && delta < intervaloIdeal) intervaloIdeal = delta;
+    /* ⚡ EL IDEAL SE DEDUCE DE LA PANTALLA, NO DEL CUADRO MÁS RÁPIDO QUE SE
+       HAYA VISTO NUNCA (2026-09-01). Antes se quedaba con el mínimo
+       histórico y un solo cuadro anómalo de 6,1 ms lo dejaba clavado ahí:
+       con intervaloIdeal=6, degradar a BAJA exigía superar 10,5 ms, o sea
+       que degradaba apenas la página no corriera a 95 fps. En capturas
+       reales el overlay reportaba "164 Hz", "141 Hz", "65 Hz" y "60 Hz" en
+       corridas distintas del MISMO monitor, y la calidad quedaba siempre en
+       baja. Ahora se toma la mediana de los cuadros rápidos, que es estable
+       y no la puede envenenar un solo valor suelto. */
+    if (delta > 6 && delta < 30) {
+      muestrasDeIntervalo.push(delta);
+      if (muestrasDeIntervalo.length > 120) muestrasDeIntervalo.shift();
+      if (muestrasDeIntervalo.length >= 30) {
+        const ordenadas = muestrasDeIntervalo.slice().sort((a, b) => a - b);
+        const p10 = ordenadas[Math.floor(ordenadas.length * 0.10)];
+        intervaloIdeal = Math.max(p10, 8);
+      }
+    }
 
     /* El peor cuadro de los últimos ~4 segundos (para el cartel de
        diagnóstico). Se olvida solo, así refleja lo que pasa AHORA. */
@@ -159,17 +221,61 @@
         promedioMs > intervaloIdeal * FACTOR_DEGRADAR[calidad + 1]) cuadrosDegrada++;
     else cuadrosDegrada = 0;
 
+    /* ⚡ CUANDO EL EQUIPO ESTÁ CLARAMENTE SOBREPASADO, NO SE ESPERAN LOS
+       45 CUADROS (2026-09-02).
+
+       Los 45 cuadros de confirmación existen para no bajar la calidad por
+       un tropezón pasajero, y para eso están bien. Pero se cuentan en
+       CUADROS, no en segundos, y ahí estaba el problema: en un equipo que
+       va a 5 fps, 45 cuadros son NUEVE SEGUNDOS. O sea que justamente el
+       equipo que más necesita ayuda es el que más tarda en recibirla, y el
+       invitado se come nueve segundos de tirones antes de que el
+       gobernador mueva un dedo.
+
+       Cuando el promedio pasa de TRES VECES el ritmo ideal (menos de 20
+       fps en una pantalla de 60 Hz) no hay nada que confirmar: eso no es
+       un tropezón, es un equipo que no da abasto. Con un cuarto de la
+       racha alcanza y sobra.
+
+       La histéresis para MEJORAR no se toca: subir sigue siendo lento y
+       cauto, que es lo que evita el ping-pong de efectos. */
+    const estaMuySobrepasado = promedioMs > intervaloIdeal * 3;
+    const cuadrosQueHacenFalta = estaMuySobrepasado
+      ? Math.ceil(CUADROS_PARA_DEGRADAR / 4)
+      : CUADROS_PARA_DEGRADAR;
+
     // ¿Conviene MEJORAR un nivel (el equipo va sobrado)?
     if (calidad > CALIDAD_GRAFICA.ALTA &&
         promedioMs < intervaloIdeal * FACTOR_MEJORAR[calidad]) cuadrosMejora++;
     else cuadrosMejora = 0;
 
-    if (cuadrosDegrada >= CUADROS_PARA_DEGRADAR) {
+    if (cuadrosDegrada >= cuadrosQueHacenFalta) {
       calidad++;
       /* Si este equipo YA tuvo que bajar de este nivel antes, la próxima vez
          se le va a exigir mucha más paciencia antes de volver a subir: evita
-         el ping-pong de prender y apagar efectos una y otra vez. */
-      intentosFallidos[calidad] = (intentosFallidos[calidad] || 0) + 1;
+         el ping-pong de prender y apagar efectos una y otra vez.
+
+         ⚠️ EL ÍNDICE ESTABA CORRIDO EN UNO, Y POR ESO EL ANTI-PING-PONG
+         NUNCA FUNCIONÓ (2026-09-03). Esta línea anotaba el fallo DESPUÉS del
+         `calidad++`, o sea contra el nivel al que se estaba BAJANDO, mientras
+         que cuadrosNecesariosParaMejorar() lee `intentosFallidos[calidad - 1]`
+         — el nivel al que se quiere SUBIR. Los dos índices nunca coincidían:
+         al bajar de MEDIA(1) a BAJA(2) se anotaba en [2], y al querer volver
+         a MEDIA se consultaba [1], que seguía en cero. Resultado: la penalidad
+         creciente (2,5 s → 5 s → 10 s) no se aplicaba NUNCA y siempre bastaban
+         los 150 cuadros base para reintentar.
+
+         Eso es exactamente el ping-pong que este bloque decía evitar, y se veía
+         en un teléfono real: en la portada, de noche, el haz de luz y los
+         pétalos grandes aparecían y desaparecían cada ~2 segundos. Cada subida
+         a MEDIA reencendía esos efectos, el equipo no los aguantaba, y volvía a
+         bajar — un diente de sierra permanente, además del costo en fps de
+         estar prendiendo y apagando sistemas todo el tiempo.
+
+         Ahora se anota contra el nivel que NO se aguantó (`calidad - 1`, que
+         es el nivel del que se viene), que es justo el que consulta la otra
+         función. */
+      intentosFallidos[calidad - 1] = (intentosFallidos[calidad - 1] || 0) + 1;
       cuadrosDegrada = cuadrosMejora = 0;
       aplicarNivel();
     } else if (cuadrosMejora >= cuadrosNecesariosParaMejorar()) {
@@ -224,7 +330,19 @@
   let peorTareaAlCargar = 0;
   let peorTareaDespues = 0;
   let laInvitacionEsVisible = false;
-  document.addEventListener('invitacion-visible', () => {
+  /* ⚡ escucharEventoQueQuizasYaPaso() Y NO addEventListener DIRECTO
+     (2026-09-02). ESTE ARCHIVO ES EL INSTRUMENTO CON EL QUE SE DIAGNOSTICA
+     TODO LO DEMÁS, Y ESTABA SESGADO.
+
+     Este archivo entra en la posición 20 de los 23 que se inyectan al hacer
+     clic, mientras que 'invitacion-visible' se dispara a un plazo fijo tras
+     el clic. En un equipo lento el archivo llegaba DESPUÉS del evento y su
+     escucha nunca corría: `laInvitacionEsVisible` se quedaba en false para
+     siempre y, por lo tanto, TODA tarea larga se contabilizaba como "de
+     carga". Por eso el cartel de ?fps=1 mostraba siempre "DESPUÉS 0 ms",
+     aunque hubiera bloqueos durante la navegación — justo el número que
+     había que llevar a cero. Se estaba midiendo con una regla rota. */
+  escucharEventoQueQuizasYaPaso('invitacion-visible', () => {
     /* Se da un respiro: la construcción diferida arranca justo acá y sus
        tareas son todavía "de carga", no de navegación. */
     setTimeout(() => { laInvitacionEsVisible = true; }, 2500);
@@ -322,7 +440,25 @@
        Cada 20 s en vez de 5 basta de sobra: la cantidad de nodos apenas
        cambia una vez que la página terminó de construirse. */
     function contarElementos(ahora) {
-      if (ahora - ultimoConteo < 20000 && ultimoConteo !== 0) return;
+      /* ⚡ AL PRINCIPIO SE CUENTA SEGUIDO, DESPUÉS NO (2026-09-02).
+         ESTE CARTEL ESTABA MINTIENDO, Y SE USABA PARA DIAGNOSTICAR.
+
+         El conteo es caro (recorre todo el DOM), así que se hacía cada
+         20 segundos. El problema es CUÁNDO se hacía el primero: al segundo
+         1 de cargar la página, con el sobre todavía cerrado y la escena sin
+         construir. Ese "flores: 0" quedaba congelado en pantalla hasta el
+         segundo 21 — o sea que en TODA carga, mirar el cartel antes de los
+         21 segundos mostraba cero flores, se hubieran construido o no.
+         Varias capturas que se usaron como prueba de que las flores
+         fallaban no probaban nada.
+
+         Ahora, durante los primeros 30 segundos —que es cuando se abre el
+         sobre y se construye todo, y por lo tanto lo único que interesa
+         mirar— se cuenta cada 2 segundos. Pasado ese rato, vuelve al
+         intervalo largo de siempre. El costo extra dura medio minuto y solo
+         existe con ?fps=1. */
+      const cadaCuantoContar = ahora < 30000 ? 2000 : 20000;
+      if (ahora - ultimoConteo < cadaCuantoContar && ultimoConteo !== 0) return;
       ultimoConteo = ahora;
 
       /* Se cuenta en un hueco libre —no en medio del trabajo de animación— y
@@ -383,6 +519,20 @@
       ).join('  ·  ') + '\n';
     }
 
+    /**
+     * El tamaño real del lienzo de velas. Era la capa más grande de la
+     * página (el documento entero) y se acotó a la franja donde de verdad
+     * hay candelabros: este renglón es la prueba de que el recorte ocurrió.
+     * @returns {string}
+     */
+    function lineaDeLienzoDeVelas() {
+      const e = window.EstadoDelLienzoDeVelas;
+      if (!e) return '';
+      const mpx = (e.ancho * e.alto / 1e6).toFixed(1);
+      return '\nlienzo velas: ' + e.ancho + '×' + e.alto +
+             ' desde y=' + e.top + '  (' + mpx + ' Mpx)';
+    }
+
     function actualizarCartel() {
       const ahora = performance.now();
       const fps = Math.round(1000 / promedioMs);
@@ -418,19 +568,56 @@
          toca el DOM, y es la última: así no queda ninguna lectura después de
          una escritura, que es lo que provoca el reflow forzado. El tamaño del
          documento sale del ResizeObserver, no de scrollWidth. */
+      /* ⚡ DOS DATOS QUE FALTABAN Y COSTARON DÍAS (2026-09-02).
+
+         1) "animación OFF" estaba en gris, entre paréntesis, pegado a la
+            calidad. Se midió durante días sin notarlo: con las animaciones
+            apagadas la escena está congelada, así que TODO da ~60 fps y no
+            cae un solo pétalo. Ninguna medición vale en ese estado, así que
+            ahora ocupa su propia línea y avisa que lo que sigue no sirve.
+
+         2) El TAMAÑO DE LA VENTANA. El costo de componer capas es por
+            píxel: la misma máquina con la ventana a la mitad cuesta menos
+            de la mitad. Sin ese dato, dos mediciones del mismo equipo no
+            son comparables — y no estaba en ningún lado. */
+      const anchoVentana = Math.round(window.innerWidth);
+      const altoVentana  = Math.round(window.innerHeight);
+      const megapixeles  = (anchoVentana * altoVentana / 1e6).toFixed(1);
+
+      /* Igual de importante que el aviso de animaciones: si hay un sistema
+         apagado con ?sin=, estas cifras NO son las de la web real. Una
+         medición con un interruptor puesto, anotada como si fuera la normal,
+         envenena todo lo que venga después. */
+      const apagados = (typeof sistemasApagadosParaMedir === 'function')
+        ? sistemasApagadosParaMedir()
+        : [];
+
       cartel.textContent =
-        `calidad: ${NOMBRE_DE_LA_CALIDAD[calidad]}` +
-        `${prefiereMenosMovimiento() ? '  (animación OFF)' : ''}\n` +
+        (prefiereMenosMovimiento()
+          ? '⚠ ANIMACIONES APAGADAS — estas cifras no sirven para medir\n'
+          : '') +
+        (apagados.length
+          ? '⚠ APAGADO PARA MEDIR: ' + apagados.join(', ') + '\n'
+          : '') +
+        `calidad: ${NOMBRE_DE_LA_CALIDAD[calidad]}\n` +
         `~${fps} fps  (${promedioMs.toFixed(1)} ms/cuadro)` +
         `  ·  pantalla ~${hzPantalla} Hz\n` +
+        `ventana: ${anchoVentana}×${altoVentana}  (${megapixeles} Mpx)\n` +
         `peor cuadro: ${peorCuadroReciente.toFixed(0)} ms  (~${peorFps} fps)\n` +
         `tareas largas: ${cuantasTareasLargas}  ·  al cargar ${peorTareaAlCargar.toFixed(0)} ms` +
         `  ·  DESPUÉS ${peorTareaDespues.toFixed(0)} ms  ·  última ${reciente}\n` +
         `nodos DOM: ${conteos.nodos}  ·  flores: ${conteos.flores}\n` +
         `pétalos activos: ${conteos.petalos}  ·  velas: ${conteos.velas}\n` +
         lineaDeRamilletes() +
+        lineaDeLienzoDeVelas() +
         lineaDeMemoria +
-        `\ndocumento: ${tamanoDelDocumento}`;
+        `\ndocumento: ${tamanoDelDocumento}` +
+        /* ⚡ DIAGNÓSTICO DIRECTO EN EL CARTEL (2026-09-02): si algún script
+           de la escena tiró un error sin atrapar (ver 02-utilidades.js),
+           se muestra acá. Así una captura de este overlay alcanza para ver
+           la causa real de una pieza que no terminó de construirse, sin
+           depender de leer la consola del navegador. */
+        (window._ultimoErrorSinAtrapar ? `\n⚠ ERROR: ${window._ultimoErrorSinAtrapar}` : '');
 
       /* Cada 2 s en vez de 1: escribir el cartel obliga a recalcular su
          estilo y su layout, y a 1 s eso pesaba de más en las mediciones. */

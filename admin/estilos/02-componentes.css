@@ -57,8 +57,11 @@
      .boton:active siga leyéndose como la señal de toque principal. */
   box-shadow: var(--brillo-oro);
 }
+/* El resplandor al apretar sale del color principal vigente, no de un
+   morado escrito a mano: si no, con otra paleta el botón se apretaba y
+   soltaba un halo del color anterior (2026-09-03). */
 .boton--principal:active {
-  box-shadow: 0 0 10px rgba(107, 63, 160, .25);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--oro) 25%, transparent);
 }
 
 .boton--peligro {
@@ -75,8 +78,15 @@
 
 .boton--ancho { width: 100%; }
 
+/* ⚡ 44 Y NO 34, AUNQUE SE LLAME "CHICO" (2026-09-03). Lo chico es la letra
+   y el aire de los lados, no la zona que hay que acertar con el dedo. Este
+   botón vive en la barra flotante de selección múltiple —"Recordar",
+   "Asignar mesa", "Marcar llegada"— y esa barra se usa con la lista llena de
+   filas tocables debajo: fallar el toque ahí no es incómodo, es abrir a la
+   persona equivocada. La regla de los 44 px está escrita al principio de
+   este archivo; esto la incumplía. */
 .boton--chico {
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 var(--esp-2);
   font-size: 13px;
 }
@@ -118,9 +128,16 @@
  * terminaba de recorrerla y quería usarlo. Ahora, al desplazarse hacia
  * abajo se aparta solo, y reaparece apenas se sube: sigue estando a un
  * gesto de distancia sin estorbar nunca. */
+/* ⚡ El botón queda pegado a la app, no al borde de la pantalla
+   (2026-09-03). Con la app centrada y un techo de 640 px, un `right` suelto
+   lo dejaba flotando solo en el vacío de la derecha del monitor, a un palmo
+   de la interfaz a la que pertenece. La cuenta lo apoya contra el borde
+   derecho del contenido: la mitad de lo que sobra a cada lado, más el
+   margen de siempre. En teléfono no sobra nada, así que se comporta
+   exactamente como antes. */
 .boton-flotante {
   position: fixed;
-  right: var(--esp-3);
+  right: max(var(--esp-3), calc((100% - 640px) / 2 + var(--esp-3)));
   bottom: calc(var(--alto-navegacion) + var(--seguro-abajo) + var(--esp-3));
   width: 48px;
   height: 48px;
@@ -133,7 +150,7 @@
   justify-content: center;
   box-shadow: var(--sombra);
   z-index: 40;
-  transition: transform 220ms ease, opacity 220ms ease;
+  transition: transform var(--entrada), opacity var(--entrada);
 }
 .boton-flotante:active { transform: scale(.92); }
 
@@ -191,6 +208,11 @@
    hace lugar con padding-right; el botón se ancla encima. */
 .campo__con-boton { position: relative; display: block; }
 .campo__con-boton .campo__control { padding-right: 42px; }
+/* ⚡ Se ve de 34 px pero se toca en 44 (2026-09-03), con el mismo truco que
+   ya usa .ayuda más abajo: la zona sensible se agranda con un ::after
+   invisible, sin que el botón crezca y desborde el alto del campo. Es la
+   forma de cumplir la regla de los 44 px cuando el dibujo tiene que seguir
+   siendo chico. */
 .campo__boton-ojo {
   position: absolute;
   top: 50%;
@@ -207,6 +229,12 @@
   border-radius: 50%;
   transition: background var(--transicion);
 }
+/* La zona sensible, invisible: 5 px más por lado llevan los 34 a 44. */
+.campo__boton-ojo::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+}
 .campo__boton-ojo:active {
   background: color-mix(in srgb, var(--oro) 12%, transparent);
 }
@@ -220,11 +248,29 @@ textarea.campo__control {
 
 select.campo__control {
   appearance: none;
-  /* La flechita, dibujada como fondo para no depender de otro archivo. */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23a07830' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  /* ⚡ LA FLECHA SE DIBUJA CON CSS, NO CON UN SVG DE COLOR QUEMADO
+     (2026-09-03). Antes era un `data:` URI con `stroke='%23a07830'` adentro:
+     un dorado que no correspondía a NINGÚN token del panel —ni a --oro ni a
+     --acento-victoriano—, resto de una paleta anterior. Y por estar dentro
+     de una URL no podía seguir a var(--oro) de ninguna manera: cuando Lucila
+     elegía otra paleta desde Colores del panel, todo cambiaba menos esta
+     flechita, que se quedaba dorada en un panel morado o ciruela.
+
+     Dos bordes de un cuadrado girado 45° dan la misma flecha, en color
+     heredado, y de paso el archivo pierde una URL ilegible. */
+     Se dibuja con dos degradados en lugar de un pseudo-elemento: `.campo`
+     no tiene `position: relative`, así que un ::after se habría posicionado
+     contra cualquier ancestro y aparecido en un lugar cualquiera de la
+     pantalla. Los degradados van sobre el propio <select>, aceptan
+     var(--oro), y no dependen de :has() ni de ningún envoltorio. */
+  background-image:
+    linear-gradient(45deg,  transparent 50%, var(--oro) 50%),
+    linear-gradient(135deg, var(--oro) 50%, transparent 50%);
+  background-position:
+    right calc(var(--esp-2) + 5px) center,
+    right var(--esp-2) center;
+  background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
-  background-position: right var(--esp-2) center;
-  background-size: 12px;
   padding-right: var(--esp-4);
 }
 
@@ -368,7 +414,7 @@ select.campo__control {
   height: 100%;
   background: var(--oro);
   border-radius: 999px;
-  transition: width 300ms ease;
+  transition: width var(--entrada);
 }
 
 /* Pasado el techo, la barra se pone roja. Es el aviso de sobregiro. */
@@ -623,6 +669,11 @@ select.campo__control {
 
 .lista__lado {
   text-align: right;
+  /* Cifras de ancho fijo: es la columna donde viven los montos y las
+     cuentas, y con cifras proporcionales los números bailan de renglón
+     a renglón y al actualizarse. Es el detalle que separa una app de
+     una herramienta contable. */
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
   /* El lado nunca se encoge, pero tampoco puede comerse la pantalla: un
      código de pase largo se corta en vez de invadir el nombre. */
@@ -635,7 +686,36 @@ select.campo__control {
 
 .hoja {
   position: fixed;
+  /* El respaldo, y lo que se ve sin teclado: la pantalla entera. */
   inset: 0;
+
+  /* ⚠️ LA HOJA SE ANCLA AL ÁREA QUE DE VERDAD SE VE (2026-09-04)
+     `--tope-visible` y `--alto-visible` las escribe
+     activarCompensacionDeTeclado() (06-piezas.js) a partir de
+     `visualViewport`, que es la única API que sabe cuánto queda
+     visible cuando aparece el teclado.
+
+     ANTES SE HACÍA CON UN translateY CALCULADO, y por eso fallaba en
+     algunos teléfonos. La cuenta era `innerHeight − (offsetTop +
+     height)`: cuánto tapa el teclado del fondo de la pantalla física.
+     Eso funciona SOLO si el layout viewport no se achica con el
+     teclado. Cuando el navegador sí lo achica —que depende del
+     teléfono— la resta da ≈0, el translateY no compensa nada, y la
+     hoja se queda con su borde inferior detrás del teclado.
+
+     Ahora no se calcula ningún desplazamiento: la caja se posiciona
+     encima del área visible real y listo, venga el número de donde
+     venga. Con `align-items: flex-end` el panel queda pegado al fondo
+     de lo que se ve.
+
+     Sobre la sintaxis: `inset: 0` deja los cuatro lados en 0, y estas
+     dos líneas pisan `top` y `height`. Con top, bottom y height a la
+     vez, el navegador ignora `bottom` — así que manda esta caja. Y sin
+     JS o sin `visualViewport`, los respaldos (`0px` y `auto`) dan
+     exactamente el `inset: 0` de siempre. */
+  top: var(--tope-visible, 0px);
+  height: var(--alto-visible, auto);
+
   z-index: 60;
   display: flex;
   align-items: flex-end;
@@ -651,7 +731,13 @@ select.campo__control {
 .hoja__panel {
   position: relative;
   width: 100%;
-  max-height: 88vh;
+  /* El teclado del celular no achica ni `vh` ni `dvh` ni `svh` — esa
+     distinción queda fuera de lo que esas unidades cubren, por
+     especificación. `--alto-hoja` la escribe abrirHoja()/cerrarHoja() en
+     06-piezas.js a partir de `visualViewport`, que sí lo sabe; sin JS o en
+     un navegador sin esa API, `88dvh` se comporta exactamente igual que
+     antes (era `88vh` a secas). */
+  max-height: var(--alto-hoja, 88dvh);
   display: flex;
   flex-direction: column;
   background: var(--fondo-elevado);
@@ -686,7 +772,20 @@ select.campo__control {
   border-bottom: 1px solid var(--borde);
 }
 
-.hoja__titulo { font-size: 16px; }
+.hoja__titulo { font-size: 16px; flex: 1; }
+
+/* Números chicos de uso de MegaBot, al otro extremo del encabezado
+   (entre el título y el botón de cerrar). Solo la hoja MegaBot lo
+   llena — abrirHoja()/cerrarHoja() lo vacían y ocultan para que el
+   resto de las hojas no lo hereden (06-piezas.js). Nada de fondo,
+   borde ni barra: es texto, no una tarjeta. */
+.hoja__uso {
+  font-size: 12px;
+  color: var(--texto-tenue);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  line-height: 1;
+}
 
 .hoja__cuerpo {
   padding: var(--esp-3);
@@ -930,4 +1029,264 @@ select.campo__control {
 @keyframes latir {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+
+
+/* ─── 14. CONFIRMAR (hoja propia, no el confirm() del navegador) ────── */
+/*
+ * POR QUÉ EXISTE
+ * Chrome en Android agrega "No volver a mostrar más diálogos" al
+ * segundo confirm() seguido. Con veinte confirmaciones en la app es
+ * cuestión de tiempo que se toque — y desde ese momento TODAS devuelven
+ * false en silencio. No solo se rompen los borrados: se rompe el
+ * guardarraíl de "escribiste cosas sin guardar", que es justamente el
+ * que evita perder media hora de trabajo.
+ *
+ * Va por encima de todo (z-index 100) porque casi siempre se pregunta
+ * con una hoja ya abierta debajo, y #hoja es una sola: reusarla se
+ * comería el formulario que se está por confirmar.
+ */
+.confirmar {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--esp-3);
+}
+
+.confirmar__fondo {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, .7);
+  animation: aparecer 140ms ease;
+}
+
+.confirmar__panel {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  max-height: 80dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--esp-4) var(--esp-3) var(--esp-3);
+  background: var(--fondo-elevado);
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo);
+  box-shadow: var(--sombra-alta);
+  animation: confirmar-entrar 180ms cubic-bezier(.2, .8, .3, 1);
+}
+
+/* El borde de alerta solo cuando lo que se pregunta destruye algo. Si
+   todas las preguntas se vieran iguales de graves, ninguna lo sería. */
+.confirmar__panel--peligro { border-color: var(--alerta); }
+
+.confirmar__titulo {
+  font-size: 16px;
+  line-height: 1.35;
+  margin-bottom: var(--esp-2);
+}
+
+/* Qué se pierde exactamente. Es la mitad que un "¿estás seguro?" no
+   tiene, y la única que permite decidir sin adivinar. */
+.confirmar__detalle {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--texto-tenue);
+  margin-bottom: var(--esp-3);
+  white-space: pre-line;
+}
+
+.confirmar__acciones {
+  display: flex;
+  gap: var(--esp-2);
+}
+.confirmar__acciones .boton {
+  flex: 1;
+  min-height: 44px;
+}
+
+@keyframes confirmar-entrar {
+  from { opacity: 0; transform: scale(.96); }
+}
+
+
+/* ─── 15. ELEGIR ETIQUETAS DE UN TOQUE ──────────────────────────────── */
+/*
+ * POR QUÉ
+ * Poner etiquetas era escribir cada nombre en un campo y tocar
+ * "Agregar", con un viaje al servidor entre una y otra. Ponerle cuatro
+ * a alguien eran cuatro tipeos, cuatro esperas — y cualquier diferencia
+ * de mayúsculas creaba una etiqueta nueva ("Familia materna" y "familia
+ * materna" convivían como dos cosas distintas).
+ *
+ * Ahora están todas a la vista y se alternan con un toque. Ver
+ * pintarEtiquetasDe() en 06-piezas.js.
+ */
+.etiquetas-elegir {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.etiqueta-chip {
+  /* 32px de alto es menos que los 44 del mínimo táctil, y es a
+     propósito: son quince objetivos juntos en una hoja que ya scrollea,
+     y a 44 ocuparían media pantalla. El área efectiva la da el padding
+     lateral generoso, y equivocarse acá no destruye nada — se toca de
+     nuevo y se apaga. */
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--borde);
+  background: transparent;
+  color: var(--texto-tenue);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--rapido), color var(--rapido), border-color var(--rapido);
+}
+
+/* El único acento: la etiqueta puesta. Si todas se vieran marcadas,
+   ninguna lo estaría. */
+.etiqueta-chip--activa {
+  background: var(--oro);
+  border-color: var(--oro);
+  color: var(--fondo);
+  font-weight: 600;
+}
+
+.etiqueta-chip:disabled { opacity: .5; }
+
+/* ─── EL ACORDEÓN DE ETIQUETAS ──────────────────────────────
+
+   Los quince chips se repetían una vez por persona en la ficha de un
+   grupo. Ahora viven dentro de un <details> cerrado, y el <summary>
+   muestra lo que SÍ está puesto — que es lo único que hace falta ver
+   sin abrir. Ver el bloque de etiquetas en 06-piezas.js. */
+
+.etiquetas-acordeon {
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo);
+  padding: 0 var(--esp-2) 0;
+}
+
+/* Abierto, el contenido necesita aire abajo; cerrado, ese espacio
+   sobraría y haría que la fila se vea flotando. */
+.etiquetas-acordeon[open] { padding-bottom: var(--esp-2); }
+
+.etiquetas-acordeon__cabecera {
+  /* 44px: es el objetivo táctil que abre y cierra, y a diferencia de los
+     chips acá hay uno solo por bloque, así que puede pagar el alto. */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: var(--esp-1);
+  flex-wrap: wrap;
+  cursor: pointer;
+  /* El triángulo por omisión de Safari se sale del sistema visual; se
+     saca y el estado se lee por el propio resumen y por el subrayado. */
+  list-style: none;
+}
+.etiquetas-acordeon__cabecera::-webkit-details-marker { display: none; }
+
+.etiquetas-acordeon__cabecera:focus-visible {
+  outline: 2px solid var(--oro);
+  outline-offset: 2px;
+}
+
+/* El rótulo ya trae margen inferior de .campo__rotulo, que acá
+   descentraría la fila. */
+.etiquetas-acordeon__cabecera .campo__rotulo { margin-bottom: 0; }
+
+.etiquetas-acordeon__puestas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  flex: 1;
+}
+
+/* En el resumen los chips no se tocan: solo informan. Más chicos, para
+   que quepan varios en la fila sin empujar el rótulo a otro renglón. */
+.etiqueta-chip--resumen {
+  min-height: 0;
+  padding: 2px 8px;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.etiquetas-acordeon__vacio {
+  font-size: 12px;
+  color: var(--texto-tenue);
+}
+
+/* El contador de cuota de MegaBot cambia de color según cuánto margen
+   queda: es lo que se mira de reojo mientras se escribe, sin llegar a
+   leer el número. Ver pintarUsoDeMegaBot() en 32-asistente.js. */
+.hoja__uso--ojo    { color: var(--ojo); }
+.hoja__uso--alerta { color: var(--alerta); font-weight: 600; }
+
+
+/* ─── 16. MEGABOT: "ESTÁ ESCRIBIENDO" Y EL CAMPO QUE CRECE ──────────── */
+/*
+ * MegaBot tarda decenas de segundos en contestar, y en ese rato la
+ * pantalla se quedaba exactamente igual que si el mensaje no se hubiera
+ * mandado. Sin nada que mirar, la reacción natural es volver a escribir
+ * o dar por hecho que se colgó. Ver mostrarEscribiendoDeMegaBot().
+ */
+.megabot-puntitos {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+}
+.megabot-puntitos span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--texto-tenue);
+  animation: megabot-latido 1.4s ease-in-out infinite;
+}
+/* Desfasados: tres puntos latiendo al unísono se leen como un error de
+   carga, escalonados se leen como alguien tecleando. */
+.megabot-puntitos span:nth-child(2) { animation-delay: .2s; }
+.megabot-puntitos span:nth-child(3) { animation-delay: .4s; }
+
+@keyframes megabot-latido {
+  0%, 60%, 100% { opacity: .25; transform: translateY(0); }
+  30%           { opacity: 1;   transform: translateY(-3px); }
+}
+
+/* Quien pidió menos movimiento en su teléfono no debería recibir tres
+   puntos saltando. Se quedan quietos y a media opacidad: se sigue
+   entendiendo que algo está en curso. */
+@media (prefers-reduced-motion: reduce) {
+  .megabot-puntitos span { animation: none; opacity: .5; }
+}
+
+/* El campo de escribir es un <textarea> que crece hasta cuatro
+   renglones (el alto lo pone el JS, que es quien puede medir el
+   contenido). Sin resize a mano: en un teléfono no sirve y deja una
+   esquina rara. */
+.megabot-entrada {
+  resize: none;
+  overflow-y: auto;
+  min-height: 44px;
+  max-height: 96px;
+  line-height: 1.4;
+  padding-top: 11px;
+  padding-bottom: 11px;
+}
+
+/* En qué moneda se está escribiendo un monto. Solo aparece cuando NO es
+   la moneda base: el selector vive en localStorage y sobrevive entre
+   sesiones, así que puede quedar en dólares sin que nadie se acuerde —
+   y al guardar se multiplica por el tipo de cambio. Ver campoDinero(). */
+.campo__moneda {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--oro);
 }

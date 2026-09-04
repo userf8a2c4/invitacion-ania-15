@@ -60,9 +60,17 @@ const VISTAS = {
   invitados: { titulo: 'Gente',     dibujar: () => dibujarGente() },
   correo:    { titulo: 'Correo',    dibujar: () => dibujarCorreo() },
   /* La clave interna sigue siendo 'dinero' —la usan la URL de los
-     atajos del icono y las llamadas a ensuciarVistas()— pero lo que se
-     lee en pantalla es "Presupuesto". */
-  dinero:    { titulo: 'Presupuesto', dibujar: () => dibujarDinero() },
+     atajos del icono y las llamadas a ensuciarVistas()— y lo que se lee
+     en pantalla dice lo mismo.
+
+     ⚡ SE LLAMA "DINERO" EN LOS DOS LADOS (2026-09-02). El acceso del
+     índice decía "Dinero" (07-vista-resumen.js:256) y el encabezado de
+     adentro decía "Presupuesto": dos nombres para el mismo lugar obligan
+     a traducir mentalmente cada vez que se entra. Se deja la palabra más
+     simple y la que ya se usa para nombrarlo en voz alta. Adentro sigue
+     habiendo un presupuesto, claro, pero es UNA de las cosas que vive
+     acá —junto con gastos, pagos y recibos—, no el nombre del lugar. */
+  dinero:    { titulo: 'Dinero', dibujar: () => dibujarDinero() },
   /* alVolver corre al entrar a una vista que YA estaba dibujada. Evento
      lo usa para volver a su índice: si uno dejó abierta una sección y
      se fue a otra pestaña, al regresar tiene que ver el índice otra vez
@@ -72,16 +80,30 @@ const VISTAS = {
                alVolver: () => volverAlIndiceDeEvento() },
 };
 
-/* Gente, Correo, Presupuesto y Evento ya no tienen botón propio en la
-   barra: se llega a ellos desde Planificar. Para que la barra no se
-   quede sin ninguna pestaña marcada al entrar a uno de esos —lo que se
-   vería como "me perdí"—, esta tabla dice qué botón de abajo hay que
-   dejar encendido en su lugar. */
+/* ⚡ LA BARRA CAMBIÓ: Hoy · Gente · Dinero · Más (2026-09-03).
+   Antes era Hoy · Resumen · Planificar · Más, y eso costaba un toque fijo en
+   TODAS las tareas del día a día: Gente, Dinero, Correo y Evento no tenían
+   botón propio y había que pasar por el índice de Planificar para llegar a
+   ellos. Contado sobre las tareas reales de Lucila, ese peaje era la mitad de
+   lo que sobraba: agregar un invitado eran 4 toques, marcar un pago 4,
+   mandar un link 4 — todos con un primer toque que no hacía nada más que
+   abrir una lista de enlaces.
+
+   Con la barra nueva, los dos destinos donde de verdad se trabaja todos los
+   días están a un toque. "Resumen" se fundió en Hoy (una sola pantalla de
+   inicio) y "Planificar" dejó de ser peaje: sus destinos están abajo o entre
+   los accesos de Hoy. Las dos vistas siguen existiendo y siguen siendo
+   alcanzables por código, para no romper irA('resumen'), los atajos del
+   icono ni nada que las nombre.
+
+   Esta tabla dice, para una vista sin botón propio, cuál encender en su
+   lugar: si no, la barra se queda sin ninguna pestaña marcada, que se lee
+   como "me perdí". */
 const PADRE_DE_VISTA = {
-  invitados: 'planificar',
-  correo:    'planificar',
-  dinero:    'planificar',
-  evento:    'planificar',
+  resumen:    'hoy',
+  planificar: 'mas',
+  correo:     'mas',
+  evento:     'mas',
 };
 
 
@@ -95,9 +117,35 @@ const PADRE_DE_VISTA = {
  *                                     hayan pedido antes.
  * @returns {void}
  */
-function irA(cual, recargar) {
+function irA(cual, recargar, desdeElHistorial) {
   const vista = VISTAS[cual];
   if (!vista) return;
+
+  /* ⚡ EL BOTÓN "ATRÁS" DEL TELÉFONO CERRABA LA APP (2026-09-03).
+     No había ni un pushState en toda la navegación: para el navegador, ir de
+     Hoy a Gente no era ir a ningún lado. Así que el gesto más usado de
+     Android —deslizar desde el borde para volver— no volvía a la pestaña
+     anterior: salía del panel. Y como no se guardaba la vista, al reabrir
+     había que rehacer el camino entero.
+
+     Cada cambio de vista deja ahora una marca en el historial, y el gesto de
+     atrás la recorre. La primera vista no empuja nada, la reemplaza: si no,
+     el primer "atrás" llevaría a una pantalla que nadie llegó a ver.
+
+     `desdeElHistorial` lo pone el propio popstate (más abajo) para no volver
+     a empujar lo que se acaba de sacar, que sería un bucle. */
+  if (!desdeElHistorial && window.history) {
+    try {
+      const marca = { vista: cual };
+      if (!history.state || !history.state.vista) {
+        history.replaceState(marca, '');
+      } else if (VISTA_ACTUAL !== cual) {
+        history.pushState(marca, '');
+      }
+    } catch (error) {
+      // Historial no disponible: la app sigue funcionando igual que antes.
+    }
+  }
 
   // Fase 8: cuánto duró la pantalla que se deja. irA() es el único
   // lugar por donde se cambia de vista, así que un solo gancho acá
@@ -109,6 +157,15 @@ function irA(cual, recargar) {
     }
   }
   VISTA_ENTRO_EN = Date.now();
+
+  /* Lo que una pantalla deja a medias no puede seguirla a la siguiente.
+     Por ahora solo Gente tiene un estado así (el modo selección); si
+     aparece otro, va acá, que es el único lugar por donde se cambia de
+     vista. Ver olvidarSeleccionDeGente() en 08-vista-invitados.js. */
+  if (VISTA_ACTUAL === 'invitados' && cual !== 'invitados' &&
+      typeof olvidarSeleccionDeGente === 'function') {
+    olvidarSeleccionDeGente();
+  }
 
   VISTA_ACTUAL = cual;
 
@@ -173,6 +230,22 @@ function irA(cual, recargar) {
  */
 function ensuciarVistas(...cuales) {
   cuales.forEach(cual => { VISTAS_CARGADAS[cual] = false; });
+}
+
+/**
+ * Marca TODAS las vistas como viejas.
+ *
+ * Se usa al volver a la app después de un rato (ver el
+ * `visibilitychange` de 26-sincronizacion.js): en ese momento no hay
+ * ninguna sección de la que se pueda decir que está al día.
+ *
+ * No pide nada al servidor: solo hace que cada vista vuelva a pedir sus
+ * datos la próxima vez que se abra.
+ *
+ * @returns {void}
+ */
+function ensuciarTodasLasVistas() {
+  Object.keys(VISTAS).forEach(cual => { VISTAS_CARGADAS[cual] = false; });
 }
 
 /**
@@ -251,6 +324,31 @@ function prepararNavegacion() {
     if (evento.key !== 'Escape') return;
     cerrarHoja();
   });
+
+  /* ─── El gesto de "atrás" del teléfono ──────────────────────────────
+     Ver la nota grande en irA(). Dos comportamientos, en este orden:
+
+     1. Si hay una hoja abierta (una ficha, un formulario), atrás la CIERRA
+        y la vista no se mueve. Es lo que hace cualquier app, y evita el
+        caso peor: estar llenando un formulario, hacer atrás por reflejo
+        para corregir algo, y que se cierre el panel entero. Como la vista
+        no cambió, se devuelve al historial la marca que se acaba de sacar.
+        Ojo: cerrarHoja() puede preguntar si hay algo escrito sin guardar;
+        si se cancela, la hoja se queda abierta y el historial ya quedó
+        consistente igual.
+
+     2. Si no hay nada abierto, se va a la vista anterior. */
+  window.addEventListener('popstate', evento => {
+    const hoja = buscar('#hoja');
+    if (hoja && !hoja.classList.contains('oculto')) {
+      try { history.pushState({ vista: VISTA_ACTUAL }, ''); } catch (error) { /* nada */ }
+      cerrarHoja();
+      return;
+    }
+
+    const cual = (evento.state && evento.state.vista) || 'hoy';
+    irA(cual, false, true);
+  });
 }
 
 /**
@@ -317,10 +415,13 @@ function dibujarMas() {
  */
 function nombreDeOpcionDeMenu(clave) {
   const nombres = {
+    'resumen':     'Resumen',
+    'planificar':  'Todas las herramientas',
     'el-dia':      'Modo día del evento',
     'escanear':    'Escanear pases',
     'compartir':   'Compartir con proveedores',
     'importar':    'Importar desde una hoja de cálculo',
+    'etiquetas_acomodo': 'Etiquetas',
     'alarmas':     'Alarmas',
     'bitacora':    'Historial de cambios',
     'cuenta':      'Mi cuenta',
@@ -330,6 +431,7 @@ function nombreDeOpcionDeMenu(clave) {
     'etiquetas':   'Cambiar los nombres',
     'colores':     'Colores del panel',
     'fab-config':  'Mis herramientas rápidas',
+    'megabot':     'MegaBot',
     'comandos-asistente': 'Comandos del asistente',
     'respaldo':    'Estado del respaldo',
     'instalar':    'Instalar en la pantalla de inicio',
@@ -346,6 +448,17 @@ function nombreDeOpcionDeMenu(clave) {
  */
 function atenderMenu(opcion) {
   switch (opcion) {
+    /* Las dos vistas que perdieron su botón de la barra. Son vistas de
+       verdad, no hojas: se va a ellas con irA(), y el gesto de atrás
+       devuelve a Más como a cualquier otra. */
+    case 'resumen':
+      irA('resumen');
+      break;
+
+    case 'planificar':
+      irA('planificar');
+      break;
+
     case 'salir':
       salir();
       break;
@@ -368,6 +481,10 @@ function atenderMenu(opcion) {
 
     case 'importar':
       abrirImportador();
+      break;
+
+    case 'etiquetas_acomodo':
+      abrirEtiquetasAcomodo();
       break;
 
     case 'compartir':
@@ -408,6 +525,10 @@ function atenderMenu(opcion) {
 
     case 'fab-config':
       abrirConfiguracionDelFab();
+      break;
+
+    case 'megabot':
+      abrirConfiguracionMegaBot();
       break;
 
     case 'comandos-asistente':

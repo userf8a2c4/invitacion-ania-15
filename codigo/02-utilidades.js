@@ -404,6 +404,38 @@ function scrollActualX() {
   return _scrollGuardadoX;
 }
 
+
+/* ─── SCROLL "DE ESTE CUADRO" — por qué esto ya NO lee window.scrollY ──
+   HISTORIA (2026-08-24 → parche v140)
+   La idea original era leer window.scrollY una vez por cuadro, al
+   principio de un requestAnimationFrame perpetuo registrado ACÁ (segundo
+   script en cargar, antes que cualquier enredadera/joya/luz), para que
+   23-lienzo-de-luz.js tuviera un valor más fresco que scrollActualY()
+   sin forzar un reprocesamiento — la teoría era que leerlo "primero en
+   la fila" salía gratis.
+
+   Un perfil real (?fps=1, calidad baja, sobre YA abierto) la desmintió:
+   esta función seguía siendo el Self Time más caro de todo el cuadro
+   (715 ms, 35.7 %), aun con el guardia de hayAlgoQueMirar() que se le
+   había sumado después. El costo no era CUÁNDO se leía window.scrollY
+   dentro del cuadro — era que hubiera un rAF perpetuo más, para siempre,
+   solo para mantener ese valor fresco.
+
+   23-lienzo-de-luz.js repinta cada 30 ms en calidad alta (nunca al
+   vsync, a propósito — ver CADA_CUANTO_REPINTAR_POR_CALIDAD ahí), así
+   que no necesita un scroll más nuevo que el que ya mantienen los
+   listeners pasivos de scroll/resize/load en _scrollGuardadoY. Se saca
+   el rAF y la lectura directa; scrollDeEsteCuadro() pasa a ser un alias
+   de scrollActualY() — se deja como función aparte (no se borra el
+   nombre) porque 23 y otros la siguen llamando así, y renombrar cada
+   llamador no aporta nada.
+ *
+ * @returns {number}
+ */
+function scrollDeEsteCuadro() {
+  return _scrollGuardadoY;
+}
+
 /**
  * LOS TRES NIVELES DE CALIDAD GRÁFICA.
  *
@@ -667,44 +699,98 @@ function trabajarPorTandas(cuantos, hacerUno, alTerminar, presupuestoMs = 8) {
      50ms que define una "tarea larga"—. Una pestaña de fondo real sigue
      terminando en una fracción de segundo (lejos de los "minutos" de
      antes), y la auditoría deja de ver ninguna tarea que la penalice. */
+  /* ⚡ UN ELEMENTO QUE FALLA YA NO MATA LA CONSTRUCCIÓN ENTERA
+     (2026-09-02). Antes ni esta función ni cederElHilo() tenían un solo
+     try/catch: si hacerUno() lanzaba —una planta con una medida rara, un
+     nodo que no está — la excepción rompía la cadena y TODO lo que faltaba
+     dejaba de construirse, sin reintento y sin dejar rastro visible. Peor
+     todavía con scheduler.yield() (Chrome moderno): ahí la excepción se
+     convierte en una promesa rechazada, que ni siquiera aparece como error
+     en rojo. Así desaparecían enredaderas enteras sin que nada lo dijera.
+
+     Ahora se anota y se sigue con el resto: perder una flor es infinitamente
+     mejor que perder el marco entero, y el error queda registrado para que
+     el cartel de ?fps=1 lo muestre. */
+  function intentar(hacerAlgo) {
+    try {
+      hacerAlgo();
+    } catch (error) {
+      console.error('Falló un paso de una construcción por tandas:', error);
+      if (!window._ultimoErrorSinAtrapar) {
+        window._ultimoErrorSinAtrapar = 'tanda — ' + (error && error.message ? error.message : error);
+      }
+    }
+  }
+
   if (document.hidden) {
     const presupuestoOculto = 40;   // bajo el umbral de "tarea larga" (50ms)
 
     function unaTandaOculta() {
       const arranque = performance.now();
       do {
-        hacerUno(indice++);
+        const cual = indice++;
+        intentar(() => hacerUno(cual));
       } while (indice < cuantos && performance.now() - arranque < presupuestoOculto);
 
       if (indice < cuantos) {
         setTimeout(unaTandaOculta, 0);
         return;
       }
-      if (typeof alTerminar === 'function') alTerminar();
+      if (typeof alTerminar === 'function') intentar(alTerminar);
     }
     unaTandaOculta();
     return;
   }
 
+  /* ⚡ EL PRESUPUESTO SE ADAPTA AL EQUIPO (v170).
+     Los 8 ms de por defecto están calibrados para una máquina que va a 60
+     fps: 8 de 16 ms es medio cuadro, un reparto sensato. Pero en un equipo
+     modesto con la ventana grande el cuadro dura 50-60 ms, y ahí esos
+     mismos 8 ms son el 14 % del tiempo: la construcción avanza a paso de
+     hormiga mientras el otro 86 % se va esperando que el navegador
+     devuelva el hilo. Cuanto más pesada la escena, más lento construye — y
+     más largo el desfile de capas apareciendo de a una, que ocurre
+     justamente en el único momento que hay para causar buena impresión.
+
+     Así que se mide cuánto tardó el navegador en devolver el hilo y el
+     presupuesto se ajusta a eso: si la espera fue larga, el cuadro ya es
+     largo, y quedarse en 8 ms no protege ninguna fluidez que exista. El
+     tope de 3× evita convertir la construcción en una tarea larga. En un
+     equipo rápido la espera es corta y el presupuesto se queda en 8: no
+     cambia nada de lo que ya andaba bien. */
+  let finDeLaTandaAnterior = 0;
+  let presupuestoVigente = presupuestoMs;
+
   function unaTanda() {
     const arranque = performance.now();
+
+    if (finDeLaTandaAnterior > 0) {
+      const esperaDelNavegador = arranque - finDeLaTandaAnterior;
+      presupuestoVigente = Math.max(
+        presupuestoMs,
+        Math.min(presupuestoMs * 3, esperaDelNavegador * 0.35)
+      );
+    }
 
     /* Se hace SIEMPRE al menos uno. Si un solo elemento ya se pasa del
        presupuesto no se puede partir por la mitad, pero sin esta garantía
        en un equipo muy lento no avanzaría nunca. */
     do {
-      hacerUno(indice++);
-    } while (indice < cuantos && performance.now() - arranque < presupuestoMs);
+      const cual = indice++;
+      intentar(() => hacerUno(cual));
+    } while (indice < cuantos && performance.now() - arranque < presupuestoVigente);
+
+    finDeLaTandaAnterior = performance.now();
 
     if (indice < cuantos) {
       cederElHilo(unaTanda);
       return;
     }
-    if (typeof alTerminar === 'function') alTerminar();
+    if (typeof alTerminar === 'function') intentar(alTerminar);
   }
 
   if (cuantos > 0) unaTanda();
-  else if (typeof alTerminar === 'function') alTerminar();
+  else if (typeof alTerminar === 'function') intentar(alTerminar);
 }
 
 /* ─── 5. MEDICIÓN COMPARTIDA DEL RELICARIO ─────────────────────────── */
@@ -815,5 +901,265 @@ document.addEventListener('invitacion-visible', () => setTimeout(actualizarMedid
 function limpiarTexto(texto) {
   const cajaTemporal = document.createElement('div');
   cajaTemporal.textContent = String(texto);
-  return cajaTemporal.innerHTML;
+
+  /* ⚡ LAS COMILLAS TAMBIÉN (2026-09-03)
+   *
+   * `innerHTML` sobre un nodo de texto escapa `&`, `<` y `>` — pero NO
+   * las comillas, porque dentro del texto de un elemento no hacen falta.
+   * El problema es que esto se usa también para armar ATRIBUTOS:
+   *
+   *     ' value="' + limpiarTexto(persona.alergia) + '"'
+   *
+   * Ahí una comilla doble cierra el atributo antes de tiempo. Un
+   * invitado que escriba `alergia "fuerte" al maní`, guarde y vuelva a
+   * abrir su link, desarma la fila de esa persona — y todo lo que venga
+   * después queda como atributos sueltos.
+   *
+   * Es además un vector de inyección de atributo (`" onfocus=…`) sobre
+   * datos que vienen de la base, así que no es solo cosmético.
+   *
+   * Se escapan las dos comillas para que la función sirva igual en texto
+   * y en atributo, que es como ya se estaba usando. */
+  return cajaTemporal.innerHTML
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+
+/* ─── 5B. EVENTOS QUE PUEDEN LLEGAR TARDE (2026-09-01) ─────────────────
+   POR QUÉ HACE FALTA ESTO
+   'sobre-abierto' y 'invitacion-visible' se disparan UNA vez, en un
+   momento fijo (el clic, o un setTimeout con un plazo fijo) — no cuando
+   el módulo interesado ya está listo para escucharlos. Varios de esos
+   módulos (10-reproductor-de-musica.js, 07-marco-y-enredaderas.js) se
+   inyectan recién DESPUÉS del clic, encadenados uno detrás de otro (ver
+   iniciarInyeccionDeLaEscena, más abajo), así que en un equipo lento —o
+   si algún script anterior en la cola tarda en construirse— pueden
+   registrar su addEventListener DESPUÉS de que el evento ya pasó, y se
+   lo pierden PARA SIEMPRE: no hay ninguna segunda oportunidad, porque
+   el evento no vuelve a dispararse.
+
+   Confirmado en la práctica: en un equipo real de gama baja la música no
+   sonó hasta que la persona hizo otro clic al azar más de un minuto
+   después (la reproducía solo la red de seguridad de "cualquier clic" de
+   10-reproductor-de-musica.js, no el evento en sí) y las flores/
+   enredaderas de 07-marco-y-enredaderas.js no llegaron a construirse.
+
+   LA SOLUCIÓN: guardar que el evento YA ocurrió, para que quien pregunte
+   tarde se entere igual. dispararEventoQueQuizasLleguenTarde() dispara Y
+   deja la marca; escucharEventoQueQuizasYaPaso() escucha normal, pero si
+   la marca ya está puesta llama al callback DE UNA, sin esperar un
+   segundo disparo que no va a llegar. */
+
+const _eventosDeLaEscenaYaOcurridos = Object.create(null);
+
+/**
+ * Dispara un CustomEvent y deja anotado que ya ocurrió, para quien
+ * pregunte después de este momento (ver escucharEventoQueQuizasYaPaso).
+ * @param {string} nombre - Nombre del evento.
+ * @returns {void}
+ */
+function dispararEventoQueQuizasLleguenTarde(nombre, detalle) {
+  _eventosDeLaEscenaYaOcurridos[nombre] = { detalle: detalle };
+  document.dispatchEvent(new CustomEvent(nombre, { detail: detalle }));
+}
+
+/**
+ * Como document.addEventListener, pero si el evento YA se disparó antes
+ * de esta llamada, ejecuta el callback de inmediato en vez de quedarse
+ * esperando un segundo disparo que nunca va a llegar.
+ * @param {string} nombre - Nombre del evento.
+ * @param {Function} callback - Qué hacer cuando ocurre (o ya ocurrió).
+ * @returns {void}
+ */
+function escucharEventoQueQuizasYaPaso(nombre, callback) {
+  const yaPaso = _eventosDeLaEscenaYaOcurridos[nombre];
+  if (yaPaso) {
+    /* Se le entrega un objeto con la misma forma que tendría el evento
+       real, para que quien escucha pueda leer `evento.detail` sin tener
+       que preguntarse si llegó tarde o temprano.
+
+       ⚠️ Y SE ENTREGA EN EL SIGUIENTE TURNO, NO EN ESTE MISMO (2026-09-02).
+       Si se llamara al callback en el acto, correría EN MEDIO de la
+       evaluación del archivo que acaba de registrarse —o sea, con las
+       constantes que están más abajo todavía sin inicializar— y cualquier
+       cosa que las tocara reventaría con un ReferenceError difícil de
+       rastrear. Un evento de verdad nunca llega así: llega cuando el
+       archivo ya terminó de cargarse. Con esto se respeta esa misma regla
+       y quien escucha no tiene que saber nada de todo esto. */
+    Promise.resolve().then(() => callback({ detail: yaPaso.detalle }));
+    return;
+  }
+  document.addEventListener(nombre, callback, { once: true });
+}
+
+
+/* ─── 5D. INTERRUPTORES DE DIAGNÓSTICO (2026-09-02) ───────────────
+   POR QUÉ EXISTE ESTO
+   En un equipo modesto, "Layerize" —el paso donde el navegador arma el
+   árbol de capas— se lleva casi la mitad del tiempo de cada cuadro, y
+   ninguna lectura del código alcanzó para decir CUÁL sistema lo provoca:
+   se descartó el tamaño del árbol (sacar 313 nodos no movió los fps), se
+   descartó el Hit test (bajó de 204 ms a 15) y se descartaron las capas de
+   mezcla (están apagadas). Adivinar de nuevo cuesta una ronda entera.
+
+   Con esto se apaga un sistema por vez desde la dirección y se mide:
+
+     ?sin=petalos       la lluvia de pétalos y su lienzo
+     ?sin=enredaderas   el marco floral entero
+     ?sin=joyas         las joyas colgantes del relicario
+     ?sin=velas         los candelabros y su lienzo
+     ?sin=petalos,joyas se pueden combinar con comas
+
+   La diferencia de fps entre una corrida y la siguiente dice, sin
+   discusión, cuánto cuesta ese sistema. Es solo para medir: sin ?sin= en la
+   dirección no cambia absolutamente nada. */
+const _sistemasApagados = (function () {
+  try {
+    const crudo = new URLSearchParams(location.search).get('sin') || '';
+    return crudo.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  } catch (error) {
+    return [];
+  }
+})();
+
+/**
+ * ¿Este sistema está apagado a propósito, para medir sin él?
+ * @param {string} nombre - 'petalos', 'enredaderas', 'joyas', 'velas'…
+ * @returns {boolean}
+ */
+function apagadoParaMedir(nombre) {
+  return _sistemasApagados.indexOf(nombre) !== -1;
+}
+
+/**
+ * Qué sistemas están apagados en esta visita, para que el cartel de ?fps=1
+ * pueda decirlo. Una medición hecha con un interruptor puesto y anotada como
+ * si fuera la normal envenena todo lo que venga después — ya pasó una vez con
+ * las animaciones en off, y costó días. Que se vea en pantalla.
+ * @returns {string[]} Los nombres apagados, o un arreglo vacío.
+ */
+function sistemasApagadosParaMedir() {
+  return _sistemasApagados.slice();
+}
+
+
+/* ─── 5C. CAPTURA DEL PRIMER ERROR SIN ATRAPAR (2026-09-02) ────────────
+   POR QUÉ HACE FALTA ESTO
+   Si algún script de la escena tira una excepción sin atrapar, esa pieza
+   queda a medio construir (por ejemplo: las enredaderas, si el error pasa
+   dentro de repartirPlantas() o algo que llama) y no hay forma de saberlo
+   sin pedirle a la persona que abra la consola del navegador e interprete
+   lo que ve — lento, y no siempre posible a distancia.
+
+   Acá se guarda el PRIMER error real (mensaje, archivo, línea) en una
+   variable global. El cartel de ?fps=1 (21-monitor-de-rendimiento.js) lo
+   muestra si existe, así una simple captura de pantalla del overlay que
+   ya se usa para medir fps alcanza para ver también esto. */
+window._ultimoErrorSinAtrapar = null;
+window.addEventListener('error', evento => {
+  if (window._ultimoErrorSinAtrapar) return;   // solo el primero: los que
+                                                 // siguen suelen ser el
+                                                 // mismo problema en cadena.
+  const archivo = evento.filename ? evento.filename.split('/').pop() : '?';
+  window._ultimoErrorSinAtrapar = `${archivo}:${evento.lineno} — ${evento.message}`;
+});
+
+
+/* ─── 6. INYECCIÓN EN SERIE DEL "PACK DE LA ESCENA" (2026-08-30) ───────
+   POR QUÉ EXISTE ESTO
+   Antes, los 23 archivos de la escena (enredaderas, velas, luz, joyas,
+   pétalos, cursor, etc.) eran <script defer> comunes en index.html: el
+   navegador los bajaba TODOS en paralelo —compitiendo por ancho de banda
+   contra las tipografías críticas del sobre, en Slow 4G— y los EVALUABA a
+   todos apenas terminaba de parsear el HTML, con el sobre todavía
+   cerrado. Eso era buena parte del Total Blocking Time de 1.380 ms medido
+   en escritorio: nadie estaba viendo nada de eso, pero el hilo principal
+   igual pagaba el parseo y la inicialización de cada uno.
+
+   La lista de esos 23 archivos vive en index.html, dentro de
+   <script type="application/json" id="scripts-de-la-escena">, para que
+   herramientas/subir-version.mjs los versione con el mismo "?v=\d+" que
+   usa para todo el resto del archivo (es una reescritura de TEXTO: no le
+   importa si el patrón está dentro de un <script defer> o de un
+   <script type="application/json">).
+
+   CÓMO SE INYECTAN: uno por uno, encadenados por el evento 'load' del
+   anterior — nunca dos evaluándose a la vez, y siempre en el mismo orden
+   en que están escritos en el JSON (el mismo orden que tenían como
+   <script defer>, con las mismas dos reglas de precedencia intactas: 24
+   antes de 06, 23 antes de 14/18/19/27). No son <script async> ni
+   type="module": son <script src> comunes, uno detrás del otro.
+
+   QUIÉN LA ARRANCA: codigo/03-sobre-de-apertura.js, recién en el clic
+   que abre el sobre — ver abrirElSobre() en 03. PageSpeed no hace clic,
+   así que no evalúa la escena. Si el sobre no existe en el HTML, 03
+   arranca esto igual, en el mismo lugar
+   donde hoy avisa 'invitacion-visible' por su cuenta. */
+
+/**
+ * Lee la lista de scripts de la escena (el JSON en index.html) y los va
+ * agregando al documento de a uno, esperando a que cada uno termine de
+ * ejecutarse (evento 'load') antes de pedir el siguiente.
+ *
+ * Si el JSON no está (por ejemplo, alguien lo borró sin querer) no rompe
+ * nada: simplemente no hay escena, igual que si el sobre no existiera y
+ * nadie llamara a esta función.
+ *
+ * @returns {void}
+ */
+let _laEscenaYaEmpezoAInyectarse = false;
+
+function iniciarInyeccionDeLaEscena() {
+  // Guardia de reentrada: mostrarElSobre() y el camino de "no hay sobre"
+  // podrían, en teoría, llamar a esto más de una vez.
+  if (_laEscenaYaEmpezoAInyectarse) return;
+  _laEscenaYaEmpezoAInyectarse = true;
+
+  const contenedorDeLaLista = document.getElementById('scripts-de-la-escena');
+  if (!contenedorDeLaLista) return;
+
+  let urls;
+  try {
+    urls = JSON.parse(contenedorDeLaLista.textContent);
+  } catch (error) {
+    console.error('No se pudo leer la lista de scripts de la escena (JSON inválido):', error);
+    return;
+  }
+  if (!Array.isArray(urls) || urls.length === 0) return;
+
+  /* ⚡ SE BAJAN LOS 23 EN PARALELO, PERO SE EJECUTAN EN ORDEN (v170).
+     Antes esto era una CADENA: cada script se pedía recién en el onload
+     del anterior. El contrato que se quería sostener —que se ejecuten en
+     este orden exacto, como los <script defer> que eran antes— es real y
+     no se puede aflojar: 07 necesita que 02 ya exista, 21 escucha eventos
+     que disparan los de más arriba.
+
+     Pero encadenar la DESCARGA para garantizar el ORDEN de ejecución es
+     pagar de más. Son 23 saltos en serie, y cada salto cuesta al menos una
+     tarea del hilo principal: con el hilo a 50-60 ms por cuadro en un
+     equipo modesto, eso solo ya son segundos de espera antes de que se
+     construya nada. Y en la primera visita de un invitado, sin nada en la
+     caché, además son 23 viajes de red uno detrás del otro. Eso es, en
+     buena parte, lo que se ve como "las capas van apareciendo de a una".
+
+     script.async = false sobre un <script> insertado por JavaScript pide
+     exactamente lo que hace falta, y está en la especificación: el
+     navegador los baja TODOS a la vez y los ejecuta en el orden en que se
+     insertaron. Es el mismo comportamiento de <script defer> —que es lo
+     que estos archivos eran originalmente— solo que sin que Lighthouse los
+     vea en el HTML y los evalúe con el sobre cerrado, que era el motivo de
+     haberlos sacado de ahí.
+
+     Si uno falla, el navegador sigue con los demás, igual que con una
+     lista de defer. */
+  for (const url of urls) {
+    const etiquetaScript = document.createElement('script');
+    etiquetaScript.src = url;
+    etiquetaScript.async = false;   // ⚠️ NO SACAR: es lo que garantiza el orden
+    etiquetaScript.onerror = () => {
+      console.error('No se pudo cargar un script de la escena:', url);
+    };
+    document.body.appendChild(etiquetaScript);
+  }
 }

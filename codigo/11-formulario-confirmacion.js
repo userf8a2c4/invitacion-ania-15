@@ -61,6 +61,578 @@
 
   /** La respuesta que significa "sí, voy" en la lista desplegable. */
   const RESPUESTA_AFIRMATIVA = 'Sí, asistiré';
+  /** Y la que significa que no — se usa para precargar la respuesta ya
+      dada, en el modo de invitación personalizada (ver más abajo). */
+  const RESPUESTA_NEGATIVA = 'No podré asistir';
+
+  /* ─── 0b. INVITACIÓN PERSONALIZADA (?i=TOKEN) ──────────────────────
+     SOLO SE INTERCAMBIA EL FORMULARIO — el sobre, la cuenta regresiva,
+     el mapa, todo lo demás de la web queda igual. Acá adentro, en vez
+     de borrar el formulario del HTML, se ocultan sus campos numéricos
+     y se inyecta un bloque hermano con la lista de personas del grupo
+     (si el admin las cargó) o se deja el número de siempre, pero con
+     tope de lugares.
+
+     Escucha 'invitacion-lista' (disparado por
+     codigo/04-invitado-personalizado.js) en vez de leer INVITACION
+     directamente, porque ese archivo hace un fetch: para cuando este
+     archivo termina de ejecutarse, todavía no hay respuesta. */
+  let MODO_PERSONAS_ACTIVO = false;
+  let PERSONAS_INVITACION = [];
+
+  /* ⚡ escucharEventoQueQuizasYaPaso() Y NO addEventListener DIRECTO
+     (2026-09-02). Este archivo se inyecta recién al hacer clic en el
+     sobre, mientras que 04-invitado-personalizado.js es "core" y dispara
+     'invitacion-lista' apenas le contesta el servidor —mucho antes—. Con
+     un addEventListener común el evento ya había pasado y se perdía: el
+     invitado abría su link personal y veía igual el formulario genérico.
+     Esta función (02-utilidades.js) entrega el evento aunque haya ocurrido
+     antes, con su mismo `detail`. */
+  escucharEventoQueQuizasYaPaso('invitacion-lista', function (evento) {
+    activarModoInvitacionPersonalizada(evento.detail);
+  });
+
+  /* Sin link personal válido no se muestra ningún formulario: las
+     invitaciones son nominales y con cupo. Ver la nota en 04. */
+  escucharEventoQueQuizasYaPaso('invitacion-sin-acceso', function (evento) {
+    cerrarElFormularioSinLink((evento.detail || {}).motivo);
+  });
+
+  /**
+   * Reemplaza el formulario por un mensaje, según por qué no hay acceso.
+   *
+   * @param {string} motivo - 'sin-link', 'no-encontrada', 'sin-conexion',
+   *   'servidor-ocupado' o 'servidor-caido'.
+   * @returns {void}
+   */
+  function cerrarElFormularioSinLink(motivo) {
+    if (!formulario || buscar('#invitacion-sin-acceso')) return;
+
+    const textos = {
+      'sin-link':
+        'Esta invitación es personal. Abre el enlace que te enviamos para ' +
+        'confirmar tu asistencia — ahí van a aparecer los nombres de tu ' +
+        'familia y sus lugares.',
+      'no-encontrada':
+        'No encontramos esta invitación. Puede que el enlace esté incompleto: ' +
+        'vuelve a abrirlo desde el mensaje que te enviamos.',
+      'sin-conexion':
+        'No pudimos cargar tu invitación. Revisa tu conexión y vuelve a ' +
+        'cargar la página.',
+      /* ⚡ Los dos de abajo son nuevos (2026-09-03). Antes estos casos
+         caían en 'no-encontrada' y le echaban la culpa al enlace del
+         invitado por un problema que era del servidor. Ver la nota
+         grande en 04-invitado-personalizado.js. */
+      'servidor-ocupado':
+        'Tu enlace está bien, pero en este momento hay mucha gente ' +
+        'entrando a la vez. Espera un par de minutos y vuelve a intentar.',
+      'servidor-caido':
+        'Tu enlace está bien: el problema es nuestro y ya lo estamos ' +
+        'viendo. Vuelve a intentar en unos minutos.',
+    };
+
+    formulario.style.display = 'none';
+    const contenedorFormulario = formulario.parentElement;
+    if (!contenedorFormulario) return;
+
+    const aviso = document.createElement('p');
+    aviso.id = 'invitacion-sin-acceso';
+    aviso.className = 'formulario__introduccion';
+    aviso.textContent = textos[motivo] || textos['sin-link'];
+    contenedorFormulario.appendChild(aviso);
+
+    /* Los tres motivos pasajeros se arreglan solos con el tiempo, así
+       que el invitado necesita una forma de volver a intentar que no sea
+       buscar de nuevo el WhatsApp. Los otros dos no: recargar con el
+       enlace incompleto da exactamente lo mismo. */
+    const sePuedeReintentar =
+      motivo === 'sin-conexion' ||
+      motivo === 'servidor-ocupado' ||
+      motivo === 'servidor-caido';
+
+    if (!sePuedeReintentar) return;
+
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.className = 'boton-contorno';
+    boton.textContent = 'Volver a intentar';
+    // Centrado bajo el aviso y con el área táctil de 44 px que usa el
+    // resto del sitio (`.boton-contorno` sola queda en ~38).
+    boton.style.display = 'block';
+    boton.style.margin = '1.25rem auto 0';
+    boton.style.minHeight = '44px';
+    boton.addEventListener('click', function () {
+      boton.disabled = true;
+      boton.textContent = 'Cargando…';
+      window.location.reload();
+    });
+    contenedorFormulario.appendChild(boton);
+  }
+
+  /**
+   * Adapta el formulario a una invitación con token: nombre y correo
+   * quedan fijos, y se reemplaza el conteo de adultos/niños por la
+   * lista de personas del grupo (si se cargaron) o por un tope de
+   * lugares (si no).
+   *
+   * @param {Object} datos - La respuesta de invitacion.php.
+   * @returns {void}
+   */
+  /**
+   * Cómo se saluda a este grupo arriba del formulario.
+   *
+   * El nombre lo escribe Lucila en el panel y es texto libre: puede ser una
+   * persona ("Monserrat Barrera") o ya una familia ("Familia Zelaya"). Si el
+   * grupo tiene más de un lugar, se agrega " y familia" — pero solo cuando
+   * el nombre no dice ya algo así, para no terminar en "Familia Zelaya y
+   * familia".
+   *
+   * @param {Object} datos - La respuesta de invitacion.php.
+   * @returns {string}
+   */
+  function nombreParaMostrar(datos) {
+    const nombre = (datos.nombre || '').trim();
+    if (!nombre) return nombre;
+
+    const cuantos = (datos.personas && datos.personas.length) || Number(datos.pases) || 1;
+    if (cuantos < 2) return nombre;
+
+    const enMinusculas = nombre.toLowerCase();
+    const yaEsFamilia = enMinusculas.indexOf('familia') !== -1 ||
+                        enMinusculas.indexOf('flia') !== -1 ||
+                        enMinusculas.indexOf(' y ') !== -1;
+    return yaEsFamilia ? nombre : nombre + ' y familia';
+  }
+
+  /**
+   * El contador de respuestas y, solo en pruebas, el botón de reinicio.
+   *
+   * @param {Object} datos - La respuesta de invitacion.php.
+   * @returns {void}
+   */
+  function mostrarHerramientasDePrueba(datos) {
+    if (!formulario || buscar('#herramientas-de-prueba')) return;
+
+    const veces = Number(datos.veces_respondida) || 0;
+    if (!veces && !datos.es_pruebas) return;
+
+    /* ⚠️ SE DIBUJA CON LOS ESTILOS DE ESTA WEB, NO CON LOS DEL PANEL.
+       La primera versión usó las clases del panel de administración
+       ('boton boton--fantasma'), que acá no existen: el botón salía como
+       un control crudo del navegador, gris y fuera de lugar, encima de una
+       invitación que cuida cada detalle. Son dos hojas de estilo separadas
+       a propósito. */
+    const caja = document.createElement('div');
+    caja.id = 'herramientas-de-prueba';
+    caja.className = 'herramientas-de-prueba';
+
+    if (veces > 0) {
+      const cuenta = document.createElement('p');
+      cuenta.className = 'herramientas-de-prueba__cuenta';
+      cuenta.textContent = veces === 1
+        ? 'Esta invitación se respondió 1 vez.'
+        : 'Esta invitación se respondió ' + veces + ' veces.';
+      caja.appendChild(cuenta);
+    }
+
+    if (datos.es_pruebas) {
+      const rotulo = document.createElement('p');
+      rotulo.className = 'herramientas-de-prueba__rotulo';
+      rotulo.textContent = 'Solo en el entorno de pruebas';
+      caja.appendChild(rotulo);
+
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.id = 'boton-reiniciar-prueba';
+      boton.className = 'herramientas-de-prueba__boton';
+      boton.textContent = 'Reiniciar esta invitación';
+
+      boton.addEventListener('click', async function alReiniciar() {
+        if (!window.confirm('Esto borra la respuesta de este grupo, acá y en el ' +
+                            'servidor, y la deja como si nunca hubieran contestado. ' +
+                            '¿Continuamos?')) return;
+
+        boton.disabled = true;
+        boton.textContent = 'Reiniciando…';
+        try {
+          const respuesta = await fetch('reiniciar-prueba.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            /* El token sale de la dirección, igual que al enviar la
+               confirmación (ver más abajo): es la única fuente segura. */
+            body: JSON.stringify({
+              token: new URLSearchParams(window.location.search).get('i') || '',
+            }),
+          });
+          const resultado = await respuesta.json();
+          if (!resultado || resultado.ok !== true) {
+            throw new Error((resultado && resultado.error) || 'No se pudo reiniciar.');
+          }
+          try {
+            localStorage.removeItem('invitacion-ania:pase');
+          } catch (error) { /* modo incógnito: no importa */ }
+          location.reload();
+        } catch (error) {
+          boton.disabled = false;
+          boton.textContent = 'Reiniciar esta invitación';
+          window.alert(error.message);
+        }
+      });
+
+      caja.appendChild(boton);
+    }
+
+    /* Va al FINAL de la sección, después de todo lo demás — también
+       cuando el formulario está oculto y en su lugar hay un aviso, que es
+       justo el caso donde más falta hace poder reiniciar. */
+    const contenedor = formulario.parentElement || formulario;
+    contenedor.appendChild(caja);
+  }
+
+  /**
+   * Cómo se llama un lugar que todavía no tiene nombre: "Adulto 1",
+   * "Niño 2"… Se numera por separado dentro de su tipo, que es como lo
+   * lee cualquiera: dos adultos y dos niños son 1 y 2 de cada uno, no 1
+   * a 4 corridos.
+   *
+   * @param {Object} persona
+   * @param {number} indice - Su posición en la lista completa.
+   * @param {Array} todas   - La lista completa, para poder contar.
+   * @returns {string}
+   */
+  function etiquetaDeLugar(persona, indice, todas) {
+    const esNino = persona.tipo === 'nino';
+    let numero = 0;
+    for (let i = 0; i <= indice; i++) {
+      if ((todas[i].tipo === 'nino') === esNino) numero++;
+    }
+    return (esNino ? 'Niño ' : 'Adulto ') + numero;
+  }
+
+  function activarModoInvitacionPersonalizada(datos) {
+    if (!formulario || !datos) return;
+
+    // Ya respondió y ya pasó la fecha límite: se reemplaza el formulario
+    // entero por su pase, del lado del servidor TAMBIÉN se rechaza
+    // cualquier intento de cambio (ver confirmar.php) — esto es solo
+    // para no mostrar un formulario que de todos modos va a rechazar.
+    if (datos.cerrado) {
+      formulario.style.display = 'none';
+      const contenedorFormulario = formulario.parentElement;
+      if (contenedorFormulario && !buscar('#invitacion-cerrada')) {
+        const aviso = document.createElement('p');
+        aviso.id = 'invitacion-cerrada';
+        aviso.className = 'formulario__introduccion';
+        aviso.textContent = 'Las confirmaciones ya se cerraron. Si necesitas hacer un ' +
+          'cambio, escríbenos.';
+        contenedorFormulario.appendChild(aviso);
+      }
+      return;
+    }
+
+    if (campoNombre) {
+      campoNombre.value = nombreParaMostrar(datos);
+      campoNombre.readOnly = true;
+
+      /* ⚡ (2026-08-28) Antes esto dejaba el input intacto (solo con
+         readOnly, sin ningún cambio visual): se veía IDÉNTICO a un campo
+         que pide escribir el nombre, aunque no se pudiera tocar — muy
+         fácil de leer como "quiere que yo escriba mi nombre". Con la
+         invitación ya nominal, no hace falta pedirlo: se muestra como un
+         dato fijo, no como una pregunta. */
+      campoNombre.style.background = 'transparent';
+      campoNombre.style.border = 'none';
+      campoNombre.style.padding = '0';
+      campoNombre.style.cursor = 'default';
+      campoNombre.tabIndex = -1;
+      const etiquetaNombre = campoNombre.closest('.campo')
+        ? campoNombre.closest('.campo').querySelector('label') : null;
+      /* "Te" o "Les" según cuántos lugares tiene el grupo: hablarle de
+         usted a una sola persona, o en singular a una familia, se nota. */
+      if (etiquetaNombre) {
+        const cuantosLugares = (datos.personas && datos.personas.length) ||
+                               Number(datos.pases) || 1;
+        etiquetaNombre.textContent = cuantosLugares > 1 ? 'Les invitamos' : 'Te invitamos';
+      }
+    }
+    if (campoCorreo && datos.correo) {
+      campoCorreo.value = datos.correo;
+      campoCorreo.readOnly = true;
+    }
+
+    /* ⚡ CONTADOR DE RESPUESTAS Y BOTÓN DE REINICIO (2026-09-02).
+       El contador aparece solo si ya contestaron: sirve para notar que
+       algo se mandó dos veces sin querer. El botón de reinicio existe
+       ÚNICAMENTE en el entorno de pruebas, y eso lo decide el servidor
+       (invitacion.php mira el host): en el sitio real, aunque alguien
+       forzara este código, la dirección que borra responde 404. */
+    mostrarHerramientasDePrueba(datos);
+
+    /* ⚡ SE ARRANCA SIEMPRE EN LA PREGUNTA, NO EN LA RESPUESTA DE ANTES
+       (2026-09-02). Antes, al reabrir un enlace ya contestado, el
+       desplegable venía puesto y la lista completa se desplegaba sola: la
+       página se abría en el medio de un formulario lleno, y no quedaba
+       claro si eso era algo por revisar, algo por completar, o algo ya
+       resuelto. Ahora se abre siempre igual — con la pregunta — y el
+       resto aparece cuando la persona contesta, como la primera vez.
+
+       Lo respondido NO se pierde: al elegir "sí", la lista reaparece con
+       cada plato y cada alergia tal como se habían guardado. Y el botón
+       dice "Actualizar mi respuesta" para que se entienda que esto es una
+       corrección de algo ya enviado, no un formulario en blanco. */
+    if (datos.ya_respondio && botonEnviar) {
+      botonEnviar.textContent = 'Actualizar mi respuesta ✦';
+    }
+
+    const introduccion = buscar('.formulario__introduccion');
+    if (introduccion) {
+      introduccion.innerHTML = 'Hemos reservado <strong>' + datos.pases +
+        (datos.pases === 1 ? ' lugar' : ' lugares') +
+        '</strong> para ustedes. Pueden modificar su respuesta cuantas ' +
+        'veces gusten mientras las confirmaciones sigan abiertas.';
+    }
+
+    const cajaCantidad = campoAdultos ? campoAdultos.closest('.campo') : null;
+
+    if (datos.personas && datos.personas.length) {
+      MODO_PERSONAS_ACTIVO = true;
+      PERSONAS_INVITACION = datos.personas.map(function (p, indice) {
+        const esNino = p.tipo === 'nino';
+        const alergiaPrevia = (p.alergias || '').trim();
+        return {
+          id: p.id,
+          /* ⚡ UN LUGAR SIN NOMBRE IGUAL SE MUESTRA (2026-09-02). Un grupo
+             puede estar cargado como "2 adultos y 2 niños" antes de que
+             Lucila escriba los nombres. Ese lugar no es un error ni una
+             invitación a medias: es una silla reservada, y el invitado
+             puede decir perfectamente si esa persona viene y qué come.
+             Cuando Lucila cargue el nombre real, aparece en su lugar. */
+          nombre: (p.nombre || '').trim() || etiquetaDeLugar(p, indice, datos.personas),
+          tipo: esNino ? 'nino' : 'adulto',
+          /* ⚡ DESTILDADAS AL ABRIR (2026-09-02). Antes una invitación nueva
+             llegaba con todos tildados y el contador decía "5 de 5
+             confirmados" sin que nadie hubiera elegido nada: la página
+             daba por hecha la respuesta y quien venía a decir que falta
+             uno tenía que DESmarcar. Ahora arranca en cero y confirmar es
+             un acto deliberado. Si ya había respondido, se respeta lo que
+             dejó guardado. */
+          marcado: datos.ya_respondio ? !!p.menu : false,
+          menu: p.menu || (esNino ? 'Infantil' : 'Estándar'),
+          tieneAlergia: alergiaPrevia !== '',
+          alergia: alergiaPrevia,
+        };
+      });
+
+      /* ⚡ (2026-08-28) Bug real, no un borde: en una invitación NUEVA
+         (todavía nadie contestó), el bloque que contiene la lista de
+         personas (id="bloque-si-asiste") solo se muestra con la clase
+         .visible, y esa clase SOLO se agregaba en el `change` del
+         desplegable de asistencia — que corre nada más si `ya_respondio`
+         es true. Resultado: el invitado abría su link, veía "Hemos
+         reservado 4 lugares" y el formulario entero quedaba vacío.
+
+         ⚡⚡ (2026-08-28, segunda vuelta) La primera corrección todavía
+         dependía del desplegable oculto: le forzaba el valor "Sí" y
+         disparaba su `change` para que ESE handler mostrara el bloque.
+         Eso rompía justo el caso de alguien que había declinado antes
+         (ya_respondio=true, asiste=false): el bloque de arriba dejaba el
+         desplegable en "No podré asistir" y SU `change` escondía el
+         checklist — el invitado no tenía forma de volver a tildar a
+         nadie, aunque el plan explícitamente pide que puedan cambiar de
+         opinión cuantas veces quieran antes de la fecha límite.
+
+         Con personas nombradas, la pregunta "¿confirmas tu asistencia?"
+         no existe: quién viene se dice tildando o destildando cada
+         nombre (destildarlos a todos equivale a "no viene nadie" — ver
+         el submit), así que el checklist queda SIEMPRE visible, sin
+         pasar por el desplegable ni por su lógica de visibilidad. */
+      /* ⚡ EL DESPLEGABLE DE ASISTENCIA SE QUEDA (2026-09-02). Se había
+         ocultado en modo personas, con la idea de que destildar a todos
+         alcanzara para decir "no vamos". En la práctica eso obliga a
+         deducir: hay que darse cuenta de que NO marcar es una respuesta.
+         La pregunta directa —"¿confirmas tu asistencia?"— no se malentiende,
+         y deja la lista para lo único que la lista sabe contestar bien:
+         quiénes de la familia vienen. */
+      /* El bloque de datos arranca cerrado, siempre: lo abre la respuesta
+         de la persona, nunca la carga de la página. */
+      if (bloqueSiAsiste) bloqueSiAsiste.classList.remove('visible');
+
+      if (cajaCantidad) cajaCantidad.style.display = 'none';
+      if (bloqueMenuInfantil) bloqueMenuInfantil.classList.remove('visible');
+
+      // La caja de alergias compartida deja de tener sentido: cada
+      // persona tiene la suya, dentro de su propia fila (ver
+      // dibujarChecklistDePersonas()).
+      if (campoAlergias) {
+        const cajaAlergias = campoAlergias.closest('.campo');
+        if (cajaAlergias) cajaAlergias.style.display = 'none';
+      }
+
+      dibujarChecklistDePersonas();
+    } else {
+      // ⚡ (2026-08-28) Antes cada campo tenía `max = pases` por
+      // separado: con 4 lugares, el HTML dejaba tipear 4 adultos Y 4
+      // niños (8 en total) y recién el servidor lo rechazaba con un
+      // 422 — un rebote evitable. Ahora cada campo recalcula su propio
+      // tope descontando lo que ya se puso en el otro.
+      const recalcularTopes = function () {
+        const adultosPuestos = campoAdultos ? (parseInt(campoAdultos.value, 10) || 0) : 0;
+        const ninosPuestos   = campoNinos   ? (parseInt(campoNinos.value, 10) || 0)   : 0;
+        if (campoAdultos) campoAdultos.setAttribute('max', String(Math.max(1, datos.pases - ninosPuestos)));
+        if (campoNinos)   campoNinos.setAttribute('max', String(Math.max(0, datos.pases - adultosPuestos)));
+      };
+      recalcularTopes();
+      if (campoAdultos) campoAdultos.addEventListener('input', recalcularTopes);
+      if (campoNinos)   campoNinos.addEventListener('input', recalcularTopes);
+
+      if (datos.ya_respondio) {
+        if (campoAdultos) campoAdultos.value = String(datos.adultos || 1);
+        if (campoNinos) campoNinos.value = String(datos.ninos || 0);
+        recalcularTopes();
+        actualizarFilasDeAdultos();
+        actualizarFilasDeNinos();
+      }
+    }
+
+    if (datos.ya_respondio && campoAlergias && datos.alergias) {
+      campoAlergias.value = datos.alergias;
+    }
+  }
+
+  /**
+   * Pinta la lista de personas con casillas + menú, dentro del
+   * contenedor que normalmente lleva las filas de menú por adulto —
+   * se reusa ese lugar del formulario, no se agrega uno nuevo al HTML.
+   *
+   * @returns {void}
+   */
+  function dibujarChecklistDePersonas() {
+    if (!contenedorMenusAdultos) return;
+    const cajaDelTitulo = contenedorMenusAdultos.closest('.campo');
+    if (cajaDelTitulo) {
+      const titulo = cajaDelTitulo.querySelector('.campo__titulo');
+      if (titulo) titulo.textContent = 'Menú de invitados';
+
+      /* Una línea que dice QUÉ HACER, no solo qué es esto. Las casillas
+         arrancan vacías, así que sin esta frase alguien puede quedarse
+         mirando la lista sin darse cuenta de que tiene que marcar. Se
+         inserta una sola vez, justo debajo del título. */
+      if (titulo && !cajaDelTitulo.querySelector('#instruccion-personas')) {
+        const instruccion = document.createElement('p');
+        instruccion.id = 'instruccion-personas';
+        instruccion.className = 'nota-campo';
+        instruccion.textContent = 'Marca quiénes vienen y elige su plato.';
+        titulo.insertAdjacentElement('afterend', instruccion);
+      }
+    }
+
+    contenedorMenusAdultos.innerHTML = PERSONAS_INVITACION.map(function (persona, indice) {
+      // A los niños no se les ofrece elegir menú — el formulario abierto
+      // de siempre tampoco lo hace, todos llevan el mismo infantil (ver
+      // "Menú de los niños" en index.html). Antes de esto se les
+      // mostraban los mismos radios de adulto, y si ya tenían guardado
+      // 'Infantil' ningún radio matcheaba (esa etiqueta no está en
+      // MENUS_DE_ADULTO) — la fila se veía sin nada tildado, mintiendo
+      // sobre lo que se iba a guardar al enviar.
+      const opcionesEnHtml = persona.tipo === 'nino'
+        ? '<span class="fila-persona__nino">Menú infantil</span>'
+        : MENUS_DE_ADULTO.map(function (menu) {
+            return '<label class="opcion-menu opcion-menu--unica">' +
+              '<input type="radio" name="persona-menu-' + indice + '" value="' + menu.valor + '"' +
+              (menu.valor === persona.menu ? ' checked' : '') + '>' +
+              '<span>' + menu.etiqueta + '</span></label>';
+          }).join('');
+
+      // ⚡ (2026-08-28) Alergia por persona, a pedido explícito: antes
+      // había una sola caja de alergias para todo el grupo, y no decía
+      // cuál de los tildados era el alérgico. Con esto se sabe, por
+      // nombre, quién tiene qué — la caja compartida queda oculta (ver
+      // activarModoInvitacionPersonalizada()).
+      /* ⚡ LA ALERGIA VA EN LA MISMA FILA (2026-09-02), a la derecha del
+         menú, no debajo. Colgada abajo se leía como una nota suelta del
+         bloque entero; al lado del plato de esa persona queda claro de
+         quién es la alergia. La casilla es cuadrada, igual que la de
+         asistencia: las dos son preguntas de sí/no. */
+      const alergiaEnHtml =
+        '<div class="fila-persona__alergia">' +
+          '<label class="fila-persona__alergia-check">' +
+            '<input type="checkbox" data-persona-tiene-alergia' +
+              (persona.tieneAlergia ? ' checked' : '') + '>' +
+            '<span>Alergia</span>' +
+          '</label>' +
+          '<input type="text" data-persona-alergia-texto placeholder="¿Cuál? Ej. mariscos"' +
+            ' value="' + limpiarTexto(persona.alergia || '') + '"' +
+            (persona.tieneAlergia ? '' : ' style="display:none"') + '>' +
+        '</div>';
+
+      return '<div class="fila-persona" data-persona-indice="' + indice + '">' +
+        '<label class="fila-persona__nombre" style="display:flex;align-items:center;gap:8px">' +
+          '<input type="checkbox" data-persona-marcada' + (persona.marcado ? ' checked' : '') + '>' +
+          limpiarTexto(persona.nombre) +
+        '</label>' +
+        '<div class="fila-persona__opciones" data-persona-opciones' +
+          (persona.marcado ? '' : ' style="display:none"') + '>' +
+          '<div class="fila-persona__menus">' + opcionesEnHtml + '</div>' +
+          alergiaEnHtml +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    contenedorMenusAdultos.querySelectorAll('[data-persona-marcada]').forEach(function (casilla, indice) {
+      casilla.addEventListener('change', function () {
+        PERSONAS_INVITACION[indice].marcado = casilla.checked;
+        const opciones = contenedorMenusAdultos.querySelector(
+          '[data-persona-indice="' + indice + '"] [data-persona-opciones]');
+        if (opciones) opciones.style.display = casilla.checked ? '' : 'none';
+        actualizarContadorDePersonas();
+      });
+    });
+
+    contenedorMenusAdultos.querySelectorAll('[data-persona-indice]').forEach(function (fila, indice) {
+      fila.querySelectorAll('input[type="radio"]').forEach(function (radio) {
+        radio.addEventListener('change', function () {
+          if (radio.checked) PERSONAS_INVITACION[indice].menu = radio.value;
+        });
+      });
+
+      const casillaAlergia = fila.querySelector('[data-persona-tiene-alergia]');
+      const textoAlergia   = fila.querySelector('[data-persona-alergia-texto]');
+      if (casillaAlergia) {
+        casillaAlergia.addEventListener('change', function () {
+          PERSONAS_INVITACION[indice].tieneAlergia = casillaAlergia.checked;
+          if (textoAlergia) {
+            textoAlergia.style.display = casillaAlergia.checked ? '' : 'none';
+            if (casillaAlergia.checked) textoAlergia.focus();
+            else { textoAlergia.value = ''; PERSONAS_INVITACION[indice].alergia = ''; }
+          }
+        });
+      }
+      if (textoAlergia) {
+        textoAlergia.addEventListener('input', function () {
+          PERSONAS_INVITACION[indice].alergia = textoAlergia.value;
+        });
+      }
+    });
+
+    actualizarContadorDePersonas();
+  }
+
+  /**
+   * "3 de 4 lugares confirmados", debajo de la lista de personas.
+   *
+   * @returns {void}
+   */
+  function actualizarContadorDePersonas() {
+    if (!contenedorMenusAdultos) return;
+    let nota = contenedorMenusAdultos.parentElement.querySelector('.nota-personas');
+    if (!nota) {
+      nota = document.createElement('p');
+      nota.className = 'nota-campo nota-personas';
+      contenedorMenusAdultos.parentElement.appendChild(nota);
+    }
+    const marcados = PERSONAS_INVITACION.filter(function (p) { return p.marcado; }).length;
+    nota.textContent = marcados + ' de ' + PERSONAS_INVITACION.length + ' lugares confirmados';
+  }
 
   /** Menús que puede elegir un adulto. */
   const MENUS_DE_ADULTO = [
@@ -142,6 +714,17 @@
   /* ─── 3. LEER LO ELEGIDO Y ARMAR LOS RESÚMENES ─────────────────── */
 
   function recolectarMenusElegidos() {
+    // Modo con personas nombradas: el menú de cada quien ya se leyó al
+    // vuelo en dibujarChecklistDePersonas() (PERSONAS_INVITACION[i].menu).
+    // Acá solo se arma la lista con las que quedaron tildadas.
+    if (MODO_PERSONAS_ACTIVO) {
+      return PERSONAS_INVITACION
+        .filter(function (p) { return p.marcado; })
+        .map(function (p) {
+          return { quien: p.nombre, menu: p.tipo === 'nino' ? 'Infantil' : p.menu };
+        });
+    }
+
     const elegidos = [];
     const cantidadAdultos = limitar(parseInt(campoAdultos.value, 10) || 1, 1, 20);
     for (let i = 1; i <= cantidadAdultos; i++) {
@@ -171,13 +754,43 @@
       .join(' | ');
   }
 
+  /**
+   * Con personas nombradas, la alergia se carga una por una (ver
+   * dibujarChecklistDePersonas()) — esto arma el resumen de grupo que
+   * sigue viajando a confirmar.php (columna compartida de siempre) y a
+   * los correos, para no tener que leer cada acompanante por separado
+   * para saber si alguien del grupo tiene alguna.
+   *
+   * @param {Array} personasMarcadas
+   * @returns {string}
+   */
+  function armarResumenDeAlergiasPorPersona(personasMarcadas) {
+    const conAlergia = personasMarcadas.filter(function (p) {
+      return p.tieneAlergia && (p.alergia || '').trim() !== '';
+    });
+    if (!conAlergia.length) return '';
+    return conAlergia
+      .map(function (p) { return p.nombre + ': ' + p.alergia.trim(); })
+      .join(' | ');
+  }
+
   /* ─── 4. MOSTRAR Y OCULTAR SECCIONES ───────────────────────────── */
 
   if (campoAsistencia) {
     campoAsistencia.addEventListener('change', function alElegirSiViene() {
       const vieneALaFiesta = this.value === RESPUESTA_AFIRMATIVA;
       bloqueSiAsiste.classList.toggle('visible', vieneALaFiesta);
-      if (vieneALaFiesta && contenedorMenusAdultos &&
+
+      // Agradecimiento cuando avisan que no pueden venir.
+      const gracias = buscar('#gracias-por-avisar');
+      if (gracias) {
+        gracias.style.display =
+          this.value === RESPUESTA_NEGATIVA ? 'block' : 'none';
+      }
+      /* En modo personas la lista ya está dibujada con los nombres reales
+         del grupo: actualizarFilasDeAdultos() armaría las filas genéricas
+         por cantidad y las pisaría. */
+      if (!MODO_PERSONAS_ACTIVO && vieneALaFiesta && contenedorMenusAdultos &&
           contenedorMenusAdultos.children.length === 0) {
         actualizarFilasDeAdultos();
       }
@@ -206,20 +819,65 @@
     const correo     = campoCorreo.value.trim();
     const asistencia = campoAsistencia.value;
 
-    if (!nombre)     return mostrarError('Por favor escribe tu nombre completo.');
-    if (!correo)     return mostrarError('Por favor escribe tu correo electrónico.');
-    if (!pareceUnCorreoValido(correo)) {
-      return mostrarError('Ese correo no parece válido. Revisa que tenga @ y un punto.');
-    }
-    if (!asistencia) return mostrarError('Cuéntanos si vas a poder acompañarnos.');
+    if (!nombre) return mostrarError('Por favor escribe tu nombre completo.');
 
-    const vieneALaFiesta  = asistencia === RESPUESTA_AFIRMATIVA;
-    const cantidadAdultos = vieneALaFiesta ? limitar(parseInt(campoAdultos.value, 10) || 1, 1, 20) : 0;
-    const cantidadNinos   = vieneALaFiesta ? limitar(parseInt(campoNinos.value, 10) || 0, 0, 20) : 0;
+    /* ⚡ EL CORREO YA NO SE EXIGE (2026-09-02). Dejó de pedirse: los datos
+       de contacto los administra Lucila desde el panel (ver la nota en el
+       campo oculto de index.html). Igual se valida SI viene, porque el que
+       viene sale del panel y un correo mal escrito ahí tiene que avisarse
+       en vez de fallar callado al mandar el pase. */
+    if (correo && !pareceUnCorreoValido(correo)) {
+      return mostrarError('El correo que tenemos cargado no parece válido. Avísanos, por favor.');
+    }
+    // ⚡ (2026-08-28) Con personas nombradas no existe el desplegable de
+    // asistencia (queda oculto desde que se activa el modo personas): "
+    // ¿va a venir?" ya no se contesta ahí, se contesta tildando o
+    // destildando cada nombre de la lista. Exigirle un valor a un campo
+    // que ni siquiera se ve habría bloqueado el envío para siempre.
+    if (!asistencia) {
+      return mostrarError('Cuéntanos si van a poder acompañarnos.');
+    }
+
+    // Con personas nombradas, "viene" significa "al menos una tildada" —
+    // el número real (y quién viene) sale siempre de la lista, nunca del
+    // desplegable de asistencia (que en este modo ni se muestra).
+    const personasMarcadas = MODO_PERSONAS_ACTIVO
+      ? PERSONAS_INVITACION.filter(function (p) { return p.marcado; })
+      : [];
+
+    /* ⚡ QUIÉN CONTESTA QUÉ (2026-09-02): el desplegable dice SI VIENEN; la
+       lista dice QUIÉNES. Antes, en modo personas, venir se deducía de que
+       hubiera al menos una casilla marcada — o sea que "no vamos" se decía
+       no haciendo nada, que es justo lo que nadie adivina. */
+    const vieneALaFiesta = asistencia === RESPUESTA_AFIRMATIVA;
+
+    /* ⚡ AVISO ANTES DE REGISTRAR UN "NO VAMOS" (2026-09-02). Desde que las
+       casillas arrancan destildadas, mandar el formulario sin tocar nada es
+       un camino fácil de recorrer sin querer — y significa exactamente lo
+       contrario de lo que casi todos quieren decir. Se pregunta una sola vez,
+       y si dice que no, no se manda nada y puede seguir marcando. Declinar
+       sigue siendo posible: alcanza con confirmar acá. */
+    /* Dijeron que sí vienen pero no marcaron a nadie: es una contradicción,
+       y guardarla dejaría una confirmación de cero personas. Se pide el dato
+       que falta en vez de adivinarlo. */
+    if (vieneALaFiesta && MODO_PERSONAS_ACTIVO && personasMarcadas.length === 0) {
+      return mostrarError('Marca al menos a una persona que va a acompañarnos.');
+    }
+
+    const cantidadAdultos = !vieneALaFiesta ? 0
+      : MODO_PERSONAS_ACTIVO
+        ? personasMarcadas.filter(function (p) { return p.tipo !== 'nino'; }).length
+        : limitar(parseInt(campoAdultos.value, 10) || 1, 1, 20);
+    const cantidadNinos = !vieneALaFiesta ? 0
+      : MODO_PERSONAS_ACTIVO
+        ? personasMarcadas.filter(function (p) { return p.tipo === 'nino'; }).length
+        : limitar(parseInt(campoNinos.value, 10) || 0, 0, 20);
     const menusElegidos   = vieneALaFiesta ? recolectarMenusElegidos() : [];
     const resumenDeMenus  = vieneALaFiesta ? armarResumenDeMenus(menusElegidos) : ', ';
     const detalleDeMenus  = vieneALaFiesta ? armarDetalleDeMenus(menusElegidos) : ', ';
-    const alergias        = campoAlergias ? campoAlergias.value.trim() : '';
+    const alergias        = MODO_PERSONAS_ACTIVO
+      ? armarResumenDeAlergiasPorPersona(personasMarcadas)
+      : (campoAlergias ? campoAlergias.value.trim() : '');
     const notas           = campoNotas ? campoNotas.value.trim() : '';
 
     const datosDeLaConfirmacion = {
@@ -234,6 +892,36 @@
       notas: notas || ', ',
       codigo: generarCodigoDePase(nombre + correo),
     };
+
+    // Con invitación personalizada, el token viaja siempre: es lo que
+    // hace que confirmar.php actualice ESA fila en vez de crear una
+    // nueva (ver la nota grande en confirmar.php, Fase 5 del plan).
+    if (typeof INVITACION !== 'undefined' && INVITACION && INVITACION.ok) {
+      datosDeLaConfirmacion.token = new URLSearchParams(window.location.search).get('i') || '';
+
+      // Con personas nombradas, cada una lleva su propio menú (o marca
+      // que no viene) — confirmar.php actualiza `acompanantes` fila por
+      // fila con esto, sin borrar y reinsertar a nadie.
+      if (MODO_PERSONAS_ACTIVO) {
+        datosDeLaConfirmacion.personas = PERSONAS_INVITACION.map(function (p) {
+          return {
+            id: p.id,
+            /* ⚡ `tipo` VIAJA (2026-09-03). Los grupos que todavía no
+               tienen nombres cargados llegan con `id: null` —los lugares
+               los sintetiza invitacion.php— y confirmar.php descartaba
+               su menú en silencio: al volver a abrir el link, las
+               casillas aparecían destildadas y parecía que la
+               confirmación no había quedado. Ahora el servidor crea la
+               fila que falta, y para eso necesita saber si es adulto o
+               niño. */
+            tipo: p.tipo === 'nino' ? 'nino' : 'adulto',
+            marcado: p.marcado,
+            menu: p.tipo === 'nino' ? 'Infantil' : p.menu,
+            alergia: p.tieneAlergia ? (p.alergia || '').trim() : '',
+          };
+        });
+      }
+    }
 
     /* ESTADO DE ESPERA */
     const textoOriginalDelBoton = botonEnviar.innerHTML;

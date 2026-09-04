@@ -16,7 +16,7 @@
      4. Si quedan MUCHOS invitados sin mesa (≥ UMBRAL_ACOMODO_COMPLETO),
         se ofrece el acomodo automático COMPLETO en vez de ir de a uno
         — con el detalle real de qué se mueve (mismo `movimientos` que
-        ya usa "Acomodar solo" en la pantalla, vía
+        ya usa "Acomodar a todos" en la pantalla, vía
         mesas.php?accion=vista_previa) y deshacer real
         (mesas.php?accion=deshacer, restaura desde acomodo_respaldo).
         Si son pocos, se sigue sentando de a uno (regla original, sin
@@ -203,7 +203,21 @@ registrarAgente('mesas', 'Mesas', async () => {
   } else if (sinSentar.length >= UMBRAL_ACOMODO_COMPLETO) {
     let vista = null;
     try {
-      vista = await mandar('mesas.php?accion=vista_previa', {});
+      /* ⚠️ mandarSinCola() Y NO mandar() (2026-09-04).
+         `vista_previa` es un cálculo de SOLO LECTURA —dice qué pasaría
+         si se acomodara, sin tocar nada— pero viaja por POST porque
+         manda parámetros. Con mandar(), sin señal se guardaba en la
+         cola de escrituras pendientes JUNTO A LOS PAGOS y los
+         invitados: al volver la conexión se mandaba una consulta vieja
+         que ya no significaba nada, y si el servidor la rechazaba
+         aparecía en "Cambios que el servidor rechazó", la bandeja donde
+         Lucila tiene que ver lo que se perdió DE VERDAD.
+
+         Y esto corre en el arranque, sin que nadie lo pida: es el mismo
+         patrón que ya se le arregló a la telemetría. Sin cola, la falta
+         de señal falla y ya está — que es lo correcto para una
+         pregunta. */
+      vista = await mandarSinCola('mesas.php?accion=vista_previa', {});
     } catch (error) {
       vista = null;
     }

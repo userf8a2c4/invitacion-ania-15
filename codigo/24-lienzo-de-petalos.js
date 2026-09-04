@@ -36,6 +36,11 @@
 
 (function elLienzoDePetalos() {
 
+  /* Mismo interruptor que 06: apagar los pétalos tiene que apagar también
+     su lienzo, o la capa quedaría viva y la medición no sería limpia. */
+  if (apagadoParaMedir('petalos')) return;
+
+
   const parametros = new URLSearchParams(location.search);
   const USAR_LIENZO = parametros.get('petalos') !== 'dom';
 

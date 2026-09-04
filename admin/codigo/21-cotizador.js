@@ -568,7 +568,7 @@ function formularioDeRenglon(cotizacionId, item, despues) {
   const borrar = buscar('#pie-borrar', cuerpo);
   if (borrar) {
     borrar.addEventListener('click', async () => {
-      if (!confirmarAccion('¿Borrar este renglón?')) return;
+      if (!await confirmarAccion('¿Borrar este renglón?')) return;
       try {
         await mandar('cotizador.php?accion=borrar_item', { id: item.id });
         cerrarHoja(true);
@@ -589,7 +589,7 @@ async function pasarAlPresupuesto(id) {
   const c = (COMPARACION.cotizaciones || []).find(x => x.id === id);
   if (!c) return;
 
-  if (!confirmarAccion(
+  if (!await confirmarAccion(
     '¿Elegir ' + c.proveedor + '?\n\n' +
     'Se va a agregar al presupuesto como un gasto de ' +
     comoDinero(c.total, false) + ' y se marca como la elegida.'

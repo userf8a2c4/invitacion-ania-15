@@ -81,7 +81,95 @@ const CATALOGO_FAB = [
     descripcion: 'Mandar por correo la copia de todo, con los archivos adjuntos',
     soloAdmin: true,
     ejecutar: () => abrirHojaDeRespaldo() },
+
+  { clave: 'recibo-rapido', nombre: 'Nuevo recibo',
+    descripcion: 'Elegir a quién le pagás (proveedor, padrino, o cualquier otro) y generar su recibo',
+    soloAdmin: true,
+    ejecutar: () => abrirGeneradorDeReciboGenerico() },
+
+  { clave: 'contrato-rapido', nombre: 'Nuevo contrato',
+    descripcion: 'Elegir un proveedor y generar su contrato, sin pasar por Presupuesto',
+    soloAdmin: true,
+    ejecutar: () => abrirElegirProveedorPara('Elige el proveedor',
+                                             p => abrirGeneradorDeContrato(p)) },
+
+  /* "Ver recibos/contratos" es también el camino para MODIFICAR o
+     BORRAR uno por chat: lleva directo a la lista protegida
+     (abrirListaDeDocumentos, en 09-vista-dinero.js), donde tocar una
+     fila abre el detalle de solo lectura y ahí —recién ahí— aparecen
+     Editar y Borrar, cada uno detrás de su propia confirmación.
+
+     ⚡ YA NO PIDEN ELEGIR PROVEEDOR PRIMERO (2026-08-27). Antes exigían
+     `abrirElegirProveedorPara(...)` como paso obligatorio, a pesar de
+     que recibos.php/contratos.php ya soportan listar TODO sin filtro —
+     la restricción era puramente del frontend. Ahora abren la lista
+     completa de una vez (con un desplegable adentro para acotar a un
+     proveedor si hace falta), igual que ya hacía "Nuevo recibo". Los
+     contratos sí siguen exigiendo proveedor para GENERARLOS (abajo,
+     contrato-rapido) porque `contratos.proveedor_id` es obligatorio en
+     la base — pero para solo VERLOS no hace falta pedirlo de entrada. */
+  { clave: 'ver-recibos', nombre: 'Ver recibos',
+    descripcion: 'Ver, editar o borrar los recibos ya generados (con filtro opcional por proveedor)',
+    soloAdmin: true,
+    ejecutar: () => abrirListaDeDocumentos('recibo', null) },
+
+  { clave: 'ver-contratos', nombre: 'Ver contratos',
+    descripcion: 'Ver, editar o borrar los contratos ya generados (con filtro opcional por proveedor)',
+    soloAdmin: true,
+    ejecutar: () => abrirListaDeDocumentos('contrato', null) },
 ];
+
+/**
+ * Lista corta de proveedores para elegir uno y actuar de inmediato —
+ * mismo espíritu que abrirMarcarPagoRapido(): un toque acá, y ya está
+ * en el formulario, sin pasar por la pestaña Presupuesto ni por su
+ * buscador. Es el atajo que hace que "Nuevo recibo" y "Nuevo contrato"
+ * cumplan con las tres toques de siempre (y dos el día de la fiesta,
+ * cuando la mayoría de los datos ya vienen pre-llenados).
+ *
+ * @param {string} titulo
+ * @param {(proveedor: Object) => void} alElegir
+ * @returns {Promise<void>}
+ */
+async function abrirElegirProveedorPara(titulo, alElegir) {
+  const cuerpo = abrirHoja(titulo, '<div class="esqueleto"></div>'.repeat(3));
+
+  let datos;
+  try {
+    datos = await traer('presupuesto.php?accion=todo');
+  } catch (error) {
+    cuerpo.innerHTML = '';
+    pintarError(cuerpo, error.message, () => abrirElegirProveedorPara(titulo, alElegir));
+    return;
+  }
+
+  const proveedores = (datos.proveedores || []).slice()
+    .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+  if (!proveedores.length) {
+    cuerpo.innerHTML = '';
+    pintarVacio(cuerpo, 'Todavía no hay proveedores',
+      'Da de alta uno primero, desde Dinero › Proveedores.');
+    return;
+  }
+
+  cuerpo.innerHTML = proveedores.map(p =>
+    '<button class="lista__fila" data-elegir-proveedor="' + seguro(p.id) + '">' +
+      '<span class="lista__cuerpo">' +
+        '<span class="lista__titulo">' + seguro(p.nombre) + '</span>' +
+        '<span class="lista__pie">' + seguro(p.servicio || '—') + '</span>' +
+      '</span>' +
+    '</button>'
+  ).join('');
+
+  buscarTodos('[data-elegir-proveedor]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', () => {
+      const proveedor = proveedores.find(p => String(p.id) === boton.dataset.elegirProveedor);
+      cerrarHoja(true);
+      if (proveedor) alElegir(proveedor);
+    });
+  });
+}
 
 /**
  * Salta directo a la pestaña Gente, sección Mesas — sin pasar por su

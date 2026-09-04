@@ -218,8 +218,8 @@ function formularioNota(nota) {
 
   const borrar = buscar('#pie-borrar', cuerpo);
   if (borrar) {
-    borrar.addEventListener('click', () => {
-      if (!confirmarAccion('¿Borrar esta nota?')) return;
+    borrar.addEventListener('click', async () => {
+      if (!await confirmarAccion('¿Borrar esta nota?')) return;
       guardarPlan('borrar_nota', { id: nota.id }, () => abrirHojaDeNota());
     });
   }
@@ -360,6 +360,14 @@ function formularioTarea(tarea) {
       prioridad:    valorDe('tar-prioridad', cuerpo),
       estado:       valorDe('tar-estado', cuerpo),
       detalle:      valorDe('tar-detalle', cuerpo),
+      /* No hay campo en el formulario para esto — se conserva tal cual
+         venía (de una edición real, o de una precarga como la que arma
+         abrirDetalleDeProveedor() con "Nueva tarea"). Sin esto, guardar
+         cualquier edición borraría en silencio el vínculo con su
+         proveedor/gasto/padrino: guardarOEditar() manda TODAS las
+         columnas en cada UPDATE, no solo las que cambiaron. */
+      atada_a_tipo: d.atada_a_tipo || '',
+      atada_a_id:   d.atada_a_id || 0,
     };
     if (esEdicion) carga.id = tarea.id;
     else registrarEvento('accion', 'crear_tarea');
@@ -369,8 +377,8 @@ function formularioTarea(tarea) {
 
   const borrar = buscar('#pie-borrar', cuerpo);
   if (borrar) {
-    borrar.addEventListener('click', () => {
-      if (!confirmarAccion('¿Borrar esta tarea?')) return;
+    borrar.addEventListener('click', async () => {
+      if (!await confirmarAccion('¿Borrar esta tarea?')) return;
       guardarPlan('borrar_tarea', { id: tarea.id }, refrescarVistaEvento);
     });
   }
@@ -489,8 +497,8 @@ function formularioCita(cita) {
 
   const borrar = buscar('#pie-borrar', cuerpo);
   if (borrar) {
-    borrar.addEventListener('click', () => {
-      if (!confirmarAccion('¿Borrar esta fecha?')) return;
+    borrar.addEventListener('click', async () => {
+      if (!await confirmarAccion('¿Borrar esta fecha?')) return;
       guardarPlan('borrar_cita', { id: cita.id }, refrescarVistaEvento);
     });
   }

@@ -43,6 +43,18 @@
 #  Apache, el .htaccess de una subcarpeta manda sobre el de arriba.)
 # ══════════════════════════════════════════════════════════════════════
 
+# ─── El juego de caracteres, declarado en la cabecera ───────────────────
+# El servidor mandaba `Content-Type: text/html` a secas, sin charset. Un
+# navegador lo resuelve mirando el <meta charset> del documento, pero un
+# lector estricto —el robot que arma la vista previa de WhatsApp, por
+# ejemplo— tiene que adivinar antes de empezar a leer.
+#
+# index.html además empezaba con un BOM: tres bytes invisibles ANTES del
+# <!DOCTYPE html>, que era la otra mitad del mismo problema. Ese ya se
+# quitó del archivo; esto cierra el otro lado, declarándolo de una vez
+# para todo lo que se sirve.
+AddDefaultCharset UTF-8
+
 # ─── Proteger archivos secretos ─────────────────────────────────────────
 # Sin esto, cualquiera puede escribir aniaxv.com/.env en el navegador y
 # leer la contraseña del correo y la de la base de datos en texto plano.
@@ -163,6 +175,29 @@ Options -Indexes
   <FilesMatch "\.(svg|jpg|jpeg|png|webp|ico|mp3|woff|woff2)$">
     Header set Cache-Control "public, max-age=31536000, immutable"
   </FilesMatch>
+
+  # ─── La imagen de la tarjeta NO se puede convertir ───────────────────
+  #
+  # ⚠️ ESTO ES LO QUE HACÍA QUE EL ENLACE SALIERA PELADO (2026-09-04).
+  #
+  # El CDN de Hostinger convierte las imágenes a WebP al vuelo cuando
+  # quien las pide dice que acepta WebP. Para un navegador es una mejora
+  # gratis. Para el robot que arma la vista previa de WhatsApp, no: pide
+  # la imagen mandando `Accept: image/webp`, recibe WebP, y **WhatsApp no
+  # arma la tarjeta con WebP**. La URL termina en .jpg, la etiqueta
+  # og:image declara un JPEG, y lo que llega es otra cosa.
+  #
+  # Costó encontrarlo porque no se ve en el HTML ni en el archivo: hay
+  # que pedir la imagen CON esa cabecera para que el CDN la cambie. Sin
+  # ella devuelve el JPEG original y parece que está todo bien.
+  #
+  # `no-transform` es la forma estándar de decirle a cualquier
+  # intermediario que ese archivo se sirve tal cual. Va SOLO para esta
+  # imagen: para el resto del sitio, la conversión a WebP es una ventaja
+  # y se deja como está.
+  <Files "vista-previa-compartir.jpg">
+    Header set Cache-Control "public, max-age=31536000, no-transform"
+  </Files>
 
   # ─── Cabeceras de seguridad ──────────────────────────────────────────
   # Mismo criterio que admin/.htaccess. X-Frame-Options en DENY evita que
