@@ -155,12 +155,15 @@ function carpetaDeArchivos() {
  * sesión. Necesitan un secreto, y ese secreto tiene que estar ya en el
  * servidor.
  *
- * El sitio se despliega con GitHub Desktop y el .env está en .gitignore
- * (bien: tiene las contraseñas). O sea que agregarle una variable nueva
- * al .env del servidor exige entrar a mano por hPanel. Para no obligar a
- * eso, se acepta como llave cualquiera de estas dos:
+ * Solo vale LLAVE_DIAGNOSTICO, que vive en el .env del servidor. El
+ * .env está en .gitignore -bien: tiene las contraseñas-, así que
+ * ponerla o cambiarla exige entrar por hPanel a mano.
  *
- * Solo vale LLAVE_DIAGNOSTICO, que está en el .env para esto.
+ * ⚠️ SI SE CAMBIA, HAY QUE CAMBIARLA EN SIETE LUGARES POR SERVIDOR:
+ * el .env, y las TRES tareas programadas que la llevan en su URL
+ * (cron_alarmas, cron_recordatorios, cron_respaldo). Un cron que se
+ * queda con la llave vieja no avisa a nadie: deja de correr y ya. Sin
+ * respaldos, sin alarmas y sin recordatorios, en silencio.
  *
  * ⚠️ ANTES TAMBIÉN SE ACEPTABA DB_PASSWORD, Y ERA UN ERROR.
  *
