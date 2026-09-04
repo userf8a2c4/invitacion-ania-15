@@ -180,6 +180,7 @@
       .then(() => {
         subirElVolumenDeAPoco();
         if (conEco && !prefiereMenosMovimiento()) entrarComoEcoLejano();
+        prepararControlesDelSistema();
       })
       .catch(() => {
         /* El navegador la bloqueó. No es un error nuestro: simplemente
@@ -213,6 +214,40 @@
   let quiereMusica = false;
 
   /**
+   * ¿El AudioContext está dormido?
+   *
+   * ⚠️ EL BUG QUE ESTO DESTAPA (2026-09-04)
+   * El <audio> y el AudioContext son dos cosas distintas, y al
+   * bloquear la pantalla el navegador puede tocar una sin tocar la
+   * otra — cuál, depende del teléfono. Si suspende SOLO el contexto,
+   * el elemento sigue diciendo `paused === false`: para el código
+   * está sonando, y para quien escucha hay silencio, porque el audio
+   * sale enrutado POR el contexto (fuente → filtro → destino, ver
+   * prepararElGrafoDeAudio).
+   *
+   * Tres lugares miraban `audioDeFondo.paused` a secas y por eso no
+   * rescataban ese estado: el retorno del bloqueo, la red del clic y
+   * el propio botón. Eso es “a veces al desbloquear ya no suena”, y
+   * que fuera aleatorio es justamente la señal de que dependía de
+   * cuál de las dos cosas suspendió el navegador esa vez.
+   *
+   * @returns {boolean}
+   */
+  function elContextoEstaDormido() {
+    return !!grafoDeAudio && grafoDeAudio.contexto.state === 'suspended';
+  }
+
+  /**
+   * Despierta el contexto si hace falta. Es inofensivo llamarlo de
+   * más: si ya está corriendo, no hace nada.
+   *
+   * @returns {void}
+   */
+  function despertarElContexto() {
+    if (elContextoEstaDormido()) grafoDeAudio.contexto.resume();
+  }
+
+  /**
    * Alterna entre reproducir y pausar. ES EL ÚNICO LUGAR donde cambia
    * la intención de la persona: todo lo demás —el bloqueo de pantalla,
    * volver a la pestaña, la red del clic— la lee, nunca la escribe.
@@ -220,7 +255,12 @@
    * @returns {void}
    */
   function alternarPlayPausa() {
-    if (audioDeFondo.paused) {
+    /* `paused` NO alcanza para saber si se oye algo: con el contexto
+       dormido el elemento dice que suena y hay silencio. Para quien
+       mira la pantalla eso es “está pausado”, así que el botón tiene
+       que despertarlo, no pausar algo que no se escucha — antes hacía
+       falta tocarlo DOS veces para recuperar el sonido. */
+    if (audioDeFondo.paused || elContextoEstaDormido()) {
       quiereMusica = true;
       reproducirLaCancion();
     } else {
@@ -228,6 +268,82 @@
       audioDeFondo.pause();
     }
   }
+
+  /* ─── LOS CONTROLES DE LA PANTALLA BLOQUEADA ──────────────────
+   *
+   * POR QUÉ HACEN FALTA (2026-09-04)
+   * El otro síntoma del reproductor era “no para de reproducir” con el
+   * teléfono bloqueado. La única forma que tenía la página de
+   * enterarse era `visibilitychange`, y en varios bloqueos llega tarde
+   * o no llega. Mientras tanto no había NINGÚN control que el sistema
+   * respetara: la música seguía y no se podía parar sin desbloquear y
+   * volver a la página.
+   *
+   * Con Media Session, el sistema operativo muestra la canción en la
+   * pantalla bloqueada con sus botones de verdad. Deja de depender de
+   * que la página adivine.
+   *
+   * Va detrás de una comprobación de soporte y de un try: si el
+   * navegador no la tiene, todo sigue funcionando exactamente como
+   * antes.
+   */
+
+  /** Para no volver a registrarlos en cada play(). */
+  let controlesDelSistemaListos = false;
+
+  /**
+   * Le cuenta al sistema qué se está escuchando y cómo controlarlo.
+   *
+   * @returns {void}
+   */
+  function prepararControlesDelSistema() {
+    if (controlesDelSistemaListos) return;
+    if (!('mediaSession' in navigator) || typeof MediaMetadata !== 'function') return;
+
+    controlesDelSistemaListos = true;
+    const cancion = (CONFIGURACION && CONFIGURACION.musica) || {};
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title:  cancion.titulo  || 'Música',
+        artist: cancion.artista || '',
+        album:  cancion.album   || '',
+        // El tamaño es el real del archivo: declarar uno que no es
+        // hace que algunos sistemas descarten la miniatura.
+        artwork: [{
+          src: 'recursos/logo-dibujado-por-lucila.png',
+          sizes: '400x540',
+          type: 'image/png',
+        }],
+      });
+
+      /* Los dos botones escriben `quiereMusica`, igual que
+         alternarPlayPausa(): apretar pausa en la pantalla bloqueada es
+         tan decisión de la persona como apretarla en la página, y la
+         red del clic tiene que respetarla. */
+      navigator.mediaSession.setActionHandler('play', () => {
+        quiereMusica = true;
+        reproducirLaCancion();
+      });
+      navigator.mediaSession.setActionHandler('pause', () => {
+        quiereMusica = false;
+        audioDeFondo.pause();
+      });
+    } catch (error) {
+      console.warn('No se pudieron poner los controles del sistema:', error);
+    }
+  }
+
+  /* El estado que muestra la pantalla bloqueada sale del elemento, no
+     de lo que creamos nosotros: así no puede quedar diciendo “sonando”
+     sobre algo que el navegador paró por su cuenta. */
+  audioDeFondo.addEventListener('play', () => {
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+  });
+  audioDeFondo.addEventListener('pause', () => {
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+  });
+
 
   /**
    * Actualiza el icono del botón según si está sonando o no.
@@ -297,6 +413,10 @@
     if (panel.contains(evento.target)) return;
     if (botonMusica && botonMusica.contains(evento.target)) return;
 
+    // El contexto se despierta SIEMPRE, sin mirar `paused`: si lo que
+    // quedó dormido es el contexto y no el elemento, este era el
+    // último rescate y tampoco entraba.
+    despertarElContexto();
     if (audioDeFondo.paused) reproducirLaCancion();
   });
 
@@ -331,10 +451,20 @@
   }
 
   function alVolverLaPagina() {
-    // reproducirLaCancion() ya despierta el AudioContext suspendido: sin
-    // eso el <audio> se pone "sonando" pero no sale sonido, porque va
-    // enrutado por el grafo (ver la nota en esa función).
-    if (quiereMusica && audioDeFondo.paused) reproducirLaCancion();
+    if (!quiereMusica) return;
+
+    /* ⚠⚠ ACÁ ESTABA EL BUG (2026-09-04). La condición era
+       `quiereMusica && audioDeFondo.paused`, y reproducirLaCancion()
+       sí despierta el contexto — pero solo si llegaba a correr. Si el
+       navegador había suspendido el contexto SIN pausar el elemento,
+       `paused` era false, la condición no entraba, nadie despertaba
+       nada, y la música quedaba muda con el ícono diciendo que sonaba.
+
+       Ahora son dos preguntas separadas, que es lo que siempre
+       fueron: el contexto se despierta pase lo que pase, y play()
+       solo se pide si el elemento de verdad está pausado. */
+    despertarElContexto();
+    if (audioDeFondo.paused) reproducirLaCancion();
   }
 
   document.addEventListener('visibilitychange', () => {
