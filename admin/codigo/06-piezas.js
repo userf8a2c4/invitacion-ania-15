@@ -332,6 +332,21 @@ async function cerrarHoja(forzar) {
     AL_CERRAR_HOJA = null;
     quehacer();
   }
+
+  /* ⚠️ EL REFRESCO DE FONDO SE SALTEA ENTERO MIENTRAS HAY UNA HOJA
+     ABIERTA, y hasta acá no se recuperaba (2026-09-04).
+
+     Saltearlo es correcto: repintar la lista de atrás mientras alguien
+     llena un formulario le mueve el suelo bajo los pies. Pero una hoja
+     puede estar abierta diez minutos —cargar un proveedor, revisar una
+     ficha— y al cerrarla se volvía a la lista con lo de antes, hasta
+     que el temporizador diera la vuelta.
+
+     Cerrar la hoja es justo el momento en que se vuelve a mirar lo de
+     atrás. refrescarEnSegundoPlano() no pinta nada si los datos no
+     cambiaron —compara huella— así que en el caso normal esto no se
+     nota; y si alguien confirmó mientras tanto, aparece solo. */
+  if (typeof refrescarEnSegundoPlano === 'function') refrescarEnSegundoPlano();
 }
 
 /**

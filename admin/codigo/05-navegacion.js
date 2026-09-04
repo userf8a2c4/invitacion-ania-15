@@ -233,6 +233,22 @@ function ensuciarVistas(...cuales) {
 }
 
 /**
+ * Marca TODAS las vistas como viejas.
+ *
+ * Se usa al volver a la app después de un rato (ver el
+ * `visibilitychange` de 26-sincronizacion.js): en ese momento no hay
+ * ninguna sección de la que se pueda decir que está al día.
+ *
+ * No pide nada al servidor: solo hace que cada vista vuelva a pedir sus
+ * datos la próxima vez que se abra.
+ *
+ * @returns {void}
+ */
+function ensuciarTodasLasVistas() {
+  Object.keys(VISTAS).forEach(cual => { VISTAS_CARGADAS[cual] = false; });
+}
+
+/**
  * Cambia el título y el subtítulo del encabezado.
  *
  * @param {string} titulo
