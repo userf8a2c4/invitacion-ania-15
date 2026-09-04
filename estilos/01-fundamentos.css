@@ -564,33 +564,56 @@ h2 {
    cuando entran en pantalla. El archivo 08-efectos-de-scroll.js les
    agrega la clase "visible" en el momento justo.
    ---------------------------------------------------------------------- */
-/* ⚡ EL CONTENIDO ES VISIBLE POR DEFECTO (2026-09-03)
+/* ⚡ ACÁ NO SE ESCONDE NADA, Y ES A PROPÓSITO (2026-09-04)
  *
- * Antes esto era `.revelar { opacity: 0 }` y solo el JavaScript de
- * 08-efectos-de-scroll.js le agregaba `.visible`. O sea que **diez
- * bloques de la invitación —el formulario de confirmar incluido—
- * dependían de que ese archivo bajara bien**. Si no bajaba, la página se
- * veía "cargada" pero vacía, sin ningún error y sin nada que invitara a
- * recargar.
+ * ESTA REGLA YA CAUSÓ DOS DESASTRES. Vale la pena contar los dos, porque
+ * el segundo nació del arreglo del primero.
  *
- * Y había un segundo camino al mismo sitio: el observador usaba
- * `threshold: 0.15`, que un bloque más alto que ~6,7 pantallas no puede
- * alcanzar nunca. Con un grupo grande y el texto agrandado por
- * accesibilidad, el formulario entraba en ese caso.
+ * 1) Al principio esto era `.revelar { opacity: 0 }`, y solo el
+ *    JavaScript de 08-efectos-de-scroll.js le agregaba `.visible`. O sea
+ *    que diez bloques —el formulario de confirmar incluido— dependían de
+ *    que ese archivo bajara bien. Si no bajaba, la página se veía
+ *    "cargada" pero vacía, sin ningún error y sin nada que invitara a
+ *    recargar.
  *
- * Ahora la regla es al revés: **el contenido se ve siempre**, y el
- * efecto de aparición lo enciende el propio JS agregando `.con-revelado`
- * al <html> cuando está listo para manejarlo. Si el archivo no baja, se
- * pierde una animación; nunca el contenido.
+ * 2) El arreglo (2026-09-03) fue mover el escondite detrás de una clase
+ *    que ponía el propio JS: `html.con-revelado .revelar { opacity: 0 }`.
+ *    Correcto en la idea, y aun así rompió producción — porque el CSS
+ *    de esta web NO SE SIRVE DESDE ACÁ: va empaquetado y minificado
+ *    dentro de index.html (herramientas/empaquetar.mjs), y ese paquete no
+ *    se regeneró. Producción quedó con el CSS viejo y el JS nuevo, cada
+ *    uno esperando lo que el otro ya no hacía: el CSS escondía por su
+ *    cuenta y el JS solo desescondía cuando veía una clase que ese CSS
+ *    no conocía. Resultado, en el teléfono de una invitada real: tocar
+ *    "Animación" y que se vaciara media invitación, para siempre.
+ *
+ * LA LECCIÓN, Y POR ESO ESTE ARCHIVO YA NO ESCONDE NADA:
+ * mientras el escondite viva en el CSS y el rescate en el JS, son dos
+ * piezas que se despliegan por caminos distintos y pueden desfasarse. Un
+ * contrato entre dos archivos siempre se puede romper por la mitad.
+ *
+ * Ahora ESCONDE Y MUESTRA EL MISMO CÓDIGO: 08-efectos-de-scroll.js pone
+ * el `opacity: 0` como estilo del propio elemento, justo antes de
+ * ponerse a vigilarlo, y lo saca cuando entra en pantalla. Si ese
+ * archivo no baja, no esconde: se pierde la animación, nunca el
+ * contenido. Y si baja viejo o nuevo, da igual — no hay contrato que
+ * cumplir con nadie.
+ *
+ * Acá solo queda la transición (que sola no esconde nada) y las dos
+ * redes de abajo, que fuerzan visibilidad y nunca la quitan.
  */
 .revelar { transition: opacity .8s var(--curva-elegante),
                        transform .8s var(--curva-elegante); }
 
-html.con-revelado .revelar {
-  opacity: 0;
-  transform: translateY(30px);
+/* RED 1 · Quien pidió menos movimiento en su sistema operativo no espera
+   ninguna aparición: se le muestra todo de una. Y de paso es una red,
+   porque `!important` gana incluso contra un estilo puesto por JS: con
+   esta preferencia activada, el contenido NO PUEDE quedar escondido.
+   (La otra red, para `html.animaciones-off`, está más abajo en la
+   sección de "sin animación".) */
+@media (prefers-reduced-motion: reduce) {
+  .revelar { opacity: 1 !important; transform: none !important; }
 }
-html.con-revelado .revelar.visible { opacity: 1; transform: translateY(0); }
 
 /* Aparecer desde abajo (se usa en la portada) */
 @keyframes aparecer-desde-abajo {
