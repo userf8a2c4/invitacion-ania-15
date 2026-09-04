@@ -228,13 +228,27 @@ function buscarConfirmacionPorCodigo($codigo) {
     // la primera vez, si se vuelve a leer después de ya haber entrado
     // (ver datosParaLaPuerta) — mismo patrón que _lib/sesion.php y
     // api/metricas.php.
+    /* ⚡ LA MESA VIAJA CON EL PASE (2026-09-04). Es LA pregunta de la
+       puerta —"¿dónde me siento?"— y la tarjeta del escáner no la tenía:
+       había que salir, ir a Gente, buscar de nuevo y abrir la ficha, con
+       la fila esperando. Mismo patrón condicional que el caso 'ultimas'
+       de más arriba: si esta base todavía no tiene las tablas de mesas,
+       la consulta sigue funcionando sin ellas. */
+    $conMesa = existeTabla('asignacion_mesas') && existeTabla('mesas');
+    $selectMesa = $conMesa ? ', m.nombre AS mesa' : '';
+    $joinMesa = $conMesa
+        ? ' LEFT JOIN asignacion_mesas am ON am.confirmacion_id = c.id
+            LEFT JOIN mesas m ON m.id = am.mesa_id'
+        : '';
+
     return consultarUno(
-        'SELECT c.*, l.llegada_en, l.marcado_por, l.intentos,
-                u.nombre AS marcado_por_nombre
+        "SELECT c.*, l.llegada_en, l.marcado_por, l.intentos,
+                u.nombre AS marcado_por_nombre $selectMesa
          FROM confirmaciones c
          LEFT JOIN llegadas l ON l.confirmacion_id = c.id
          LEFT JOIN usuarios u ON u.id = l.marcado_por
-         WHERE c.codigo = :codigo',
+         $joinMesa
+         WHERE c.codigo = :codigo",
         [':codigo' => $codigo]
     );
 }
@@ -255,6 +269,12 @@ function datosParaLaPuerta($fila) {
         'adultos'         => (int) ($fila['adultos'] ?? 0),
         'ninos'           => (int) ($fila['ninos'] ?? 0),
         'alergias'        => $fila['alergias'] ?? '',
+        /* Lo que hace falta para dejar pasar a alguien y decirle dónde
+           va, sin salir de esta pantalla. La mesa es lo primero que
+           preguntan; los menús sirven para avisarle a la cocina de una
+           en la puerta, y son dato viejo apenas se sientan. */
+        'mesa'            => $fila['mesa'] ?? '',
+        'resumen_menus'   => $fila['resumen_menus'] ?? '',
         'ya_llego'        => !empty($fila['llegada_en']),
         'llegada_en'      => $fila['llegada_en'] ?? null,
         // Quién lo dejó pasar la primera vez, y cuántas veces se volvió

@@ -129,7 +129,8 @@ if ($token === '' || strlen($token) < 8) {
 try {
     $stmt = $pdo->prepare(
         'SELECT i.id, i.nombre, i.correo, i.pases, i.estado, i.confirmacion_id,
-                c.asiste, c.adultos, c.ninos, c.resumen_menus, c.alergias
+                c.asiste, c.adultos, c.ninos, c.resumen_menus, c.alergias,
+                c.codigo
          FROM invitaciones i
          LEFT JOIN confirmaciones c ON c.id = i.confirmacion_id
          WHERE i.token = :t LIMIT 1'
@@ -252,6 +253,23 @@ echo json_encode([
     'estado'            => $inv['estado'],
     'ya_respondio'      => $yaRespondio,
     'cerrado'           => $cerrado,
+    /* ⚡ EL CÓDIGO DEL PASE, EL DE VERDAD (2026-09-04)
+       Sin esto, el navegador se INVENTABA uno
+       (12-pase-de-acceso.js, generarCodigoDePase) y el invitado veía en
+       su pase, y en el QR de su correo, un código que no existía en la
+       base. El de la base lo genera el panel al crear la invitación
+       (admin/api/invitaciones.php) y es el que busca el escáner de la
+       puerta: eran dos verdades distintas para la misma persona.
+
+       Se descubrió probando el escáner en PBE: el pase decía
+       XV-04D3-B7X1, el panel XV-B2B47E, y buscar el primero contestaba
+       "No encontré a nadie con eso". La noche del evento eso son 114
+       personas en la puerta y ningún pase que sirva.
+
+       Viaja vacío cuando todavía no hay confirmación asociada; ahí el
+       navegador sigue generando el suyo, que es el comportamiento
+       correcto para el formulario abierto de toda la vida. */
+    'codigo'            => (string) ($inv['codigo'] ?? ''),
     /* Cuántas veces contestó este grupo. Se muestra en la invitación solo
        si ya contestó al menos una vez, para que se note si algo se mandó
        dos veces sin querer. La columna se agrega desde el instalador del
