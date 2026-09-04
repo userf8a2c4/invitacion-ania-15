@@ -57,11 +57,33 @@ if ($token === '') {
 }
 
 /* ─── 3. REINICIAR ────────────────────────────────────────────────── */
+
+/* ⚠️ ESTE ARCHIVO NO FUNCIONABA (2026-09-04). El DSN se armaba con
+   $DB_HOST, $DB_NAME, $DB_USER y $DB_PASSWORD, cuatro variables que
+   NUNCA se definieron acá: no hay ningún $DB_HOST = ... en el archivo,
+   y `require entorno.php` no define variables sueltas — carga el .env y
+   lo expone con env(). En PHP 8 una variable indefinida es solo un
+   aviso y se interpola como cadena vacía, así que el DSN quedaba
+   "mysql:host=;dbname=;charset=utf8mb4", la conexión fallaba, y el
+   catch de abajo contestaba un 500 con "No se pudo reiniciar." sin
+   decir por qué.
+
+   O sea que la herramienta que existe para poder repetir la prueba de
+   punta a punta no dejaba repetir nada, y cada ensayo del formulario
+   consumía un grupo familiar de los de verdad.
+
+   env() (entorno.php) llama solo a cargarEntorno() la primera vez, así
+   que no hace falta nada más. Se sigue usando PDO crudo y no _lib/bd.php
+   a propósito: los atajos de bd.php salen por responderMal(), que hace
+   exit, y este archivo quiere contestar con su propio JSON desde el
+   catch de abajo. */
 try {
     $pdo = new PDO(
-        "mysql:host=$DB_HOST;dbname=$DB_NAME;charset=utf8mb4",
-        $DB_USER,
-        $DB_PASSWORD,
+        'mysql:host=' . env('DB_HOST', 'localhost') .
+        ';dbname='    . env('DB_NAME', '') .
+        ';charset=utf8mb4',
+        env('DB_USER', ''),
+        env('DB_PASSWORD', ''),
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
 
