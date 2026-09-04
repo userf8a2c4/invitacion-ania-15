@@ -218,8 +218,26 @@ if (!$personas) {
     $cuantosNinos = min($ninosQueDijo, $cupo);
     $cuantosAdultos = $cupo - $cuantosNinos;
 
+    /* ⚡ EL PRIMER LUGAR LLEVA EL NOMBRE DE LA INVITACIÓN (2026-09-04)
+       Los demás quedan vacíos y el navegador los rotula «Adulto 2»,
+       «Niño 1» (etiquetaDeLugar(), 11-formulario-confirmacion.js) — está
+       bien, porque de verdad no se sabe quiénes son.
+
+       Pero el PRIMERO sí se sabe: es la persona a la que va dirigida
+       esta invitación, y su nombre está acá al lado, en
+       `invitaciones.nombre`. Llamarla «Adulto 1» en su propia invitación
+       —y después en su pase— era perder el único nombre que teníamos.
+
+       Es el mismo criterio que ya toma el importador al crear lugares de
+       relleno (admin/api/importar.php: el primer adulto usa el nombre de
+       la fila). Acá se estaba haciendo distinto sin querer.
+
+       Solo el primer ADULTO: si el cupo fuera todo de niños no se pone,
+       porque no hay forma de saber cuál de ellos es. */
     for ($i = 0; $i < $cuantosAdultos; $i++) {
-        $personas[] = ['id' => null, 'nombre' => '', 'tipo' => 'adulto',
+        $personas[] = ['id' => null,
+                       'nombre' => $i === 0 ? (string) ($inv['nombre'] ?? '') : '',
+                       'tipo' => 'adulto',
                        'menu' => '', 'alergias' => ''];
     }
     for ($i = 0; $i < $cuantosNinos; $i++) {
