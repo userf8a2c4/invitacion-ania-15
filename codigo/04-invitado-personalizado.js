@@ -176,10 +176,57 @@ let INVITACION = null;
        tiene apuro real, el saludo genérico ya se puso arriba y este fetch
        solo lo corrige cuando llega— pero le da a la fuente un cuadro de
        ventaja para arrancar primero. */
-    requestAnimationFrame(() => {
+    /* ⚡ UN PROBLEMA DEL SERVIDOR NO ES UN LINK ROTO (2026-09-03)
+     *
+     * Antes acá solo se miraba `datos.ok !== true`, así que CUALQUIER
+     * respuesta que no fuera un éxito —el freno por IP (429), una caída
+     * de la base (500), un mantenimiento— le decía al invitado:
+     *
+     *     "No encontramos esta invitación. Vuelve a abrirlo desde el
+     *      mensaje que te enviamos."
+     *
+     * Y volver a abrirlo generaba otra petición, que fallaba igual, con
+     * el mismo cartel. Un callejón sin salida, y encima acusándolo a él
+     * de tener mal el enlace cuando el problema era nuestro.
+     *
+     * Ahora se mira el código HTTP. Los errores pasajeros se reintentan
+     * solos —dos veces, espaciando— y si igual no salen, el mensaje dice
+     * la verdad y ofrece recargar. El 404 sigue siendo el único caso en
+     * el que se le habla del enlace, porque es el único en el que el
+     * enlace tiene de verdad algo que ver.
+     */
+    const ESPERAS_ENTRE_INTENTOS = [2000, 5000];
+
+    /**
+     * Pide la invitación al servidor, reintentando los fallos pasajeros.
+     *
+     * @param {number} intento - 0 el primero; crece con cada reintento.
+     * @returns {void}
+     */
+    function pedirLaInvitacion(intento) {
       fetch('invitacion.php?accion=ver&token=' + encodeURIComponent(token))
-        .then(respuesta => respuesta.json())
+        .then(respuesta => {
+          const ocupado = respuesta.status === 429;
+          const caido = respuesta.status >= 500;
+
+          if (ocupado || caido) {
+            const esperar = ESPERAS_ENTRE_INTENTOS[intento];
+            if (esperar !== undefined) {
+              setTimeout(() => pedirLaInvitacion(intento + 1), esperar);
+              // Se corta la cadena: el reintento se encarga del resultado.
+              return null;
+            }
+            dispararEventoQueQuizasLleguenTarde('invitacion-sin-acceso',
+              { motivo: ocupado ? 'servidor-ocupado' : 'servidor-caido' });
+            return null;
+          }
+
+          return respuesta.json();
+        })
         .then(datos => {
+          // null = ya se resolvió arriba (reintento en curso o aviso dado).
+          if (datos === null) return;
+
           if (!datos || datos.ok !== true) {
             // El token no corresponde a ninguna invitación viva.
             dispararEventoQueQuizasLleguenTarde('invitacion-sin-acceso',
@@ -216,10 +263,21 @@ let INVITACION = null;
              un invitado legítimo con una red mala, así que se lo trata
              aparte para no acusarlo de nada y pedirle que recargue. */
           console.warn('No se pudo cargar la invitación personalizada:', error);
+
+          // La red también se reintenta: el wifi que parpadea un segundo
+          // es más común que el que se cae del todo.
+          const esperar = ESPERAS_ENTRE_INTENTOS[intento];
+          if (esperar !== undefined) {
+            setTimeout(() => pedirLaInvitacion(intento + 1), esperar);
+            return;
+          }
+
           dispararEventoQueQuizasLleguenTarde('invitacion-sin-acceso',
             { motivo: 'sin-conexion' });
         });
-    });
+    }
+
+    requestAnimationFrame(() => pedirLaInvitacion(0));
   } else {
     /* ⚡ SIN LINK PERSONAL NO HAY FORMULARIO (2026-09-02). Las invitaciones
        son nominales y con cupo real: cada grupo familiar tiene su propio

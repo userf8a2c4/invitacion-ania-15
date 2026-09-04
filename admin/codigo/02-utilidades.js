@@ -297,6 +297,35 @@ function aFecha(valor) {
 
   const texto = String(valor);
 
+  /* ⚡ UNA FECHA QUE YA DICE SU HUSO SE RESPETA (2026-09-03)
+   *
+   * La expresión de abajo no está anclada al final, así que un ISO
+   * completo —'2026-09-03T01:00:00.000Z', lo que devuelve
+   * toISOString()— también entraba, y el 'Z' se descartaba en silencio.
+   * El resultado se rearmaba con el constructor de tres números, que es
+   * hora LOCAL: en México (UTC−6) toda fecha en UTC quedaba corrida seis
+   * horas hacia adelante.
+   *
+   * Se veía así: `30-vista-hoy.js` le pasa `new Date().toISOString()`,
+   * de modo que **a partir de las 18:00 el subtítulo de Hoy anunciaba el
+   * día siguiente** — en la pantalla que se usa en la puerta, la noche
+   * del evento. Mismo corrimiento al marcar un regalo como comprado
+   * (quedaba guardado con la fecha de mañana) y en el corte de mes de
+   * Dinero.
+   *
+   * Si el texto trae huso propio —'Z' o '+05:30'— no hay nada que
+   * adivinar: lo parsea `new Date`, que sabe leerlo, y lo convierte a
+   * local correctamente. La rama de abajo queda para lo que de verdad
+   * viene sin huso, que es lo que devuelve MySQL.
+   */
+  const TRAE_HUSO =
+    /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?(\.\d+)?([Zz]|[+-]\d{2}:?\d{2})$/;
+
+  if (TRAE_HUSO.test(texto)) {
+    const conHuso = new Date(texto);
+    if (!isNaN(conHuso)) return conHuso;
+  }
+
   /* Se acepta AAAA-MM-DD con hora opcional. La hora se conserva si
      viene: MySQL devuelve "2026-08-03 14:30:00" para las alarmas, y
      descartarla haría que una alarma de las 14:30 se leyera como las

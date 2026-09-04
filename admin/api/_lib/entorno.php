@@ -18,6 +18,33 @@
    por eso sube tres niveles con dirname() para encontrarlo en la raíz.
    ══════════════════════════════════════════════════════════════════════ */
 
+
+/* ─── LA HORA ES LA DE LA FIESTA, NO LA DEL SERVIDOR ──────────────────
+ *
+ * ⚡ NO HABÍA NINGUNA ZONA HORARIA EN TODO EL PROYECTO (2026-09-03).
+ *
+ * El hosting corre en UTC y la fiesta es en Toluca (UTC−6). Todo lo que
+ * usa date() se corría seis horas, y en dos lugares eso tenía
+ * consecuencias de verdad:
+ *
+ *   · confirmar.php e invitacion.php comparan `date('Y-m-d')` contra la
+ *     fecha límite para decidir si todavía se puede editar una
+ *     respuesta. A las 18:00 del día límite, hora de México, el servidor
+ *     ya creía que era el día siguiente y contestaba "las confirmaciones
+ *     ya se cerraron" a alguien que llegaba a tiempo.
+ *   · El correo que le llega a Lucila con cada confirmación traía la
+ *     hora en UTC, seis horas adelantada.
+ *
+ * Va acá porque este archivo lo carga TODO: el panel entra por bd.php,
+ * y la invitación y confirmar.php lo piden directo. Un solo lugar, antes
+ * de que nadie llame a date().
+ *
+ * `@` porque en algún hosting muy cerrado date_default_timezone_set()
+ * puede estar deshabilitada: si no se puede, se sigue con la del
+ * servidor —que es lo que había hasta ahora— en vez de tirar un aviso
+ * en medio del JSON. */
+@date_default_timezone_set('America/Mexico_City');
+
 /**
  * Carga el .env de la raíz del sitio. Se puede llamar varias veces sin
  * problema: la segunda vez y las siguientes no hacen nada.

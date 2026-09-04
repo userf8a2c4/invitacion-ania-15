@@ -73,7 +73,27 @@ try {
 /* ─── FRENO POR IP (mismo patrón que confirmar.php/mi-pase.php) ──────── */
 $ip = substr($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0', 0, 45);
 const MARCA_DE_FRENO = '__invitacion__';
-const INTENTOS_MAXIMOS = 15;
+
+/* ⚡ EL FRENO ESTABA CORTANDO INVITADOS DE VERDAD (2026-09-03)
+ *
+ * Eran 15 cargas cada 20 minutos por IP, contando TODAS las cargas —
+ * también las que encontraban la invitación. Dos problemas:
+ *
+ *   · Detrás del CGNAT de un operador móvil, o del wifi de una casa,
+ *     varias familias comparten la misma IP. Quince cargas entre todas
+ *     se agotan en una tarde.
+ *   · Una misma persona abre su link, lo cierra, lo vuelve a abrir para
+ *     enseñárselo a alguien, entra desde el buscador de WhatsApp… son
+ *     cargas legítimas, y cada una gastaba una.
+ *
+ * Este freno existe para que nadie pruebe tokens al azar. Un token
+ * VÁLIDO no es un intento de adivinar nada: no tiene por qué gastar
+ * cuota. Ahora solo cuentan las consultas que NO encontraron
+ * invitación, que son las únicas que un atacante genera — y el tope
+ * sube, porque con solo los fallos, 30 en veinte minutos ya es
+ * clarísimamente alguien probando.
+ */
+const INTENTOS_MAXIMOS = 30;
 const FRENO_EN_MINUTOS = 20;
 
 try {
@@ -121,17 +141,25 @@ try {
     responderMalPublico('No se pudo cargar tu invitación ahora. Intenta de nuevo en un rato.', 500);
 }
 
-/* ⚡ (2026-08-28) El INSERT de abajo se movió fuera del `if (!$inv)`:
-   antes solo se anotaban las consultas FALLIDAS, así que un token válido
-   (por ejemplo, uno filtrado) se podía consultar un número ilimitado de
-   veces sin gastar nunca el freno. Ahora cada consulta cuenta, haya
-   encontrado la invitación o no. */
-try {
-    $pdo->prepare('INSERT INTO intentos_login (ip, correo) VALUES (:ip, :marca)')
-        ->execute([':ip' => $ip, ':marca' => MARCA_DE_FRENO]);
-} catch (PDOException $e) { /* el freno es best-effort */ }
-
+/* ⚡ SOLO CUENTAN LAS CONSULTAS QUE NO ENCONTRARON NADA (2026-09-03)
+ *
+ * El 2026-08-28 este INSERT se sacó del `if (!$inv)` para que un token
+ * filtrado no se pudiera consultar sin límite. El remedio salió peor que
+ * la enfermedad: pasó a gastarle cuota a los invitados de verdad, que
+ * comparten IP entre ellos (ver la nota del tope, más arriba).
+ *
+ * El caso que se quería cubrir —alguien recarga mil veces un token
+ * válido que se filtró— no es el que hay que frenar acá: quien tiene el
+ * token ya tiene todo lo que ese token muestra, recargar no le da nada
+ * nuevo. Lo que sí hay que frenar es la búsqueda a ciegas, y ésa siempre
+ * falla. Vuelve adentro del `if`.
+ */
 if (!$inv) {
+    try {
+        $pdo->prepare('INSERT INTO intentos_login (ip, correo) VALUES (:ip, :marca)')
+            ->execute([':ip' => $ip, ':marca' => MARCA_DE_FRENO]);
+    } catch (PDOException $e) { /* el freno es best-effort */ }
+
     // Mismo mensaje genérico que un token válido con datos vacíos no
     // podría dar, para no revelar si el token existe o no.
     responderMalPublico('No encontramos esa invitación.', 404);
@@ -166,13 +194,28 @@ if ($inv['confirmacion_id']) {
    como "Adulto 1", "Niño 2", y en cuanto Lucila escriba los nombres reales
    en el panel, esos mismos lugares pasan a mostrarlos. */
 if (!$personas) {
-    $cuantosAdultos = (int) ($inv['adultos'] ?? 0);
-    $cuantosNinos   = (int) ($inv['ninos'] ?? 0);
+    /* ⚡ LOS LUGARES SALEN DEL CUPO, NO DE LO QUE YA CONFIRMÓ (2026-09-03)
+     *
+     * Acá se leía `c.adultos` / `c.ninos`, que son columnas de
+     * `confirmaciones` — o sea **lo que la persona contestó**, no lo que
+     * tiene apartado. Y confirmar.php las pisa con la respuesta.
+     *
+     * El resultado era que una familia con 4 pases que confirmaba 2
+     * volvía a abrir su link y veía **2 lugares**. Los otros dos
+     * desaparecían, y no había forma de recuperarlos desde la
+     * invitación: si al final venían los cuatro, no podía decirlo.
+     *
+     * `invitaciones.pases` es el cupo, y el cupo no cambia porque
+     * alguien conteste. De ahí salen los lugares.
+     *
+     * La composición (cuántos son niños) sí se conserva de la respuesta
+     * anterior, porque es un dato útil que la persona ya dio — pero
+     * acotada al cupo, nunca al revés. */
+    $cupo = max(1, (int) $inv['pases']);
 
-    // Sin composición cargada, los lugares apartados se tratan como adultos.
-    if ($cuantosAdultos + $cuantosNinos === 0) {
-        $cuantosAdultos = max(1, (int) $inv['pases']);
-    }
+    $ninosQueDijo = max(0, (int) ($inv['ninos'] ?? 0));
+    $cuantosNinos = min($ninosQueDijo, $cupo);
+    $cuantosAdultos = $cupo - $cuantosNinos;
 
     for ($i = 0; $i < $cuantosAdultos; $i++) {
         $personas[] = ['id' => null, 'nombre' => '', 'tipo' => 'adulto',

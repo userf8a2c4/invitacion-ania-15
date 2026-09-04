@@ -56,11 +56,65 @@
    además bloquea la carpeta herramientas/ por las dudas.
    ══════════════════════════════════════════════════════════════════════ */
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/* ─── 0. ¿EL CÓDIGO QUE SE VA A SERVIR ESTÁ AL DÍA? ───────────────────
+ *
+ * ⚡ POR QUÉ ESTO EXISTE (2026-09-03)
+ * index.html sirve `codigo/produccion/*.js`, que son las copias
+ * minificadas que genera `minificar-js.mjs`. Este script subía la
+ * versión sin mirarlas — o sea que se podía arreglar un bug, subir la
+ * versión, desplegar, y que a la gente le siguiera llegando el código
+ * viejo, porque el minificado nunca se regeneró.
+ *
+ * Pasó de verdad: el arreglo del reproductor de música quedó en el repo
+ * y NO en producción durante un despliegue entero. Nada lo advirtió.
+ *
+ * Comparar fechas es más honesto que confiar en que alguien se acuerde
+ * de correr dos comandos en el orden correcto. Si un fuente es más nuevo
+ * que su minificado, esto CORTA antes de tocar nada — porque subir la
+ * versión con el código viejo es peor que no subirla: invalida las
+ * cachés y reparte lo de antes como si fuera lo nuevo.
+ */
+const dirFuente = join(raiz, 'codigo');
+const dirProduccion = join(raiz, 'codigo', 'produccion');
+
+if (existsSync(dirProduccion)) {
+  const desactualizados = [];
+
+  for (const archivo of readdirSync(dirFuente)) {
+    if (!archivo.endsWith('.js')) continue;
+
+    const fuente = join(dirFuente, archivo);
+    const minificado = join(dirProduccion, archivo);
+
+    if (!existsSync(minificado)) {
+      desactualizados.push(`${archivo} (no existe su minificado)`);
+      continue;
+    }
+    if (statSync(fuente).mtimeMs > statSync(minificado).mtimeMs) {
+      desactualizados.push(archivo);
+    }
+  }
+
+  if (desactualizados.length) {
+    console.error('');
+    console.error('✗ NO se subió la versión: hay código sin minificar.');
+    console.error('');
+    console.error('  Estos archivos de codigo/ son más nuevos que su copia');
+    console.error('  en codigo/produccion/, que es la que se sirve de verdad:');
+    desactualizados.forEach(a => console.error(`    · ${a}`));
+    console.error('');
+    console.error('  Corré esto y volvé a intentar:');
+    console.error('    node herramientas/minificar-js.mjs');
+    console.error('');
+    process.exit(1);
+  }
+}
 const rutaIndex = join(raiz, 'index.html');
 const rutaSw = join(raiz, 'sw.js');
 const rutaSwAdmin = join(raiz, 'admin', 'sw.js');

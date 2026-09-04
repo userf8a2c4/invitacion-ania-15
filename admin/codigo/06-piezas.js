@@ -117,6 +117,66 @@ function desactivarCompensacionDeTeclado() {
   quitarCompensacionDeTeclado = null;
 }
 
+/**
+ * Cosas que hay que apagar cuando la hoja deja de estar en pantalla,
+ * SE CIERRE COMO SE CIERRE.
+ *
+ * ⚡ POR QUÉ EXISTE, APARTE DE `AL_CERRAR_HOJA` (2026-09-03)
+ *
+ * Los dos corren "al final", pero no son lo mismo y mezclarlos rompía
+ * cosas:
+ *
+ *   · `AL_CERRAR_HOJA` es NAVEGACIÓN: qué pasa después de cerrar
+ *     —refrescar la lista de atrás, volver a la ficha anterior—. Solo
+ *     tiene sentido en un cierre de verdad, y por eso lo pisa la hoja
+ *     siguiente sin ejecutarlo.
+ *   · Esto es LIMPIEZA DE RECURSOS: apagar la cámara, cortar un
+ *     temporizador. No se puede saltear nunca, ni cuando otra hoja se
+ *     abre encima. Si se saltea, la cámara del escáner se queda
+ *     prendida en la puerta de la fiesta.
+ *
+ * Es una lista y no un solo valor a propósito: dos piezas de la misma
+ * hoja pueden tener cada una lo suyo que apagar, y la segunda no debe
+ * borrar el registro de la primera.
+ */
+let LIMPIEZAS_DE_LA_HOJA = [];
+
+/**
+ * Registra algo para apagar cuando la hoja se vaya de pantalla.
+ *
+ * @param {Function} limpieza - Debe ser idempotente por las dudas.
+ * @returns {void}
+ *
+ * @example
+ *   alSoltarLaHoja(apagarCamaraDelEscaner);
+ */
+function alSoltarLaHoja(limpieza) {
+  if (typeof limpieza === 'function') LIMPIEZAS_DE_LA_HOJA.push(limpieza);
+}
+
+/**
+ * Corre y vacía todas las limpiezas registradas. La llaman abrirHoja()
+ * y cerrarHoja(); nadie más debería necesitarla.
+ *
+ * @returns {void}
+ */
+function soltarLaHoja() {
+  if (!LIMPIEZAS_DE_LA_HOJA.length) return;
+
+  // Se vacía ANTES de correrlas: si una lanza, las demás igual se
+  // ejecutan y ninguna queda anotada para correr dos veces.
+  const pendientes = LIMPIEZAS_DE_LA_HOJA;
+  LIMPIEZAS_DE_LA_HOJA = [];
+
+  pendientes.forEach(limpieza => {
+    try {
+      limpieza();
+    } catch (error) {
+      console.warn('[hoja] Una limpieza falló:', error);
+    }
+  });
+}
+
 /** Cómo estaban los campos al abrir, para detectar lo escrito sin guardar. */
 let LO_QUE_HABIA_AL_ABRIR = '';
 
@@ -157,8 +217,32 @@ function abrirHoja(titulo, contenido, alCerrar) {
     cuerpo.appendChild(contenido);
   }
 
+  /* ⚡ ABRIR HOJA SOBRE HOJA YA NO DEJA RECURSOS PRENDIDOS (2026-09-03)
+   *
+   * Abrir hoja sobre hoja es EL gesto principal del panel: de un detalle
+   * se toca "Editar" y la misma hoja se reusa con otro contenido, sin
+   * pasar nunca por cerrarHoja(). Eso dejaba dos cosas colgadas:
+   *
+   *   · Las limpiezas de recursos (la cámara del escáner, sobre todo)
+   *     no corrían. Ver soltarLaHoja(), abajo.
+   *   · `activarCompensacionDeTeclado()` se llamaba sin desactivar la
+   *     anterior, y como cada activación engancha tres listeners y pisa
+   *     `quitarCompensacionDeTeclado`, los tres viejos quedaban
+   *     huérfanos para siempre. Una tarde de trabajo deja decenas
+   *     midiendo el viewport en cada tecla.
+   *
+   * POR QUÉ `AL_CERRAR_HOJA` SÍ SE SIGUE PISANDO SIN EJECUTAR
+   * Porque no es una limpieza: es NAVEGACIÓN. En 09-vista-dinero.js el
+   * alCerrar de un recibo es `() => abrirDetalleDeProveedor(proveedor)`
+   * —volver a la ficha de atrás—. Ejecutarlo acá abriría la hoja del
+   * proveedor encima de la que la persona acaba de pedir. "Volver
+   * atrás" solo tiene sentido cuando de verdad se cierra.
+   */
+  soltarLaHoja();
+
   AL_CERRAR_HOJA = alCerrar || null;
   hoja.classList.remove('oculto');
+  desactivarCompensacionDeTeclado();
   activarCompensacionDeTeclado();
 
   /* Se guarda cómo quedó la hoja recién abierta. Al cerrarla se compara
@@ -217,6 +301,7 @@ async function cerrarHoja(forzar) {
   }
 
   hoja.classList.add('oculto');
+  soltarLaHoja();                    // apagar cámara, temporizadores, etc.
   desactivarCompensacionDeTeclado();
   buscar('#hoja-cuerpo').innerHTML = '';
   const hojaUsoAlCerrar = buscar('#hoja-uso');

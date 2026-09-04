@@ -825,7 +825,10 @@ function elegirRegaloParaLaCompra(c) {
           precio:        item.precio || 0,
           enlace:        item.enlace || '',
           recibido_en:   item.recibido_en || '',
-          comprado_en:   c.fecha ? c.fecha.slice(0, 10) : new Date().toISOString().slice(0, 10),
+          // hoyEnFecha() y no toISOString(): en UTC, marcar un regalo
+          // como comprado después de las 18:00 lo guardaba con la fecha
+          // de mañana. Ver la nota en 02-utilidades.js.
+          comprado_en:   c.fecha ? c.fecha.slice(0, 10) : hoyEnFecha(),
           agradecido:    Number(item.agradecido) === 1,
           correo_origen: c.huella,
           notas:         item.notas || '',
