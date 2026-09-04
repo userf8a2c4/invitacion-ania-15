@@ -1395,15 +1395,27 @@ function pintarSugerenciasEnHiloDeMegaBot(hilo, sugerencias) {
  */
 function compactarTiempoDeUsoDeMegaBot(segundos) {
   const minutosTotales = Math.round(segundos / 60);
-  const horas = Math.floor(minutosTotales / 60);
-  const minutos = minutosTotales % 60;
+  const horasTotales   = Math.floor(minutosTotales / 60);
+  const dias           = Math.floor(horasTotales / 24);
+  const horas          = horasTotales % 24;
+  const minutos        = minutosTotales % 60;
 
   // Menos de un minuto: se dice en segundos, no "0 min", que se lee
   // como que ya pasó.
   if (minutosTotales <= 0) return Math.max(0, Math.round(segundos)) + ' s';
-  if (horas <= 0) return minutos + ' min';
-  if (minutos <= 0) return horas + ' h';
-  return horas + ' h ' + minutos + ' min';
+  if (horasTotales <= 0) return minutos + ' min';
+
+  /* ⚡ DÍAS (2026-09-04). La cuota de GrokBot es SEMANAL, así que el
+     reinicio puede estar a varios días — y esta función llegaba hasta
+     las horas: cuatro días y cinco horas se leían como "101 h 0 min".
+     No está mal, pero nadie lee "101 h" y entiende "el jueves".
+
+     Mismo criterio que ya usaba: dos unidades como mucho, y nunca un
+     cero que se lea como que ya pasó ("4 d" a secas, no "4 d 0 h"). */
+  if (dias > 0) return horas > 0 ? dias + ' d ' + horas + ' h' : dias + ' d';
+
+  if (minutos <= 0) return horasTotales + ' h';
+  return horasTotales + ' h ' + minutos + ' min';
 }
 
 /** El último uso conocido y el reloj que lo hace bajar en pantalla. */

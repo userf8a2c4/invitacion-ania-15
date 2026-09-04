@@ -361,8 +361,11 @@ function anotarSaludDeMegabot($vivo) {
 /**
  * El snapshot de uso que mandó MegaBot la última vez (o null si nunca
  * mandó nada) — se guarda como ajuste, mismo patrón que cualquier otro
- * valor chico de `ajustes`. Nunca se inventa un número acá: si no hay
- * dato, el encabezado se queda en blanco (lo decide el JS).
+ * valor chico de `ajustes`.
+ *
+ * El contrato del campo está documentado UNA sola vez, junto a
+ * guardarUsoDeMegabotSiVino(). Acá solo se lee y se le descuenta el
+ * tiempo transcurrido.
  *
  * @return array|null
  */
@@ -402,10 +405,48 @@ function usoDeMegabotGuardado() {
     return $uso;
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   EL CONTRATO DE `uso` — LA ÚNICA DEFINICIÓN, NO REPETIR EN OTRO LADO
+
+   Quien asiste a Lucila cuando hay internet es GrokBot, con el
+   Orquestador/MegaBot como su representante. Ese servicio tiene una
+   cuota SEMANAL, y el encabezado del chat se lo cuenta a Lucila en
+   chico: cuánto se lleva usado y cuándo se reinicia.
+
+   MegaBot lo manda —opcionalmente— dentro del cuerpo de
+   `accion=responder`:
+
+       "uso": {
+         "porcentaje":  65,      entero 0-100, lo CONSUMIDO
+         "reinicia_en": 4620,    segundos que faltan para el reinicio
+         "agotado":     false    true si ya no queda cuota
+       }
+
+   TRES REGLAS QUE NO HAY QUE ROMPER
+
+   1. EL CAMPO SE LLAMA `reinicia_en`. Sin excepciones y sin variantes.
+
+   2. `reinicia_en` NO HACE FALTA MANDARLO SEGUIDO. Acá se guarda junto
+      con `guardado_en`, y usoDeMegabotGuardado() descuenta lo
+      transcurrido en cada lectura. Con que venga de vez en cuando, el
+      reloj baja solo.
+
+   3. SIN DATO NO SE INVENTA NADA. Si el campo no viene, o viene sin
+      `porcentaje` y sin `agotado`, no se guarda: el encabezado del
+      panel se queda vacío. Un número inventado sobre la cuota de un
+      servicio ajeno sería peor que no decir nada.
+
+   Del otro lado lo pinta pintarUsoDeMegaBot() en
+   admin/codigo/32-asistente.js, que tiene su propio reloj de diez
+   segundos para que el número se vea correr entre viaje y viaje.
+   ══════════════════════════════════════════════════════════════════ */
+
 /**
  * Valida y guarda el `uso` opcional que mandó MegaBot en `accion=
  * responder`. Nunca corta la petición si viene mal formado — el texto
  * de la respuesta es lo importante, el uso es un extra.
+ *
+ * Ver el contrato completo justo arriba.
  *
  * @param mixed $usoCrudo
  * @return void
