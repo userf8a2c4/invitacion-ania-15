@@ -342,6 +342,11 @@ function pintarListaDeInvitaciones(cuerpo, totales, capacidad) {
     '<div id="lista-invitaciones"></div>' +
     botonAgregar('Nueva invitación');
 
+  /* La tarjeta que acompaña a cada invitación empieza a bajarse acá,
+     al pintar la lista: para cuando abran una ficha y toquen el botón,
+     ya está en memoria. Ver LA INVITACIÓN VA CON LA TARJETA. */
+  precargarLaTarjeta();
+
   buscar('#inv-configurar', cuerpo).addEventListener('click', abrirConfiguracionDeInvitaciones);
 
   const botonTodosCorreo = buscar('#inv-todos-correo', cuerpo);
@@ -380,12 +385,154 @@ function pintarListaDeInvitaciones(cuerpo, totales, capacidad) {
   buscar('#agregar', cuerpo).addEventListener('click', () => abrirFormularioDeInvitacion());
 }
 
+/* ─── LA INVITACIÓN VA CON LA TARJETA ─────────────────────
+
+   POR QUÉ NO ALCANZÓ CON EL LINK SOLO
+   La invitación tiene su imagen —recursos/vista-previa-compartir.jpg—
+   y la idea era que WhatsApp la dedujera solo, leyendo las etiquetas
+   og: de la página. El sitio quedó correcto y comprobado: JPEG de
+   verdad (no WebP), 1200×630, servido con no-transform, leído sin
+   problemas por lectores independientes. Y aun así WhatsApp sigue
+   mandando el texto pelado. Esa vista previa la genera WhatsApp, no
+   nosotros: desde el sitio ya no hay nada más que hacer.
+
+   ASÍ QUE LA MANDAMOS NOSOTROS
+   navigator.share() con `files` comparte la imagen DE VERDAD, y el
+   texto —con el link adentro— viaja como pie. Llega como imagen, no
+   como promesa de imagen.
+
+   LO QUE CUESTA, DICHO SIN VUELTAS
+   La hoja de compartir no acepta destinatario: hay que elegir el chat
+   a mano. wa.me sí abría el chat directo, pero solo con texto. No se
+   pueden tener las dos cosas, y es una limitación de WhatsApp — no
+   del código. Por eso, cuando compartir con imagen no está
+   disponible, se cae al camino de siempre en vez de quedarse sin
+   mandar nada.
+
+   POR QUÉ LA IMAGEN SE BAJA ANTES DE TOCAR EL BOTÓN
+   navigator.share() exige el gesto de una persona, y el gesto se
+   pierde con cualquier espera larga en el medio: bajar 75 KB dentro
+   del click alcanzaría para que el navegador lo bloquee. Por eso se
+   baja al ABRIR la pantalla — para cuando tocan el botón, ya está en
+   memoria y el compartir sale en el acto.
+*/
+
+/* Relativa al documento (/admin/), no absoluta: así cada entorno lee
+   la suya — producción /recursos/, PBE /pbe/recursos/. Es justo lo que
+   og:image NO puede hacer, porque una etiqueta og: no sabe desde qué
+   dominio la están leyendo. */
+const RUTA_DE_LA_TARJETA = '../recursos/vista-previa-compartir.jpg';
+
+/** La tarjeta ya bajada, o null si todavía no está. */
+let TARJETA_EN_MEMORIA = null;
+
+/** La bajada en curso, para no pedirla dos veces. */
+let BAJANDO_LA_TARJETA = null;
+
 /**
- * Si una invitación pasa el filtro activo.
+ * Deja la tarjeta lista para compartir.
+ *
+ * Se llama al abrir cualquier pantalla con botón de WhatsApp, nunca al
+ * tocarlo (ver la nota de arriba). Si falla no pasa nada: el envío
+ * sigue andando sin imagen, por el camino de siempre.
+ *
+ * @returns {Promise<Blob|null>}
+ */
+function precargarLaTarjeta() {
+  if (TARJETA_EN_MEMORIA) return Promise.resolve(TARJETA_EN_MEMORIA);
+  if (BAJANDO_LA_TARJETA) return BAJANDO_LA_TARJETA;
+
+  BAJANDO_LA_TARJETA = fetch(RUTA_DE_LA_TARJETA)
+    .then(r => (r.ok ? r.blob() : null))
+    .then(blob => {
+      /* Se comprueba que sea una imagen con contenido y no una página de
+         error con 200: compartir un archivo vacío se ve peor que no
+         compartir ninguno. */
+      if (blob && blob.size > 0 && String(blob.type || '').indexOf('image/') === 0) {
+        TARJETA_EN_MEMORIA = blob;
+      }
+      return TARJETA_EN_MEMORIA;
+    })
+    .catch(() => null);
+
+  return BAJANDO_LA_TARJETA;
+}
+
+/**
+ * La tarjeta como archivo compartible, o null si no se puede.
+ *
+ * Da null en computadora y en los navegadores sin Web Share nivel 2.
+ * Ahí el envío cae a wa.me, que en computadora es lo que conviene
+ * igual: abre WhatsApp Web en el chat de la persona.
+ *
+ * @returns {File|null}
+ */
+function tarjetaParaCompartir() {
+  if (!TARJETA_EN_MEMORIA) return null;
+  if (!navigator.share || !navigator.canShare) return null;
+  if (typeof File !== 'function') return null;
+
+  try {
+    const archivo = new File([TARJETA_EN_MEMORIA], 'invitacion-ania-xv.jpg',
+                             { type: TARJETA_EN_MEMORIA.type || 'image/jpeg' });
+    /* canShare() con `files` es la única forma honesta de saberlo: hay
+       navegadores con navigator.share que no aceptan archivos. */
+    return navigator.canShare({ files: [archivo] }) ? archivo : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * El camino de siempre: abre el chat de la persona con el texto puesto.
  *
  * @param {Object} inv
- * @returns {boolean}
+ * @param {string} texto
+ * @returns {boolean}  si se llegó a abrir algo
  */
+function abrirElChatConElTexto(inv, texto) {
+  const ventana = window.open('https://wa.me/' + paraWhatsApp(inv.telefono) +
+                              '?text=' + encodeURIComponent(texto), '_blank');
+  if (!ventana) {
+    /* Sin ventana no hay envío. Que al menos el texto quede a mano en
+       vez de dejar a la persona sin nada. */
+    try { navigator.clipboard.writeText(texto); } catch (error) { /* ni eso */ }
+    avisar('No se pudo abrir WhatsApp. El texto quedó copiado: pegalo vos.', true);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Manda una invitación por WhatsApp, con la tarjeta si se puede.
+ *
+ * TIENE QUE LLAMARSE DENTRO DEL GESTO, sin ningún await antes: tanto
+ * navigator.share() como window.open() se bloquean si el navegador no
+ * ve el toque. Por eso la primera línea ya arma el texto y comparte.
+ *
+ * @param {Object} inv  con nombre, pases, link y telefono
+ * @returns {Promise<boolean>}  false solo si la persona canceló
+ */
+function mandarInvitacionPorWhatsApp(inv) {
+  const texto = textoDeInvitacion(inv);
+  const archivo = tarjetaParaCompartir();
+
+  if (!archivo) return Promise.resolve(abrirElChatConElTexto(inv, texto));
+
+  return navigator.share({ files: [archivo], text: texto })
+    .then(() => true)
+    .catch(error => {
+      /* Cancelar no es un error: cerraron la hoja a propósito y la
+         invitación no salió, así que tampoco hay que marcarla como
+         enviada. */
+      if (error && error.name === 'AbortError') return false;
+      /* Cualquier otra cosa —la hoja no abrió, el archivo no entró, el
+         navegador no vio el gesto— cae al camino de siempre, que al
+         menos manda el texto. */
+      return abrirElChatConElTexto(inv, texto);
+    });
+}
+
 /* ─── MANDAR A TODOS ────────────────────────────────────
 
    POR QUÉ SON DOS CAMINOS Y NO UNO
@@ -532,6 +679,10 @@ function abrirColaDeWhatsApp(cuerpo) {
   let enCual = 0;
   let mandados = 0;
 
+  // La imagen se baja acá, mientras se lee la pantalla, y no dentro
+  // del click. Ver la nota de LA INVITACIÓN VA CON LA TARJETA.
+  precargarLaTarjeta();
+
   const hoja = abrirHoja('Mandar por WhatsApp', '<div id="cola-wa"></div>');
   const donde = buscar('#cola-wa', hoja);
 
@@ -565,11 +716,11 @@ function abrirColaDeWhatsApp(cuerpo) {
       '</div>' +
 
       '<div class="acciones" style="flex-wrap:wrap">' +
-        '<button class="boton boton--principal" id="wa-abrir">Abrir el chat</button>' +
+        '<button class="boton boton--principal" id="wa-abrir">Mandar la invitación</button>' +
       '</div>' +
 
       /* Los dos de abajo aparecen desde el principio, no después de
-         abrir: si WhatsApp no abre por lo que sea, tiene que haber
+         mandar: si WhatsApp no abre por lo que sea, tiene que haber
          forma de seguir sin quedarse trabado en este. */
       '<div class="acciones" style="margin-top:var(--esp-2);flex-wrap:wrap">' +
         '<button class="boton" id="wa-listo">Ya lo mandé → siguiente</button>' +
@@ -577,11 +728,11 @@ function abrirColaDeWhatsApp(cuerpo) {
       '</div>';
 
     buscar('#wa-abrir', donde).addEventListener('click', () => {
-      /* window.open TIENE que correr dentro del gesto, sin ningún await
-         antes: con una espera de por medio el navegador lo bloquea. */
-      const texto = textoDeInvitacion(inv);
-      window.open('https://wa.me/' + paraWhatsApp(inv.telefono) +
-                  '?text=' + encodeURIComponent(texto), '_blank');
+      /* Sin await antes: navigator.share() y window.open() se bloquean
+         los dos si el navegador no ve el gesto. Por eso se llama y
+         listo, sin esperar el resultado — acá el que marca como
+         enviada es el botón de abajo, a mano. */
+      mandarInvitacionPorWhatsApp(inv);
     });
 
     buscar('#wa-listo', donde).addEventListener('click', async () => {
@@ -611,6 +762,12 @@ function abrirColaDeWhatsApp(cuerpo) {
 }
 
 
+/**
+ * Si una invitación pasa el filtro activo.
+ *
+ * @param {Object} inv
+ * @returns {boolean}
+ */
 function filtroDeInvitacionPasa(inv) {
   switch (FILTRO_INVITACIONES) {
     case 'sin_telefono':    return !inv.telefono;
@@ -716,11 +873,14 @@ function abrirDetalleDeInvitacion(inv) {
 
   const botonWhatsapp = buscar('#inv-whatsapp', cuerpo);
   if (botonWhatsapp) {
+    // Acá, no dentro del click: ver LA INVITACIÓN VA CON LA TARJETA.
+    precargarLaTarjeta();
     botonWhatsapp.addEventListener('click', async () => {
-      const texto = textoDeInvitacion(inv);
-      const numero = paraWhatsApp(inv.telefono);
-      window.open('https://wa.me/' + numero + '?text=' + encodeURIComponent(texto), '_blank');
-      await marcarEnviadaSiHaceFalta();
+      // Sin await antes de esta línea, o el navegador no ve el gesto.
+      const seMando = await mandarInvitacionPorWhatsApp(inv);
+      // Si cancelaron la hoja de compartir no se mandó nada, así que
+      // marcarla como enviada sería mentir.
+      if (seMando) await marcarEnviadaSiHaceFalta();
     });
   }
 

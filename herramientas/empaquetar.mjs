@@ -67,11 +67,28 @@
    ⚠️ SI SE EDITA CUALQUIER ARCHIVO DE estilos/, HAY QUE VOLVER A CORRER
    ESTO antes de subir — si no, el cambio queda en el archivo fuente pero
    index.html sigue teniendo el CSS inline viejo.
+
+   ⚠️ Y SI ALGUIEN SE OLVIDA DE CORRERLO, ¿QUÉ? (2026-09-04)
+   Eso pasó, y rompió producción: el CSS fuente cambió, este script no se
+   corrió, y la web sirvió el paquete viejo con el JavaScript nuevo. En
+   el teléfono de una invitada real, media invitación quedó en blanco.
+
+   Por eso este archivo ahora también EXPORTA lo que sabe hacer:
+   `comprobarElCssInline()` rearma el paquete en memoria y lo compara,
+   byte a byte, con el que index.html está sirviendo. La usa
+   herramientas/subir-version.mjs —que es el paso obligatorio antes de
+   subir— para CORTAR si no coinciden. No hay copia del minificador ni
+   del orden de los archivos en ningún otro lado: si acá cambia algo, la
+   comprobación cambia con ello.
+
+   Importar este archivo NO escribe nada: el script solo se ejecuta si se
+   lo invoca directo.
+
    ══════════════════════════════════════════════════════════════════════ */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 const rutaIndex = join(raiz, 'index.html');
@@ -79,35 +96,6 @@ const rutaManifiesto = join(raiz, 'herramientas', '_manifiesto-empaquetado.json'
 
 const MARCADOR_INICIO = '<!-- ESTILOS-EMPAQUETADOS-INICIO -->';
 const MARCADOR_FIN = '<!-- ESTILOS-EMPAQUETADOS-FIN -->';
-
-/* ─── 1. La lista de archivos siempre sale del manifiesto ─────────────── */
-if (!existsSync(rutaManifiesto)) {
-  console.error(`✗ No existe ${rutaManifiesto}.`);
-  console.error('  Sin él no hay forma de saber qué archivos de estilos/ juntar.');
-  console.error('  Hay que reconstruirlo a mano una sola vez: un JSON con');
-  console.error('  { "css": ["00-tipografias.css", "01-fundamentos.css", ...] }');
-  process.exit(1);
-}
-const manifiesto = JSON.parse(readFileSync(rutaManifiesto, 'utf8'));
-const archivosCss = manifiesto.css;
-
-/* ─── 2. Leer cada archivo y armar el contenido combinado ─────────────── */
-const partes = [
-  '/* Generado por herramientas/empaquetar.mjs — no editar a mano.\n' +
-  '   Para cambiar algo, editar el archivo original en estilos/ y volver\n' +
-  '   a correr el script. Ver ese archivo para la explicación completa. */\n'
-];
-
-for (const archivo of archivosCss) {
-  const ruta = join(raiz, 'estilos', archivo);
-  if (!existsSync(ruta)) {
-    console.error(`✗ No existe estilos/${archivo} (parte del manifiesto).`);
-    process.exit(1);
-  }
-  partes.push(`\n/* ═══ ${archivo} ═══ */\n`, readFileSync(ruta, 'utf8'));
-}
-
-const cssSinMinificar = partes.join('');
 
 /**
  * Minificado conservador: comentarios, espacio en blanco, y el espacio/
@@ -126,37 +114,144 @@ function minificarCss(codigo) {
     .trim();
 }
 
-const cssEmpaquetado = minificarCss(cssSinMinificar);
+/**
+ * El CSS empaquetado que le CORRESPONDE a estilos/ en este momento.
+ *
+ * Lanza Error (y no process.exit) para que quien lo importe decida qué
+ * hacer con el problema.
+ *
+ * @returns {{css: string, archivos: string[]}}
+ */
+export function armarCssEmpaquetado() {
+  if (!existsSync(rutaManifiesto)) {
+    throw new Error(
+      `No existe ${rutaManifiesto}.\n` +
+      '  Sin él no hay forma de saber qué archivos de estilos/ juntar.\n' +
+      '  Hay que reconstruirlo a mano una sola vez: un JSON con\n' +
+      '  { "css": ["00-tipografias.css", "01-fundamentos.css", ...] }');
+  }
 
-/* ─── 3. Artefacto de referencia (no se enlaza desde index.html) ──────── */
-writeFileSync(join(raiz, 'estilos', '_empaquetado.css'), cssEmpaquetado);
+  const archivos = JSON.parse(readFileSync(rutaManifiesto, 'utf8')).css;
 
-/* ─── 4. Inyectar entre los marcadores de index.html ───────────────────── */
-const html = readFileSync(rutaIndex, 'utf8');
+  const partes = [
+    '/* Generado por herramientas/empaquetar.mjs — no editar a mano.\n' +
+    '   Para cambiar algo, editar el archivo original en estilos/ y volver\n' +
+    '   a correr el script. Ver ese archivo para la explicación completa. */\n'
+  ];
 
-if (!html.includes(MARCADOR_INICIO) || !html.includes(MARCADOR_FIN)) {
-  console.error('✗ No se encontraron los marcadores ESTILOS-EMPAQUETADOS-INICIO/FIN en index.html.');
-  console.error('  Sin ellos no hay dónde inyectar el CSS de forma segura.');
-  process.exit(1);
+  for (const archivo of archivos) {
+    const ruta = join(raiz, 'estilos', archivo);
+    if (!existsSync(ruta)) {
+      throw new Error(`No existe estilos/${archivo} (parte del manifiesto).`);
+    }
+    partes.push(`\n/* ═══ ${archivo} ═══ */\n`, readFileSync(ruta, 'utf8'));
+  }
+
+  return { css: minificarCss(partes.join('')), archivos };
 }
 
-const inicio = html.indexOf(MARCADOR_INICIO) + MARCADOR_INICIO.length;
-const fin = html.indexOf(MARCADOR_FIN);
-
-if (fin < inicio) {
-  console.error('✗ El marcador de FIN aparece antes que el de INICIO. Revisar index.html a mano.');
-  process.exit(1);
+/**
+ * El trozo que este script escribe entre los marcadores, tal cual.
+ * Tenerlo en una sola función es lo que permite comparar byte a byte.
+ * @param {string} css
+ * @returns {string}
+ */
+function trozoParaIndex(css) {
+  return `\n  <style>${css}</style>\n  `;
 }
 
-const htmlNuevo =
-  html.slice(0, inicio) +
-  `\n  <style>${cssEmpaquetado}</style>\n  ` +
-  html.slice(fin);
+/**
+ * Lo que index.html tiene HOY entre los marcadores.
+ * @param {string} html
+ * @returns {string|null} null si faltan los marcadores o están al revés
+ */
+function trozoQueTieneIndex(html) {
+  const inicio = html.indexOf(MARCADOR_INICIO);
+  const fin = html.indexOf(MARCADOR_FIN);
+  if (inicio < 0 || fin < 0 || fin < inicio) return null;
+  return html.slice(inicio + MARCADOR_INICIO.length, fin);
+}
 
-writeFileSync(rutaIndex, htmlNuevo);
+/**
+ * ¿El CSS incrustado en index.html es el que corresponde a estilos/?
+ *
+ * Compara byte a byte contra el paquete rearmado en memoria. NO mira
+ * fechas: una fecha puede mentir —index.html se reescribe por otros
+ * motivos, como subir la versión, y eso lo dejaría siempre "más nuevo"
+ * que estilos/— mientras que el contenido no miente nunca.
+ *
+ * @returns {{alDia: boolean, motivo: string}}
+ */
+export function comprobarElCssInline() {
+  let css;
+  try {
+    css = armarCssEmpaquetado().css;
+  } catch (error) {
+    return { alDia: false, motivo: error.message };
+  }
 
-console.log(`✓ CSS empaquetado (${archivosCss.length} archivos, ${(cssEmpaquetado.length / 1024).toFixed(0)} KB) inyectado inline en index.html`);
-console.log('  estilos/_empaquetado.css escrito solo como referencia (no se enlaza).');
-console.log('');
-console.log('El JavaScript NO se toca acá — correr node herramientas/minificar-js.mjs');
-console.log('aparte. Los archivos de estilos/ siguen intactos.');
+  const tiene = trozoQueTieneIndex(readFileSync(rutaIndex, 'utf8'));
+
+  if (tiene === null) {
+    return {
+      alDia: false,
+      motivo: 'index.html no tiene los marcadores ESTILOS-EMPAQUETADOS-INICIO/FIN, ' +
+              'o están en orden invertido.',
+    };
+  }
+  if (tiene !== trozoParaIndex(css)) {
+    return {
+      alDia: false,
+      motivo: 'El <style> incrustado en index.html NO es el que sale de estilos/.',
+    };
+  }
+  return { alDia: true, motivo: 'El CSS incrustado en index.html coincide con estilos/.' };
+}
+
+
+/* ─── El script propiamente dicho ─────────────────────────────────────
+
+   Solo corre si se lo invoca directo (`node herramientas/empaquetar.mjs`).
+   Importarlo desde otra herramienta no escribe ningún archivo. */
+const meInvocaronDirecto =
+  !!process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+
+if (meInvocaronDirecto) {
+  let paquete;
+  try {
+    paquete = armarCssEmpaquetado();
+  } catch (error) {
+    console.error(`✗ ${error.message}`);
+    process.exit(1);
+  }
+
+  /* Artefacto de referencia (no se enlaza desde index.html) */
+  writeFileSync(join(raiz, 'estilos', '_empaquetado.css'), paquete.css);
+
+  /* Inyectar entre los marcadores de index.html */
+  const html = readFileSync(rutaIndex, 'utf8');
+  const inicio = html.indexOf(MARCADOR_INICIO);
+  const fin = html.indexOf(MARCADOR_FIN);
+
+  if (inicio < 0 || fin < 0) {
+    console.error('✗ No se encontraron los marcadores ESTILOS-EMPAQUETADOS-INICIO/FIN en index.html.');
+    console.error('  Sin ellos no hay dónde inyectar el CSS de forma segura.');
+    process.exit(1);
+  }
+  if (fin < inicio) {
+    console.error('✗ El marcador de FIN aparece antes que el de INICIO. Revisar index.html a mano.');
+    process.exit(1);
+  }
+
+  writeFileSync(rutaIndex,
+    html.slice(0, inicio + MARCADOR_INICIO.length) +
+    trozoParaIndex(paquete.css) +
+    html.slice(fin));
+
+  console.log(`✓ CSS empaquetado (${paquete.archivos.length} archivos, ${(paquete.css.length / 1024).toFixed(0)} KB) inyectado inline en index.html`);
+  console.log('  estilos/_empaquetado.css escrito solo como referencia (no se enlaza).');
+  console.log('');
+  console.log('El JavaScript NO se toca acá — correr node herramientas/minificar-js.mjs');
+  console.log('aparte. Los archivos de estilos/ siguen intactos.');
+  console.log('');
+}
