@@ -43,30 +43,37 @@ let AL_CERRAR_HOJA = null;
 let quitarCompensacionDeTeclado = null;
 
 /**
- * Engancha el ajuste de `--alto-hoja` Y `--desplazamiento-hoja` a
- * `visualViewport` mientras la hoja esté abierta. Sin soporte de
- * `visualViewport`, no hace nada: el CSS ya tiene `88dvh` como valor de
- * respaldo, igual que antes de este cambio.
+ * Mantiene `--tope-visible`, `--alto-visible` y `--alto-hoja` al día
+ * mientras la hoja esté abierta, leyendo `visualViewport`.
  *
- * ⚡ POR QUÉ SE SUMÓ `--desplazamiento-hoja`, Y POR QUÉ LA PRIMERA
- * VERSIÓN NO SERVÍA (2026-08-27). Achicar el ALTO del panel no
- * alcanza: `.hoja` es `position:fixed; inset:0` — ocupa el *layout*
- * viewport completo — y con `interactive-widget=resizes-visual`
- * (admin/index.html) ese layout viewport NO se achica cuando aparece
- * el teclado, solo el *visual* viewport sí. Como `.hoja` usa
- * `align-items:flex-end`, el panel queda pegado al fondo del layout
- * viewport — que en ese momento está DETRÁS del teclado, fuera de lo
- * que se ve.
+ * EL PROBLEMA DE FONDO
+ * `.hoja` es `position:fixed` y con `align-items:flex-end` el panel se
+ * pega al fondo de su caja. Si esa caja es la pantalla ENTERA, el borde
+ * de abajo queda detrás del teclado. Ni `vh` ni `dvh` ni `svh`
+ * reaccionan al teclado — por especificación, esa distinción queda
+ * fuera de lo que esas unidades cubren. `visualViewport` es la única
+ * API que sabe cuánto se ve de verdad.
  *
- * La primera versión de este arreglo usaba `visualViewport.offsetTop`
- * a secas — pero ese valor es 0 en el caso normal de abrir un teclado
- * (mide cuánto SCROLLEÓ el visual viewport, no cuánto tapa el
- * teclado), así que `translateY(0)` no cambiaba nada y el bug seguía
- * intacto. Lo que hace falta es la distancia entre el fondo de la
- * pantalla física (`window.innerHeight`) y el fondo de lo que
- * realmente se ve (`offsetTop + height`) — esa es la porción tapada
- * por el teclado, y hay que subir `.hoja` esa distancia (valor
- * NEGATIVO de `translateY`, ver `.hoja` en 02-componentes.css).
+ * ⚡ POR QUÉ SE DEJÓ DE CALCULAR UN DESPLAZAMIENTO (2026-09-04)
+ * Las dos versiones anteriores subían la hoja con un `translateY`
+ * negativo, calculado como `innerHeight − (offsetTop + height)`: cuánto
+ * tapa el teclado del fondo de la pantalla física. Esa cuenta solo vale
+ * si el layout viewport NO se achica con el teclado, que es lo que
+ * promete `interactive-widget=resizes-visual` (admin/index.html).
+ *
+ * Pero no todos los navegadores lo cumplen igual: donde el layout
+ * viewport también se achica, la resta da ≈0, el `translateY` no
+ * compensa nada, y la hoja vuelve a quedar debajo del teclado — que es
+ * justo el síntoma que se reportaba al abrir "Nuevo pago".
+ *
+ * Ahora no se calcula ningún desplazamiento: se le da a `.hoja` la
+ * posición y el alto del área visible, y el panel se apoya en el fondo
+ * de esa área. Deja de depender de que dos medidas del navegador
+ * concuerden entre sí.
+ *
+ * Sin soporte de `visualViewport` no hace nada: los respaldos del CSS
+ * (`inset: 0` y `88dvh`) dan el comportamiento de siempre.
+ *
  * @returns {void}
  */
 function activarCompensacionDeTeclado() {
@@ -74,9 +81,15 @@ function activarCompensacionDeTeclado() {
 
   function ajustar() {
     const vv = window.visualViewport;
-    document.documentElement.style.setProperty('--alto-hoja', Math.round(vv.height * 0.88) + 'px');
-    const tapadoPorElTeclado = window.innerHeight - (vv.offsetTop + vv.height);
-    document.documentElement.style.setProperty('--desplazamiento-hoja', Math.round(-tapadoPorElTeclado) + 'px');
+    const raiz = document.documentElement.style;
+
+    /* Las dos primeras posicionan la caja de `.hoja` EXACTAMENTE sobre
+       el área que se ve; la tercera limita el alto del panel dentro de
+       esa área. Ver la nota larga en `.hoja` (02-componentes.css) sobre
+       por qué esto reemplazó al translateY calculado. */
+    raiz.setProperty('--tope-visible', Math.round(vv.offsetTop) + 'px');
+    raiz.setProperty('--alto-visible', Math.round(vv.height) + 'px');
+    raiz.setProperty('--alto-hoja', Math.round(vv.height * 0.88) + 'px');
   }
 
   // Red de seguridad adicional: si el campo que se tocó queda tapado de
@@ -87,7 +100,11 @@ function activarCompensacionDeTeclado() {
   function alEnfocar(evento) {
     const campo = evento.target;
     if (!campo || !campo.matches || !campo.matches('input, textarea, select')) return;
-    setTimeout(() => campo.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300);
+    // 'nearest' y no 'center': con la hoja ya bien ubicada, el campo
+    // suele verse entero, y 'center' lo empujaba igual — un salto
+    // gratis que se siente como que la hoja se sacude sola al tocar
+    // cada campo.
+    setTimeout(() => campo.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 300);
   }
 
   const cuerpo = buscar('#hoja-cuerpo');
@@ -102,8 +119,9 @@ function activarCompensacionDeTeclado() {
     window.visualViewport.removeEventListener('resize', ajustar);
     window.visualViewport.removeEventListener('scroll', ajustar);
     cuerpo.removeEventListener('focusin', alEnfocar);
+    document.documentElement.style.removeProperty('--tope-visible');
+    document.documentElement.style.removeProperty('--alto-visible');
     document.documentElement.style.removeProperty('--alto-hoja');
-    document.documentElement.style.removeProperty('--desplazamiento-hoja');
   };
 }
 
@@ -1993,8 +2011,37 @@ async function pintarEtiquetasDe(tipo, id, contenedor) {
   const puestasEnMinuscula = new Set(
     nombresPuestos.map(n => n.toLocaleLowerCase('es')));
 
+  /* ⚠️ EN ACORDEÓN, Y CERRADO (2026-09-04)
+     Este bloque pinta los ~15 chips completos, y la ficha de un grupo lo
+     repite UNA VEZ POR PERSONA: con dos personas eran treinta chips y
+     dos campos "Crear otra etiqueta" antes de llegar a nada más. La
+     ficha se volvía ilegible justo cuando más gente tiene.
+
+     Se usa <details>/<summary> nativo y no un desplegable propio: no
+     hay estado que mantener, funciona con teclado y lectores de
+     pantalla sin que haya que escribir nada, y no puede desincronizarse
+     con el DOM.
+
+     CERRADO SIEMPRE, también sin etiquetas puestas. La primera idea fue
+     abrirlo cuando no hubiera ninguna, pero ese es justo el caso de la
+     captura que motivó esto —una ficha recién creada, sin etiquetas en
+     ninguna persona— así que habría quedado igual de saturada. Lo que
+     hace falta ver de un vistazo es QUÉ TIENE PUESTO, y eso va en el
+     resumen; poner una es una acción deliberada y se banca un toque. */
+  const resumenDeLoPuesto = nombresPuestos.length
+    ? nombresPuestos.map(n =>
+        '<span class="etiqueta-chip etiqueta-chip--activa etiqueta-chip--resumen">' +
+          seguro(n) +
+        '</span>').join('')
+    : '<span class="etiquetas-acordeon__vacio">Ninguna todavía</span>';
+
   contenedor.innerHTML =
-    '<span class="campo__rotulo">Etiquetas</span>' +
+    '<details class="etiquetas-acordeon">' +
+    '<summary class="etiquetas-acordeon__cabecera">' +
+      '<span class="campo__rotulo">Etiquetas</span>' +
+      '<span class="etiquetas-acordeon__puestas">' + resumenDeLoPuesto + '</span>' +
+    '</summary>' +
+
     '<p class="vacio__texto" style="margin-bottom:var(--esp-1)">' +
       'Puedes poner todas las que quieras. Toca para poner o quitar.</p>' +
 
@@ -2015,7 +2062,8 @@ async function pintarEtiquetasDe(tipo, id, contenedor) {
              'placeholder="Crear otra etiqueta" style="flex:1">' +
       '<button type="button" class="boton boton--chico" id="etiqueta-agregar-' + tipo + id + '">' +
         'Crear</button>' +
-    '</div>';
+    '</div>' +
+    '</details>';
 
   /* Poner y quitar con un toque, sin repintar todo el bloque: repintar
      perdía el lugar del scroll y hacía parpadear los quince chips para

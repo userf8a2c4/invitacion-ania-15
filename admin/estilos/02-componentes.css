@@ -686,20 +686,39 @@ select.campo__control {
 
 .hoja {
   position: fixed;
+  /* El respaldo, y lo que se ve sin teclado: la pantalla entera. */
   inset: 0;
+
+  /* ⚠️ LA HOJA SE ANCLA AL ÁREA QUE DE VERDAD SE VE (2026-09-04)
+     `--tope-visible` y `--alto-visible` las escribe
+     activarCompensacionDeTeclado() (06-piezas.js) a partir de
+     `visualViewport`, que es la única API que sabe cuánto queda
+     visible cuando aparece el teclado.
+
+     ANTES SE HACÍA CON UN translateY CALCULADO, y por eso fallaba en
+     algunos teléfonos. La cuenta era `innerHeight − (offsetTop +
+     height)`: cuánto tapa el teclado del fondo de la pantalla física.
+     Eso funciona SOLO si el layout viewport no se achica con el
+     teclado. Cuando el navegador sí lo achica —que depende del
+     teléfono— la resta da ≈0, el translateY no compensa nada, y la
+     hoja se queda con su borde inferior detrás del teclado.
+
+     Ahora no se calcula ningún desplazamiento: la caja se posiciona
+     encima del área visible real y listo, venga el número de donde
+     venga. Con `align-items: flex-end` el panel queda pegado al fondo
+     de lo que se ve.
+
+     Sobre la sintaxis: `inset: 0` deja los cuatro lados en 0, y estas
+     dos líneas pisan `top` y `height`. Con top, bottom y height a la
+     vez, el navegador ignora `bottom` — así que manda esta caja. Y sin
+     JS o sin `visualViewport`, los respaldos (`0px` y `auto`) dan
+     exactamente el `inset: 0` de siempre. */
+  top: var(--tope-visible, 0px);
+  height: var(--alto-visible, auto);
+
   z-index: 60;
   display: flex;
   align-items: flex-end;
-  /* `--desplazamiento-hoja` la escribe activarCompensacionDeTeclado()
-     (06-piezas.js): cuánto tapa el teclado del fondo de la pantalla
-     física (`innerHeight − visualViewport visible`), en NEGATIVO. Sin
-     esto, este panel (anclado por abajo a `inset:0`, o sea al fondo de
-     la pantalla ENTERA) queda con su borde inferior detrás del teclado
-     en vez de pegado al fondo de lo que realmente se ve — subirlo esa
-     distancia lo alinea con el área visible real. Sin JS o sin soporte
-     de `visualViewport`, el valor de respaldo es 0 (sin cambio,
-     comportamiento de siempre). */
-  transform: translateY(var(--desplazamiento-hoja, 0px));
 }
 
 .hoja__fondo {
@@ -1139,6 +1158,69 @@ select.campo__control {
 }
 
 .etiqueta-chip:disabled { opacity: .5; }
+
+/* ─── EL ACORDEÓN DE ETIQUETAS ──────────────────────────────
+
+   Los quince chips se repetían una vez por persona en la ficha de un
+   grupo. Ahora viven dentro de un <details> cerrado, y el <summary>
+   muestra lo que SÍ está puesto — que es lo único que hace falta ver
+   sin abrir. Ver el bloque de etiquetas en 06-piezas.js. */
+
+.etiquetas-acordeon {
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo);
+  padding: 0 var(--esp-2) 0;
+}
+
+/* Abierto, el contenido necesita aire abajo; cerrado, ese espacio
+   sobraría y haría que la fila se vea flotando. */
+.etiquetas-acordeon[open] { padding-bottom: var(--esp-2); }
+
+.etiquetas-acordeon__cabecera {
+  /* 44px: es el objetivo táctil que abre y cierra, y a diferencia de los
+     chips acá hay uno solo por bloque, así que puede pagar el alto. */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: var(--esp-1);
+  flex-wrap: wrap;
+  cursor: pointer;
+  /* El triángulo por omisión de Safari se sale del sistema visual; se
+     saca y el estado se lee por el propio resumen y por el subrayado. */
+  list-style: none;
+}
+.etiquetas-acordeon__cabecera::-webkit-details-marker { display: none; }
+
+.etiquetas-acordeon__cabecera:focus-visible {
+  outline: 2px solid var(--oro);
+  outline-offset: 2px;
+}
+
+/* El rótulo ya trae margen inferior de .campo__rotulo, que acá
+   descentraría la fila. */
+.etiquetas-acordeon__cabecera .campo__rotulo { margin-bottom: 0; }
+
+.etiquetas-acordeon__puestas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  flex: 1;
+}
+
+/* En el resumen los chips no se tocan: solo informan. Más chicos, para
+   que quepan varios en la fila sin empujar el rótulo a otro renglón. */
+.etiqueta-chip--resumen {
+  min-height: 0;
+  padding: 2px 8px;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.etiquetas-acordeon__vacio {
+  font-size: 12px;
+  color: var(--texto-tenue);
+}
 
 /* El contador de cuota de MegaBot cambia de color según cuánto margen
    queda: es lo que se mira de reojo mientras se escribe, sin llegar a
