@@ -724,6 +724,14 @@ if ($errorBD !== null) {
         'ok'      => true,
         'mensaje' => 'Confirmación registrada.',
         'avisos'  => $errores,   // vacío cuando todo salió bien
+        /* ⚡ EL CÓDIGO QUE DE VERDAD QUEDÓ GUARDADO (2026-09-04)
+           $codigo acá ya es el bueno: si la invitación existía, más
+           arriba se reescribió con el de la base (el que hizo el panel);
+           si no, es el que se acaba de insertar. Devolverlo cierra el
+           círculo — el navegador puede corregir lo que muestra y lo que
+           guarda, aunque hubiera llegado con uno inventado.
+           Ver la nota de 'codigo' en invitacion.php. */
+        'codigo'  => $codigo,
     ]);
 
     if (!empty($errores)) {

@@ -296,9 +296,40 @@ function pintarTarjetaDeLaPuerta(datos, donde) {
             gente + (gente === 1 ? ' persona' : ' personas') +
           '</div>') +
 
+      /* ⚡ LA MESA, GRANDE Y ANTES QUE NADA MÁS (2026-09-04)
+         Es la pregunta que hace todo el mundo al entrar. Sin esto había
+         que salir del escáner, ir a Gente, buscar otra vez y abrir la
+         ficha — con la persona y la fila esperando en la puerta.
+         Mismo criterio y mismos colores que la tarjeta de buscar por
+         nombre (25-hoy.js), para que las dos se lean igual.
+
+         Solo se muestra si viene: quien avisó que no venía no necesita
+         mesa, y ocuparía el lugar del cartel que sí importa. */
+      (datos.asiste
+        ? '<div class="etiqueta ' +
+              (datos.mesa ? 'etiqueta--bien' : 'etiqueta--alerta') +
+              '" style="margin-top:var(--esp-2);font-size:18px;padding:8px 12px">' +
+              (datos.mesa ? 'Mesa ' + seguro(datos.mesa) : 'Sin mesa asignada') +
+          '</div>'
+        : '') +
+
       (tieneAlergia
         ? '<div class="etiqueta etiqueta--alerta" style="margin-top:var(--esp-2);' +
                'font-size:16px;padding:8px 12px">⚠ ' + seguro(datos.alergias) + '</div>'
+        : '') +
+
+      /* En chico, debajo: lo que se mira solo si hace falta. Los menús
+         para avisarle a la cocina al pasar, y el código para poder
+         cotejarlo con el pase impreso que trae la persona en la mano. */
+      (datos.asiste && datos.resumen_menus
+        ? '<div class="vacio__texto" style="margin-top:var(--esp-2);font-size:14px">' +
+            seguro(datos.resumen_menus) +
+          '</div>'
+        : '') +
+
+      (datos.codigo
+        ? '<div class="codigo-pase" style="margin-top:var(--gota);font-size:13px;' +
+               'opacity:.7">' + seguro(datos.codigo) + '</div>'
         : '') +
 
       (datos.ya_llego

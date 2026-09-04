@@ -890,7 +890,22 @@
       detalleDeMenus,
       alergias: alergias || 'Ninguna',
       notas: notas || ', ',
-      codigo: generarCodigoDePase(nombre + correo),
+      /* ⚡ EL CÓDIGO SALE DEL SERVIDOR CUANDO HAY INVITACIÓN (2026-09-04)
+         El panel ya le puso un código a esta persona al crear su
+         invitación, y ESE es el que busca el escáner de la puerta.
+         Inventar otro acá hacía que el pase y el QR del correo llevaran
+         un código que no existe en ningún lado.
+
+         Se toma antes de mandar nada, a propósito: el QR que viaja al
+         correo se arma con este mismo valor unas líneas más abajo
+         (15-registro-de-confirmaciones.js). Si se corrigiera recién con
+         la respuesta, el correo ya habría salido con el equivocado.
+
+         Sin invitación —el formulario abierto de siempre— no hay código
+         previo que respetar y se genera uno acá, como toda la vida. */
+      codigo: (typeof INVITACION !== 'undefined' && INVITACION && INVITACION.codigo)
+        ? INVITACION.codigo
+        : generarCodigoDePase(nombre + correo),
     };
 
     // Con invitación personalizada, el token viaja siempre: es lo que
@@ -953,7 +968,15 @@
         enviarAlServidor(datosDeLaConfirmacion),  // PHP: MySQL + correos
         anotarEnLaHoja(datosDeLaConfirmacion),    // Google Sheets: respaldo
       ]);
-      seGuardoEnElServidor = resultadoDelServidor === true;
+      seGuardoEnElServidor = !!(resultadoDelServidor && resultadoDelServidor.ok);
+
+      /* La última palabra sobre el código la tiene el servidor: es el
+         único que sabe qué quedó escrito en la base, y es lo que va a
+         buscar el escáner. Si contesta uno, se adopta antes de guardar
+         el pase y antes de dibujarlo. */
+      if (seGuardoEnElServidor && resultadoDelServidor.codigo) {
+        datosDeLaConfirmacion.codigo = resultadoDelServidor.codigo;
+      }
     } catch (error) {
       console.error('[Ania XV] El envío falló:', error);
     }
