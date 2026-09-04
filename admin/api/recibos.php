@@ -546,7 +546,7 @@ case 'generar':
        manual, para que este PDF conviva sin diferencias con los
        adjuntos que Lucila sube a mano — el respaldo y el listado de
        "Contrato y documentos" no distinguen entre uno y otro. */
-    $carpeta = dirname(__DIR__) . '/archivos';
+    $carpeta = carpetaDeArchivos();
     if (!is_dir($carpeta)) @mkdir($carpeta, 0755, true);
     if (!is_dir($carpeta) || !is_writable($carpeta)) {
         bd()->rollBack();
@@ -741,7 +741,7 @@ case 'borrar':
         $archivo = consultarUno('SELECT * FROM archivos WHERE id = :i',
                                 [':i' => (int) $recibo['archivo_id']]);
         if ($archivo) {
-            $ruta = dirname(__DIR__) . '/archivos/' . basename($archivo['nombre_disco']);
+            $ruta = carpetaDeArchivos() . '/' . basename($archivo['nombre_disco']);
             if (is_file($ruta)) @unlink($ruta);
             borrar('archivos', (int) $archivo['id']);
         }
