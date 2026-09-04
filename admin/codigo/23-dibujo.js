@@ -294,7 +294,7 @@ function prepararLienzo(cuerpo, opciones) {
 
       // Se le pone nombre para que en la lista de archivos se entienda
       // qué es sin tener que abrirlo.
-      blob.name = 'dibujo-' + new Date().toISOString().slice(0, 10) + '.png';
+      blob.name = 'dibujo-' + hoyEnFecha() + '.png';
 
       const salio = await subirArchivo(blob, {
         tipo: opciones.tipo,

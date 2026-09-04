@@ -101,7 +101,8 @@
   /**
    * Reemplaza el formulario por un mensaje, según por qué no hay acceso.
    *
-   * @param {string} motivo - 'sin-link', 'no-encontrada' o 'sin-conexion'.
+   * @param {string} motivo - 'sin-link', 'no-encontrada', 'sin-conexion',
+   *   'servidor-ocupado' o 'servidor-caido'.
    * @returns {void}
    */
   function cerrarElFormularioSinLink(motivo) {
@@ -118,6 +119,16 @@
       'sin-conexion':
         'No pudimos cargar tu invitación. Revisa tu conexión y vuelve a ' +
         'cargar la página.',
+      /* ⚡ Los dos de abajo son nuevos (2026-09-03). Antes estos casos
+         caían en 'no-encontrada' y le echaban la culpa al enlace del
+         invitado por un problema que era del servidor. Ver la nota
+         grande en 04-invitado-personalizado.js. */
+      'servidor-ocupado':
+        'Tu enlace está bien, pero en este momento hay mucha gente ' +
+        'entrando a la vez. Espera un par de minutos y vuelve a intentar.',
+      'servidor-caido':
+        'Tu enlace está bien: el problema es nuestro y ya lo estamos ' +
+        'viendo. Vuelve a intentar en unos minutos.',
     };
 
     formulario.style.display = 'none';
@@ -129,6 +140,33 @@
     aviso.className = 'formulario__introduccion';
     aviso.textContent = textos[motivo] || textos['sin-link'];
     contenedorFormulario.appendChild(aviso);
+
+    /* Los tres motivos pasajeros se arreglan solos con el tiempo, así
+       que el invitado necesita una forma de volver a intentar que no sea
+       buscar de nuevo el WhatsApp. Los otros dos no: recargar con el
+       enlace incompleto da exactamente lo mismo. */
+    const sePuedeReintentar =
+      motivo === 'sin-conexion' ||
+      motivo === 'servidor-ocupado' ||
+      motivo === 'servidor-caido';
+
+    if (!sePuedeReintentar) return;
+
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.className = 'boton-contorno';
+    boton.textContent = 'Volver a intentar';
+    // Centrado bajo el aviso y con el área táctil de 44 px que usa el
+    // resto del sitio (`.boton-contorno` sola queda en ~38).
+    boton.style.display = 'block';
+    boton.style.margin = '1.25rem auto 0';
+    boton.style.minHeight = '44px';
+    boton.addEventListener('click', function () {
+      boton.disabled = true;
+      boton.textContent = 'Cargando…';
+      window.location.reload();
+    });
+    contenedorFormulario.appendChild(boton);
   }
 
   /**
@@ -868,6 +906,15 @@
         datosDeLaConfirmacion.personas = PERSONAS_INVITACION.map(function (p) {
           return {
             id: p.id,
+            /* ⚡ `tipo` VIAJA (2026-09-03). Los grupos que todavía no
+               tienen nombres cargados llegan con `id: null` —los lugares
+               los sintetiza invitacion.php— y confirmar.php descartaba
+               su menú en silencio: al volver a abrir el link, las
+               casillas aparecían destildadas y parecía que la
+               confirmación no había quedado. Ahora el servidor crea la
+               fila que falta, y para eso necesita saber si es adulto o
+               niño. */
+            tipo: p.tipo === 'nino' ? 'nino' : 'adulto',
             marcado: p.marcado,
             menu: p.tipo === 'nino' ? 'Infantil' : p.menu,
             alergia: p.tieneAlergia ? (p.alergia || '').trim() : '',

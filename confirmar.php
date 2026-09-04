@@ -385,19 +385,60 @@ try {
                 'UPDATE acompanantes SET menu = :menu, alergias = :alergias
                  WHERE id = :id AND confirmacion_id = :conf'
             );
+            /* ⚡ LOS LUGARES SIN NOMBRE TAMBIÉN GUARDAN SU MENÚ (2026-09-03)
+             *
+             * Acá había un `if ($idPersona <= 0) continue;` que descartaba
+             * en silencio a toda persona sin fila en `acompanantes` — o
+             * sea, a TODOS los grupos cuyos nombres Lucila todavía no
+             * cargó, que son la mayoría. Consecuencias:
+             *
+             *   · El detalle de quién come qué se perdía (el conteo
+             *     global sí se guarda en `resumen_menus`, pero el mesero
+             *     y el acomodo necesitan el detalle).
+             *   · Al reabrir el link, `p.menu` volvía vacío y las
+             *     casillas salían destildadas: la persona veía su
+             *     formulario en blanco y creía que su confirmación no
+             *     había quedado.
+             *
+             * Ahora se crea la fila que falta. El nombre queda vacío —el
+             * invitado no lo escribe, y "Adulto 2" es una etiqueta de
+             * pantalla, no un nombre— y cuando Lucila cargue el real, se
+             * le pone a ESTE mismo registro, con su menú ya adentro.
+             *
+             * En la siguiente vuelta esas personas ya llegan con `id`
+             * real desde invitacion.php, así que este INSERT corre una
+             * sola vez por lugar: no puede duplicar. */
+            $stmtNuevaPersona = $pdo->prepare(
+                'INSERT INTO acompanantes (confirmacion_id, nombre, tipo, menu, alergias)
+                 VALUES (:conf, :nombre, :tipo, :menu, :alergias)'
+            );
+
             foreach ($personasRecibidas as $persona) {
                 $idPersona = (int) ($persona['id'] ?? 0);
-                if ($idPersona <= 0) continue;
+
                 $marcado = !empty($persona['marcado']);
                 $menuElegido = $marcado ? limpiar($persona['menu'] ?? 'Estándar') : '';
                 $alergiaElegida = $marcado
                     ? mb_substr(limpiar($persona['alergia'] ?? ''), 0, 200)
                     : '';
-                $stmtPersona->execute([
+
+                if ($idPersona > 0) {
+                    $stmtPersona->execute([
+                        ':menu'     => $menuElegido,
+                        ':alergias' => $alergiaElegida,
+                        ':id'       => $idPersona,
+                        ':conf'     => (int) $invitacion['confirmacion_id'],
+                    ]);
+                    continue;
+                }
+
+                // Sin id: es un lugar apartado que todavía no tiene fila.
+                $stmtNuevaPersona->execute([
+                    ':conf'     => (int) $invitacion['confirmacion_id'],
+                    ':nombre'   => '',
+                    ':tipo'     => (($persona['tipo'] ?? '') === 'nino') ? 'nino' : 'adulto',
                     ':menu'     => $menuElegido,
                     ':alergias' => $alergiaElegida,
-                    ':id'       => $idPersona,
-                    ':conf'     => (int) $invitacion['confirmacion_id'],
                 ]);
             }
         }
@@ -459,6 +500,25 @@ try {
 /* smtpEnviar() ya viene cargada desde admin/api/_lib/correo.php (arriba).
    Es la misma función de siempre, palabra por palabra; solo cambió de
    archivo. Sigue conectándose con SSL directo al puerto 465. */
+
+/* ⚡ QUE MANDAR CORREOS NO PUEDA MATAR LA PETICIÓN (2026-09-03)
+ *
+ * La fila ya está guardada. Lo que sigue son hasta TRES conexiones SMTP,
+ * cada una con 15 s para conectar y 20 s para leer (ver _lib/correo.php).
+ * En el peor caso eso supera el `max_execution_time` de PHP —30 s por
+ * defecto—: el proceso muere a mitad del envío, el invitado recibe un
+ * 500 con una página de error de PHP en vez de JSON, y su confirmación
+ * quedó guardada sin que él lo sepa. Otra vez el mismo daño: decirle que
+ * falló algo que funcionó.
+ *
+ * Dos líneas lo cubren:
+ *   · Más tiempo del que los tres correos pueden llegar a tardar, para
+ *     que el script llegue SIEMPRE a responder.
+ *   · `ignore_user_abort`: si la persona cierra la pestaña mientras se
+ *     mandan los correos, se terminan de mandar igual en vez de quedar
+ *     a medias. */
+@set_time_limit(120);
+@ignore_user_abort(true);
 
 /* ─── 3. HTML: CORREO AL INVITADO ────────────────────────────────────── */
 $asistiTexto = $asiste ? 'Sí, asistiré con mucho gusto ✦' : 'Lamentablemente no podré asistir';
@@ -623,15 +683,51 @@ foreach ($listaAdmins as $adminEmail) {
     }
 }
 
-/* ─── 6. RESPUESTA JSON REAL ──────────────────────────────────────────── */
-if (empty($errores)) {
-    echo json_encode(['ok' => true, 'mensaje' => 'Confirmación registrada y correos enviados.']);
-} else {
-    // La BD se guardó igual. Los correos fallaron, reportamos el error real.
-    http_response_code(207); // Multi-status: algo funcionó, algo no
+/* ─── 6. RESPUESTA JSON REAL ──────────────────────────────────────────────
+ *
+ * ⚡ EL ÉXITO LO DEFINE LA FILA GUARDADA, NO EL CORREO (2026-09-03)
+ *
+ * Acá se respondía `ok:false` si CUALQUIER correo había fallado — y el
+ * navegador traduce eso a "No pudimos registrar tu confirmación. Revisa
+ * tu conexión e inténtalo de nuevo." O sea que le decíamos a alguien que
+ * no había confirmado cuando su fila ya estaba escrita en la base.
+ *
+ * El comentario de más arriba (el de `$correoValido`) describe
+ * exactamente este problema y lo llama "peor imposible"… pero solo se
+ * arregló para el correo DEL INVITADO. Los dos de las administradoras
+ * seguían sumando a `$errores`, y son los que más fallan: van a Gmail
+ * desde el SMTP de Hostinger, y con ciento catorce personas confirmando
+ * la misma noche, que uno entre en diferido o greylisting es lo
+ * esperable, no lo raro.
+ *
+ * La regla, ahora explícita: **la confirmación es de la persona, no del
+ * correo.** Si la fila se guardó, confirmó. Los correos son un extra que
+ * se reporta aparte —para el log y para diagnóstico— pero que nunca
+ * puede hacerle creer que perdió su lugar.
+ *
+ * El único fallo que sí es un fallo: que no se haya podido guardar.
+ */
+if ($errorBD !== null) {
+    // Esto sí es un error de verdad: no quedó registro de nada.
+    http_response_code(500);
     echo json_encode([
-        'ok'      => false,
-        'bdOk'    => ($errorBD === null),
+        'ok'     => false,
+        'bdOk'   => false,
+        'error'  => 'No pudimos guardar tu confirmación. Intenta de nuevo en un momento.',
         'errores' => $errores,
     ]);
+} else {
+    /* Se guardó. Para el invitado esto es un éxito, punto.
+       `avisos` viaja para que el panel y el log puedan ver qué correo no
+       salió, sin que eso cambie lo que la persona lee en pantalla. */
+    echo json_encode([
+        'ok'      => true,
+        'mensaje' => 'Confirmación registrada.',
+        'avisos'  => $errores,   // vacío cuando todo salió bien
+    ]);
+
+    if (!empty($errores)) {
+        error_log('[Ania XV] ⚠ Confirmación guardada, pero ' . count($errores) .
+                  ' correo(s) fallaron: ' . implode(' | ', $errores));
+    }
 }

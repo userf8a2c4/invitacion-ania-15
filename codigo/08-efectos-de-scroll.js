@@ -148,6 +148,28 @@
   const elementosQueAparecen = buscarTodos('.revelar');
   if (elementosQueAparecen.length === 0) return;
 
+  /* ⚡ RECIÉN ACÁ SE ESCONDE LO QUE VA A APARECER (2026-09-03)
+   *
+   * El CSS ya no arranca con `opacity: 0`: si este archivo no bajara,
+   * diez bloques de la invitación —el formulario de confirmar incluido—
+   * quedaban invisibles para siempre, en una página que se ve cargada.
+   *
+   * La clase se pone acá, cuando ya está garantizado que hay quien la
+   * saque. Y se pone ANTES de observar, en la misma tarea, para que no
+   * haya un parpadeo de contenido visible.
+   *
+   * Si el navegador no tiene IntersectionObserver (muy viejo), no se
+   * esconde nada y se ve todo de una: sin animación, pero completo. */
+  if (!('IntersectionObserver' in window)) return;
+
+  /* Quien pidió menos movimiento en su sistema no necesita que las
+     secciones aparezcan: se muestran y ya. Antes esto no se respetaba
+     acá —el CSS de `prefers-reduced-motion` solo acortaba duraciones—,
+     así que igual dependía del observador para ver el formulario. */
+  if (typeof prefiereMenosMovimiento === 'function' && prefiereMenosMovimiento()) return;
+
+  document.documentElement.classList.add('con-revelado');
+
   /*
      IntersectionObserver ("observador de intersección") es una
      herramienta del navegador que avisa cuando un elemento entra o sale
@@ -166,9 +188,17 @@
       observador.unobserve(entrada.target);
     });
   }, {
-    /* threshold 0.15 = se activa cuando ya se ve el 15 % del elemento.
-       Así aparece cuando de verdad entró, no cuando asoma un píxel. */
-    threshold: 0.15,
+    /* ⚡ threshold 0 + rootMargin, NO 0.15 (2026-09-03).
+       Con 0.15 hacía falta que se viera el 15 % del elemento — y un
+       bloque más alto que unas seis pantallas y media NO PUEDE llegar a
+       esa proporción nunca, así que no aparecía jamás. El formulario de
+       un grupo grande, con una fila por persona y el texto agrandado por
+       accesibilidad, entra justo en ese caso.
+       Con threshold 0 alcanza con que asome, y el margen negativo
+       conserva la intención original: que aparezca cuando de verdad
+       entró en pantalla, no cuando asoma el primer píxel. */
+    threshold: 0,
+    rootMargin: '0px 0px -12% 0px',
   });
 
   elementosQueAparecen.forEach(elemento => observador.observe(elemento));

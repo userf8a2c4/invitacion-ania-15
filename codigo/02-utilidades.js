@@ -901,7 +901,28 @@ document.addEventListener('invitacion-visible', () => setTimeout(actualizarMedid
 function limpiarTexto(texto) {
   const cajaTemporal = document.createElement('div');
   cajaTemporal.textContent = String(texto);
-  return cajaTemporal.innerHTML;
+
+  /* ⚡ LAS COMILLAS TAMBIÉN (2026-09-03)
+   *
+   * `innerHTML` sobre un nodo de texto escapa `&`, `<` y `>` — pero NO
+   * las comillas, porque dentro del texto de un elemento no hacen falta.
+   * El problema es que esto se usa también para armar ATRIBUTOS:
+   *
+   *     ' value="' + limpiarTexto(persona.alergia) + '"'
+   *
+   * Ahí una comilla doble cierra el atributo antes de tiempo. Un
+   * invitado que escriba `alergia "fuerte" al maní`, guarde y vuelva a
+   * abrir su link, desarma la fila de esa persona — y todo lo que venga
+   * después queda como atributos sueltos.
+   *
+   * Es además un vector de inyección de atributo (`" onfocus=…`) sobre
+   * datos que vienen de la base, así que no es solo cosmético.
+   *
+   * Se escapan las dos comillas para que la función sirva igual en texto
+   * y en atributo, que es como ya se estaba usando. */
+  return cajaTemporal.innerHTML
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 

@@ -65,6 +65,11 @@ function abrirEscaner() {
     '<div id="escaner-resultado"></div>'
   );
 
+  // Se apaga la cámara pase lo que pase: la X, el fondo, Escape, el
+  // gesto de atrás, cerrarHoja(true) o una hoja que se abra encima. Ver
+  // la nota en apagarCamaraDelEscaner() y en alSoltarLaHoja().
+  alSoltarLaHoja(apagarCamaraDelEscaner);
+
   const caja = buscar('#escaner-resultado', cuerpo);
 
   if (tieneCamara) {
@@ -197,17 +202,45 @@ async function iniciarCamaraDelEscaner(video, alLeer) {
   };
 
   requestAnimationFrame(cuadro);
+}
 
-  // Al cerrar la hoja (X, fondo, Escape) se apaga la cámara: si no,
-  // sigue prendida y el teléfono se calienta sin que nadie la use.
-  const apagar = () => {
-    if (ESCANER_STREAM) {
-      ESCANER_STREAM.getTracks().forEach(pista => pista.stop());
-      ESCANER_STREAM = null;
-    }
-  };
-  buscar('#hoja-cerrar').addEventListener('click', apagar, { once: true });
-  buscar('#hoja-fondo').addEventListener('click', apagar, { once: true });
+/**
+ * Apaga la cámara del escáner. Es idempotente: llamarla dos veces no
+ * hace nada la segunda.
+ *
+ * ⚡ POR QUÉ ESTO ES UNA FUNCIÓN SUELTA Y NO DOS LISTENERS (2026-09-03)
+ *
+ * Antes se enganchaba así, adentro de iniciarCamaraDelEscaner():
+ *
+ *     buscar('#hoja-cerrar').addEventListener('click', apagar, {once:true});
+ *     buscar('#hoja-fondo').addEventListener('click', apagar, {once:true});
+ *
+ * Dos problemas, los dos con la fiesta ya empezada y el escáner en la
+ * puerta:
+ *
+ * 1. La hoja se cierra por CUATRO caminos más que esos dos —Escape, el
+ *    gesto de atrás de Android, cerrarHoja(true) después de dejar pasar
+ *    a alguien, y otra hoja que se abre encima—. Por cualquiera de
+ *    ellos la cámara quedaba prendida, con el requestAnimationFrame
+ *    corriendo contra un vídeo ya desprendido: el teléfono se calienta y
+ *    se queda sin batería en la noche que más lo necesitas.
+ *
+ * 2. Peor: un listener `{once:true}` que nunca se disparó NO se
+ *    desengancha. Al reabrir el escáner quedaban vivos los de la sesión
+ *    anterior, y esas closures viejas apagaban `ESCANER_STREAM` —que es
+ *    global— o sea el stream NUEVO. El escáner quedaba mudo con la
+ *    pantalla encendida y sin ningún error a la vista.
+ *
+ * Ahora se registra con alSoltarLaHoja() (06-piezas.js), que corre en
+ * los seis caminos de cierre —cerrarHoja() y también abrirHoja(), para
+ * la hoja que se abre encima— y no deja nada colgado.
+ *
+ * @returns {void}
+ */
+function apagarCamaraDelEscaner() {
+  if (!ESCANER_STREAM) return;
+  ESCANER_STREAM.getTracks().forEach(pista => pista.stop());
+  ESCANER_STREAM = null;
 }
 
 

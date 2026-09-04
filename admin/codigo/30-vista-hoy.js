@@ -39,7 +39,9 @@ async function dibujarHoy() {
   const vista = buscar('#vista-hoy');
   if (!vista) return;
 
-  ponerTitulo('Hoy', comoFechaCorta(new Date().toISOString()));
+  // hoyEnFecha() y no toISOString(): esta es LA pantalla de la puerta,
+  // y en UTC el subtítulo anunciaba mañana a partir de las 18:00.
+  ponerTitulo('Hoy', comoFechaCorta(hoyEnFecha()));
 
   pintarCargando(vista, 4);
 

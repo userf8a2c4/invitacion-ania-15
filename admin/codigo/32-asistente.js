@@ -1081,7 +1081,9 @@ const PREGUNTAS_QUE_SE_LEEN = [
       const pendientes = DINERO.pagos.filter(p => p.estado !== 'pagado');
       if (!pendientes.length) return 'No hay ningún pago pendiente cargado.';
 
-      const mesAhora = new Date().toISOString().slice(0, 7);
+      // Local, no UTC: el último día del mes después de las 18:00, el
+      // asistente contestaba sobre el mes siguiente.
+      const mesAhora = hoyEnFecha().slice(0, 7);
       const deEsteMes = pendientes.filter(p =>
         p.fecha_limite && String(p.fecha_limite).slice(0, 7) === mesAhora);
       const atrasados = pendientes.filter(p =>
@@ -1801,6 +1803,25 @@ function abrirAsistente() {
     let huboNovedad = false;
     try {
       const r = await traer('chat.php?accion=listar&despues_de=' + MEGABOT_ULTIMO_ID);
+
+      /* ⚡ LA MARCA SE VUELVE A MIRAR DESPUÉS DEL await (2026-09-03)
+       *
+       * La comprobación de arriba mira el estado de ANTES de la
+       * petición, y esta petición puede tardar varios segundos. En esa
+       * ventana el chat se puede cerrar y reabrir —`cerrarHoja(true)`
+       * pasa solo, desde resolverMegaBotOffline— y entonces esta
+       * closure vieja seguía de largo: pintaba en un hilo desprendido y,
+       * peor, más abajo llamaba a programarPoll(), que pisa
+       * MEGABOT_INTERVALO, que para entonces ya es el temporizador del
+       * chat NUEVO. El chat nuevo quedaba mudo con los puntitos
+       * girando: exactamente el síntoma que la marca vino a arreglar,
+       * corrido un `await` más adelante.
+       *
+       * Por eso hay dos comprobaciones y no una: una tapa la ventana
+       * anterior a la petición, ésta tapa la de la petición misma. */
+      if (MEGABOT_GENERACION !== miGeneracion) return;
+      if (!document.body.contains(hilo)) return;
+
       const llegaron = r.mensajes || [];
 
       /* ⚡ EL ECO DEL PROPIO MENSAJE NO ES UNA RESPUESTA (2026-09-03)
@@ -1839,6 +1860,11 @@ function abrirAsistente() {
       // Sin red: se reintenta en el próximo tick, sin avisar cada vez
       // que algo falló.
     }
+
+    /* La petición también puede fallar DESPUÉS de que el chat se
+       reabrió. Sin esta línea, el catch dejaba pasar a la closure vieja
+       hasta programarPoll() y le pisaba el temporizador al nuevo. */
+    if (MEGABOT_GENERACION !== miGeneracion) return;
 
     /* Cinco minutos sin una sola novedad: el chat está abierto pero
        nadie lo está usando. Se apaga y vuelve solo al escribir. */

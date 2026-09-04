@@ -77,12 +77,38 @@ function cargarQRCode() {
   if (promesaDeQRCode) return promesaDeQRCode;
 
   promesaDeQRCode = new Promise(resolver => {
+    /* ⚡ CON TOPE DE TIEMPO (2026-09-03)
+     *
+     * `onload`/`onerror` cubren que el CDN conteste o falle rápido. No
+     * cubren el caso más común en un teléfono: una conexión que NO
+     * cierra —señal débil, portal cautivo, red saturada—, donde ninguno
+     * de los dos se dispara nunca.
+     *
+     * Y esto está en el camino crítico: 15-registro-de-confirmaciones.js
+     * hace `await generarQrParaElCorreo(...)` ANTES de mandar la
+     * confirmación. Sin tope, la promesa no resuelve, el POST no sale, y
+     * el botón se queda girando sin nada que tocar. La persona cierra la
+     * pestaña creyendo que no pudo confirmar.
+     *
+     * Ocho segundos: más de lo que tarda un CDN sano en cualquier red
+     * usable, y mucho menos que la paciencia de alguien mirando un botón
+     * que no responde. Al vencerse se resuelve igual — quien llama ya
+     * sabe seguir sin QR, y el código escrito se lee perfectamente. */
+    let yaResolvio = false;
+    const terminar = () => {
+      if (yaResolvio) return;
+      yaResolvio = true;
+      resolver();
+    };
+
+    const reloj = setTimeout(terminar, 8000);
+
     const script = document.createElement('script');
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
     // Sin internet o si el CDN falla, se resuelve igual: quien llama ya
     // sabe seguir sin QR (el código escrito abajo se lee perfectamente).
-    script.onload  = () => resolver();
-    script.onerror = () => resolver();
+    script.onload  = () => { clearTimeout(reloj); terminar(); };
+    script.onerror = () => { clearTimeout(reloj); terminar(); };
     document.head.appendChild(script);
   });
   return promesaDeQRCode;

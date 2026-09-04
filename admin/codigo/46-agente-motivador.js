@@ -190,7 +190,9 @@ registrarAgente('motivador', 'Motivador', async pantalla => {
   // Como mucho una vez por día, y a propósito de baja prioridad: esto
   // nunca debe taparle a nadie una sugerencia de verdad (un pago que
   // vence, una mesa por cerrar). Si hay algo urgente, va primero.
-  const hoy = new Date().toISOString().slice(0, 10);
+  // Local, no UTC: con toISOString() el "día" cambiaba a las 18:00, así
+  // que el saludo diario se repetía esa misma noche.
+  const hoy = hoyEnFecha();
   if (recordado(claveDelUltimoSaludo(), '') === hoy) return [];
 
   const opciones = DICCIONARIO_CARINOSO.respuestas.length

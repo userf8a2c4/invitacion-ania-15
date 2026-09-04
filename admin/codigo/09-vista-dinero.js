@@ -542,11 +542,26 @@ function bloqueProximosPagos(pagos) {
   const pendientes = (pagos || []).filter(p => p.estado !== 'pagado');
   if (!pendientes.length) return '';
 
+  /* ⚡ LOS DOS MESES SE ARMAN EN HORA LOCAL (2026-09-03)
+   *
+   * Antes salían de `toISOString()`, que es UTC. México va seis horas
+   * atrás, así que el último día del mes, después de las 18:00:
+   *
+   *   · `esteMes` ya decía el mes siguiente, y
+   *   · `mesQueViene` —el día 1 a medianoche LOCAL, pasado a UTC— caía
+   *     el último día del mes anterior, o sea el mes ACTUAL.
+   *
+   * Los dos terminaban valiendo lo mismo: el grupo "El mes que viene"
+   * se quedaba vacío y sus pagos desaparecían de la pantalla, la noche
+   * anterior al cierre de mes, que es justo cuando se miran.
+   */
   const hoy = new Date();
   const mesDe = fecha => String(fecha).slice(0, 7);          // "2026-10"
-  const esteMes = mesDe(hoy.toISOString());
-  const mesQueViene = mesDe(
-    new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1).toISOString());
+  const esteMes = mesDe(hoyEnFecha());
+  const siguiente = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+  const mesQueViene =
+    siguiente.getFullYear() + '-' +
+    String(siguiente.getMonth() + 1).padStart(2, '0');
 
   const grupos = [
     { clave: 'atrasado',  titulo: 'Atrasados',      pagos: [] },
