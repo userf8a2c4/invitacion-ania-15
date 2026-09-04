@@ -244,6 +244,20 @@ function pintarListaDeInvitaciones(cuerpo, totales, capacidad) {
     '<button type="button" class="lista__fila" id="inv-configurar" ' +
       'style="margin-bottom:var(--esp-2)">⚙️ Fecha límite para confirmar</button>' +
 
+    /* Mandar a todos, sin entrar de a una. Los botones aparecen solo
+       si hay a quién mandarle: con todo respondido, no tienen nada que
+       hacer ahí ocupando la pantalla que se usa para revisar. */
+    (pendientesDeInvitar().length
+      ? '<div class="acciones" style="margin-bottom:var(--esp-2);flex-wrap:wrap">' +
+          (pendientesConCorreo().length
+            ? '<button class="boton" id="inv-todos-correo">Mandar a todos por correo</button>'
+            : '') +
+          (pendientesConWhatsApp().length
+            ? '<button class="boton" id="inv-todos-whatsapp">WhatsApp, uno por uno</button>'
+            : '') +
+        '</div>'
+      : '') +
+
     '<div class="filtros" style="margin-bottom:var(--esp-2);flex-wrap:wrap">' +
       filtros.map(f =>
         '<button class="filtro' + (FILTRO_INVITACIONES === f[0] ? ' activo' : '') +
@@ -255,6 +269,17 @@ function pintarListaDeInvitaciones(cuerpo, totales, capacidad) {
     botonAgregar('Nueva invitación');
 
   buscar('#inv-configurar', cuerpo).addEventListener('click', abrirConfiguracionDeInvitaciones);
+
+  const botonTodosCorreo = buscar('#inv-todos-correo', cuerpo);
+  if (botonTodosCorreo) {
+    botonTodosCorreo.addEventListener('click', () =>
+      mandarInvitacionesPorCorreoATodos(cuerpo, botonTodosCorreo));
+  }
+
+  const botonTodosWhatsApp = buscar('#inv-todos-whatsapp', cuerpo);
+  if (botonTodosWhatsApp) {
+    botonTodosWhatsApp.addEventListener('click', () => abrirColaDeWhatsApp(cuerpo));
+  }
 
   buscarTodos('[data-filtro-inv]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {
@@ -287,6 +312,231 @@ function pintarListaDeInvitaciones(cuerpo, totales, capacidad) {
  * @param {Object} inv
  * @returns {boolean}
  */
+/* ─── MANDAR A TODOS ────────────────────────────────────
+
+   POR QUÉ SON DOS CAMINOS Y NO UNO
+   El correo se puede mandar de verdad a todos: el servidor recibe una
+   lista de ids y los manda él (invitaciones.php, acción enviar_correo).
+
+   WhatsApp NO. Abrir un chat es `window.open('https://wa.me/…')`, y el
+   navegador solo lo permite dentro del gesto de una persona: un bucle
+   abriría una ventana y el resto quedarían bloqueadas. No hay forma de
+   automatizarlo desde el navegador, y prometerlo sería peor que no
+   ofrecerlo. Lo que sí se puede es sacarle la parte tediosa: una cola
+   que lleva la cuenta, arma el texto y marca cada uno como enviado, de
+   modo que el trabajo se reduzca a tocar dos botones por invitado.
+*/
+
+/**
+ * Las invitaciones a las que todavía hay que mandarles algo.
+ *
+ * Mismo criterio que el filtro "Sin responder" de la lista
+ * (filtroDeInvitacionPasa), para que el botón y el filtro nunca digan
+ * números distintos.
+ *
+ * @returns {Array}
+ */
+function pendientesDeInvitar() {
+  return INVITACIONES.filter(inv =>
+    inv.estado === 'sin_enviar' || inv.estado === 'enviada');
+}
+
+/** Las pendientes que tienen correo cargado. @returns {Array} */
+function pendientesConCorreo() {
+  return pendientesDeInvitar().filter(inv => String(inv.correo || '').trim() !== '');
+}
+
+/** Las pendientes con un teléfono que sirve para WhatsApp. @returns {Array} */
+function pendientesConWhatsApp() {
+  return pendientesDeInvitar().filter(inv => sirveParaWhatsApp(inv.telefono));
+}
+
+/** De a cuántos se manda por vez. Ver la nota de abajo. */
+const CORREOS_POR_TANDA = 5;
+
+/**
+ * Manda la invitación por correo a todos los que faltan.
+ *
+ * ⚠️ SE MANDA POR TANDAS, Y NO TODO DE UNA (2026-09-04)
+ * El servidor manda los correos DENTRO de la petición, uno tras otro,
+ * con hasta 35 segundos de espera por cada conexión SMTP. Con 51
+ * invitaciones, una sola petición superaría el tiempo máximo de PHP y
+ * moriría a mitad: correos ya salidos, respuesta perdida, y ninguna
+ * forma de saber cuáles llegaron.
+ *
+ * De a cinco, cada petición dura pocos segundos, se ve el avance de
+ * verdad, y si una tanda falla las anteriores ya quedaron registradas.
+ *
+ * @param {Element} cuerpo
+ * @param {Element} boton
+ * @returns {Promise<void>}
+ */
+async function mandarInvitacionesPorCorreoATodos(cuerpo, boton) {
+  const conCorreo = pendientesConCorreo();
+  const sinCorreo = pendientesDeInvitar().length - conCorreo.length;
+
+  if (!conCorreo.length) {
+    avisar('No hay a quién mandarle: los que faltan no tienen correo cargado.', true);
+    return;
+  }
+
+  if (!await confirmarAccion(
+    '¿Mandar la invitación por correo a ' +
+      pluralizar(conCorreo.length, 'grupo', 'grupos') + '?\n\n' +
+    'Van solo los que todavía no respondieron.' +
+    (sinCorreo
+      ? ' Quedan ' + pluralizar(sinCorreo, 'grupo', 'grupos') +
+        ' sin correo cargado: a esos hay que mandarles por WhatsApp.'
+      : ''),
+    { confirmar: 'Mandar a ' + conCorreo.length })) return;
+
+  const rotulo = boton.textContent;
+  boton.disabled = true;
+
+  let mandados = 0;
+  let fallidos = 0;
+  let corte = '';
+
+  for (let desde = 0; desde < conCorreo.length; desde += CORREOS_POR_TANDA) {
+    const tanda = conCorreo.slice(desde, desde + CORREOS_POR_TANDA);
+    boton.textContent = 'Mandando… ' + desde + ' de ' + conCorreo.length;
+
+    try {
+      const r = await mandar('invitaciones.php?accion=enviar_correo',
+                             { ids: tanda.map(inv => inv.id) });
+      mandados += Number(r && r.mandados) || 0;
+      fallidos += Number(r && r.fallidos) || 0;
+    } catch (error) {
+      /* Se corta acá: si el servidor dejó de contestar, seguir
+         insistiendo con las tandas que faltan solo suma correos a medio
+         mandar. Lo que ya salió quedó registrado. */
+      corte = error.message;
+      break;
+    }
+  }
+
+  boton.disabled = false;
+  boton.textContent = rotulo;
+
+  if (mandados) registrarEvento('accion', 'invitaciones_por_correo', { cuantos: mandados });
+
+  avisar(
+    corte
+      ? 'Se mandaron ' + mandados + ' de ' + conCorreo.length + ' y se cortó: ' + corte
+      : (fallidos
+          ? 'Se mandaron ' + mandados + '. ' +
+            pluralizar(fallidos, 'correo no salió', 'correos no salieron') + '.'
+          : 'Listo: ' + pluralizar(mandados, 'invitación enviada', 'invitaciones enviadas') + '.'),
+    !!(corte || fallidos)
+  );
+
+  await dibujarInvitaciones(cuerpo);
+}
+
+/**
+ * Abre la cola guiada de WhatsApp.
+ *
+ * Muestra de a uno: el nombre, cuántos van y cuántos faltan, y un botón
+ * que abre el chat con el texto ya puesto. Al volver, se elige si se
+ * mandó (se marca como enviada y pasa al siguiente) o si se saltea.
+ *
+ * El estado vive acá adentro, en una variable de la función: si se
+ * cierra la hoja se pierde, y eso está bien — al reabrirla, los que ya
+ * se marcaron no vuelven a aparecer, porque la lista se recalcula.
+ *
+ * @param {Element} cuerpo
+ * @returns {void}
+ */
+function abrirColaDeWhatsApp(cuerpo) {
+  const cola = pendientesConWhatsApp();
+  if (!cola.length) {
+    avisar('No hay a quién mandarle por WhatsApp: a los que faltan no les ' +
+           'falta teléfono o ya respondieron.', true);
+    return;
+  }
+
+  let enCual = 0;
+  let mandados = 0;
+
+  const hoja = abrirHoja('Mandar por WhatsApp', '<div id="cola-wa"></div>');
+  const donde = buscar('#cola-wa', hoja);
+
+  const pintar = () => {
+    if (enCual >= cola.length) {
+      donde.innerHTML =
+        '<div class="vacio">' +
+          '<p class="vacio__titulo">Terminaste la vuelta</p>' +
+          '<p class="vacio__texto">' +
+            seguro(pluralizar(mandados, 'invitación marcada como enviada',
+                              'invitaciones marcadas como enviadas')) + '.' +
+          '</p>' +
+        '</div>';
+      return;
+    }
+
+    const inv = cola[enCual];
+
+    donde.innerHTML =
+      '<p class="vacio__texto" style="margin:0 0 var(--esp-1)">' +
+        seguro((enCual + 1) + ' de ' + cola.length) +
+        (mandados ? ' · ' + seguro(mandados) + ' marcadas' : '') +
+      '</p>' +
+
+      '<div class="tarjeta" style="padding:var(--esp-3);margin-bottom:var(--esp-3)">' +
+        '<p style="margin:0 0 var(--gota);font-size:16px">' + seguro(inv.nombre) + '</p>' +
+        '<p class="vacio__texto" style="margin:0">' +
+          seguro(inv.telefono || '') + ' · ' +
+          seguro(pluralizar(Number(inv.pases) || 0, 'pase', 'pases')) +
+        '</p>' +
+      '</div>' +
+
+      '<div class="acciones" style="flex-wrap:wrap">' +
+        '<button class="boton boton--principal" id="wa-abrir">Abrir el chat</button>' +
+      '</div>' +
+
+      /* Los dos de abajo aparecen desde el principio, no después de
+         abrir: si WhatsApp no abre por lo que sea, tiene que haber
+         forma de seguir sin quedarse trabado en este. */
+      '<div class="acciones" style="margin-top:var(--esp-2);flex-wrap:wrap">' +
+        '<button class="boton" id="wa-listo">Ya lo mandé → siguiente</button>' +
+        '<button class="boton" id="wa-saltar">Saltar</button>' +
+      '</div>';
+
+    buscar('#wa-abrir', donde).addEventListener('click', () => {
+      /* window.open TIENE que correr dentro del gesto, sin ningún await
+         antes: con una espera de por medio el navegador lo bloquea. */
+      const texto = textoDeInvitacion(inv);
+      window.open('https://wa.me/' + paraWhatsApp(inv.telefono) +
+                  '?text=' + encodeURIComponent(texto), '_blank');
+    });
+
+    buscar('#wa-listo', donde).addEventListener('click', async () => {
+      try {
+        await mandar('invitaciones.php?accion=marcar_enviada', { id: inv.id });
+        mandados++;
+      } catch (error) {
+        // Que no se pueda anotar no puede frenar la vuelta: lo importante
+        // es el mensaje, y el estado se puede corregir después a mano.
+        avisar('Se abrió el chat pero no se pudo anotar como enviada.', true);
+      }
+      enCual++;
+      pintar();
+    });
+
+    buscar('#wa-saltar', donde).addEventListener('click', () => {
+      enCual++;
+      pintar();
+    });
+  };
+
+  pintar();
+
+  /* Al cerrar la hoja se repinta la lista de atrás: las que se marcaron
+     tienen que verse con su estado nuevo. */
+  AL_CERRAR_HOJA = () => dibujarInvitaciones(cuerpo);
+}
+
+
 function filtroDeInvitacionPasa(inv) {
   switch (FILTRO_INVITACIONES) {
     case 'sin_telefono':    return !inv.telefono;

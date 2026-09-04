@@ -997,9 +997,30 @@ window.addEventListener('offline', () => actualizarBannerConexion());
    Y se refresca la vista de fondo: volver a la app después de veinte
    minutos es justo cuando lo que hay en pantalla está más viejo. */
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    actualizarBannerConexion();
-    sincronizarCola();
-    refrescarEnSegundoPlano();
-  }
+  if (document.visibilityState !== 'visible') return;
+
+  actualizarBannerConexion();
+  sincronizarCola();
+
+  /* ⚠️ VOLVER SE TRATA COMO "TODO ESTÁ VIEJO" (2026-09-04)
+     refrescarEnSegundoPlano() solo mira la vista ABIERTA. Al volver
+     después de un rato, esa se actualizaba — y las otras cinco seguían
+     mostrando lo que se cargó hace horas hasta que alguien las abriera
+     y esperara el siguiente ciclo. Con el teléfono, "volver a la app"
+     es lo que se hace veinte veces por día: es exactamente el momento
+     en que TODO lo que hay en pantalla está más viejo.
+
+     Marcarlas sucias no dispara ninguna petición ahora: solo hace que
+     la próxima vez que se entre a cada una se pidan sus datos en vez de
+     mostrar lo que quedó en memoria. El costo aparece repartido, cuando
+     hace falta, y no en una ráfaga al volver — que es lo que agotaba la
+     cuota (ver el agrupado de lecturas en 03-servidor.js). */
+  ensuciarTodasLasVistas();
+  refrescarEnSegundoPlano();
+
+  /* Y se refresca la copia guardada de las secciones que NO se están
+     mirando, para que abrirlas sin señal muestre algo de hoy. Tiene su
+     propio enfriamiento de cinco minutos, así que entrar y salir de la
+     app no lo dispara una y otra vez. */
+  precalentarCopias();
 });
