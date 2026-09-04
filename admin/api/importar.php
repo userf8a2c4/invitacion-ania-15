@@ -58,6 +58,29 @@ const COLUMNAS_CONOCIDAS = [
     'adultos'   => ['adultos', 'adulto', 'mayores'],
     'ninos'     => ['ninos', 'niños', 'nino', 'niño', 'menores', 'infantiles'],
     'notas'     => ['notas', 'nota', 'observaciones', 'comentarios'],
+
+    /* ⚡ INTEGRANTES (2026-09-04) · quiénes son, uno por uno.
+       Una fila de esta planilla es una FAMILIA, no una persona: trae el
+       contacto y cuántos van. Los nombres de cada integrante viven en
+       otra tabla (`acompanantes`) y, sin esta columna, al importar se
+       rellenaban con "Adulto 2", "Niño 1"…
+
+       Eso está bien cuando de verdad no se saben, pero PERDÍA EL TRABAJO
+       YA HECHO al mudar una lista de un entorno a otro: los nombres que
+       alguien había cargado a mano desaparecían.
+
+       FORMATO: nombres separados por `;`, cada uno con su tipo adelante:
+
+           adulto:Ana Pérez; adulto:Luis Pérez; nino:Sofía Pérez
+
+       El tipo va adelante y no se deduce del orden a propósito. Si se
+       dedujera, una familia con el niño cargado y los adultos no
+       convertiría a ese niño en adulto — y con él, su menú y su lugar en
+       la mesa. Sin prefijo se asume adulto, que es el caso más común.
+
+       Es la columna que escribe exportarParaMudanza() en
+       admin/codigo/13-exportar.js. Se puede editar a mano sin problema. */
+    'integrantes' => ['integrantes', 'integrante', 'miembros', 'personas'],
 ];
 
 
@@ -138,6 +161,7 @@ case 'analizar':
             'mesa'     => trim((string) ($fila[$mapa['mesa']] ?? '')),
             'menu'     => trim((string) ($fila[$mapa['menu']] ?? '')),
             'notas'    => trim((string) ($fila[$mapa['notas']] ?? '')),
+            'integrantes' => trim((string) ($fila[$mapa['integrantes']] ?? '')),
             // Si no dice cuántos adultos, se asume uno: una fila con
             // nombre es al menos una persona.
             'adultos'  => $adultos > 0 ? $adultos : (($ninos > 0) ? 0 : 1),
@@ -408,17 +432,42 @@ case 'invitados':
                reconciliarPersonasDelGrupo) apenas se sepan los nombres
                reales, sin perder el lugar ni el menú ya elegido. */
             if (existeTabla('acompanantes')) {
+                /* ⚡ (2026-09-04) Si la planilla trae la columna
+                   `integrantes`, esos nombres MANDAN sobre los de
+                   relleno. Ver COLUMNAS_CONOCIDAS arriba para el formato.
+                   Los que no vengan se siguen rellenando igual que antes:
+                   nombrar es opcional y progresivo, y media lista cargada
+                   no puede impedir que entre la otra media. */
+                $porTipo = ['adulto' => [], 'nino' => []];
+
+                foreach (explode(';', (string) ($fila['integrantes'] ?? '')) as $trozo) {
+                    $trozo = trim($trozo);
+                    if ($trozo === '') continue;
+
+                    $tipo = 'adulto';
+                    if (preg_match('/^\s*(adulto|nino|niño)\s*:\s*(.*)$/iu', $trozo, $m)) {
+                        $tipo  = (mb_strtolower($m[1]) === 'adulto') ? 'adulto' : 'nino';
+                        $trozo = trim($m[2]);
+                    }
+                    if ($trozo === '') continue;
+
+                    $porTipo[$tipo][] = mb_substr($trozo, 0, 150);
+                }
+
                 for ($i = 1; $i <= $adultos; $i++) {
+                    $suNombre = $porTipo['adulto'][$i - 1]
+                        ?? ($i === 1 ? mb_substr($nombre, 0, 150) : ('Adulto ' . $i));
                     insertar('acompanantes', [
                         'confirmacion_id' => $idNuevo,
-                        'nombre'          => $i === 1 ? mb_substr($nombre, 0, 150) : ('Adulto ' . $i),
+                        'nombre'          => $suNombre,
                         'tipo'            => 'adulto',
                     ]);
                 }
                 for ($i = 1; $i <= $ninos; $i++) {
+                    $suNombre = $porTipo['nino'][$i - 1] ?? ('Niño ' . $i);
                     insertar('acompanantes', [
                         'confirmacion_id' => $idNuevo,
-                        'nombre'          => 'Niño ' . $i,
+                        'nombre'          => $suNombre,
                         'tipo'            => 'nino',
                     ]);
                 }

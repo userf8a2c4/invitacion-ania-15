@@ -26,7 +26,7 @@
 /* ⚠️ SUBÍ ESTE NÚMERO CADA VEZ QUE CAMBIES CÓDIGO DEL PANEL.
    Si no, el teléfono sigue mostrando la copia guardada de la versión
    anterior y parece que el cambio "no se subió". */
-const VERSION = 'ania-admin-v200';
+const VERSION = 'ania-admin-v206';
 
 /* Lo mínimo para que la app arranque sin red. Se guarda al instalar. */
 const ARMAZON = [
@@ -79,6 +79,9 @@ self.addEventListener('activate', evento => {
 
 /* ─── QUÉ HACER CON CADA PEDIDO ──────────────────────────────────────── */
 
+/** La carpeta que este Service Worker administra: /admin/ o /pbe/admin/. */
+const MI_AMBITO = new URL('./', self.registration.scope).pathname;
+
 self.addEventListener('fetch', evento => {
   const pedido = evento.request;
   const url    = new URL(pedido.url);
@@ -91,6 +94,28 @@ self.addEventListener('fetch', evento => {
      de verdad, y si no hay señal recibe un error honesto en vez de datos
      viejos disfrazados de actuales. */
   if (url.pathname.startsWith('/admin/api/')) return;
+
+  /* ⚡ LO QUE NO ES DEL PANEL, NO ES ASUNTO DE ESTE ARCHIVO (2026-09-04)
+   *
+   * Este Service Worker se registra en /admin/ (o /pbe/admin/), pero
+   * intercepta TODAS las peticiones que salen de sus páginas, vayan a
+   * donde vayan. Y las mandaba a armazonDesdeLaCopia(), que busca en
+   * todas las cachés del dominio y, sin red, contesta un 503 o el
+   * armazón del panel.
+   *
+   * Eso rompía una cosa concreta: la tarjeta que el panel adjunta al
+   * mandar la invitación por WhatsApp vive en /recursos/, fuera de
+   * /admin/. Al pedirla, podía volver cualquier cosa menos una imagen —
+   * y el compartir se caía al texto pelado sin decir por qué.
+   *
+   * Se compara contra el ÁMBITO REAL del registro y no contra '/admin/'
+   * escrito a mano: así vale igual en producción y en PBE, donde el
+   * panel cuelga de /pbe/admin/.
+   *
+   * Comprobado antes de hacerlo: lo único que el panel pide fuera de su
+   * carpeta es esa imagen. Ni fuentes, ni estilos, ni iconos. Así que
+   * esto no le quita nada al modo sin conexión. */
+  if (!url.pathname.startsWith(MI_AMBITO)) return;
 
   // Los envíos (POST) tampoco se cachean: no tendría sentido.
   if (pedido.method !== 'GET') return;

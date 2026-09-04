@@ -345,6 +345,69 @@ function engancharTresAcciones(vista, alertas) {
     const alerta = (alertas || [])[Number(boton.dataset.hoyAlerta)];
     if (alerta) boton.addEventListener('click', () => alerta.accion());
   });
+
+  buscarTodos('[data-hoy-alerta-visto]', vista).forEach(boton => {
+    const alerta = (alertas || [])[Number(boton.dataset.hoyAlertaVisto)];
+    if (!alerta || !alerta.darPorVisto) return;
+
+    boton.addEventListener('click', () => {
+      /* Se guarda CUÁNTOS había, no un simple "visto": así el cartel
+         vuelve solo si aparece uno nuevo, sin necesitar que nadie lo
+         reactive. */
+      recordar(alerta.darPorVisto, alerta.cuantos);
+      dibujarHoy();
+    });
+  });
+}
+
+
+/**
+ * Quiénes son los pases que se leyeron dos veces.
+ *
+ * El cartel decía cuántos y no quiénes, y llevaba al escáner en blanco.
+ * Esto contesta la única pregunta que importa cuando eso pasa: a quién
+ * hay que ir a buscar.
+ *
+ * Sale de llegadas.php?accion=ultimas, que ya marca `reintentado` por
+ * fila. Se piden 30 —el tope de esa acción— y se filtran acá: son las
+ * últimas llegadas por hora, así que un pase releído recién entrado
+ * siempre está. Uno de mucho antes, con la fiesta en marcha, podría
+ * quedar afuera; para eso está la pantalla de llegadas completa.
+ *
+ * @returns {void}
+ */
+function verPasesReleidos() {
+  const cuerpo = abrirHoja('Pases leídos dos veces',
+    '<div id="releidos-lista"><p class="vacio__texto">Buscando…</p></div>');
+
+  const donde = buscar('#releidos-lista', cuerpo);
+
+  traer('llegadas.php?accion=ultimas&cuantas=30')
+    .then(r => {
+      const releidos = (r.ultimas || []).filter(u => u.reintentado);
+
+      if (!releidos.length) {
+        pintarVacio(donde, 'No hay ninguno entre las últimas llegadas',
+          'Puede que haya sido hace rato. Mirá la lista completa de llegadas.');
+        return;
+      }
+
+      donde.innerHTML = releidos.map(u =>
+        '<div class="lista__fila" style="padding:8px 0">' +
+          '<span class="lista__cuerpo">' +
+            '<span class="lista__titulo">' + seguro(u.nombre) + '</span>' +
+            '<span class="lista__pie">' +
+              'Entró a las ' + seguro(String(u.llegada_en || '').slice(11, 16)) +
+              (u.mesa ? ' · Mesa ' + seguro(u.mesa) : '') +
+            '</span>' +
+          '</span>' +
+        '</div>'
+      ).join('');
+    })
+    .catch(error => pintarError(donde, error.message, () => {
+      cerrarHoja(true);
+      verPasesReleidos();
+    }));
 }
 
 
@@ -400,15 +463,39 @@ function pintarBloqueDeUltimasLlegadas(donde, ultimas) {
  * @param {Object} datosDeHoy - Lo que devuelve hoy.php entero.
  * @returns {Array<{texto:string, accion:Function}>}
  */
+/** Cuántos pases releídos se dieron por vistos en ESTE dispositivo. */
+const ALERTA_RELEIDOS_VISTA = 'alerta-releidos-vista';
+
 function alertasDelDia(datosDeHoy) {
   const dia = datosDeHoy.dia || {};
   const alertas = [];
 
-  if (dia.pases_reintentados > 0) {
+  /* ⚡ ESTE CARTEL NO SE PODÍA QUITAR (2026-09-04)
+   *
+   * `pases_reintentados` cuenta filas de `llegadas` con intentos > 0, y
+   * ese contador NUNCA vuelve a cero: en cuanto un pase se lee dos
+   * veces queda así para siempre. Con la fiesta a 50 días ya había un
+   * cartel rojo de la puerta encendido, sin forma de bajarlo.
+   *
+   * Y encima no servía: al tocarlo abría el escáner en blanco, que es
+   * justo lo que uno acaba de cerrar. No decía QUIÉN, que es lo único
+   * que se quiere saber.
+   *
+   * Ahora: al tocarlo se ve quiénes fueron, y se puede dar por visto.
+   * Darlo por visto guarda cuántos había en ese momento —por
+   * dispositivo, sin tocar la base— y el cartel vuelve solo si el número
+   * CRECE. Así no molesta en los 50 días previos, y la noche del evento
+   * reaparece en cuanto alguien intenta entrar dos veces. */
+  const releidos = Number(dia.pases_reintentados) || 0;
+  const releidosYaVistos = Number(recordado(ALERTA_RELEIDOS_VISTA, 0)) || 0;
+
+  if (releidos > releidosYaVistos) {
     alertas.push({
-      texto: pluralizar(dia.pases_reintentados, 'pase', 'pases') +
+      texto: pluralizar(releidos, 'pase', 'pases') +
              ' que ya habían entrado, leídos otra vez',
-      accion: () => abrirEscaner(),
+      accion: () => verPasesReleidos(),
+      darPorVisto: ALERTA_RELEIDOS_VISTA,
+      cuantos: releidos,
     });
   }
 
@@ -442,11 +529,22 @@ function bloqueAlertasDelDia(alertas) {
 
   return '<div class="tarjeta" style="border-color:var(--alerta);margin-top:var(--esp-2)">' +
     alertas.map((a, i) =>
-      '<button class="lista__fila" data-hoy-alerta="' + i + '" style="padding:6px 0">' +
-        '<span class="lista__cuerpo">' +
-          '<span class="lista__titulo" style="color:var(--alerta)">⚠ ' + seguro(a.texto) + '</span>' +
-        '</span>' +
-      '</button>'
+      '<div style="display:flex;align-items:center;gap:var(--esp-1)">' +
+        '<button class="lista__fila" data-hoy-alerta="' + i + '" ' +
+                'style="padding:6px 0;flex:1;min-width:0">' +
+          '<span class="lista__cuerpo">' +
+            '<span class="lista__titulo" style="color:var(--alerta)">⚠ ' + seguro(a.texto) + '</span>' +
+          '</span>' +
+        '</button>' +
+        /* La ✕ solo en las que se pueden dar por vistas. Las otras
+           —mesas llenas, tareas atrasadas— se apagan solas cuando el
+           hecho deja de ser cierto, así que no necesitan botón. */
+        (a.darPorVisto
+          ? '<button class="boton boton--fantasma" data-hoy-alerta-visto="' + i + '" ' +
+                    'title="Dar por visto" aria-label="Dar por visto" ' +
+                    'style="min-height:0;padding:4px 10px;flex-shrink:0">✕</button>'
+          : '') +
+      '</div>'
     ).join('') +
   '</div>';
 }

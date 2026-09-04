@@ -367,11 +367,16 @@
   font-size: 1.5rem;
   margin-bottom: .75rem;
 }
+/* ⚡ EN COLUMNA, NO EN FILA (2026-09-04). «Confirmar de nuevo» estaba al
+   LADO del botón dorado y a la misma altura, así que competía con él
+   siendo la acción secundaria. Debajo se lee como lo que es: la salida
+   por si te equivocaste. (En pantalla angosta ya se apilaban, por
+   estilos/11-responsivo.css — ahora es igual en todas.) */
 .mensaje-exito__acciones {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: center;
   gap: .75rem;
-  justify-content: center;
   margin-top: 1.5rem;
 }
 

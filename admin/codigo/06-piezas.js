@@ -302,11 +302,35 @@ async function cerrarHoja(forzar) {
   const huboAlgoEscrito = loEscritoEnLaHoja() !== LO_QUE_HABIA_AL_ABRIR;
 
   if (!forzar && huboAlgoEscrito) {
-    if (!await confirmarAccion(
-          'Escribiste cosas que todavía no se guardaron.\n\n' +
-          'Si cierras ahora se pierden.',
-          { confirmar: 'Cerrar y perderlas', cancelar: 'Seguir editando',
-            peligro: true })) return;
+    /* ⚡ «GUARDAR Y CERRAR», LA SALIDA QUE FALTABA (2026-09-04)
+     *
+     * Este aviso ofrecía dos salidas —perder lo escrito o seguir
+     * editando— y NINGUNA DE LAS DOS GUARDABA. En un teléfono el botón
+     * «Guardar» del pie queda más abajo, fuera de pantalla, así que
+     * desde acá parecía que guardar no fuera una opción y no quedaba
+     * claro si lo anterior se había guardado o no.
+     *
+     * Solo se ofrece si esta hoja de verdad tiene dónde guardar: las
+     * que son solo de lectura siguen mostrando las dos de siempre.
+     *
+     * No cierra nada por su cuenta: le da el toque al botón de la hoja
+     * y se aparta. Guardar ya cierra solo (con forzar=true), y si la
+     * validación se queja —falta el nombre, por ejemplo— la hoja se
+     * queda abierta mostrando el error, que es lo correcto. */
+    const dondeGuardar = buscar('#pie-guardar', hoja);
+
+    const respuesta = await confirmarAccion(
+      'Escribiste cosas que todavía no se guardaron.\n\n' +
+      (dondeGuardar
+        ? 'Puedes guardarlas ahora, seguir editando, o cerrar y perderlas.'
+        : 'Si cierras ahora se pierden.'),
+      { confirmar: 'Cerrar y perderlas',
+        cancelar:  'Seguir editando',
+        extra:     dondeGuardar ? 'Guardar y cerrar' : '',
+        peligro:   true });
+
+    if (respuesta === 'extra') { dondeGuardar.click(); return; }
+    if (!respuesta) return;
   }
 
   /* Fase 8, la señal más valiosa que antes no existía: qué formulario se
@@ -1444,6 +1468,17 @@ function confirmarAccion(pregunta, opciones) {
         (detalle
           ? '<div class="confirmar__detalle">' + seguro(detalle) + '</div>'
           : '') +
+        /* ⚡ UN TERCER BOTÓN, OPCIONAL (2026-09-04)
+           Va arriba y ancho, en su propia fila: tres botones en línea no
+           entran en un teléfono, y este suele ser la salida buena
+           («Guardar y cerrar»), así que merece el lugar más cómodo.
+           Quien no pida `extra` sigue viendo exactamente los dos de
+           siempre. */
+        (op.extra
+          ? '<button class="boton boton--principal boton--ancho" ' +
+                    'data-confirmar="extra" style="margin-bottom:var(--esp-2)">' +
+              seguro(op.extra) + '</button>'
+          : '') +
         '<div class="confirmar__acciones">' +
           '<button class="boton" data-confirmar="no">' +
             seguro(op.cancelar || 'Cancelar') + '</button>' +
@@ -1474,9 +1509,17 @@ function confirmarAccion(pregunta, opciones) {
       responder(false);
     };
 
+    /* Sigue devolviendo true o false, como toda la vida — los ~19
+       llamados que ya existen hacen `if (!await confirmarAccion(…))` y
+       una cadena de texto los rompería en silencio, porque 'no' es
+       verdadero en JavaScript. El texto 'extra' solo puede salir de acá
+       si alguien pidió ese botón, así que nadie más lo ve nunca. */
     capa.addEventListener('click', evento => {
       const boton = evento.target.closest('[data-confirmar]');
-      if (boton) responder(boton.dataset.confirmar === 'si');
+      if (!boton) return;
+
+      const cual = boton.dataset.confirmar;
+      responder(cual === 'si' ? true : (cual === 'extra' ? 'extra' : false));
     });
     document.addEventListener('keydown', porTecla, true);
 

@@ -309,7 +309,7 @@ function nombreLegibleDeMetrica(clave) {
  * Pide los eventos crudos del rango y arma el .txt: encabezado, resumen
  * rápido, tendencia, tiempo por pantalla, ranking de fricción, top
  * pantallas/acciones, frases del asistente, y eventos detallados —
- * pensado para pegarse directo en Claude Code.
+ * pensado para pegarse directo en un asistente de IA.
  *
  * @param {number} dias
  * @returns {Promise<void>}
@@ -442,10 +442,10 @@ async function descargarMetricas(dias) {
   });
 
   lineas.push('');
-  lineas.push('Este archivo está pensado para pegarse en Claude Code junto con el');
-  lineas.push('contexto del proyecto y pedirle: "Analiza este uso real del panel y');
-  lineas.push('dime dónde hay más fricción, qué atajos faltan y qué mejoras concretas');
-  lineas.push('priorizar".');
+  lineas.push('Este archivo está pensado para pegarse en un asistente de IA, junto');
+  lineas.push('con el contexto del proyecto, y pedirle: "Analiza este uso real del');
+  lineas.push('panel y dime dónde hay más fricción, qué atajos faltan y qué mejoras');
+  lineas.push('concretas priorizar".');
 
   const nombreArchivo = 'metricas-aniaxv-' + exportadoEn.slice(0, 10) + '.txt';
   bajarArchivo(nombreArchivo, lineas.join('\n'), 'text/plain');

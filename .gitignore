@@ -1,9 +1,10 @@
 # Contraseñas del correo y de la base de datos. Nunca a GitHub.
 .env
 
-# Configuración local del asistente de Claude Code. No es parte del
-# proyecto: es la herramienta con la que se construyó, no algo que la
-# app necesite para funcionar.
+# Configuración local de las herramientas con las que se trabaja. No es
+# parte del proyecto: es herramienta, no algo que la app necesite para
+# funcionar. Esta línea TIENE que quedarse: es justamente lo que impide
+# que esa carpeta entre al repositorio.
 .claude/
 
 # Dependencias de build (terser, para herramientas/minificar-js.mjs).
