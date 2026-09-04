@@ -95,20 +95,39 @@
     }, 40);
   }
 
-  /* ── EL ECO LEJANO ──────────────────────────────────────────────────
-     Cuando la música arranca junto con la apertura del sobre, no entra de
-     golpe a su sonido pleno: entra COMO UN ECO LEJANO —apagada, como si
-     sonara en otra habitación— y en un par de segundos se abre hasta
-     sentirse "acá con nosotros", al mismo tiempo que la luz revela la web.
+  /* ── POR QUÉ ACÁ NO HAY WEBAUDIO ───────────────────────────
 
-     El truco es un filtro pasabajos: al principio deja pasar solo los
-     graves (por eso suena lejana y sorda) y después se abre del todo. Se
-     hace con WebAudio, enrutando el audio por: fuente → filtro → destino.
+     Hasta el 2026-09-04, la música entraba COMO UN ECO LEJANO —apagada,
+     como si sonara en otra habitación, abriéndose en tres segundos— con
+     un filtro pasabajos de WebAudio: fuente → filtro → destino.
 
-     Ese enrutado NO pelea con el control de volumen: el volumen sigue
-     viviendo en audioDeFondo.volume (antes del grafo), así que el
-     deslizador y el silencio funcionan igual. Y la fuente de un elemento
-     de audio solo se puede crear UNA vez, por eso se guarda y se reusa. */
+     Era lindo y se sacó, después de tres rondas persiguiendo el mismo
+     fallo. Esta es la línea que lo decidió, sacada del registro de un
+     iPhone al desbloquear:
+
+         la página vuelve | contexto=running | pausado=false | vol=1
+
+     Contexto despierto, elemento reproduciendo, volumen al máximo — y
+     sin sonido. En WebKit, un MediaElementAudioSourceNode puede quedar
+     MUDO tras una interrupción del sistema (una llamada, otra app,
+     bloquear la pantalla) aunque el contexto vuelva a 'running': el
+     enrutado se rompe por dentro y no hay ninguna propiedad que lo
+     delate. Todo lo que el código puede mirar dice que está bien.
+
+     Y no se podía parchar, porque `createMediaElementSource()` es
+     IRREVERSIBLE: en cuanto se llama, el audio del elemento pasa por el
+     grafo para siempre. Grafo roto = sin sonido por ningún lado.
+
+     Sin WebAudio, el <audio> suena nativo — que es justo lo que iOS
+     sabe pausar y retomar solo. Desaparece la clase entera de fallo, no
+     un caso puntual.
+
+     LO QUE COSTAMOS: en iPhone la música arranca de golpe, a volumen
+     pleno. iOS ignora `audio.volume` por diseño (el volumen es de los
+     botones del teléfono), así que la entrada gradual de abajo nunca
+     funcionó ahí y WebAudio era la única vía — la misma que rompía el
+     audio. No se pueden tener las dos cosas. En computadora y Android la
+     entrada gradual sigue igual. */
   /* ─── BITÁCORA DE DIAGNÓSTICO ─────────────────────────────
 
      POR QUÉ EXISTE (2026-09-04)
@@ -139,7 +158,9 @@
       hora: new Date().toTimeString().slice(0, 8),
       que: que,
       detalle: detalle === undefined ? '' : String(detalle),
-      contexto: grafoDeAudio ? grafoDeAudio.contexto.state : 'sin grafo',
+      // Sin WebAudio ya no hay contexto que mirar; lo útil ahora es si
+      // el navegador tiene el audio cargado y listo para sonar.
+      listo: audioDeFondo.readyState,
       pausado: audioDeFondo.paused,
       quiere: quiereMusica,
       volumen: Math.round(audioDeFondo.volume * 100) / 100,
@@ -165,7 +186,7 @@
       return s.hora +
              ' | ' + s.que +
              (s.detalle ? ' (' + s.detalle + ')' : '') +
-             ' | contexto=' + s.contexto +
+             ' | listo=' + s.listo +
              ' | pausado=' + s.pausado +
              ' | quiere=' + s.quiere +
              ' | vol=' + s.volumen;
@@ -256,61 +277,6 @@
     });
   }
 
-  let grafoDeAudio = null;
-
-  /**
-   * Arma (una sola vez) el grafo de WebAudio y devuelve el filtro, para
-   * poder abrirlo. Si el navegador no soporta WebAudio, devuelve null y la
-   * música suena igual, sin el efecto.
-   *
-   * @returns {{contexto: AudioContext, filtro: BiquadFilterNode}|null}
-   */
-  function prepararElGrafoDeAudio() {
-    if (grafoDeAudio) return grafoDeAudio;
-
-    const Contexto = window.AudioContext || window.webkitAudioContext;
-    if (!Contexto) return null;
-
-    try {
-      const contexto = new Contexto();
-      const fuente = contexto.createMediaElementSource(audioDeFondo);
-      const filtro = contexto.createBiquadFilter();
-      filtro.type = 'lowpass';
-      filtro.frequency.value = 20000;   // abierto por defecto (sonido pleno)
-      filtro.Q.value = 0.7;
-
-      fuente.connect(filtro);
-      filtro.connect(contexto.destination);
-
-      grafoDeAudio = { contexto, filtro };
-      return grafoDeAudio;
-    } catch (error) {
-      /* Algún navegador viejo o un segundo intento de crear la fuente.
-         No es grave: la música suena sin el efecto de eco. */
-      console.warn('No se pudo preparar el eco de la música:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Hace entrar la música como un eco lejano que se acerca: arranca el
-   * filtro casi cerrado y lo abre despacio hasta el sonido pleno.
-   * @returns {void}
-   */
-  function entrarComoEcoLejano() {
-    const grafo = prepararElGrafoDeAudio();
-    if (!grafo) return;
-
-    const { contexto, filtro } = grafo;
-    if (contexto.state === 'suspended') contexto.resume();
-
-    const ahora = contexto.currentTime;
-    // De sordo y lejano (500 Hz) a pleno (20 kHz) en 3,2 segundos.
-    filtro.frequency.cancelScheduledValues(ahora);
-    filtro.frequency.setValueAtTime(500, ahora);
-    filtro.frequency.exponentialRampToValueAtTime(20000, ahora + 3.2);
-  }
-
   /**
    * Intenta reproducir la canción.
    *
@@ -323,26 +289,15 @@
    * @returns {void}
    */
   function reproducirLaCancion(conEco = false) {
-    /* ⚡ EL CONTEXTO DE WEBAUDIO TAMBIÉN HAY QUE DESPERTARLO ACÁ, NO SOLO
-       LA PRIMERA VEZ. Antes esto solo pasaba dentro de entrarComoEcoLejano(),
-       que se llama una única vez (al abrir el sobre). El problema: cuando
-       el teléfono apaga la pantalla por inactividad, el navegador suspende
-       el AudioContext (además de pausar el <audio>). Al desbloquear, este
-       reproducirLaCancion() volvía a llamar audioDeFondo.play() y el
-       elemento SE PONÍA "sonando" —el ícono cambiaba, currentTime avanzaba—
-       pero como el audio sale enrutado POR el contexto (fuente → filtro →
-       destino, ver prepararElGrafoDeAudio) y ese contexto seguía suspendido,
-       no salía ningún sonido: la música quedaba "trabada", sonando en el
-       papel pero muda. Despertarlo acá, en cada intento de reproducir, lo
-       arregla para siempre sin agregar ningún bucle ni reintento. */
-    if (grafoDeAudio && grafoDeAudio.contexto.state === 'suspended') {
-      grafoDeAudio.contexto.resume();
-    }
-
     audioDeFondo.play()
       .then(() => {
-        subirElVolumenDeAPoco();
-        if (conEco && !prefiereMenosMovimiento()) entrarComoEcoLejano();
+        /* La entrada: más larga al abrir el sobre que en los retomes.
+           Es lo que quedó del eco lejano — en computadora y Android se
+           oye como una entrada suave; en iPhone no hace nada, porque
+           iOS ignora `volume` (ver la nota de arriba). */
+        if (prefiereMenosMovimiento()) audioDeFondo.volume = volumenElegido;
+        else subirElVolumenDeAPoco(conEco ? 3200 : 2200);
+
         prepararControlesDelSistema();
         anotar('sonando');
       })
@@ -383,51 +338,6 @@
    */
   let quiereMusica = false;
 
-  /**
-   * ¿El AudioContext está dormido?
-   *
-   * ⚠️ EL BUG QUE ESTO DESTAPA (2026-09-04)
-   * El <audio> y el AudioContext son dos cosas distintas, y al
-   * bloquear la pantalla el navegador puede tocar una sin tocar la
-   * otra — cuál, depende del teléfono. Si suspende SOLO el contexto,
-   * el elemento sigue diciendo `paused === false`: para el código
-   * está sonando, y para quien escucha hay silencio, porque el audio
-   * sale enrutado POR el contexto (fuente → filtro → destino, ver
-   * prepararElGrafoDeAudio).
-   *
-   * Tres lugares miraban `audioDeFondo.paused` a secas y por eso no
-   * rescataban ese estado: el retorno del bloqueo, la red del clic y
-   * el propio botón. Eso es “a veces al desbloquear ya no suena”, y
-   * que fuera aleatorio es justamente la señal de que dependía de
-   * cuál de las dos cosas suspendió el navegador esa vez.
-   *
-   * @returns {boolean}
-   */
-  function elContextoEstaDormido() {
-    return !!grafoDeAudio && grafoDeAudio.contexto.state === 'suspended';
-  }
-
-  /**
-   * Despierta el contexto si hace falta. Es inofensivo llamarlo de
-   * más: si ya está corriendo, no hace nada.
-   *
-   * @returns {void}
-   */
-  function despertarElContexto() {
-    if (!elContextoEstaDormido()) return Promise.resolve();
-
-    /* ⚠️ DEVUELVE LA PROMESA, Y HAY QUE ESPERARLA (2026-09-04).
-       `resume()` es asíncrono. Antes se lo llamaba y en la línea
-       siguiente se pedía `play()`, con el contexto todavía
-       suspendido — y ahí el navegador puede rechazar el play() y
-       dejar el elemento en pausa. Que llegara a tiempo o no dependía
-       del momento: de ahí que fallara una de cada tres veces y no
-       hubiera forma de reproducirlo a voluntad. */
-    return grafoDeAudio.contexto.resume()
-      .then(() => { anotar('contexto despierto'); })
-      .catch(error => { anotar('resume rechazado', error && error.name); });
-  }
-
   /** Si ya hay un reintento esperando el próximo gesto. */
   let reintentoArmado = false;
 
@@ -456,7 +366,7 @@
       document.removeEventListener('pointerdown', reintentar, true);
 
       if (!quiereMusica) return;
-      if (audioDeFondo.paused || elContextoEstaDormido()) {
+      if (audioDeFondo.paused) {
         anotar('reintentando por gesto');
         reproducirLaCancion();
       }
@@ -474,12 +384,7 @@
    * @returns {void}
    */
   function alternarPlayPausa() {
-    /* `paused` NO alcanza para saber si se oye algo: con el contexto
-       dormido el elemento dice que suena y hay silencio. Para quien
-       mira la pantalla eso es “está pausado”, así que el botón tiene
-       que despertarlo, no pausar algo que no se escucha — antes hacía
-       falta tocarlo DOS veces para recuperar el sonido. */
-    if (audioDeFondo.paused || elContextoEstaDormido()) {
+    if (audioDeFondo.paused) {
       quiereMusica = true;
       reproducirLaCancion();
     } else {
@@ -634,13 +539,10 @@
     if (panel.contains(evento.target)) return;
     if (botonMusica && botonMusica.contains(evento.target)) return;
 
-    // El contexto se despierta SIEMPRE, sin mirar `paused`: si lo que
-    // quedó dormido es el contexto y no el elemento, este era el
-    // último rescate y tampoco entraba. Y se espera al resume por el
-    // mismo motivo que en alVolverLaPagina().
-    despertarElContexto().then(() => {
-      if (audioDeFondo.paused) reproducirLaCancion();
-    });
+    // La red de seguridad: si la persona quiere música y el elemento
+    // quedó pausado —porque el navegador rechazó un play() anterior—
+    // este toque es el gesto que lo vuelve a permitir.
+    if (audioDeFondo.paused) reproducirLaCancion();
   });
 
 
@@ -648,14 +550,13 @@
    *
    * QUÉ PASABA
    * El navegador pausa el <audio> por su cuenta al apagarse la
-   * pantalla, y suspende el AudioContext. Al volver, esto intentaba
-   * retomar solo si `sonabaAntesDeOcultarse` era verdadero — un valor
-   * que se leía de `audioDeFondo.paused` EN el visibilitychange. Pero
-   * el orden de esos dos hechos no está garantizado: en varios
-   * teléfonos el navegador pausa ANTES de avisar que la página se
-   * ocultó, y entonces se anotaba "no estaba sonando" y al desbloquear
-   * no volvía nada. De ahí que a veces volviera y a veces no, sin
-   * ningún patrón visible.
+   * pantalla. Al volver, esto intentaba retomar solo si
+   * `sonabaAntesDeOcultarse` era verdadero — un valor que se leía de
+   * `audioDeFondo.paused` EN el visibilitychange. Pero el orden de esos
+   * dos hechos no está garantizado: en varios teléfonos el navegador
+   * pausa ANTES de avisar que la página se ocultó, y entonces se anotaba
+   * "no estaba sonando" y al desbloquear no volvía nada. De ahí que a
+   * veces volviera y a veces no, sin ningún patrón visible.
    *
    * QUÉ HACE AHORA
    * No se adivina nada: se mira `quiereMusica`, que solo cambia cuando
@@ -678,24 +579,16 @@
     anotar('la página vuelve');
     if (!quiereMusica) return;
 
-    /* ⚠⚠ ACÁ ESTABA EL BUG (2026-09-04). La condición era
-       `quiereMusica && audioDeFondo.paused`, y reproducirLaCancion()
-       sí despierta el contexto — pero solo si llegaba a correr. Si el
-       navegador había suspendido el contexto SIN pausar el elemento,
-       `paused` era false, la condición no entraba, nadie despertaba
-       nada, y la música quedaba muda con el ícono diciendo que sonaba.
+    /* El rescate es simple: si la persona quiere música y el elemento
+       está pausado, se pide play(). Y si el navegador lo rechaza —volver
+       del bloqueo no siempre cuenta como gesto— queda armado el
+       reintento para el próximo toque, en vez de quedarse callado.
 
-       Ahora son dos preguntas separadas, que es lo que siempre
-       fueron: el contexto se despierta pase lo que pase, y play()
-       solo se pide si el elemento de verdad está pausado.
-
-       Y SE ESPERA a que el contexto despierte antes de pedir play():
-       esa carrera es la que dejaba el reproductor en pausa una de
-       cada tres veces. Ver despertarElContexto(). */
-    despertarElContexto().then(() => {
-      if (audioDeFondo.paused) reproducirLaCancion();
-      else anotar('seguía sonando, nada que hacer');
-    });
+       Antes acá había toda una danza con el AudioContext, que era la
+       causa de fondo del fallo. Ya no hay contexto: ver la nota de
+       arriba sobre por qué se sacó WebAudio. */
+    if (audioDeFondo.paused) reproducirLaCancion();
+    else anotar('seguía sonando, nada que hacer');
   }
 
   document.addEventListener('visibilitychange', () => {

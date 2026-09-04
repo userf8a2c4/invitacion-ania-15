@@ -115,6 +115,62 @@ if (existsSync(dirProduccion)) {
     process.exit(1);
   }
 }
+/* ─── 0B. ¿LA IMAGEN DE LA TARJETA SIGUE EN PIE? ─────────────────
+ *
+ * ⚡ POR QUÉ ESTO EXISTE (2026-09-04)
+ * `og:image` es una dirección ABSOLUTA a producción — tiene que serlo,
+ * porque el mismo index.html lo sirven dos dominios y una etiqueta og:
+ * no puede saber desde cuál la leen. Eso significa que ese archivo tiene
+ * que existir en producción con ese nombre exacto, siempre.
+ *
+ * Pasó de verdad: se renombró la imagen en el repositorio, llegó a PBE,
+ * y como producción no se había promovido la etiqueta quedó apuntando a
+ * un 404. La tarjeta desapareció de golpe y costó tres mensajes
+ * descubrirlo, porque desde afuera se ve igual que todos los otros
+ * motivos por los que una tarjeta no aparece.
+ *
+ * Una petición de dos segundos lo dice al instante. Si no hay internet,
+ * NO corta: avisa y sigue. Cortar por no poder comprobar sería peor que
+ * no comprobar — dejaría sin poder subir versión a quien esté sin red.
+ */
+const htmlParaLaTarjeta = readFileSync(join(raiz, 'index.html'), 'utf8');
+const laImagenDeLaTarjeta = (htmlParaLaTarjeta.match(
+  /<meta\s+property="og:image"\s+content="([^"]+)"/i) || [])[1];
+
+if (laImagenDeLaTarjeta && laImagenDeLaTarjeta.startsWith('http')) {
+  let respuesta = null;
+
+  try {
+    respuesta = await fetch(laImagenDeLaTarjeta, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (error) {
+    console.warn('');
+    console.warn('! No se pudo comprobar la imagen de la tarjeta (¿sin internet?).');
+    console.warn(`  ${laImagenDeLaTarjeta}`);
+    console.warn('  Se sigue igual, pero conviené mirarla a mano.');
+    console.warn('');
+  }
+
+  if (respuesta && !respuesta.ok) {
+    console.error('');
+    console.error('✗ NO se subió la versión: la imagen de la tarjeta no responde.');
+    console.error('');
+    console.error(`  og:image apunta a:  ${laImagenDeLaTarjeta}`);
+    console.error(`  y devuelve:         ${respuesta.status}`);
+    console.error('');
+    console.error('  Esa dirección es la que lee WhatsApp para armar la tarjeta del');
+    console.error('  enlace. Si no responde 200, cada invitación sale como texto pelado.');
+    console.error('');
+    console.error('  Suele pasar por renombrar la imagen sin promover a producción:');
+    console.error('  la etiqueta es absoluta a aniaxv.com, así que el archivo tiene');
+    console.error('  que estar AHÍ, no solo en el repositorio.');
+    console.error('');
+    process.exit(1);
+  }
+}
+
 const rutaIndex = join(raiz, 'index.html');
 const rutaSw = join(raiz, 'sw.js');
 const rutaSwAdmin = join(raiz, 'admin', 'sw.js');
