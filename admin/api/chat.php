@@ -170,7 +170,12 @@ function construirContexto($pantalla, $usuario) {
             // armado -eso lo calcula cada consumidor según lo que
             // necesite (acá, solo contar). mesa_id null = todavía sin
             // lugar.
-            $panorama = panoramaDeMesas();
+            // intentando() (ver _lib/bd.php) hace que un fallo de la
+            // base LANCE en vez de cortar la petición. Sin eso este
+            // catch nunca corría: si faltaba una tabla del acomodo,
+            // preguntarle CUALQUIER cosa al asistente devolvía 500 en
+            // vez de contestar sin el dato de mesas.
+            $panorama = intentando('panoramaDeMesas');
             $totalGente = 0;
             $sinSentar = 0;
             foreach ($panorama['invitados'] as $u) {

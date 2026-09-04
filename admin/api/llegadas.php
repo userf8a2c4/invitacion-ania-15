@@ -88,13 +88,20 @@ case 'marcar':
         error_log('[Ania XV · llegadas] Pase reintentado tras ya haber entrado: ' .
                   ($fila['nombre'] ?? $codigo));
     } else {
+        /* intentando() (ver _lib/bd.php): sin esto el catch de abajo
+           era decorativo — el choque contra el UNIQUE KEY salía por
+           responderMal() con un 500, y la persona de la puerta veía
+           "no se pudo guardar" en un pase que SÍ había entrado. Es el
+           caso que este bloque dice atender desde que se escribió. */
         try {
-            insertar('llegadas', [
-                'confirmacion_id' => $fila['id'],
-                'marcado_por'     => (int) ($yo['id'] ?? 0),
-            ]);
-            anotarEnBitacora($yo, 'marcó una llegada', 'llegadas', $fila['id'],
-                             (string) ($fila['nombre'] ?? ''));
+            intentando(function () use ($fila, $yo) {
+                insertar('llegadas', [
+                    'confirmacion_id' => $fila['id'],
+                    'marcado_por'     => (int) ($yo['id'] ?? 0),
+                ]);
+                anotarEnBitacora($yo, 'marcó una llegada', 'llegadas', $fila['id'],
+                                 (string) ($fila['nombre'] ?? ''));
+            });
         } catch (Throwable $e) {
             // Choque por el UNIQUE KEY: alguien más lo marcó un instante
             // antes. No es un error del que haya que avisar como tal.

@@ -198,21 +198,29 @@ case 'armar_salon':
             /* Ya estaba: solo se le pone dónde va. No se le toca la
                capacidad ni la ubicación escrita, que puede haberse
                ajustado a mano por algo. */
-            actualizar('mesas', (int) $existe['id'], [
+            /* `fila`, `columna` y `prioridad` se agregaron a `mesas`
+               después de que la tabla existiera. Sin filtrar, en una
+               instalación sin migrar "Armar el salón" moría con un 500
+               a mitad del lote: unas mesas creadas, otras no, y ningún
+               aviso de por qué. Ver soloColumnasQueExisten() en
+               _lib/bd.php. */
+            actualizar('mesas', (int) $existe['id'], soloColumnasQueExisten('mesas', [
                 'fila' => $fila, 'columna' => $columna, 'prioridad' => $prioridad,
-            ]);
+            ]));
             $ubicadas++;
             continue;
         }
 
-        $mesaId = insertar('mesas', [
+        // Mismo motivo que arriba: sin las columnas del plano la mesa
+        // igual se crea, y queda sin ubicar en vez de no existir.
+        $mesaId = insertar('mesas', soloColumnasQueExisten('mesas', [
             'nombre'    => $nombre,
             'capacidad' => $capacidad,
             'ubicacion' => '',
             'fila'      => $fila,
             'columna'   => $columna,
             'prioridad' => $prioridad,
-        ]);
+        ]));
         $creadas++;
 
         /* ⚡ (2026-08-30) Zona como etiqueta real desde el día uno, no
@@ -284,10 +292,18 @@ case 'ubicar':
         responderMal('Esa mesa no existe.', 404);
     }
 
-    actualizar('mesas', $mesa, [
+    /* Arrastrar una mesa en el plano es el gesto más repetido de esta
+       pantalla: si las columnas del plano no están, tiene que decirlo
+       una vez y no reventar con un 500 en cada arrastre. */
+    $movida = soloColumnasQueExisten('mesas', [
         'fila'    => campoEntero($datos, 'fila', 0, 20),
         'columna' => campoEntero($datos, 'columna', 0, 12),
     ]);
+    if (!$movida) {
+        responderMal('Esta instalación todavía no tiene el plano del salón. ' .
+                     'Hay que correr admin/api/instalar.php.', 503);
+    }
+    actualizar('mesas', $mesa, $movida);
 
     responderBien(['mensaje' => 'Mesa movida.']);
     break;
@@ -747,13 +763,19 @@ case 'pelea':
          * contempló. Se atrapa acá con un mensaje claro en vez de dejar
          * pasar el error crudo de MySQL. */
         try {
-            $id = insertar('incompatibilidades', [
-                'invitado_a'    => $confDe[$acompA],
-                'invitado_b'    => $confDe[$acompB],
-                'acompanante_a' => $acompA,
-                'acompanante_b' => $acompB,
-                'motivo'        => campoTexto($datos, 'motivo', 200),
-            ]);
+            // intentando() (ver _lib/bd.php): sin esto el choque contra
+            // la llave única salía por responderMal() con un 500 crudo,
+            // y el mensaje explicativo de abajo —escrito justo para ese
+            // caso— no se mostraba nunca.
+            $id = intentando(function () use ($confDe, $acompA, $acompB, $datos) {
+                return insertar('incompatibilidades', [
+                    'invitado_a'    => $confDe[$acompA],
+                    'invitado_b'    => $confDe[$acompB],
+                    'acompanante_a' => $acompA,
+                    'acompanante_b' => $acompB,
+                    'motivo'        => campoTexto($datos, 'motivo', 200),
+                ]);
+            });
         } catch (PDOException $e) {
             responderMal(
                 'No se pudo guardar esta regla puntual — probablemente porque ya hay ' .

@@ -235,6 +235,23 @@ switch ($accion) {
             );
         }
 
+        /* ⚠️ SIN ESTA TABLA, "OLVIDÉ MI CONTRASEÑA" MORÍA CON UN 500
+           (2026-09-04). `recuperaciones_clave` se creó en una ronda
+           posterior a `usuarios`: en una instalación que no volvió a
+           correr instalar.php, escribir acá cortaba la petición y la
+           única vía de recuperar el acceso al panel quedaba muerta sin
+           decir por qué. Ahora lo dice — y no filtra nada, porque el
+           mensaje es el mismo exista o no ese correo. */
+        if (!existeTabla('recuperaciones_clave')) {
+            error_log('[Ania XV · sesion] Falta la tabla recuperaciones_clave: ' .
+                      'hay que correr admin/api/instalar.php.');
+            responderMal(
+                'El restablecimiento por correo no está disponible en esta instalación. ' .
+                'Avísale a quien mantiene el panel.',
+                503
+            );
+        }
+
         $datos     = cuerpoJson();
         $correo    = mb_strtolower(campoTexto($datos, 'correo', 190));
         $pregunta  = (string) ($datos['pregunta'] ?? '');
@@ -315,6 +332,23 @@ switch ($accion) {
             responderMal(
                 'Demasiados intentos seguidos. Espera ' . MINUTOS_DE_FRENO . ' minutos.',
                 429
+            );
+        }
+
+        /* ⚠️ SIN ESTA TABLA, "OLVIDÉ MI CONTRASEÑA" MORÍA CON UN 500
+           (2026-09-04). `recuperaciones_clave` se creó en una ronda
+           posterior a `usuarios`: en una instalación que no volvió a
+           correr instalar.php, escribir acá cortaba la petición y la
+           única vía de recuperar el acceso al panel quedaba muerta sin
+           decir por qué. Ahora lo dice — y no filtra nada, porque el
+           mensaje es el mismo exista o no ese correo. */
+        if (!existeTabla('recuperaciones_clave')) {
+            error_log('[Ania XV · sesion] Falta la tabla recuperaciones_clave: ' .
+                      'hay que correr admin/api/instalar.php.');
+            responderMal(
+                'El restablecimiento por correo no está disponible en esta instalación. ' .
+                'Avísale a quien mantiene el panel.',
+                503
             );
         }
 

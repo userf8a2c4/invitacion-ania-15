@@ -235,6 +235,21 @@ $agregarColumna('invitaciones', 'veces_enviado', 'INT NOT NULL DEFAULT 0');
 $agregarColumna('recibos', 'padrino_id',   'INT DEFAULT NULL');
 $agregarColumna('recibos', 'beneficiario', "VARCHAR(200) NOT NULL DEFAULT ''");
 
+/* ⚠️ ESTAS CINCO ESTABAN EN migracion.sql Y NO ACÁ (2026-09-04).
+   `CREATE TABLE IF NOT EXISTS` no agrega columnas a una tabla que ya
+   existe, así que una instalación creada ANTES de que estas columnas se
+   sumaran al esquema no las tenía — y correr instalar.php no lo
+   arreglaba, porque este archivo no las nombraba. Silenciosamente: el
+   PDF de un recibo o de un contrato quedaba generado pero sin la fila
+   de `archivos` que lo enlaza, y un pago sin su comprobante. Es la
+   misma clase de agujero que el respaldo de lista blanca: algo que
+   estaba escrito en un lado y no en el otro. */
+$agregarColumna('recibos',   'archivo_id',     'INT DEFAULT NULL');
+$agregarColumna('recibos',   'creado_por',     'INT DEFAULT NULL');
+$agregarColumna('contratos', 'archivo_id',     'INT DEFAULT NULL');
+$agregarColumna('contratos', 'creado_por',     'INT DEFAULT NULL');
+$agregarColumna('pagos',     'comprobante_id', 'INT DEFAULT NULL');
+
 /* Esto no es agregar una columna, es AFLOJAR una que ya exigía
    NOT NULL — por eso no usa $agregarColumna(). Se comprueba antes de
    tocar nada, tanto para no fallar si ya se corrió como para no

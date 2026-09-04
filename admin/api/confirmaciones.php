@@ -125,17 +125,31 @@ case 'listar':
     // Búsqueda por nombre, correo o código de pase.
     $busca = trim((string) ($_GET['busca'] ?? ''));
     if ($busca !== '') {
+        /* ⚠️ UN MARCADOR POR COLUMNA, NO UNO COMPARTIDO (2026-09-04).
+           Antes las tres columnas usaban el mismo `:busca` y se enviaba
+           UN solo valor. Con PDO::ATTR_EMULATE_PREPARES en false (ver
+           _lib/bd.php) las preparadas las arma MySQL, y ahí un marcador
+           repetido necesita un valor por aparición: faltaban dos y la
+           consulta moría con SQLSTATE[HY093].
+
+           O sea que ESCRIBIR UNA SOLA LETRA en el buscador de Gente
+           devolvía 500 y vaciaba la lista. Es el mismo bug que ya se
+           arregló en planificador.php:90, en la otra pantalla. */
         $trozos = [];
+        $cuantos = 0;
         foreach (['nombre', 'correo', 'codigo'] as $columna) {
             // Con el LEFT JOIN de mesas hay que aclarar de qué tabla es
             // cada columna: "mesas" también tiene "nombre".
-            if (hay($columna)) $trozos[] = "confirmaciones.`$columna` LIKE :busca";
+            if (!hay($columna)) continue;
+
+            $marca = ':busca' . (++$cuantos);
+            $trozos[] = "confirmaciones.`$columna` LIKE $marca";
+            // Los comodines van en el VALOR, nunca pegados al SQL: así
+            // sigue siendo una consulta preparada de verdad.
+            $parametros[$marca] = '%' . $busca . '%';
         }
         if ($trozos) {
             $condiciones[] = '(' . implode(' OR ', $trozos) . ')';
-            // Los comodines van en el VALOR, nunca pegados al SQL: así
-            // sigue siendo una consulta preparada de verdad.
-            $parametros[':busca'] = '%' . $busca . '%';
         }
     }
 
