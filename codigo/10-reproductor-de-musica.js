@@ -63,18 +63,34 @@
    * @param {number} [duracionEnMs=2200] - Cuánto tarda el fundido.
    * @returns {void}
    */
+  /** El temporizador de la subida en curso, para poder cancelarlo. */
+  let temporizadorDeVolumen = null;
+
   function subirElVolumenDeAPoco(duracionEnMs = 2200) {
+    /* ⚠️ SE CANCELA LA SUBIDA ANTERIOR (2026-09-04). Cada llamada
+       arrancaba un setInterval nuevo sin apagar el de antes, y el
+       tamaño del paso se calcula UNA vez con el volumen de ese
+       momento. Con dos corriendo a la vez, cada una empuja hacia su
+       propio destino y el volumen queda donde ninguna quería.
+
+       Antes casi no pasaba porque reproducirLaCancion() se llamaba
+       poco. Ahora se llama al volver del bloqueo, en la red del clic y
+       desde los controles del sistema — o sea que se volvió probable
+       por los arreglos de la ronda anterior. */
+    if (temporizadorDeVolumen) clearInterval(temporizadorDeVolumen);
+
     const pasosTotales = Math.round(duracionEnMs / 40);
     const cuantoSubePorPaso = (volumenElegido - audioDeFondo.volume) / pasosTotales;
     let pasosDados = 0;
 
-    const temporizador = setInterval(() => {
+    temporizadorDeVolumen = setInterval(() => {
       pasosDados++;
       audioDeFondo.volume = limitar(audioDeFondo.volume + cuantoSubePorPaso, 0, 1);
 
       if (pasosDados >= pasosTotales) {
         audioDeFondo.volume = volumenElegido;
-        clearInterval(temporizador);
+        clearInterval(temporizadorDeVolumen);
+        temporizadorDeVolumen = null;
       }
     }, 40);
   }
@@ -93,6 +109,50 @@
      viviendo en audioDeFondo.volume (antes del grafo), así que el
      deslizador y el silencio funcionan igual. Y la fuente de un elemento
      de audio solo se puede crear UNA vez, por eso se guarda y se reusa. */
+  /* ─── BITÁCORA DE DIAGNÓSTICO ─────────────────────────────
+
+     POR QUÉ EXISTE (2026-09-04)
+     Este reproductor falla de forma ALEATORIA al desbloquear el
+     teléfono, y ya van dos intentos de arreglarlo a ciegas. El
+     problema es que el síntoma (se queda en pausa) puede venir de
+     cuatro caminos distintos y desde acá no hay forma de saber cuál
+     fue: pasa en un teléfono, con la pantalla apagada, sin nadie
+     mirando la consola.
+
+     Esto anota los últimos treinta sucesos con el estado en cada uno.
+     Si vuelve a fallar, `__musica()` en la consola dice exactamente en
+     qué paso se torció, en vez de adivinar por tercera vez.
+
+     No decide nada: solo mira. Se saca cuando el problema esté
+     cerrado. */
+  const BITACORA = [];
+
+  /**
+   * Anota un suceso con el estado del reproductor en ese instante.
+   *
+   * @param {string} que
+   * @param {*} [detalle]
+   * @returns {void}
+   */
+  function anotar(que, detalle) {
+    BITACORA.push({
+      hora: new Date().toTimeString().slice(0, 8),
+      que: que,
+      detalle: detalle === undefined ? '' : String(detalle),
+      contexto: grafoDeAudio ? grafoDeAudio.contexto.state : 'sin grafo',
+      pausado: audioDeFondo.paused,
+      quiere: quiereMusica,
+      volumen: Math.round(audioDeFondo.volume * 100) / 100,
+    });
+    if (BITACORA.length > 30) BITACORA.shift();
+  }
+
+  // Se expone para poder leerla desde la consola del teléfono.
+  window.__musica = function () {
+    if (console.table) console.table(BITACORA);
+    return BITACORA;
+  };
+
   let grafoDeAudio = null;
 
   /**
@@ -181,10 +241,17 @@
         subirElVolumenDeAPoco();
         if (conEco && !prefiereMenosMovimiento()) entrarComoEcoLejano();
         prepararControlesDelSistema();
+        anotar('sonando');
       })
-      .catch(() => {
-        /* El navegador la bloqueó. No es un error nuestro: simplemente
-           queda esperando a que la persona apriete play. */
+      .catch(error => {
+        /* ⚠️ YA NO SE TRAGA EN SILENCIO (2026-09-04). Acá no pasaba
+           nada y el reproductor quedaba en pausa hasta que alguien
+           tocara algo, sin dejar rastro de por qué. Si la persona
+           sigue queriendo música, se arma el reintento para el
+           próximo toque, que es cuando el navegador vuelve a
+           permitirlo. */
+        anotar('play rechazado', error && error.name);
+        if (quiereMusica) armarReintentoEnElProximoGesto();
       });
   }
 
@@ -244,7 +311,56 @@
    * @returns {void}
    */
   function despertarElContexto() {
-    if (elContextoEstaDormido()) grafoDeAudio.contexto.resume();
+    if (!elContextoEstaDormido()) return Promise.resolve();
+
+    /* ⚠️ DEVUELVE LA PROMESA, Y HAY QUE ESPERARLA (2026-09-04).
+       `resume()` es asíncrono. Antes se lo llamaba y en la línea
+       siguiente se pedía `play()`, con el contexto todavía
+       suspendido — y ahí el navegador puede rechazar el play() y
+       dejar el elemento en pausa. Que llegara a tiempo o no dependía
+       del momento: de ahí que fallara una de cada tres veces y no
+       hubiera forma de reproducirlo a voluntad. */
+    return grafoDeAudio.contexto.resume()
+      .then(() => { anotar('contexto despierto'); })
+      .catch(error => { anotar('resume rechazado', error && error.name); });
+  }
+
+  /** Si ya hay un reintento esperando el próximo gesto. */
+  let reintentoArmado = false;
+
+  /**
+   * Deja armado un reintento para el próximo toque de la persona.
+   *
+   * ⚠️ POR QUÉ HACE FALTA (2026-09-04)
+   * Cuando el navegador rechaza el `play()` —porque volver del
+   * bloqueo no siempre cuenta como “gesto de la persona”— el
+   * reproductor se quedaba en pausa y NADA lo reintentaba. Eso es lo
+   * que se ve como “se queda insistentemente en pausa”.
+   *
+   * El próximo toque en cualquier parte de la página SÍ es un gesto,
+   * así que ahí vuelve a estar permitido. Se engancha una sola vez y
+   * se desengancha al usarse: no queda nada corriendo.
+   *
+   * @returns {void}
+   */
+  function armarReintentoEnElProximoGesto() {
+    if (reintentoArmado) return;
+    reintentoArmado = true;
+    anotar('reintento armado');
+
+    const reintentar = () => {
+      reintentoArmado = false;
+      document.removeEventListener('pointerdown', reintentar, true);
+
+      if (!quiereMusica) return;
+      if (audioDeFondo.paused || elContextoEstaDormido()) {
+        anotar('reintentando por gesto');
+        reproducirLaCancion();
+      }
+    };
+
+    // En captura: corre antes que cualquier otro manejador de la página.
+    document.addEventListener('pointerdown', reintentar, true);
   }
 
   /**
@@ -322,10 +438,12 @@
          tan decisión de la persona como apretarla en la página, y la
          red del clic tiene que respetarla. */
       navigator.mediaSession.setActionHandler('play', () => {
+        anotar('play del sistema');
         quiereMusica = true;
         reproducirLaCancion();
       });
       navigator.mediaSession.setActionHandler('pause', () => {
+        anotar('pausa del sistema');
         quiereMusica = false;
         audioDeFondo.pause();
       });
@@ -415,9 +533,11 @@
 
     // El contexto se despierta SIEMPRE, sin mirar `paused`: si lo que
     // quedó dormido es el contexto y no el elemento, este era el
-    // último rescate y tampoco entraba.
-    despertarElContexto();
-    if (audioDeFondo.paused) reproducirLaCancion();
+    // último rescate y tampoco entraba. Y se espera al resume por el
+    // mismo motivo que en alVolverLaPagina().
+    despertarElContexto().then(() => {
+      if (audioDeFondo.paused) reproducirLaCancion();
+    });
   });
 
 
@@ -447,10 +567,12 @@
    * quedaba muda.
    */
   function alIrseLaPagina() {
+    anotar('la página se va');
     if (quiereMusica && !audioDeFondo.paused) audioDeFondo.pause();
   }
 
   function alVolverLaPagina() {
+    anotar('la página vuelve');
     if (!quiereMusica) return;
 
     /* ⚠⚠ ACÁ ESTABA EL BUG (2026-09-04). La condición era
@@ -462,9 +584,15 @@
 
        Ahora son dos preguntas separadas, que es lo que siempre
        fueron: el contexto se despierta pase lo que pase, y play()
-       solo se pide si el elemento de verdad está pausado. */
-    despertarElContexto();
-    if (audioDeFondo.paused) reproducirLaCancion();
+       solo se pide si el elemento de verdad está pausado.
+
+       Y SE ESPERA a que el contexto despierte antes de pedir play():
+       esa carrera es la que dejaba el reproductor en pausa una de
+       cada tres veces. Ver despertarElContexto(). */
+    despertarElContexto().then(() => {
+      if (audioDeFondo.paused) reproducirLaCancion();
+      else anotar('seguía sonando, nada que hacer');
+    });
   }
 
   document.addEventListener('visibilitychange', () => {
