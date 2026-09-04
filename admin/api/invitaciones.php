@@ -132,7 +132,76 @@ function fechaLimiteConfigurada() {
  * @return string La plantilla, con sus huecos sin rellenar.
  */
 function textoDeInvitacionConfigurado() {
-    $original =
+    $original = TEXTO_DE_INVITACION_POR_OMISION;
+
+    if (!existeTabla('ajustes')) return $original;
+
+    $fila  = consultarUno("SELECT valor FROM ajustes WHERE clave = 'texto_invitacion' LIMIT 1");
+    $valor = trim((string) ($fila['valor'] ?? ''));
+
+    if ($valor === '') return $original;
+
+    /* Una copia guardada que es palabra por palabra un texto por
+       omisión VIEJO significa que nadie lo editó nunca: se actualiza
+       al nuevo, que trae los [uno|varios]. Un texto escrito a mano no
+       se toca — el editor explica la sintaxis para que se agregue. */
+    if (in_array($valor, textosPorOmisionAnteriores(), true)) return $original;
+
+    return $valor;
+}
+
+/* ─── EL TEXTO DE LA INVITACIÓN ──────────────────────────────
+
+   ⚠️ LA SINTAXIS [uno|varios] (2026-09-04)
+   El texto le hablaba a un grupo de punta a punta — "contar con
+   ustedes", "a su nombre", "pueden confirmar", "Les pedimos" — aunque
+   la invitación fuera de UN SOLO pase. Son nueve palabras, no una: el
+   arreglo anterior resolvió "lugar/lugares" y dejó las otras ocho.
+
+   Ahora, donde el texto cambia según cuánta gente sea, se escriben las
+   dos formas: [contigo|con ustedes]. La primera es para una persona,
+   la segunda para varias. Ver resolverSingularPlural().
+
+   TIENE QUE SER IDÉNTICO AL DE admin/codigo/48-invitaciones.js. */
+
+const TEXTO_DE_INVITACION_POR_OMISION =
+    "✦ Ania cumple quince años ✦\n\n" .
+    "{nombre}:\n\n" .
+    "Hay fechas que uno quiere recordar acompañado, y esta es una de ellas. " .
+    "Nos dará mucha alegría contar [contigo|con ustedes].\n\n" .
+    "Hemos reservado {lugares} a [tu|su] nombre.\n\n" .
+    "Aquí está [tu|su] invitación. Ahí mismo [puedes|pueden] confirmar y elegir [tu|su] menú:\n" .
+    "{link}\n\n" .
+    "[Te|Les] pedimos confirmar antes del {fecha_limite}. " .
+    "[Puedes|Pueden] modificar [tu|su] respuesta cuantas veces [gustes|gusten] hasta esa fecha.";
+
+/**
+ * Los textos por omisión ANTERIORES, palabra por palabra.
+ *
+ * POR QUÉ HACE FALTA GUARDARLOS
+ * El texto es editable y hay una copia guardada en `ajustes`. Si esa
+ * copia es una versión vieja del texto por omisión —o sea, nadie lo
+ * editó nunca de verdad, solo se guardó tal cual— entonces cambiar el
+ * texto de acá arriba no serviría de nada: se seguiría mandando el
+ * viejo, sin los marcadores, en plural para todos.
+ *
+ * Comparando contra esta lista se puede actualizar ESA copia sin
+ * pisarle el texto a nadie que lo haya escrito a mano.
+ */
+function textosPorOmisionAnteriores() {
+    return [
+        // El original, con la palabra "lugares" pegada al marcador.
+        "✦ Ania cumple quince años ✦\n\n" .
+        "{nombre}:\n\n" .
+        "Hay fechas que uno quiere recordar acompañado, y esta es una de ellas. " .
+        "Nos dará mucha alegría contar con ustedes.\n\n" .
+        "Hemos reservado {lugares} lugares a su nombre.\n\n" .
+        "Aquí está su invitación. Ahí mismo pueden confirmar y elegir su menú:\n" .
+        "{link}\n\n" .
+        "Les pedimos confirmar antes del {fecha_limite}. " .
+        "Pueden modificar su respuesta cuantas veces gusten hasta esa fecha.",
+
+        // El del 2026-09-04 por la mañana, ya sin la palabra pegada.
         "✦ Ania cumple quince años ✦\n\n" .
         "{nombre}:\n\n" .
         "Hay fechas que uno quiere recordar acompañado, y esta es una de ellas. " .
@@ -141,14 +210,22 @@ function textoDeInvitacionConfigurado() {
         "Aquí está su invitación. Ahí mismo pueden confirmar y elegir su menú:\n" .
         "{link}\n\n" .
         "Les pedimos confirmar antes del {fecha_limite}. " .
-        "Pueden modificar su respuesta cuantas veces gusten hasta esa fecha.";
+        "Pueden modificar su respuesta cuantas veces gusten hasta esa fecha.",
+    ];
+}
 
-    if (!existeTabla('ajustes')) return $original;
-
-    $fila  = consultarUno("SELECT valor FROM ajustes WHERE clave = 'texto_invitacion' LIMIT 1");
-    $valor = trim((string) ($fila['valor'] ?? ''));
-
-    return $valor !== '' ? $valor : $original;
+/**
+ * Resuelve los `[uno|varios]` del texto.
+ *
+ * @param string $texto
+ * @param bool   $esUno  true si la invitación es de un solo pase.
+ * @return string
+ */
+function resolverSingularPlural($texto, $esUno) {
+    // Sin corchetes ni barras adentro de cada lado: así un corchete
+    // suelto en el texto no se come media frase.
+    return preg_replace('/\\[([^\\[\\]|]*)\\|([^\\[\\]|]*)\\]/u',
+                        $esUno ? '$1' : '$2', $texto);
 }
 
 /**
@@ -207,7 +284,10 @@ function conLugaresSinPluralPegado($texto) {
 function invitacionComoHtml($plantilla, $inv, $link, $fechaLimite) {
     // Acá y no al leer el ajuste: por esta función pasan la plantilla
     // guardada, la original y cualquiera que llegue de afuera.
-    $texto = conLugaresSinPluralPegado((string) $plantilla);
+    $texto = resolverSingularPlural(
+        conLugaresSinPluralPegado((string) $plantilla),
+        ((int) ($inv['pases'] ?? 0)) === 1
+    );
 
     if ($fechaLimite === '') {
         $renglones = array_filter(

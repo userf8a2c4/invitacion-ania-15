@@ -42,6 +42,10 @@ const HUECOS_DE_LA_INVITACION = [
   { marca: '{lugares}',      rotulo: 'los lugares',     ejemplo: '4 lugares' },
   { marca: '{link}',         rotulo: 'el link',         ejemplo: 'https://aniaxv.com/?i=…' },
   { marca: '{fecha_limite}', rotulo: 'la fecha límite', ejemplo: '10 de octubre' },
+  /* No es un hueco que se rellena: son las DOS formas de decir lo
+     mismo. La primera va a las invitaciones de un solo pase; la
+     segunda, a las de dos o más. Ver resolverSingularPlural(). */
+  { marca: '[tu|su]',        rotulo: 'uno o varios',   ejemplo: 'su' },
 ];
 
 /**
@@ -55,12 +59,49 @@ const TEXTO_INVITACION_ORIGINAL =
   '✦ Ania cumple quince años ✦\n\n' +
   '{nombre}:\n\n' +
   'Hay fechas que uno quiere recordar acompañado, y esta es una de ellas. ' +
+  'Nos dará mucha alegría contar [contigo|con ustedes].\n\n' +
+  'Hemos reservado {lugares} a [tu|su] nombre.\n\n' +
+  'Aquí está [tu|su] invitación. Ahí mismo [puedes|pueden] confirmar y elegir [tu|su] menú:\n' +
+  '{link}\n\n' +
+  '[Te|Les] pedimos confirmar antes del {fecha_limite}. ' +
+  '[Puedes|Pueden] modificar [tu|su] respuesta cuantas veces [gustes|gusten] hasta esa fecha.';
+
+/**
+ * Los textos por omisión ANTERIORES, palabra por palabra.
+ *
+ * El texto es editable y hay una copia guardada en `ajustes`. Si esa
+ * copia es una versión vieja del texto por omisión —o sea, nadie lo
+ * editó nunca de verdad— cambiar el de arriba no serviría de nada: se
+ * seguiría mandando el viejo, en plural para todos. Comparándola contra
+ * esta lista se puede actualizar esa copia sin pisarle el texto a nadie
+ * que lo haya escrito a mano.
+ *
+ * TIENE QUE SER IDÉNTICA a textosPorOmisionAnteriores() en
+ * admin/api/invitaciones.php.
+ */
+const TEXTOS_INVITACION_ANTERIORES = [
+  // El original, con la palabra "lugares" pegada al marcador.
+  '✦ Ania cumple quince años ✦\n\n' +
+  '{nombre}:\n\n' +
+  'Hay fechas que uno quiere recordar acompañado, y esta es una de ellas. ' +
+  'Nos dará mucha alegría contar con ustedes.\n\n' +
+  'Hemos reservado {lugares} lugares a su nombre.\n\n' +
+  'Aquí está su invitación. Ahí mismo pueden confirmar y elegir su menú:\n' +
+  '{link}\n\n' +
+  'Les pedimos confirmar antes del {fecha_limite}. ' +
+  'Pueden modificar su respuesta cuantas veces gusten hasta esa fecha.',
+
+  // El del 2026-09-04 por la mañana, ya sin la palabra pegada.
+  '✦ Ania cumple quince años ✦\n\n' +
+  '{nombre}:\n\n' +
+  'Hay fechas que uno quiere recordar acompañado, y esta es una de ellas. ' +
   'Nos dará mucha alegría contar con ustedes.\n\n' +
   'Hemos reservado {lugares} a su nombre.\n\n' +
   'Aquí está su invitación. Ahí mismo pueden confirmar y elegir su menú:\n' +
   '{link}\n\n' +
   'Les pedimos confirmar antes del {fecha_limite}. ' +
-  'Pueden modificar su respuesta cuantas veces gusten hasta esa fecha.';
+  'Pueden modificar su respuesta cuantas veces gusten hasta esa fecha.',
+];
 
 /** El texto que se está usando: el guardado en ajustes, o el original. */
 let TEXTO_INVITACION = TEXTO_INVITACION_ORIGINAL;
@@ -115,7 +156,14 @@ async function asegurarTextoDeInvitacion(forzar) {
 
   try {
     const r = await traer('ajustes.php?accion=obtener&clave=texto_invitacion');
-    TEXTO_INVITACION = (r && r.valor) ? r.valor : TEXTO_INVITACION_ORIGINAL;
+    const guardado = (r && r.valor) ? r.valor : '';
+
+    /* Una copia guardada que es palabra por palabra un texto por
+       omisión VIEJO significa que nadie lo editó nunca: se usa el nuevo,
+       que trae los [uno|varios]. Un texto escrito a mano se respeta. */
+    TEXTO_INVITACION = (guardado && !TEXTOS_INVITACION_ANTERIORES.includes(guardado))
+      ? guardado
+      : TEXTO_INVITACION_ORIGINAL;
     TEXTO_INVITACION_CARGADO = true;
   } catch (error) {
     TEXTO_INVITACION = TEXTO_INVITACION_ORIGINAL;
@@ -136,6 +184,31 @@ async function asegurarTextoDeInvitacion(forzar) {
  * @param {Object} inv - { nombre, pases, link }
  * @returns {string}
  */
+/**
+ * Resuelve los `[uno|varios]` del texto.
+ *
+ * ⚠️ POR QUÉ EXISTE (2026-09-04)
+ * El texto le hablaba a un grupo de punta a punta — "contar con
+ * ustedes", "a su nombre", "pueden confirmar", "Les pedimos" — aunque
+ * la invitación fuera de UN SOLO pase. Son nueve palabras, no una: el
+ * arreglo del plural de "lugares" resolvió la primera y dejó las ocho
+ * restantes, y el mensaje siguió sonando raro para quien viene solo.
+ *
+ * TIENE QUE DECIR LO MISMO QUE resolverSingularPlural() en
+ * admin/api/invitaciones.php: son los dos canales de la misma
+ * invitación.
+ *
+ * @param {string} texto
+ * @param {boolean} esUno
+ * @returns {string}
+ */
+function resolverSingularPlural(texto, esUno) {
+  // Sin corchetes ni barras adentro de cada lado: así un corchete
+  // suelto en el texto no se come media frase.
+  return String(texto).replace(/\[([^\[\]|]*)\|([^\[\]|]*)\]/g,
+                               (todo, uno, varios) => (esUno ? uno : varios));
+}
+
 /**
  * "1 lugar" / "4 lugares", con el número adelante.
  *
@@ -179,7 +252,8 @@ function rellenarHuecosDeInvitacion(plantilla, inv) {
       .join('\n');
   }
 
-  return conLugaresSinPluralPegado(texto)
+  return resolverSingularPlural(conLugaresSinPluralPegado(texto),
+                                Number(inv.pases) === 1)
     .split('{nombre}').join(inv.nombre || '')
     .split('{lugares}').join(inv.pases == null ? '' : lugaresEnPalabras(inv.pases))
     .split('{link}').join(inv.link || '')

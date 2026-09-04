@@ -43,6 +43,18 @@
 #  Apache, el .htaccess de una subcarpeta manda sobre el de arriba.)
 # ══════════════════════════════════════════════════════════════════════
 
+# ─── El juego de caracteres, declarado en la cabecera ───────────────────
+# El servidor mandaba `Content-Type: text/html` a secas, sin charset. Un
+# navegador lo resuelve mirando el <meta charset> del documento, pero un
+# lector estricto —el robot que arma la vista previa de WhatsApp, por
+# ejemplo— tiene que adivinar antes de empezar a leer.
+#
+# index.html además empezaba con un BOM: tres bytes invisibles ANTES del
+# <!DOCTYPE html>, que era la otra mitad del mismo problema. Ese ya se
+# quitó del archivo; esto cierra el otro lado, declarándolo de una vez
+# para todo lo que se sirve.
+AddDefaultCharset UTF-8
+
 # ─── Proteger archivos secretos ─────────────────────────────────────────
 # Sin esto, cualquiera puede escribir aniaxv.com/.env en el navegador y
 # leer la contraseña del correo y la de la base de datos en texto plano.
