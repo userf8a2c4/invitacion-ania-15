@@ -261,6 +261,10 @@ const CONFIGURACION = {
            en su menú como cualquier otra herramienta. */
         ['compartir', 'Mandar los datos del evento a un proveedor por WhatsApp', true],
         ['importar',  'Cargar invitados o gastos desde una hoja de cálculo'],
+        /* Solo admin, igual que el resto del dinero: direcciones.php
+           usa exigirAdministrador() y una cuenta de entrada recibiría un
+           403 después de haberlo visto en su menú. */
+        ['direcciones', 'Dónde recibes las compras que le pides al equipo', true],
         // ⚡ (2026-08-28) Antes las etiquetas de acomodo (Entrega 2) solo
         // se podían crear o ver desde adentro de la ficha de una persona
         // o de una mesa — no había ningún lugar central para verlas

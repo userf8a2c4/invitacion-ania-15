@@ -330,6 +330,7 @@ $tablasEsperadas = [
     'escrituras_hechas', 'envios_proveedor', 'acomodo_respaldo',
     'etiquetas', 'etiquetas_asignadas',
     'chat_hilos', 'chat_mensajes', 'chat_propuestas',
+    'direcciones_entrega',
 ];
 
 $faltantes = [];

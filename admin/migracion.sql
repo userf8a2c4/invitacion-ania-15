@@ -1275,3 +1275,39 @@ CREATE TABLE IF NOT EXISTS chat_propuestas (
   creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY por_mensaje (mensaje_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- DÓNDE SE ENTREGAN LAS COMPRAS (2026-09-04)
+--
+-- Los lugares a los que puede llegar algo que Lucila compre con ayuda
+-- del equipo: la casa, el salón, la casa de su mamá. En cada compra se
+-- elige uno.
+--
+-- SON DEL EVENTO, NO DE CADA CUENTA. Hay una sola fiesta y una sola
+-- lista; quien administra las ve y las edita todas. No tendría sentido
+-- que la dirección del salón fuera "de" alguien.
+--
+-- `activa` EXISTE PARA NO BORRAR. Una compra vieja tiene que poder
+-- seguir diciendo a dónde se entregó: si se borrara la fila, ese pedido
+-- quedaría apuntando a la nada. Quitar una dirección la saca de la
+-- lista para elegir y la deja guardada.
+-- ══════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS direcciones_entrega (
+  id                INT AUTO_INCREMENT PRIMARY KEY,
+  -- Cómo la reconoce ella: "Casa", "Salón", "Casa de mi mamá".
+  alias             VARCHAR(60) NOT NULL,
+  calle             VARCHAR(200) NOT NULL,
+  colonia           VARCHAR(120) NOT NULL DEFAULT '',
+  ciudad            VARCHAR(120) NOT NULL DEFAULT '',
+  estado            VARCHAR(120) NOT NULL DEFAULT '',
+  cp                VARCHAR(10) NOT NULL DEFAULT '',
+  -- Cómo llegar: el portón verde, tocar en el 3B. Texto libre porque
+  -- una referencia útil nunca entra en un campo con forma.
+  referencias       TEXT,
+  telefono_contacto VARCHAR(40) NOT NULL DEFAULT '',
+  es_predeterminada TINYINT(1) NOT NULL DEFAULT 0,
+  activa            TINYINT(1) NOT NULL DEFAULT 1,
+  creado_en         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY por_activa (activa)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
