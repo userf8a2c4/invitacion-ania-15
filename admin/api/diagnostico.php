@@ -216,6 +216,59 @@ if (existeTabla('padrinos')) {
 }
 
 
+/* ─── 4C. ¿EL RESPALDO PUEDE SIQUIERA GUARDAR ALGO? ───────────────────── */
+/*
+ * ⚡ AGREGADO EN LA AUDITORÍA FINAL (2026-09-04)
+ *
+ * El respaldo semanal puede llegar VACÍO sin que nadie se entere. Son
+ * dos condiciones que se comprueban recién cuando el cron corre, a las
+ * tres de la mañana de un domingo, y cuyo único rastro es una línea en
+ * el error_log del servidor que del lado de Lucila nadie lee:
+ *
+ *   · Sin RESPALDO_CLAVE en el .env no se adjunta NADA. El correo llega
+ *     igual, con su tabla de registros y todo — parece que funcionó.
+ *   · Sin ZipArchive tampoco, por el mismo camino.
+ *
+ * O sea que se puede pasar meses recibiendo un correo semanal que dice
+ * "respaldo" y no tener ni una copia. Que es, con otra ropa, exactamente
+ * lo que ya pasó en agosto de 2026.
+ *
+ * Acá se contestan las dos, más la fecha del último respaldo y cuántos
+ * archivos hay en la base que ya no están en el disco — el síntoma de
+ * aquel incidente.
+ */
+$claveDeRespaldo = (string) env('RESPALDO_CLAVE', '');
+$puedeCifrar = class_exists('ZipArchive') &&
+               method_exists('ZipArchive', 'setEncryptionName');
+
+$ultimoRespaldo = null;
+if (existeTabla('ajustes')) {
+    $filaUltimo = consultarUno(
+        "SELECT valor FROM ajustes WHERE clave = 'ultimo_respaldo'");
+    if ($filaUltimo) $ultimoRespaldo = json_decode((string) $filaUltimo['valor'], true);
+}
+
+/* Filas que apuntan a un archivo que ya no está. No es un problema del
+   respaldo: es la prueba de que algo se perdió y de que hace falta. */
+$archivosHuerfanos = 0;
+$carpetaDeArchivos = dirname(__DIR__) . '/archivos';
+if (existeTabla('archivos')) {
+    foreach (consultarTodo('SELECT nombre_disco FROM archivos') as $f) {
+        if (!is_file($carpetaDeArchivos . '/' . basename($f['nombre_disco']))) {
+            $archivosHuerfanos++;
+        }
+    }
+}
+
+$respaldoSirve = $claveDeRespaldo !== '' && $puedeCifrar;
+
+$diasSinRespaldo = null;
+if ($ultimoRespaldo && !empty($ultimoRespaldo['cuando'])) {
+    $cuando = strtotime((string) $ultimoRespaldo['cuando']);
+    if ($cuando) $diasSinRespaldo = (int) floor((time() - $cuando) / 86400);
+}
+
+
 /* ─── 5. RESPUESTA ────────────────────────────────────────────────────── */
 
 responderBien([
@@ -248,4 +301,22 @@ responderBien([
         'conexion_directa' => $socketImap,
     ],
     'archivos' => $archivos,
+
+    /* Ver la sección 4C. `puede_respaldar` en false significa que el
+       correo semanal llega SIN adjunto: hay que arreglarlo antes que
+       cualquier otra cosa de esta lista. */
+    'respaldo' => [
+        'puede_respaldar'      => $respaldoSirve,
+        'tiene_clave'          => $claveDeRespaldo !== '',
+        'puede_cifrar_zip'     => $puedeCifrar,
+        'ultimo'               => $ultimoRespaldo ? ($ultimoRespaldo['cuando'] ?? null) : null,
+        'dias_sin_respaldo'    => $diasSinRespaldo,
+        'archivos_huerfanos'   => $archivosHuerfanos,
+        'que_es'               => $respaldoSirve
+            ? 'El respaldo puede adjuntar y cifrar. Revisá "dias_sin_respaldo".'
+            : ($claveDeRespaldo === ''
+                ? 'FALTA RESPALDO_CLAVE en el .env: el correo semanal llega SIN adjunto.'
+                : 'Este servidor no puede cifrar ZIP: el respaldo NO se adjunta, ' .
+                  'a propósito, para no mandar datos privados en claro.'),
+    ],
 ]);

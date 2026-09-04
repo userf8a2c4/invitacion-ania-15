@@ -386,7 +386,8 @@ async function abrirHojaDeRespaldo() {
         '<button type="button" class="boton boton--principal boton--ancho" ' +
                 'id="respaldo-correr" style="margin-top:var(--esp-3)">' +
           'Respaldar ahora' +
-        '</button>';
+        '</button>' +
+        bloqueDeDescargarTodo();
     } else {
       const dias = diasHasta(String(estado.cuando).slice(0, 10));
       const haceCuanto = dias === 0 ? 'hoy'
@@ -420,7 +421,8 @@ async function abrirHojaDeRespaldo() {
         '<button type="button" class="boton boton--principal boton--ancho" ' +
                 'id="respaldo-correr" style="margin-top:var(--esp-3)">' +
           'Respaldar ahora' +
-        '</button>';
+        '</button>' +
+        bloqueDeDescargarTodo();
     }
 
     buscar('#respaldo-correr', donde).addEventListener('click', async () => {
@@ -438,9 +440,84 @@ async function abrirHojaDeRespaldo() {
         boton.textContent = 'Respaldar ahora';
       }
     });
+
+    engancharDescargarTodo(donde);
   };
 
   pintar();
+}
+
+/**
+ * El bloque "Descargar todo", que va debajo de "Respaldar ahora".
+ *
+ * POR QUÉ SON DOS BOTONES Y NO UNO
+ * Hacen cosas distintas y se usan en momentos distintos:
+ *
+ *   · Respaldar ahora   → manda el correo semanal a mano. Entra la base
+ *     entera y hasta 12 MB de archivos, que es lo que tolera un correo.
+ *     Es la red de seguridad de todas las semanas.
+ *   · Descargar todo    → se baja acá, ahora, la base entera MÁS TODOS
+ *     los archivos, sin tope. Es lo que hay que hacer antes de tocar el
+ *     hosting o de subir una versión nueva.
+ *
+ * El texto de abajo lo dice con esas palabras a propósito: si hay que
+ * adivinar cuál de los dos usar, el que sabe no está en la pantalla.
+ *
+ * @returns {string} HTML
+ */
+function bloqueDeDescargarTodo() {
+  return '' +
+    '<div style="margin-top:var(--esp-4);padding-top:var(--esp-3);' +
+                'border-top:1px solid var(--borde)">' +
+      '<button type="button" class="boton boton--ancho" id="respaldo-bajar">' +
+        'Descargar todo' +
+      '</button>' +
+      '<p class="vacio__texto" style="margin-top:var(--esp-2);font-size:13px">' +
+        'Se baja a este dispositivo un ZIP con la base entera y ' +
+        '<strong>todos</strong> los archivos, sin el tope de peso del correo. ' +
+        'Hazlo antes de subir una versión nueva o de tocar el hosting.<br>' +
+        'Se abre con la misma contraseña que los respaldos del correo.' +
+      '</p>' +
+    '</div>';
+}
+
+/**
+ * Engancha el botón "Descargar todo".
+ *
+ * Pasa por bajarDelServidor() (03-servidor.js) y no por window.open()
+ * ni por un enlace: la sesión del panel viaja en la cabecera
+ * `Authorization`, y una pestaña nueva sale sin ella — el servidor
+ * contestaría 401 y la descarga no funcionaría nunca.
+ *
+ * @param {Element} donde
+ * @returns {void}
+ */
+function engancharDescargarTodo(donde) {
+  const boton = buscar('#respaldo-bajar', donde);
+  if (!boton) return;
+
+  boton.addEventListener('click', async () => {
+    if (!navigator.onLine) {
+      avisar('Necesitas conexión para bajar el respaldo.', true);
+      return;
+    }
+
+    boton.disabled = true;
+    boton.textContent = 'Armando el archivo…';
+
+    try {
+      await bajarDelServidor(
+        'cron_respaldo.php?accion=descargar',
+        'ania-xv-completo-' + hoyEnFecha() + '.zip'
+      );
+      avisar('Listo, revisa tus descargas.');
+    } catch (error) {
+      avisar(error.message, true);
+    } finally {
+      boton.disabled = false;
+      boton.textContent = 'Descargar todo';
+    }
+  });
 }
 
 /* La gestión de avisos y la instalación viven en 15-instalar-y-avisos.js:
