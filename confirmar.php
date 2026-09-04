@@ -413,6 +413,27 @@ try {
                  VALUES (:conf, :nombre, :tipo, :menu, :alergias)'
             );
 
+            /* ⚡ EL PRIMER LUGAR CONSERVA SU NOMBRE AL GUARDAR (2026-09-04)
+               invitacion.php ya le pone a ese primer lugar el nombre de
+               quien recibe la invitación, pero acá se guardaba con
+               `nombre => ''` — así que el nombre se veía en el formulario
+               y se perdía en cuanto la persona confirmaba. Después el
+               panel y el pase volvían a decir «Adulto 1».
+
+               La condición: solo cuando NINGUNO de los lugares tiene id,
+               que es exactamente el caso en que invitacion.php los
+               sintetizó porque el grupo no tenía a nadie cargado. Si
+               alguno ya existía, este grupo ya tiene nombres puestos a
+               mano y no hay que suponer nada sobre quién es quién.
+
+               El nombre sale del servidor, no de lo que mandó el
+               navegador: es el mismo criterio que el código del pase. */
+            $ningunoTieneFila = true;
+            foreach ($personasRecibidas as $unaPersona) {
+                if ((int) ($unaPersona['id'] ?? 0) > 0) { $ningunoTieneFila = false; break; }
+            }
+            $faltaPonerElNombre = $ningunoTieneFila;
+
             foreach ($personasRecibidas as $persona) {
                 $idPersona = (int) ($persona['id'] ?? 0);
 
@@ -433,10 +454,18 @@ try {
                 }
 
                 // Sin id: es un lugar apartado que todavía no tiene fila.
+                $esAdulto = (($persona['tipo'] ?? '') !== 'nino');
+
+                $nombreDeEsteLugar = '';
+                if ($faltaPonerElNombre && $esAdulto) {
+                    $nombreDeEsteLugar = mb_substr((string) ($invitacion['nombre'] ?? ''), 0, 150);
+                    $faltaPonerElNombre = false;
+                }
+
                 $stmtNuevaPersona->execute([
                     ':conf'     => (int) $invitacion['confirmacion_id'],
-                    ':nombre'   => '',
-                    ':tipo'     => (($persona['tipo'] ?? '') === 'nino') ? 'nino' : 'adulto',
+                    ':nombre'   => $nombreDeEsteLugar,
+                    ':tipo'     => $esAdulto ? 'adulto' : 'nino',
                     ':menu'     => $menuElegido,
                     ':alergias' => $alergiaElegida,
                 ]);
@@ -724,6 +753,14 @@ if ($errorBD !== null) {
         'ok'      => true,
         'mensaje' => 'Confirmación registrada.',
         'avisos'  => $errores,   // vacío cuando todo salió bien
+        /* ⚡ EL CÓDIGO QUE DE VERDAD QUEDÓ GUARDADO (2026-09-04)
+           $codigo acá ya es el bueno: si la invitación existía, más
+           arriba se reescribió con el de la base (el que hizo el panel);
+           si no, es el que se acaba de insertar. Devolverlo cierra el
+           círculo — el navegador puede corregir lo que muestra y lo que
+           guarda, aunque hubiera llegado con uno inventado.
+           Ver la nota de 'codigo' en invitacion.php. */
+        'codigo'  => $codigo,
     ]);
 
     if (!empty($errores)) {

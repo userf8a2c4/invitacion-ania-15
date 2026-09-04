@@ -129,7 +129,8 @@ if ($token === '' || strlen($token) < 8) {
 try {
     $stmt = $pdo->prepare(
         'SELECT i.id, i.nombre, i.correo, i.pases, i.estado, i.confirmacion_id,
-                c.asiste, c.adultos, c.ninos, c.resumen_menus, c.alergias
+                c.asiste, c.adultos, c.ninos, c.resumen_menus, c.alergias,
+                c.codigo
          FROM invitaciones i
          LEFT JOIN confirmaciones c ON c.id = i.confirmacion_id
          WHERE i.token = :t LIMIT 1'
@@ -217,8 +218,26 @@ if (!$personas) {
     $cuantosNinos = min($ninosQueDijo, $cupo);
     $cuantosAdultos = $cupo - $cuantosNinos;
 
+    /* ⚡ EL PRIMER LUGAR LLEVA EL NOMBRE DE LA INVITACIÓN (2026-09-04)
+       Los demás quedan vacíos y el navegador los rotula «Adulto 2»,
+       «Niño 1» (etiquetaDeLugar(), 11-formulario-confirmacion.js) — está
+       bien, porque de verdad no se sabe quiénes son.
+
+       Pero el PRIMERO sí se sabe: es la persona a la que va dirigida
+       esta invitación, y su nombre está acá al lado, en
+       `invitaciones.nombre`. Llamarla «Adulto 1» en su propia invitación
+       —y después en su pase— era perder el único nombre que teníamos.
+
+       Es el mismo criterio que ya toma el importador al crear lugares de
+       relleno (admin/api/importar.php: el primer adulto usa el nombre de
+       la fila). Acá se estaba haciendo distinto sin querer.
+
+       Solo el primer ADULTO: si el cupo fuera todo de niños no se pone,
+       porque no hay forma de saber cuál de ellos es. */
     for ($i = 0; $i < $cuantosAdultos; $i++) {
-        $personas[] = ['id' => null, 'nombre' => '', 'tipo' => 'adulto',
+        $personas[] = ['id' => null,
+                       'nombre' => $i === 0 ? (string) ($inv['nombre'] ?? '') : '',
+                       'tipo' => 'adulto',
                        'menu' => '', 'alergias' => ''];
     }
     for ($i = 0; $i < $cuantosNinos; $i++) {
@@ -252,6 +271,23 @@ echo json_encode([
     'estado'            => $inv['estado'],
     'ya_respondio'      => $yaRespondio,
     'cerrado'           => $cerrado,
+    /* ⚡ EL CÓDIGO DEL PASE, EL DE VERDAD (2026-09-04)
+       Sin esto, el navegador se INVENTABA uno
+       (12-pase-de-acceso.js, generarCodigoDePase) y el invitado veía en
+       su pase, y en el QR de su correo, un código que no existía en la
+       base. El de la base lo genera el panel al crear la invitación
+       (admin/api/invitaciones.php) y es el que busca el escáner de la
+       puerta: eran dos verdades distintas para la misma persona.
+
+       Se descubrió probando el escáner en PBE: el pase decía
+       XV-04D3-B7X1, el panel XV-B2B47E, y buscar el primero contestaba
+       "No encontré a nadie con eso". La noche del evento eso son 114
+       personas en la puerta y ningún pase que sirva.
+
+       Viaja vacío cuando todavía no hay confirmación asociada; ahí el
+       navegador sigue generando el suyo, que es el comportamiento
+       correcto para el formulario abierto de toda la vida. */
+    'codigo'            => (string) ($inv['codigo'] ?? ''),
     /* Cuántas veces contestó este grupo. Se muestra en la invitación solo
        si ya contestó al menos una vez, para que se note si algo se mandó
        dos veces sin querer. La columna se agrega desde el instalador del

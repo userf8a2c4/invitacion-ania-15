@@ -87,4 +87,70 @@
     pintarBoton(nuevoApagado);
   });
 
+
+  /* ─── 4. SE APARTA AL BAJAR, Y VUELVE AL SUBIR ───────────────────────
+
+     POR QUÉ
+     El botón es `position: fixed` y va por encima de todo, así que tapa
+     lo que quede arriba mientras se hace scroll. Tapaba el rótulo de la
+     sección en el teléfono de una invitada.
+
+     POR QUÉ NO SE ESCONDE Y YA
+     Porque su razón de ser es poder apagar el movimiento CUANDO MOLESTA,
+     y eso se descubre leyendo, no en la portada. Si desapareciera para
+     siempre al bajar, el equipo lento que más lo necesita se quedaría sin
+     él. Volviendo al subir sigue estando a un gesto de distancia.
+
+     ESCONDER ES TAREA DE ACÁ, NO DEL CSS. El CSS lo deja visible; este
+     archivo agrega `.esta-oculto`. Si este archivo no baja, se pierde el
+     efecto y nunca el botón. Ver la nota grande en
+     estilos/01-fundamentos.css. */
+
+  /** Hasta dónde se considera "arriba del todo": ahí siempre se ve. */
+  const ZONA_DE_ARRIBA = 120;
+
+  /** Cuánto hay que moverse para que cuente como subir o bajar. Sin este
+      margen, el temblor de un scroll con el dedo lo haría parpadear. */
+  const TEMBLOR = 6;
+
+  let ultimaAltura = scrollActualY();
+  let hayCuadroPedido = false;
+
+  /**
+   * Decide si el botón se ve, según hacia dónde se está yendo.
+   * @returns {void}
+   */
+  function acomodarElBoton() {
+    hayCuadroPedido = false;
+
+    const altura = scrollActualY();
+
+    /* Arriba del todo siempre se ve: es donde se abre la invitación y
+       donde alguien lo busca por primera vez. */
+    if (altura <= ZONA_DE_ARRIBA) {
+      boton.classList.remove('esta-oculto');
+    } else if (altura > ultimaAltura + TEMBLOR) {
+      boton.classList.add('esta-oculto');      // bajando: estorba
+    } else if (altura < ultimaAltura - TEMBLOR) {
+      boton.classList.remove('esta-oculto');   // subiendo: lo están buscando
+    }
+
+    ultimaAltura = altura;
+  }
+
+  /* Un solo cálculo por cuadro, igual que el resto de los efectos de
+     scroll de esta web (ver 08-efectos-de-scroll.js). */
+  window.addEventListener('scroll', () => {
+    if (hayCuadroPedido) return;
+    hayCuadroPedido = true;
+    requestAnimationFrame(acomodarElBoton);
+  }, { passive: true });
+
+  /* Al volver desde el historial la página se restaura a media altura y
+     sin disparar 'scroll': sin esto, el botón podría quedar escondido
+     con la persona parada arriba del todo. */
+  window.addEventListener('pageshow', acomodarElBoton);
+
+  acomodarElBoton();
+
 })();

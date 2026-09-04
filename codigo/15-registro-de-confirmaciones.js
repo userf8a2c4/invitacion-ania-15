@@ -32,7 +32,12 @@
  * Se llama SIEMPRE, asista o no el invitado.
  *
  * @param {Object} datos - Los datos de la confirmación.
- * @returns {Promise<boolean>} true si el servidor confirmó que guardó.
+ * @returns {Promise<Object|null>} La respuesta del servidor si guardó
+ *   (trae `ok` y el `codigo` de verdad), o null si no se pudo.
+ *
+ * ⚡ ANTES DEVOLVÍA true/false (2026-09-04). Ahora devuelve la respuesta
+ * entera porque el que llama necesita UN dato más: el código del pase
+ * que quedó en la base. Ver la nota en invitacion.php.
  */
 async function enviarAlServidor(datos) {
   try {
@@ -62,21 +67,22 @@ async function enviarAlServidor(datos) {
 
     if (!respuesta.ok) {
       console.warn('[Ania XV] El servidor respondió con error HTTP:', respuesta.status);
-      return false;
+      return null;
     }
 
     const json = await respuesta.json();
-    if (json.ok) {
+    if (json && json.ok) {
       console.info('[Ania XV] ✅ Confirmación guardada en MySQL y correos enviados.');
-      return true;
+      return json;
     } else {
-      console.warn('[Ania XV] El servidor devolvió ok:false, ', json.error ?? 'sin detalle');
-      return false;
+      console.warn('[Ania XV] El servidor devolvió ok:false, ',
+                   (json && json.error) ?? 'sin detalle');
+      return null;
     }
 
   } catch (error) {
     console.warn('[Ania XV] No se pudo contactar con confirmar.php:', error);
-    return false;
+    return null;
   }
 }
 

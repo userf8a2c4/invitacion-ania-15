@@ -130,11 +130,37 @@ function abrirImportador() {
 
     '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
       'En Google Sheets o Excel, selecciona las filas <strong>incluyendo ' +
-      'la de los títulos</strong>, copia con Ctrl+C, y pega aquí abajo.' +
+      'la de los títulos</strong>, copia con Ctrl+C, y pega aquí abajo. ' +
+      'O sube un archivo, que para listas largas es más cómodo.' +
     '</p>' +
 
+    /* ⚡ MUDAR LA LISTA DE UN ENTORNO A OTRO (2026-09-04)
+       La lista de invitados se carga una vez y hay que tenerla en los
+       dos lados. Reescribir 51 familias a mano es horas de tipeo y una
+       fuente de errores. Las dos mitades viven acá, juntas y en orden:
+       se baja de un entorno y se sube en el otro. */
+    '<div class="tarjeta" style="padding:var(--esp-2);margin-bottom:var(--esp-3)">' +
+      '<p class="campo__rotulo" style="margin:0 0 var(--gota)">' +
+        'Mudar la lista a otro entorno' +
+      '</p>' +
+      '<p class="vacio__texto" style="margin:0 0 var(--esp-2)">' +
+        'Descarga la lista completa de aquí y súbela allá con el selector ' +
+        'de abajo. <strong>No hace falta abrir el archivo</strong>: si lo ' +
+        'abres en Excel y lo vuelves a guardar, los acentos se rompen.' +
+      '</p>' +
+      '<button class="boton" id="imp-bajar-lista">' +
+        'Descargar la lista de este entorno' +
+      '</button>' +
+    '</div>' +
+
     '<label class="campo">' +
-      '<span class="campo__rotulo">Pega aquí</span>' +
+      '<span class="campo__rotulo">Sube el archivo</span>' +
+      '<input type="file" id="imp-archivo" ' +
+             'accept=".csv,.txt,text/csv,text/plain">' +
+    '</label>' +
+
+    '<label class="campo">' +
+      '<span class="campo__rotulo">…o pega aquí</span>' +
       '<textarea id="imp-pegado" class="campo__control" style="min-height:150px" ' +
                 'placeholder="Ctrl+V"></textarea>' +
     '</label>' +
@@ -157,6 +183,33 @@ function abrirImportador() {
 
   buscar('#imp-analizar', cuerpo).addEventListener('click', () =>
     analizarLoPegado(cuerpo));
+
+  /* ⚡ EL ARCHIVO ENTRA POR EL MISMO CAMINO QUE EL PEGADO (2026-09-04)
+     Se vuelca en el mismo <textarea> y se llama al mismo analizador. No
+     hay una segunda ruta que mantener, ni una vista previa que se
+     comporte distinto según por dónde entraron los datos — que es
+     exactamente el tipo de diferencia que después nadie prueba.
+
+     Y queda a la vista en el cuadro de texto: si el archivo trae algo
+     raro, se ve antes de importar y se puede corregir a mano. */
+  const entradaDeArchivo = buscar('#imp-archivo', cuerpo);
+  entradaDeArchivo.addEventListener('change', () => {
+    const archivo = entradaDeArchivo.files && entradaDeArchivo.files[0];
+    if (!archivo) return;
+
+    const lector = new FileReader();
+    lector.onload = () => {
+      area.value = String(lector.result || '');
+      analizarLoPegado(cuerpo);
+    };
+    lector.onerror = () => avisar('No pude leer ese archivo.', true);
+
+    // UTF-8 explícito: es como lo escribe el exportador del panel.
+    lector.readAsText(archivo, 'UTF-8');
+  });
+
+  buscar('#imp-bajar-lista', cuerpo).addEventListener('click', () =>
+    exportarParaMudanza());
 
   buscarTodos('[data-que]', cuerpo).forEach(boton => {
     boton.addEventListener('click', () => {

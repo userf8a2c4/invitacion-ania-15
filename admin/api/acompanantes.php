@@ -15,6 +15,7 @@
 
    QUÉ SE LE PUEDE PEDIR
      GET  ?accion=listar&confirmacion_id=…   los que ya se cargaron
+     GET  ?accion=listar_todos               los de TODAS las familias
      POST ?accion=agregar                    uno nuevo
      POST ?accion=editar                     corrige uno que ya existe
      POST ?accion=borrar                     saca uno de la lista
@@ -46,6 +47,37 @@ case 'listar':
     $filas = consultarTodo(
         'SELECT * FROM acompanantes WHERE confirmacion_id = :c ORDER BY id',
         [':c' => $confirmacionId]
+    );
+
+    responderBien(['filas' => $filas]);
+    break;
+
+/* ─── LISTAR TODOS ────────────────────────────────────────────────────
+   Los integrantes de todas las familias, en una sola consulta.
+
+   POR QUÉ EXISTE, Y POR QUÉ NO ALCANZA CON 'listar' (2026-09-04)
+   'listar' pide de a una confirmación, que es lo correcto para la ficha
+   de una familia: se abre una, se piden los suyos. Pero para BAJAR LA
+   LISTA ENTERA —mudar los invitados de un entorno a otro— haría falta
+   una petición por familia: cincuenta y una en el caso de Ania.
+
+   Este panel ya se comió un 429 del hosting por hacer veinte peticiones
+   al arrancar (ver la nota de 20-arranque.js). Cincuenta y una seguidas
+   es pedirlo de nuevo, y encima para algo que una sola consulta resuelve.
+
+   DEVUELVE LO JUSTO, A PROPÓSITO
+   Solo de quién es cada integrante, cómo se llama y si es adulto o niño.
+   Ni menús ni alergias: eso pertenece a la confirmación de cada uno y no
+   viaja en una mudanza —- quien se muda es la lista de gente, no lo que
+   ya contestaron. Menos datos saliendo del servidor es también menos que
+   filtrar si algo sale mal. */
+case 'listar_todos':
+    exigirMetodo('GET');
+
+    $filas = consultarTodo(
+        'SELECT confirmacion_id, nombre, tipo
+           FROM acompanantes
+          ORDER BY confirmacion_id, id'
     );
 
     responderBien(['filas' => $filas]);
