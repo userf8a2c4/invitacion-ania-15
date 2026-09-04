@@ -614,6 +614,15 @@ function pintarVacio(donde, titulo, texto, guino) {
 /**
  * Pinta un error con botón de reintentar.
  *
+ * ⚠️ EL BOTÓN ESPERA SI EL SERVIDOR DIJO "BASTA" (2026-09-04)
+ * El techo del hosting es de 300 peticiones cada 5 minutos POR IP —
+ * compartido por todo el equipo. Cuando se agota, el servidor contesta
+ * 429, y hasta acá el botón reintentaba en el acto: cada toque gastaba
+ * otra petición de la cuota que ya estaba agotada, y hundía un poco más
+ * el panel de todos. Ahora, mientras dure el retroceso que anotó
+ * pedir() (03-servidor.js), el botón se muestra deshabilitado con la
+ * cuenta atrás y se habilita solo cuando de verdad sirve tocarlo.
+ *
  * @param {Element} donde
  * @param {string} mensaje
  * @param {Function} reintentar
@@ -631,7 +640,93 @@ function pintarError(donde, mensaje, reintentar) {
     '</div>';
 
   const boton = buscar('#reintentar', donde);
-  if (boton && reintentar) boton.addEventListener('click', reintentar);
+  if (!boton) return;
+  if (reintentar) boton.addEventListener('click', reintentar);
+
+  const faltan = typeof segundosDeEsperaDelServidor === 'function'
+    ? segundosDeEsperaDelServidor()
+    : 0;
+  if (faltan > 0) esperarParaReintentar(boton, faltan);
+}
+
+/**
+ * Corre una acción recién cuando el dato que necesita esté cargado.
+ *
+ * POR QUÉ EXISTE (2026-09-04)
+ * Varias pantallas hacen irA('dinero') y después de 600-700 ms tocan
+ * DINERO.proveedores o EVENTO.corte_honor, confiando en que para
+ * entonces la vista ya cargó. Con la red lenta no cargó: DINERO todavía
+ * es null, y el `|| []` que había protegía de que faltara la PROPIEDAD,
+ * no de que el objeto entero fuera null. La ficha no abría y no se veía
+ * ningún error — quedaba en la consola, donde nadie mira.
+ *
+ * Esperar a que el dato esté es lo correcto, y si no llega hay que
+ * DECIRLO. Un tiempo fijo no puede acertar en las dos redes.
+ *
+ * @param {Function} hayDatos - Devuelve algo verdadero cuando ya se puede.
+ * @param {Function} hacer - Lo que se quería hacer.
+ * @param {string} queFaltaba - Para el aviso, si nunca llega.
+ * @returns {void}
+ *
+ * @example
+ *   alTenerLosDatos(
+ *     () => DINERO && DINERO.proveedores,
+ *     () => formularioProveedor(p),
+ *     'la lista de proveedores'
+ *   );
+ */
+function alTenerLosDatos(hayDatos, hacer, queFaltaba) {
+  const limite = Date.now() + 8000;
+
+  const mirar = () => {
+    let listo = false;
+    try { listo = !!hayDatos(); } catch (error) { listo = false; }
+
+    if (listo) { hacer(); return; }
+
+    if (Date.now() > limite) {
+      avisar('No se pudo abrir: ' + queFaltaba + ' no terminó de cargar. ' +
+             'Vuelve a intentarlo.', true);
+      return;
+    }
+
+    setTimeout(mirar, 150);
+  };
+
+  mirar();
+}
+
+/**
+ * Deshabilita el botón de reintentar y le pone la cuenta atrás.
+ *
+ * Se apoya en que el botón esté en el DOM: si la vista se repinta o se
+ * navega a otro lado, document.contains() da false y el temporizador se
+ * corta solo. Sin eso quedaría uno vivo por cada error mostrado.
+ *
+ * @param {Element} boton
+ * @param {number} segundos
+ * @returns {void}
+ */
+function esperarParaReintentar(boton, segundos) {
+  const rotulo = boton.textContent;
+  let faltan = segundos;
+
+  const pintar = () => {
+    boton.disabled = true;
+    boton.textContent = 'Reintentar en ' + faltan + ' s';
+  };
+  pintar();
+
+  const reloj = setInterval(() => {
+    if (!document.contains(boton)) { clearInterval(reloj); return; }
+
+    faltan -= 1;
+    if (faltan > 0) { pintar(); return; }
+
+    clearInterval(reloj);
+    boton.disabled = false;
+    boton.textContent = rotulo;
+  }, 1000);
 }
 
 

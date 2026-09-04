@@ -102,6 +102,7 @@ async function dibujarGente() {
      apuntando a un contenedor vacío y no se volvería a pintar nunca. */
   Object.keys(GENTE_CARGADA).forEach(k => { delete GENTE_CARGADA[k]; });
 
+
   vista.innerHTML =
     '<div class="filtros" style="margin-bottom:6px">' +
       secciones.map(s =>
@@ -594,6 +595,32 @@ function actualizarBarraSeleccion() {
 
   const texto = buscar('#seleccion-cuantos', barra);
   if (texto) texto.textContent = pluralizar(cuantos, 'seleccionado', 'seleccionados');
+}
+
+/**
+ * Olvida el modo selección al dejar la pantalla de Gente.
+ *
+ * ⚠️ POR QUÉ HACE FALTA (2026-09-04)
+ * SELECCION_ACTIVA y SELECCIONADOS viven en este archivo y no se
+ * reiniciaban nunca. Marcar cinco personas, irse a Dinero y volver
+ * dejaba la lista en modo selección CON esas cinco marcadas — pero el
+ * botón se repinta con su texto por omisión, "Seleccionar", así que
+ * tocarlo APAGABA el modo en vez de encenderlo. Y si alguna de esas
+ * cinco se borró mientras tanto, la asignación en lote salía igual
+ * sobre ids que ya no existen.
+ *
+ * POR QUÉ ACÁ Y NO EN dibujarGente()
+ * Porque dibujarGente() también corre al REFRESCAR: al editar a alguien,
+ * al ejecutar una sugerencia del asistente, y cada 60-120 s por el
+ * refresco periódico. Limpiar ahí borraría una selección a medio armar
+ * sin que nadie la haya tocado. Lo llama irA() (05-navegacion.js), que
+ * es el único lugar por donde se cambia de vista.
+ *
+ * @returns {void}
+ */
+function olvidarSeleccionDeGente() {
+  SELECCION_ACTIVA = false;
+  SELECCIONADOS.clear();
 }
 
 /**

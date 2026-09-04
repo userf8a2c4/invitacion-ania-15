@@ -373,40 +373,68 @@ function abrirFichaCompleta(contacto) {
       setTimeout(() => abrirDetalleDeInvitado(contacto.id), 400);
       break;
 
+    /* ⚠️ SE ESPERA AL DATO, NO A UN RELOJ (2026-09-04). Los cuatro casos
+       de abajo esperaban 600 ms y después tocaban DINERO.proveedores o
+       EVENTO.corte_honor. Con la red lenta, a los 600 ms DINERO todavía
+       es null: el `|| []` protegía de que faltara la PROPIEDAD, no de
+       que el objeto entero no existiera, así que reventaba y la ficha
+       no abría — sin ningún error visible. Ver alTenerLosDatos() en
+       06-piezas.js. */
+
     case 'proveedor':
       SECCION_DINERO = 'proveedores';
       irA('dinero', true);
-      setTimeout(() => {
-        const p = (DINERO.proveedores || []).find(x => Number(x.id) === contacto.id);
-        if (p) formularioProveedor(p);
-      }, 600);
+      alTenerLosDatos(
+        () => DINERO && DINERO.proveedores,
+        () => {
+          const p = DINERO.proveedores.find(x => Number(x.id) === contacto.id);
+          if (p) formularioProveedor(p);
+          else avisar('Ese proveedor ya no está en la lista.', true);
+        },
+        'la lista de proveedores'
+      );
       break;
 
     case 'padrino':
       SECCION_DINERO = 'padrinos';
       irA('dinero', true);
-      setTimeout(() => {
-        const p = (DINERO.padrinos || []).find(x => Number(x.id) === contacto.id);
-        if (p) formularioPadrino(p);
-      }, 600);
+      alTenerLosDatos(
+        () => DINERO && DINERO.padrinos,
+        () => {
+          const p = DINERO.padrinos.find(x => Number(x.id) === contacto.id);
+          if (p) formularioPadrino(p);
+          else avisar('Ese padrino ya no está en la lista.', true);
+        },
+        'la lista de padrinos'
+      );
       break;
 
     case 'corte':
       SECCION_EVENTO = 'corte_honor';
       irA('evento', true);
-      setTimeout(() => {
-        const m = (EVENTO.corte_honor || []).find(x => Number(x.id) === contacto.id);
-        if (m) formularioEvento('corte_honor', m);
-      }, 600);
+      alTenerLosDatos(
+        () => EVENTO && EVENTO.corte_honor,
+        () => {
+          const m = EVENTO.corte_honor.find(x => Number(x.id) === contacto.id);
+          if (m) formularioEvento('corte_honor', m);
+          else avisar('Esa persona ya no está en el corte de honor.', true);
+        },
+        'el corte de honor'
+      );
       break;
 
     case 'foraneo':
       SECCION_EVENTO = 'foraneos';
       irA('evento', true);
-      setTimeout(() => {
-        const f = (EVENTO.foraneos || []).find(x => Number(x.id) === contacto.id);
-        if (f) formularioEvento('foraneos', f);
-      }, 600);
+      alTenerLosDatos(
+        () => EVENTO && EVENTO.foraneos,
+        () => {
+          const f = EVENTO.foraneos.find(x => Number(x.id) === contacto.id);
+          if (f) formularioEvento('foraneos', f);
+          else avisar('Ese foráneo ya no está en la lista.', true);
+        },
+        'la lista de foráneos'
+      );
       break;
   }
 }

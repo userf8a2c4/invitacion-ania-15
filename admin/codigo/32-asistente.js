@@ -1970,6 +1970,21 @@ function engancharComandos(cuerpo, repintar) {
   buscarTodos('[data-comando-borrar]', cuerpo).forEach(boton => {
     boton.addEventListener('click', async () => {
       const id = Number(boton.dataset.comandoBorrar);
+
+      /* ⚠️ ERA EL ÚNICO BORRADO DE LOS DIECINUEVE SIN PREGUNTAR
+         (2026-09-04). La X está pegada al renglón de la frase, en una
+         lista donde todo lo demás se toca para editar: un toque de más
+         y la frase enseñada se iba sin vuelta atrás. Nada en el panel
+         borra sin preguntar; esto se había quedado afuera. */
+      const frase = boton.closest('.lista__fila');
+      const texto = frase ? (frase.textContent || '').trim() : 'esta frase';
+
+      if (!await confirmarAccion(
+        '¿Olvidar "' + texto + '"?\n\n' +
+        'El asistente deja de reconocer esa forma de pedirlo. Las demás ' +
+        'frases de este comando siguen funcionando.',
+        { confirmar: 'Olvidarla', peligro: true })) return;
+
       try {
         await mandar('comandos.php?accion=borrar', { id: id });
         FRASES_APRENDIDAS = FRASES_APRENDIDAS.filter(f => f.id !== id);
