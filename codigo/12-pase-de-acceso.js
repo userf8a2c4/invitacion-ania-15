@@ -360,15 +360,43 @@ function imprimirPaseDeAcceso() {
    enlace chiquito por si se equivocó y quiere rehacerlo.
    -------------------------------------------------------------------- */
 (function recuerdaLaConfirmacionAnterior() {
-  const paseGuardado = leerDeMemoria('pase');
-  if (!paseGuardado) return;
-
   const formulario     = buscar('#formulario-confirmacion');
   const mensajeDeExito = buscar('#mensaje-de-exito');
   const textoDeExito   = buscar('#texto-de-exito');
   const botonRehacer   = buscar('#boton-confirmar-de-nuevo');
 
   if (!formulario || !mensajeDeExito) return;
+
+  /* ⚡ EL BOTÓN SE CABLEA SIEMPRE, PASE LO QUE PASE (2026-09-04)
+   *
+   * Antes esto estaba DESPUÉS de un `if (!paseGuardado) return;`, o sea
+   * que solo se enganchaba cuando ya había una confirmación guardada de
+   * una visita anterior.
+   *
+   * Resultado: quien ACABABA DE CONFIRMAR en esta misma visita entró a
+   * la página sin nada guardado, esta función se fue en la primera
+   * línea, y después 11-formulario-confirmacion.js mostraba el cartel de
+   * gracias —con este enlace dentro— sin que nadie lo escuchara. El
+   * enlace se veía y no hacía nada.
+   *
+   * Al recargar sí andaba, porque ahí el pase ya estaba en memoria. Por
+   * eso pasó desapercibido: probándolo dos veces seguidas, la segunda
+   * funciona.
+   *
+   * Empezar de nuevo es válido siempre que el enlace esté a la vista,
+   * sin importar cómo se llegó ahí. Así que se cablea acá arriba, antes
+   * de cualquier salida. */
+  if (botonRehacer) {
+    botonRehacer.addEventListener('click', () => {
+      borrarDeMemoria('pase');
+      window.location.reload();
+    });
+  }
+
+  /* Lo de abajo SÍ depende de que haya una confirmación anterior: es
+     mostrar el cartel en vez del formulario al entrar. */
+  const paseGuardado = leerDeMemoria('pase');
+  if (!paseGuardado) return;
 
   formulario.style.display = 'none';
   mensajeDeExito.classList.add('visible');
@@ -377,13 +405,5 @@ function imprimirPaseDeAcceso() {
     textoDeExito.innerHTML =
       'Ya tenemos tu confirmación, <strong>' + limpiarTexto(paseGuardado.nombre) + '</strong>.<br>' +
       'Puedes volver a ver tu pase cuando quieras.';
-  }
-
-  /* Botón para empezar de nuevo: borra la memoria y recarga la página */
-  if (botonRehacer) {
-    botonRehacer.addEventListener('click', () => {
-      borrarDeMemoria('pase');
-      window.location.reload();
-    });
   }
 })();
