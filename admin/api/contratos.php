@@ -407,7 +407,7 @@ case 'generar':
     // Mismo esquema de carpeta y nombre al azar que archivos.php y
     // recibos.php: un PDF generado acá convive sin diferencias con los
     // adjuntos que Lucila sube a mano.
-    $carpeta = dirname(__DIR__) . '/archivos';
+    $carpeta = carpetaDeArchivos();
     if (!is_dir($carpeta)) @mkdir($carpeta, 0755, true);
     if (!is_dir($carpeta) || !is_writable($carpeta)) {
         bd()->rollBack();
@@ -542,7 +542,7 @@ case 'borrar':
         $archivo = consultarUno('SELECT * FROM archivos WHERE id = :i',
                                 [':i' => (int) $contrato['archivo_id']]);
         if ($archivo) {
-            $ruta = dirname(__DIR__) . '/archivos/' . basename($archivo['nombre_disco']);
+            $ruta = carpetaDeArchivos() . '/' . basename($archivo['nombre_disco']);
             if (is_file($ruta)) @unlink($ruta);
             borrar('archivos', (int) $archivo['id']);
         }

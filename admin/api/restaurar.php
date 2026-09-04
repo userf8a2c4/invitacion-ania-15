@@ -38,6 +38,12 @@
        php restaurar.php respaldo-ania-xv-2026-09-04.json --aplicar
        php restaurar.php respaldo-ania-xv-2026-09-04.json --aplicar --completo
 
+     Y para reponer SOLO los archivos que faltan en el disco, sin
+     tocar ni una fila (ver el bloque 1B):
+
+       php restaurar.php --archivos ./archivos-del-zip
+       php restaurar.php --archivos ./archivos-del-zip --aplicar
+
      Desde el navegador, con la llave del .env (igual que instalar.php):
 
        POST a  restaurar.php?llave=…            → prueba
@@ -65,6 +71,128 @@ if (!$desdeLaConsola) {
     if (!llaveDeArranqueCorrecta($_GET['llave'] ?? '')) {
         responderMal('Esta operación necesita la llave del servidor.', 403);
     }
+}
+
+
+/* ─── 1B. MODO "SOLO REPONER ARCHIVOS" ──────────────────────────
+
+   PARA QUÉ SIRVE (2026-09-04)
+   El informe de más abajo sabe decir qué filas apuntan a un archivo que
+   ya no está en el disco, y termina diciendo "copiá esos archivos desde
+   la carpeta archivos/ del ZIP". Eso es la mitad del trabajo: con
+   cuarenta PDF, copiarlos a mano uno por uno es justo donde se cometen
+   errores.
+
+   Esto hace la otra mitad. Se le pasa la carpeta `archivos/` ya extraída
+   del ZIP del respaldo, y repone SOLO los que faltan.
+
+   POR QUE RECIBE UNA CARPETA Y NO EL ZIP
+   El ZIP está cifrado con RESPALDO_CLAVE y ZipArchive no siempre puede
+   abrir un cifrado fuerte. Para sacar el JSON ya hay que abrirlo a mano
+   igual, así que la carpeta ya está extraída cuando se llega acá. Menos
+   piezas que puedan fallar.
+
+   QUÉ NO HACE
+   No toca la base de datos. Ni una fila. Solo copia archivos que HOY no
+   existen — nunca pisa uno que esté, así que correrlo dos veces no puede
+   romper nada, y no puede "restaurar" un archivo viejo encima de uno
+   nuevo.
+
+     php restaurar.php --archivos ./archivos-del-zip
+     php restaurar.php --archivos ./archivos-del-zip --aplicar
+*/
+
+$vieneDeUnaCarpeta = '';
+if ($desdeLaConsola) {
+    $donde = array_search('--archivos', $argv, true);
+    if ($donde !== false) $vieneDeUnaCarpeta = (string) ($argv[$donde + 1] ?? '');
+} else {
+    $vieneDeUnaCarpeta = (string) ($_GET['archivos'] ?? '');
+}
+
+if ($vieneDeUnaCarpeta !== '') {
+    $origen = rtrim($vieneDeUnaCarpeta, "/\\");
+
+    if (!is_dir($origen)) {
+        terminarRestauracion([
+            'error' => 'No encuentro esa carpeta: ' . $origen . '. Tenés que ' .
+                       'extraer el ZIP del respaldo y pasarme su carpeta archivos/.',
+        ], 1);
+    }
+
+    $copiar = $desdeLaConsola
+        ? in_array('--aplicar', $argv, true)
+        : !empty($_GET['aplicar']);
+
+    $destino = carpetaDeArchivos();
+
+    $sePueden   = [];
+    $noEstan    = [];
+    $repuestos  = 0;
+    $fallaron   = [];
+
+    if (existeTabla('archivos')) {
+        foreach (consultarTodo('SELECT nombre_disco, nombre_real FROM archivos') as $f) {
+            $nombre = basename((string) $f['nombre_disco']);
+            if ($nombre === '') continue;
+
+            // Ya está: no hay nada que reponer.
+            if (is_file($destino . '/' . $nombre)) continue;
+
+            $enElRespaldo = $origen . '/' . $nombre;
+
+            if (!is_file($enElRespaldo)) {
+                // Falta en el disco Y tampoco viajó en este respaldo. Se
+                // nombra para poder buscarlo en uno anterior o a mano.
+                $noEstan[] = $f['nombre_real'] . ' → ' . $nombre;
+                continue;
+            }
+
+            $sePueden[] = $f['nombre_real'] . ' → ' . $nombre;
+
+            if (!$copiar) continue;
+
+            if (!is_dir($destino)) @mkdir($destino, 0755, true);
+            if (!is_dir($destino) || !is_writable($destino)) {
+                $fallaron[] = $nombre . ' (no se puede escribir en ' . $destino . ')';
+                continue;
+            }
+
+            if (!@copy($enElRespaldo, $destino . '/' . $nombre)) {
+                $fallaron[] = $nombre . ' (no se pudo copiar)';
+                continue;
+            }
+
+            // Mismo cuidado que la mudanza de instalar.php: si la copia
+            // no pesa lo mismo, se descarta en vez de dejar un archivo
+            // roto que parece bueno.
+            if (filesize($destino . '/' . $nombre) !== filesize($enElRespaldo)) {
+                @unlink($destino . '/' . $nombre);
+                $fallaron[] = $nombre . ' (la copia quedó incompleta)';
+                continue;
+            }
+
+            $repuestos++;
+        }
+    }
+
+    terminarRestauracion([
+        'modo'              => $copiar ? 'reponer archivos (APLICADO)' : 'reponer archivos (prueba)',
+        'desde'             => $origen,
+        'hacia'             => $destino,
+        'se_pueden_reponer' => $sePueden,
+        'repuestos'         => $repuestos,
+        'no_estan_en_este_respaldo' => $noEstan,
+        'con_problema'      => $fallaron,
+        'siguiente_paso'    => $copiar
+            ? ($noEstan
+                ? 'Quedan ' . count($noEstan) . ' sin reponer: buscá esos nombres en un ' .
+                  'respaldo anterior y volvé a correr esto con esa carpeta.'
+                : 'No falta ninguno.')
+            : ($sePueden
+                ? 'Volvé a correrlo con --aplicar para copiar ' . count($sePueden) . '.'
+                : 'No hay nada que reponer desde esta carpeta.'),
+    ], 0);
 }
 
 
@@ -291,7 +419,7 @@ $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
  * archivos/ del ZIP" es la mitad del trabajo que antes no existía.
  */
 $archivosQueFaltan = [];
-$carpeta = dirname(__DIR__) . '/archivos';
+$carpeta = carpetaDeArchivos();
 
 if (existeTabla('archivos')) {
     foreach (consultarTodo('SELECT nombre_disco, nombre_real FROM archivos') as $f) {

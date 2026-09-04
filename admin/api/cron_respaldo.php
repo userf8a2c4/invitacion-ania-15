@@ -249,7 +249,7 @@ if (!$desdeLaConsola && ($_GET['accion'] ?? '') === 'descargar') {
     $zipTodo->addFromString($nombre, $json);
     $dentro = [$nombre];
 
-    $carpetaDeArchivos = dirname(__DIR__) . '/archivos';
+    $carpetaDeArchivos = carpetaDeArchivos();
     $cuantosArchivos = 0;
     $faltantes = [];
 
@@ -410,7 +410,7 @@ $avisoDelAdjunto = '';
  * esta semana, en vez de que el cron fallara entero. */
 const PESO_MAXIMO_DE_ARCHIVOS_EN_RESPALDO = 12 * 1024 * 1024;
 
-$CARPETA_ARCHIVOS = dirname(__DIR__) . '/archivos';
+$CARPETA_ARCHIVOS = carpetaDeArchivos();
 $archivosParaRespaldar = [];
 $archivosQueNoEntraron = [];
 $archivosDemasiadoGrandes = [];

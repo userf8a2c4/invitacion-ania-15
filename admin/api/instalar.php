@@ -347,6 +347,90 @@ if (existeTabla('usuarios')) {
 
 /* ─── INFORME ─────────────────────────────────────────────────────────── */
 
+/* ─── MUDAR LOS ADJUNTOS FUERA DEL ÁRBOL DEL DESPLIEGUE ─────────────
+
+   Los PDF y las imágenes vivían en `admin/archivos/`, que está dentro
+   del árbol que el despliegue reconstruye pero NO está en el
+   repositorio. Por eso no viajan entre entornos y pueden desaparecer al
+   promover, dejando las filas de `archivos`, `recibos` y `contratos`
+   apuntando a un archivo que ya no existe.
+
+   Si el .env define CARPETA_ARCHIVOS (ver carpetaDeArchivos() en
+   _lib/entorno.php), acá se mudan los que hayan quedado en la carpeta
+   vieja.
+
+   ⚠️ CÓMO SE CUIDA DE NO PERDER NADA
+     · Sin CARPETA_ARCHIVOS configurada NO HACE NADA. Origen y destino
+       son el mismo lugar y no hay nada que mudar.
+     · COPIA, VERIFICA Y RECIÉN AHÍ BORRA, archivo por archivo. Si la
+       copia no queda del mismo tamaño, el original se deja donde está y
+       se informa: es preferible un archivo duplicado a uno perdido.
+     · Si el destino no se puede crear o no es escribible, no se toca
+       nada y se dice por qué.
+     · Un archivo que YA está en el destino no se pisa: se cuenta como
+       hecho. Así correr instalar.php dos veces es inofensivo.
+     · No se toca la base: `nombre_disco` es solo el nombre, nunca la
+       ruta, así que mover la carpeta no invalida ninguna fila. */
+
+$mudanzaDeArchivos = ['hizo_falta' => false];
+
+$carpetaVieja = carpetaDeArchivosPorOmision();
+$carpetaNueva = carpetaDeArchivos();
+
+if ($carpetaNueva !== $carpetaVieja && is_dir($carpetaVieja)) {
+    $sueltos = array_values(array_filter(
+        (array) @scandir($carpetaVieja),
+        function ($n) use ($carpetaVieja) {
+            // El .htaccess se queda: sigue protegiendo la carpeta vieja
+            // por si algo la vuelve a usar.
+            if ($n === '.' || $n === '..' || $n === '.htaccess') return false;
+            return is_file($carpetaVieja . '/' . $n);
+        }
+    ));
+
+    if ($sueltos) {
+        $mudanzaDeArchivos = [
+            'hizo_falta' => true,
+            'desde'      => $carpetaVieja,
+            'hacia'      => $carpetaNueva,
+            'mudados'    => 0,
+            'ya_estaban' => 0,
+            'con_problema' => [],
+        ];
+
+        if (!is_dir($carpetaNueva)) @mkdir($carpetaNueva, 0755, true);
+
+        if (!is_dir($carpetaNueva) || !is_writable($carpetaNueva)) {
+            $mudanzaDeArchivos['con_problema'][] =
+                'No se pudo escribir en ' . $carpetaNueva . '. No se movió nada.';
+        } else {
+            foreach ($sueltos as $nombre) {
+                $origen  = $carpetaVieja . '/' . $nombre;
+                $destino = $carpetaNueva . '/' . $nombre;
+
+                if (is_file($destino)) { $mudanzaDeArchivos['ya_estaban']++; continue; }
+
+                if (!@copy($origen, $destino)) {
+                    $mudanzaDeArchivos['con_problema'][] = $nombre . ' (no se pudo copiar)';
+                    continue;
+                }
+
+                // La copia tiene que pesar lo mismo ANTES de borrar el
+                // original. Un disco lleno copia a medias sin avisar.
+                if (filesize($destino) !== filesize($origen)) {
+                    @unlink($destino);
+                    $mudanzaDeArchivos['con_problema'][] = $nombre . ' (la copia quedó incompleta)';
+                    continue;
+                }
+
+                @unlink($origen);
+                $mudanzaDeArchivos['mudados']++;
+            }
+        }
+    }
+}
+
+
 $listo = empty($faltantes);
 
 responderBien([
@@ -356,6 +440,7 @@ responderBien([
     'tablas_faltantes'  => $faltantes,
     'columnas_agregadas'=> $columnasQueFaltaban,
     'cuentas_existentes'=> $cuentas,
+    'mudanza_de_archivos' => $mudanzaDeArchivos,
     'siguiente_paso'    => $listo
         ? ($cuentas > 0
             ? 'Todo listo. Entra a https://' . ($_SERVER['HTTP_HOST'] ?? 'aniaxv.com') . '/admin/'

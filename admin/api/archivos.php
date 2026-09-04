@@ -42,7 +42,10 @@ exigirPermiso($yo, 'archivos', ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' ?
 $accion = (string) ($_GET['accion'] ?? 'listar');
 
 /** Dónde viven los archivos. */
-$CARPETA = dirname(__DIR__) . '/archivos';
+// carpetaDeArchivos() (_lib/entorno.php): se puede mover fuera del
+// árbol del despliegue con CARPETA_ARCHIVOS en el .env. Sin esa
+// línea devuelve `admin/archivos`, igual que antes.
+$CARPETA = carpetaDeArchivos();
 
 /** Cuánto puede pesar cada uno. 8 MB alcanza para una foto de teléfono. */
 const PESO_MAXIMO = 8388608;

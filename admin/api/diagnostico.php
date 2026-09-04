@@ -117,9 +117,13 @@ if ($conexion) {
 
 /* ─── 4. CARPETA DE ARCHIVOS ──────────────────────────────────────────── */
 
-$carpetaArchivos = dirname(__DIR__) . '/archivos';
+$carpetaArchivos = carpetaDeArchivos();
 $archivos = [
     'ruta'      => $carpetaArchivos,
+    // Si dice false, los adjuntos siguen dentro del árbol que el
+    // despliegue reconstruye. Ver carpetaDeArchivos() en
+    // _lib/entorno.php.
+    'fuera_del_despliegue' => $carpetaArchivos !== carpetaDeArchivosPorOmision(),
     'existe'    => is_dir($carpetaArchivos),
     'escribible' => is_dir($carpetaArchivos) && is_writable($carpetaArchivos),
 ];
@@ -251,7 +255,7 @@ if (existeTabla('ajustes')) {
 /* Filas que apuntan a un archivo que ya no está. No es un problema del
    respaldo: es la prueba de que algo se perdió y de que hace falta. */
 $archivosHuerfanos = 0;
-$carpetaDeArchivos = dirname(__DIR__) . '/archivos';
+$carpetaDeArchivos = carpetaDeArchivos();
 if (existeTabla('archivos')) {
     foreach (consultarTodo('SELECT nombre_disco FROM archivos') as $f) {
         if (!is_file($carpetaDeArchivos . '/' . basename($f['nombre_disco']))) {
