@@ -254,7 +254,18 @@ function mandarWebhookDeMegabot($payload) {
                          "X-Automation-Key: " . $claveSaliente . "\r\n" .
                          "X-MegaBot-Clave: " . $claveSaliente . "\r\n",
             'content' => json_encode($payload, JSON_UNESCAPED_UNICODE),
-            'timeout' => 10,
+            /* ⚡ 3 s, no 10 (2026-09-03). Este timeout NO es lo que
+               tarda MegaBot en pensar —eso llega después, por el
+               callback— sino lo que tarda en ACEPTAR el POST. Un
+               servicio sano acepta en menos de un segundo; diez
+               segundos solo servían para que el panel se quedara
+               esperando a uno caído.
+
+               Y tiene que ser MENOR que el timeout del cliente
+               (CONFIGURACION.servidor.segundosDeEspera): si el cliente
+               abortara primero, la respuesta con el id del mensaje se
+               perdería y la burbuja se quedaría sin reconciliar. */
+            'timeout' => 3,
             'ignore_errors' => true,
         ],
     ]);
@@ -279,6 +290,67 @@ function mandarWebhookDeMegabot($payload) {
 function linkDeCallback() {
     $host = preg_replace('/[^a-z0-9.\-]/i', '', $_SERVER['HTTP_HOST'] ?? 'pbe.aniaxv.com');
     return 'https://' . $host . '/admin/api/chat.php';
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   SABER DE ANTEMANO SI MEGABOT ESTÁ VIVO
+
+   EL PROBLEMA
+   `mandarWebhookDeMegabot()` bloquea hasta que el Orquestador acepta el
+   POST. Con MegaBot caído eso es el timeout entero, y se pagaba en CADA
+   mensaje antes de que el respaldo local pudiera contestar: el chat
+   "tardaba muchísimo" incluso para preguntas que el teléfono sabe
+   contestar solo.
+
+   LA REGLA
+   Quién contesta se decide por la DISPONIBILIDAD, no por la pregunta.
+   MegaBot sigue siendo el primero siempre que esté vivo; cuando no lo
+   está, el local entra al instante, sin que nadie espere. El cambio de
+   motor ocurre cuando cambia la disponibilidad.
+
+   CÓMO
+   Se anota el resultado de cada intento. Tras un fallo se deja de
+   intentar por un rato corto —lo suficiente para no pagar el timeout en
+   cada mensaje, lo bastante poco para no quedarse en local si MegaBot
+   ya volvió—, y pasado ese rato se deja pasar UN intento de prueba.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Cuánto se espera antes de volver a probar un MegaBot que falló. */
+const REPOSO_TRAS_FALLO_DE_MEGABOT = 90;   // segundos
+
+/**
+ * Si conviene intentar el webhook ahora mismo.
+ *
+ * @return bool false si falló hace poco y todavía no toca reintentar.
+ */
+function megabotEstaDisponible() {
+    if (!existeTabla('ajustes')) return true;
+
+    $fila = consultarUno("SELECT valor FROM ajustes WHERE clave = 'megabot_salud'");
+    $salud = json_decode((string) ($fila['valor'] ?? ''), true);
+
+    // Sin historial se intenta: no se puede declarar caído a alguien a
+    // quien nunca se le habló.
+    if (!is_array($salud) || !empty($salud['vivo'])) return true;
+
+    $desde = (int) ($salud['cuando'] ?? 0);
+    return (time() - $desde) >= REPOSO_TRAS_FALLO_DE_MEGABOT;
+}
+
+/**
+ * Anota cómo salió el último intento de hablar con MegaBot.
+ *
+ * @param bool $vivo
+ * @return void
+ */
+function anotarSaludDeMegabot($vivo) {
+    if (!existeTabla('ajustes')) return;
+
+    ejecutar(
+        "INSERT INTO ajustes (clave, valor) VALUES ('megabot_salud', :v)
+         ON DUPLICATE KEY UPDATE valor = VALUES(valor)",
+        [':v' => json_encode(['vivo' => (bool) $vivo, 'cuando' => time()])]
+    );
 }
 
 /**
@@ -416,6 +488,21 @@ case 'enviar':
         // agentes 40-44/46 y el matcher viejo. Nunca se cae a eso desde
         // acá: es la UI la que decide qué mostrar con offline=true.
         actualizar('chat_mensajes', $mensajeId, ['estado' => 'pendiente']);
+    } elseif (!megabotEstaDisponible()) {
+        /* ⚡ NO SE ESPERA A UN SERVICIO QUE YA SE SABE CAÍDO (2026-09-03)
+         *
+         * Antes se intentaba el webhook SIEMPRE, y cada intento contra
+         * un MegaBot caído costaba el timeout completo —diez segundos—
+         * ANTES de que el respaldo local pudiera contestar. Se pagaba
+         * en cada mensaje, uno por uno, y desde afuera se veía como que
+         * "el asistente tarda muchísimo".
+         *
+         * Ahora el resultado del último intento se recuerda: si falló
+         * hace poco, se contesta al instante con `offline` y el panel
+         * resuelve en el teléfono, sin que nadie espere nada. Cada
+         * tanto se deja pasar un intento para notar que volvió — ver
+         * megabotEstaDisponible(). */
+        actualizar('chat_mensajes', $mensajeId, ['estado' => 'pendiente']);
     } else {
         $contexto = construirContexto($pantalla, $yo);
         $enviado = mandarWebhookDeMegabot([
@@ -430,6 +517,7 @@ case 'enviar':
         ]);
 
         $offline = !$enviado;
+        anotarSaludDeMegabot($enviado);
         actualizar('chat_mensajes', $mensajeId, ['estado' => $enviado ? 'enviado' : 'error']);
     }
 
@@ -538,6 +626,12 @@ case 'responder':
     exigirMetodo('POST');
     exigirClaveDeServicio();
     $datos = cuerpoJson();
+
+    /* Que MegaBot conteste es la mejor prueba de que está vivo — mejor
+       que el POST de ida, porque significa que además pudo pensar. Si
+       venía marcado como caído, esto lo revive sin esperar a que se
+       cumpla el reposo. */
+    anotarSaludDeMegabot(true);
 
     $hiloId = campoEntero($datos, 'hilo_id', 0);
     if ($hiloId <= 0) responderMal('Falta decir de qué hilo.', 400);

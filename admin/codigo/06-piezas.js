@@ -810,9 +810,31 @@ function campoDinero(opciones) {
   const valor = (opciones.valor !== undefined && opciones.valor !== '' && opciones.valor !== null)
     ? formatoDeMiles(String(opciones.valor))
     : '';
+
+  /* ⚡ EN QUÉ MONEDA SE ESTÁ ESCRIBIENDO (2026-09-03)
+   *
+   * El selector de moneda de Dinero vive en localStorage y sobrevive
+   * entre sesiones, así que se puede quedar en dólares desde la semana
+   * pasada sin que nadie se acuerde. Y aPesos() multiplica por el tipo
+   * de cambio al guardar: escribir 50000 en "Costo real" con el
+   * selector olvidado en dólares guarda novecientos veinticinco mil
+   * pesos, sin un solo aviso.
+   *
+   * De los siete formularios con montos, UNO solo nombraba la moneda en
+   * su rótulo. Ahora lo hace el componente, así que lo dicen todos —y
+   * los que se agreguen después—. En la moneda base no se dice nada: no
+   * hay ambigüedad que resolver y sería ruido en cada campo. */
+  const cual = (typeof monedaElegida === 'function') ? monedaElegida() : null;
+  const enOtraMoneda = cual && cual !== CONFIGURACION.dinero.monedaBase;
+
+  const aclaracion = enOtraMoneda
+    ? ' <span class="campo__moneda">en ' +
+      seguro(CONFIGURACION.dinero.monedas[cual].nombre.toLowerCase()) + '</span>'
+    : '';
+
   return '' +
     '<label class="campo">' +
-      '<span class="campo__rotulo">' + seguro(opciones.rotulo) + '</span>' +
+      '<span class="campo__rotulo">' + seguro(opciones.rotulo) + aclaracion + '</span>' +
       '<input type="text" inputmode="decimal" id="' + seguro(opciones.id) + '" ' +
              'class="campo__control" value="' + seguro(valor) + '"' +
              (opciones.pista ? ' placeholder="' + seguro(opciones.pista) + '"' : '') +

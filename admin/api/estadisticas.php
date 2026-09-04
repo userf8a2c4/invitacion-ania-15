@@ -171,8 +171,15 @@ if ($vePlata && existeTabla('gastos')) {
      *               cubren los padrinos.
      * Un presupuesto que solo muestra el costo asusta de más; uno que
      * solo muestra lo propio esconde que alguien puede echarse atrás. */
+    /* Las MISMAS tres condiciones que presupuesto.php, no dos: esto se
+       le pasa a categoriasConGasto(), que emite `presupuesto_id` sobre
+       `gastos` Y sobre `categorias_gasto`. Con la comprobación a medias,
+       si el ALTER de una tabla funcionó y el de la otra no, Inicio
+       reventaba mientras Dinero degradaba bien — el mismo dato, dos
+       comportamientos, según por qué puerta se entrara. */
     $tienePresupuestos = existeTabla('presupuestos')
-                       && in_array('presupuesto_id', columnasDe('gastos'), true);
+                       && in_array('presupuesto_id', columnasDe('gastos'), true)
+                       && in_array('presupuesto_id', columnasDe('categorias_gasto'), true);
     $cifras = cifrasDelPresupuesto(
         $tienePresupuestos ? presupuestoActivo() : null,
         $tienePresupuestos

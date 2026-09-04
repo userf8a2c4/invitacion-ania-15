@@ -197,16 +197,129 @@ function campoEntero($origen, $clave, $minimo = 0, $maximo = null, $respaldo = 0
 }
 
 /**
- * Saca un monto de dinero. Acepta "1,500.50" y "$1500" y los normaliza.
+ * Saca un monto de dinero, interpretando el separador decimal.
+ *
+ * ⚡ ANTES ESTO GUARDABA MAL EL DINERO, EN SILENCIO (2026-09-03)
+ * La versión vieja borraba todo lo que no fuera dígito, punto o guion y
+ * hacía un cast de PHP, que corta en el primer token inválido sin
+ * avisar. Con formato local —el que sale de cualquier hoja de cálculo
+ * en español— el resultado era una milésima del valor:
+ *
+ *     "$1,500.50"  → 1500.50  ✓
+ *     "1.500,50"   → "1.500.50" → 1.5    ✗  mil quinientos → un peso
+ *     "1.234.567"  → "1.234.567" → 1.234 ✗
+ *     "12-3"       → "12-3" → 12         ✗
+ *
+ * Entraba por los nueve formularios de dinero del panel y ninguna capa
+ * lo detectaba: el número quedaba guardado, mal, y desde ese momento
+ * todas las sumas eran otra cosa.
+ *
+ * CÓMO SE DECIDE AHORA
+ *   · Con coma Y punto, manda el ÚLTIMO: es el decimal, y el otro es de
+ *     miles. Cubre "1,500.50" y "1.500,50" a la vez.
+ *   · Con un solo tipo de separador, decide el tamaño del último grupo:
+ *     tres dígitos son miles ("1.500" → 1500), otra cantidad es decimal
+ *     ("1.5" → 1.5, "1,50" → 1.50).
+ *   · El signo solo cuenta al principio.
+ *
+ * LO AMBIGUO SE RECHAZA, NO SE ADIVINA
+ * "1.500" con tres dígitos podría ser mil quinientos o uno con
+ * quinientas milésimas. Se resuelve como miles porque es lo que escribe
+ * una persona, pero cuando ni eso alcanza —varios separadores mezclados
+ * sin patrón, letras en medio del número— devuelve `null` y quien llama
+ * corta con un error visible. En dinero, adivinar mal y callarse es
+ * peor que preguntar.
  *
  * @param array  $origen
  * @param string $clave
+ * @param bool   $exigir  Si true, un valor imposible de interpretar
+ *   corta con responderMal() en vez de devolver 0.
  * @return float
  */
-function campoMonto($origen, $clave) {
-    $crudo = (string) ($origen[$clave] ?? '0');
-    $limpio = preg_replace('/[^0-9.\-]/', '', $crudo);
-    return round((float) $limpio, 2);
+function campoMonto($origen, $clave, $exigir = true) {
+    $crudo = trim((string) ($origen[$clave] ?? ''));
+    if ($crudo === '') return 0.0;
+
+    $monto = interpretarMonto($crudo);
+
+    if ($monto === null) {
+        if ($exigir) {
+            responderMal(
+                'No entiendo el monto «' . $crudo . '». Escríbelo con números, ' .
+                'por ejemplo 1500.50 o 1,500.50',
+                400
+            );
+        }
+        return 0.0;
+    }
+
+    return $monto;
+}
+
+/**
+ * Interpreta un monto escrito por una persona. Ver campoMonto().
+ *
+ * Está separada para poder probarla sola y para que la revisión de
+ * montos ya guardados pueda usar la misma regla.
+ *
+ * @param string $crudo
+ * @return float|null null si no se puede interpretar sin adivinar.
+ */
+function interpretarMonto($crudo) {
+    $texto = trim((string) $crudo);
+    if ($texto === '') return null;
+
+    // El signo, solo al principio. Un guion en el medio ("12-3") no es
+    // un número: cae al rechazo de más abajo.
+    $negativo = (strpos($texto, '-') === 0);
+    $texto = ltrim($texto, '+-');
+
+    // Fuera símbolos de moneda y espacios (incluido el fino de los
+    // miles: "1 500,50").
+    $texto = preg_replace('/[\s\x{00A0}\x{202F}$€£¥]|MXN|USD|MX\$/iu', '', $texto);
+
+    // Lo que queda solo puede ser dígitos, puntos y comas.
+    if ($texto === '' || !preg_match('/^[0-9.,]+$/', $texto)) return null;
+
+    $ultimoPunto = strrpos($texto, '.');
+    $ultimaComa  = strrpos($texto, ',');
+
+    if ($ultimoPunto !== false && $ultimaComa !== false) {
+        // Los dos: el que está más a la derecha es el decimal.
+        $corte = max($ultimoPunto, $ultimaComa);
+        $entera   = preg_replace('/\D/', '', substr($texto, 0, $corte));
+        $decimal  = preg_replace('/\D/', '', substr($texto, $corte + 1));
+    } elseif ($ultimoPunto !== false || $ultimaComa !== false) {
+        $corte = ($ultimoPunto !== false) ? $ultimoPunto : $ultimaComa;
+        $cola  = substr($texto, $corte + 1);
+
+        /* Un solo tipo de separador. Tres dígitos después del último y
+           sin decimales previos es agrupación de miles ("1.500",
+           "1.234.567"); cualquier otra cantidad es la parte decimal
+           ("1.5", "1,50", "1500.505"). */
+        $esMiles = (strlen($cola) === 3 && preg_match('/^\d{3}$/', $cola));
+
+        if ($esMiles) {
+            $entera  = preg_replace('/\D/', '', $texto);
+            $decimal = '';
+        } else {
+            $entera  = preg_replace('/\D/', '', substr($texto, 0, $corte));
+            $decimal = preg_replace('/\D/', '', $cola);
+        }
+    } else {
+        $entera  = $texto;
+        $decimal = '';
+    }
+
+    if ($entera === '' && $decimal === '') return null;
+
+    // Más de dos decimales no es un monto: es un separador mal leído.
+    if (strlen($decimal) > 2) return null;
+
+    $valor = (float) (($entera === '' ? '0' : $entera) . '.' .
+                      str_pad($decimal, 2, '0'));
+
+    return round($negativo ? -$valor : $valor, 2);
 }
 
 /**

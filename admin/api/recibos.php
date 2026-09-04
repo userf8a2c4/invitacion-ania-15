@@ -321,8 +321,20 @@ case 'generar':
        que parecía un bug de código en vez de una migración pendiente.
        Este chequeo cuesta una consulta a information_schema, pero
        convierte un misterio en una instrucción concreta. */
+    /* ⚡ LA LISTA TIENE QUE SER LA COMPLETA (2026-09-03). Estaban las
+       tres de la migración vieja, pero el INSERT de más abajo manda
+       además `archivo_id` y `creado_por`. Si faltaba alguna de esas
+       dos, el error genérico volvía — y para ese momento ya se había
+       escrito el PDF al disco, insertado su fila en `archivos`, y
+       posiblemente creado el gasto y el pago. O sea: justo lo que este
+       chequeo existe para evitar, un paso más adelante y con basura
+       dejada atrás. Se comprueban todas las columnas que se van a
+       escribir, antes de tocar nada. */
     $columnasDeRecibos = columnasDe('recibos');
-    $columnasQueHacenFalta = array_diff(['pago_id', 'beneficiario', 'padrino_id'], $columnasDeRecibos);
+    $columnasQueHacenFalta = array_diff(
+        ['pago_id', 'beneficiario', 'padrino_id', 'archivo_id', 'creado_por'],
+        $columnasDeRecibos
+    );
     if ($columnasQueHacenFalta) {
         responderMal(
             'Falta actualizar la base de datos: correr admin/api/instalar.php de nuevo.',
@@ -574,7 +586,25 @@ case 'generar':
     $filaParaGuardar = $recibo;
     unset($filaParaGuardar['lugar_expedicion']);
 
-    $reciboId = insertar('recibos', $filaParaGuardar);
+    /* ⚡ SI ESTO FALLA, NO SE DEJA BASURA ATRÁS (2026-09-03).
+       Un fallo dentro de insertar() sale por responderMal(), que hace
+       exit — y hasta ahora eso dejaba la transacción ABIERTA (la
+       cerraba el motor al morir la conexión, deshaciendo el gasto, el
+       pago y la fila de `archivos`) pero el PDF ya escrito seguía en el
+       disco para siempre, sin ninguna fila que lo nombrara. Un archivo
+       huérfano que nadie iba a encontrar ni borrar.
+
+       El catch deshace las dos cosas en el orden correcto: primero la
+       base, después el archivo, y recién ahí se avisa. */
+    try {
+        $reciboId = insertar('recibos', $filaParaGuardar);
+    } catch (Throwable $e) {
+        if (bd()->inTransaction()) bd()->rollBack();
+        if (is_file($rutaCompleta)) @unlink($rutaCompleta);
+
+        error_log('[Ania XV · recibos] No se pudo guardar el recibo: ' . $e->getMessage());
+        responderMal('No se pudo guardar el recibo. No quedó nada a medias.', 500);
+    }
 
     /* ⚡ YA NO SE TOCA `proveedores.anticipo` ACÁ (2026-08-27). Antes este
        bloque lo sumaba a mano, capado por `monto_total` — con el bug de

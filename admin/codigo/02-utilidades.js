@@ -147,6 +147,28 @@ function comoDinero(cantidad, conDecimales) {
 }
 
 /**
+ * Hoy, en AAAA-MM-DD, según el reloj DEL TELÉFONO.
+ *
+ * POR QUÉ NO ES `new Date().toISOString().slice(0, 10)`
+ * Ese patrón —repetido en varios formularios— devuelve la fecha en UTC.
+ * México va seis horas atrás: a partir de las 18:00 hora local, UTC ya
+ * está en el día siguiente. Un pago cargado el martes a la noche se
+ * fechaba el miércoles, y un recibo generado después de cenar salía con
+ * la fecha de mañana impresa en el PDF.
+ *
+ * Acá se arman las tres partes con los getters locales, que es lo que
+ * la persona tiene delante en su calendario.
+ *
+ * @returns {string} "2026-10-24"
+ */
+function hoyEnFecha() {
+  const ahora = new Date();
+  const mes = String(ahora.getMonth() + 1).padStart(2, '0');
+  const dia = String(ahora.getDate()).padStart(2, '0');
+  return ahora.getFullYear() + '-' + mes + '-' + dia;
+}
+
+/**
  * Cuánto cuesta un gasto. UNA sola definición, para toda la app.
  *
  * LA REGLA

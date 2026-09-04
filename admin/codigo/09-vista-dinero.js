@@ -45,23 +45,24 @@ async function dibujarDinero() {
     throw error;
   }
 
+  /* ⚡ LOS CHIPS DE SECCIÓN, ARRIBA (2026-09-03)
+   *
+   * Estaban debajo de la tarjeta "Cómo vamos", de "Qué hay que pagar" y
+   * del buscador. Con pagos pendientes cargados eso son una pantalla y
+   * media antes de llegar al control con el que se navega: TODA
+   * navegación dentro de Dinero costaba un desplazamiento fijo, y como
+   * cada guardado redibuja la vista entera y devuelve el scroll a cero,
+   * cargar tres pagos seguidos costaba tres desplazamientos completos.
+   *
+   * Ahora el orden es: qué escenario miro · dónde quiero ir · cómo
+   * vamos · qué hay que pagar. Lo que sirve para moverse va antes que
+   * lo que sirve para leer.
+   */
   vista.innerHTML =
     bloqueSelectorDePresupuesto(DINERO.presupuestos, DINERO.presupuesto_activo) +
-    bloqueTotales(DINERO.totales) +
-    bloqueProximosPagos(DINERO.pagos) +
-
-    '<div class="buscador">' +
-      '<svg class="buscador__lupa" viewBox="0 0 24 24" aria-hidden="true">' +
-        '<circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/>' +
-        '<path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
-      '</svg>' +
-      '<input type="search" id="buscar-dinero" class="buscador__control" ' +
-             'placeholder="Buscar en todo el presupuesto" ' +
-             'autocapitalize="off" spellcheck="false">' +
-    '</div>' +
 
     '<div class="filtros" id="secciones-dinero">' +
-      botonSeccion('resumen',      et('dinero.resumen', 'Resumen')) +
+      botonSeccion('resumen',      et('dinero.resumen', 'Categorías')) +
       botonSeccion('gastos',       et('dinero.gastos', 'Gastos'),
                    DINERO.gastos.length) +
       botonSeccion('pagos',        et('dinero.pagos', 'Pagos'),
@@ -73,6 +74,25 @@ async function dibujarDinero() {
       botonSeccion('cotizaciones', et('dinero.cotizaciones', 'Cotizaciones'),
                    DINERO.cotizaciones.length) +
     '</div>' +
+
+    bloqueTotales(DINERO.totales) +
+    bloqueProximosPagos(DINERO.pagos) +
+
+    '<div class="buscador">' +
+      '<svg class="buscador__lupa" viewBox="0 0 24 24" aria-hidden="true">' +
+        '<circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/>' +
+        '<path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
+      '</svg>' +
+      /* Dice "en esta sección" porque es lo que hace: filtrarPorBusqueda
+         corre dentro de cada pintarX, y solo se pinta la sección
+         activa. El texto anterior —"Buscar en todo el presupuesto"—
+         prometía una búsqueda global que nunca existió, y el estado
+         vacío tenía que salir a aclarar "mira en otra sección". */
+      '<input type="search" id="buscar-dinero" class="buscador__control" ' +
+             'placeholder="Buscar en esta sección" ' +
+             'autocapitalize="off" spellcheck="false">' +
+    '</div>' +
+
     '<div id="cuerpo-dinero"></div>';
 
   buscarTodos('[data-seccion]', vista).forEach(boton => {
@@ -351,6 +371,12 @@ function bloqueComoVamos(t) {
   const costo  = Number(t.costo) || 0;
   const pagado = Number(t.pagado) || 0;
   const falta  = Number(t.falta) || 0;
+  /* `pagado_de_mas` es una clave propia y no un `falta` negativo: el
+     servidor corta `falta` en cero a propósito, porque mezcla un costo
+     filtrado por plan con pagos que pueden ser de cualquiera (ver
+     cifrasDelPresupuesto). Un número con signo obligaba a interpretarlo;
+     dos claves explícitas, no. */
+  const dePlus = Number(t.pagado_de_mas) || 0;
 
   /* ─── La cifra que manda ──────────────────────────────────────────
    *
@@ -375,9 +401,9 @@ function bloqueComoVamos(t) {
     pie    = 'Lo pagado (' + comoDinero(pagado, false) + ') supera por mucho al ' +
              'presupuesto cargado (' + comoDinero(costo, false) + '). ' +
              'Carga el costo real de los gastos para ver cuánto falta.';
-  } else if (falta < -0.01) {
+  } else if (dePlus > 0.01) {
     rotulo = 'Pagado de más';
-    cifra  = comoDinero(Math.abs(falta), false);
+    cifra  = comoDinero(dePlus, false);
     clase  = ' cuenta__cifra--alerta';
     pie    = 'Pagaste más que el costo cargado. Revisa si falta subir algún costo real.';
   } else {
@@ -1071,7 +1097,20 @@ function abrirDetalleDeGasto(gasto) {
         (s.saldo < -0.005
           ? ' — ' + seguro(comoDinero(Math.abs(s.saldo), false)) + ' de más.'
           : '.') +
-      '</p>'
+      '</p>' +
+
+      /* ⚡ LA FICHA PUEDE PAGAR, NO SOLO MIRAR (2026-09-03)
+         Mostraba la deuda y no dejaba hacer nada con ella: para cargar
+         el pago del gasto que se estaba mirando había que cerrar,
+         desplazarse, entrar a Pagos, bajar hasta el final, tocar "Nuevo
+         pago" y volver a elegir el proveedor y el gasto que ya se
+         tenían delante. Siete toques para algo que son dos. */
+      (s.saldo > 0.005
+        ? '<button class="boton boton--principal boton--ancho" ' +
+                  'id="detalle-pagar" style="margin-top:var(--esp-2)">' +
+            'Registrar un pago de ' + seguro(comoDinero(s.saldo, false)) +
+          '</button>'
+        : '')
     : '';
 
   const seccionPagos = seccionSaldo + (pagosDeEsteGasto.length
@@ -1132,6 +1171,20 @@ function abrirDetalleDeGasto(gasto) {
     ponerleAlarmaA({ titulo: gasto.concepto, tipo: 'gasto', id: gasto.id }));
 
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioGasto(gasto));
+
+  /* Pagar desde acá: el formulario abre con el gasto, el proveedor, el
+     monto que falta y la fecha de hoy ya puestos. No queda nada que
+     elegir salvo confirmar. */
+  const botonPagar = buscar('#detalle-pagar', cuerpo);
+  if (botonPagar) {
+    botonPagar.addEventListener('click', () => formularioPago({
+      gasto_id:  gasto.id,
+      concepto:  gasto.concepto,
+      monto:     s.saldo,
+      estado:    'pagado',
+      _desdeGasto: true,
+    }));
+  }
 
   if (proveedor) {
     buscar('#detalle-recibo', cuerpo).addEventListener('click', () => abrirGeneradorDeRecibo(proveedor));
@@ -1507,6 +1560,24 @@ function abrirDetalleDePadrino(padrino) {
   const cuerpo = abrirHoja(padrino.nombre,
     '<div class="detalle">' + detalle + '</div>' +
     seccionAporte +
+
+    /* ⚡ ANOTAR UNA ENTREGA DEJA DE SER "EDITAR EL PADRINO" (2026-09-03)
+       Es lo que más se hace sobre un padrino, y costaba siete toques:
+       abrir la ficha, bajar hasta el final, Editar, bajar hasta el
+       quinto campo de nueve, escribir, cambiar el estado en un
+       desplegable, guardar. Y como el monto y el estado no están
+       enlazados por nada, era fácil dejar "entregó $30,000" con estado
+       "Hablado" y que las dos pantallas que resumen padrinos se
+       contradijeran.
+
+       Un botón, un campo, guardar. El estado se deduce de la cifra. */
+    (padrino.tipo_aporte === 'dinero' && prometido > 0 && prometido - entregado > 0.005
+      ? '<button class="boton boton--principal boton--ancho" ' +
+                'id="padrino-entrego" style="margin-top:var(--esp-2)">' +
+          'Anotar una entrega' +
+        '</button>'
+      : '') +
+
     seccionGastos +
     '<div id="tareas-de-la-ficha"></div>' +
     '<div class="acciones" style="margin-top:var(--esp-3)">' +
@@ -1533,6 +1604,12 @@ function abrirDetalleDePadrino(padrino) {
     ponerleAlarmaA({ titulo: 'Sobre ' + padrino.nombre, tipo: 'padrino', id: padrino.id }));
 
   buscar('#detalle-editar', cuerpo).addEventListener('click', () => formularioPadrino(padrino));
+
+  const botonEntrego = buscar('#padrino-entrego', cuerpo);
+  if (botonEntrego) {
+    botonEntrego.addEventListener('click', () =>
+      anotarEntregaDePadrino(padrino, prometido, entregado));
+  }
 
   buscar('#detalle-borrar', cuerpo).addEventListener('click', async () => {
     if (!await confirmarAccion('¿Borrar esto? No se puede deshacer.')) return;
@@ -2162,7 +2239,14 @@ function formularioPago(pago) {
   const gastoActual = d.gasto_id ? DINERO.gastos.find(g => g.id === d.gasto_id) : null;
   const proveedorActualId = gastoActual && gastoActual.proveedor_id ? gastoActual.proveedor_id : '';
 
-  const cuerpo = abrirHoja(pago ? 'Editar pago' : 'Nuevo pago',
+  /* `pago.id` y no `pago` a secas: desde la ficha de un gasto o de un
+     proveedor se abre este mismo formulario PRE-LLENADO pero sin id —
+     es un alta, no una edición—. Mirando solo si el objeto existe, el
+     título decía "Editar pago" y aparecía un botón Borrar para algo que
+     todavía no se había guardado. */
+  const esEdicion = !!(pago && pago.id);
+
+  const cuerpo = abrirHoja(esEdicion ? 'Editar pago' : 'Nuevo pago',
     campoTexto({ id: 'pag-concepto', rotulo: 'Concepto', valor: d.concepto }) +
 
     campoListaAmpliable({
@@ -2197,8 +2281,28 @@ function formularioPago(pago) {
 
     campoCasilla({ id: 'pag-pagado', rotulo: 'Ya está pagado',
                    marcado: d.estado === 'pagado' }) +
+
+    /* ⚡ CUÁNDO SE PAGÓ — EL CAMPO QUE NO EXISTÍA (2026-09-03)
+       El formulario tenía "Vence el" (una fecha límite) y nada más, así
+       que la fecha del pago la estampaba el servidor con el día en que
+       se cargaba: un pago hecho el martes y anotado el viernes quedaba
+       fechado el viernes. El propio presupuesto.php decía "se cambia a
+       mano desde el formulario del pago", refiriéndose a un campo que
+       no estaba. Y la ficha lo mostraba después como "Pagado el",
+       mientras el formulario que lo produjo lo llamaba "Vence el".
+
+       El servidor ya aceptaba `fecha_pagado` desde siempre; solo
+       faltaba mandárselo. Aparece al marcar "Ya está pagado", porque
+       antes de eso no hay ninguna fecha de pago que poner. */
+    '<div id="pag-cuando-envoltura"' +
+         (d.estado === 'pagado' ? '' : ' class="oculto"') + '>' +
+      campoTexto({ id: 'pag-fecha-pago', rotulo: 'Cuándo se pagó', tipo: 'date',
+                   valor: d.fecha_pagado || hoyEnFecha(),
+                   ayuda: 'El día en que salió la plata, no el día en que lo anotas.' }) +
+    '</div>' +
+
     campoLargo({ id: 'pag-notas', rotulo: 'Notas', valor: d.notas }) +
-    pieDeFormulario('Guardar', !!pago)
+    pieDeFormulario('Guardar', esEdicion)
   );
 
   activarFormatoDeMiles('pag-monto', cuerpo);
@@ -2214,6 +2318,17 @@ function formularioPago(pago) {
       refrescarGastosDelProveedor(cuerpo, d.gasto_id));
   }
   refrescarGastosDelProveedor(cuerpo, d.gasto_id);
+
+  /* "Cuándo se pagó" solo tiene sentido si está pagado: aparece y
+     desaparece con la casilla, en vez de estar siempre ahí pidiendo una
+     fecha que todavía no existe. */
+  const casillaPagado = buscar('#pag-pagado', cuerpo);
+  const cuandoSePago  = buscar('#pag-cuando-envoltura', cuerpo);
+  if (casillaPagado && cuandoSePago) {
+    casillaPagado.addEventListener('change', () => {
+      cuandoSePago.classList.toggle('oculto', !casillaPagado.checked);
+    });
+  }
 
   engancharFormularioDinero(cuerpo, () => {
     const concepto = valorDe('pag-concepto', cuerpo);
@@ -2256,6 +2371,10 @@ function formularioPago(pago) {
       fecha_limite: valorDe('pag-fecha', cuerpo),
       metodo:       metodo,
       estado:       valorDe('pag-pagado', cuerpo) ? 'pagado' : 'pendiente',
+      /* Cuándo salió la plata de verdad. El servidor ya lo aceptaba
+         desde siempre (presupuesto.php, guardar_pago) y cae a hoy si no
+         viene; lo que faltaba era mandárselo. */
+      fecha_pagado: valorDe('pag-fecha-pago', cuerpo),
       notas:        valorDe('pag-notas', cuerpo),
     };
 
@@ -2273,7 +2392,7 @@ function formularioPago(pago) {
     // igual que "Suelto" antes.
 
     return carga;
-  }, 'pago', pago);
+  }, 'pago', esEdicion ? pago : null);
 }
 
 /**
@@ -2303,8 +2422,28 @@ function refrescarGastosDelProveedor(cuerpo, gastoActualId) {
     ? (DINERO.gastos || []).filter(g => String(g.proveedor_id) === String(proveedorId))
     : [];
 
-  if (suyos.length < 2) {
-    envoltura.innerHTML = '';
+  /* ⚡ NO SE PREGUNTA CUANDO LA RESPUESTA ES UNA SOLA (2026-09-03)
+     Esto aparecía siempre que el proveedor tuviera dos gastos o más,
+     aunque uno solo tuviera saldo abierto: se obligaba a elegir entre
+     "Barra libre — faltan $8,000" y "Paquete — liquidado", que no es
+     una elección. El saldo ya se calcula acá abajo para armar cada
+     opción, así que el dato para saltearlo estaba en la mano.
+
+     Si queda un solo gasto con saldo, se usa ese y no se pregunta
+     nada. */
+  const conSaldo = suyos.filter(g => saldoDelGasto(g).saldo > 0.005);
+  const hayQuePreguntar = suyos.length >= 2 && conSaldo.length >= 2;
+
+  if (!hayQuePreguntar) {
+    /* Se recuerda cuál se resolvió solo, para que el guardado lo mande:
+       sin esto, el servidor volvería a elegir por su cuenta el gasto
+       más viejo, que es justo lo que este selector vino a evitar. */
+    const unico = gastoActualId
+      || (conSaldo.length === 1 ? conSaldo[0].id : (suyos.length === 1 ? suyos[0].id : 0));
+
+    envoltura.innerHTML = unico
+      ? '<input type="hidden" id="pag-gasto" value="' + seguro(unico) + '">'
+      : '';
     envoltura.classList.add('oculto');
     return;
   }
@@ -2313,19 +2452,40 @@ function refrescarGastosDelProveedor(cuerpo, gastoActualId) {
   envoltura.innerHTML = campoLista({
     id: 'pag-gasto',
     rotulo: '¿A cuál de sus gastos?',
-    valor: gastoActualId ? String(gastoActualId) : String(suyos[0].id),
-    opciones: suyos.map(g => {
+    valor: gastoActualId ? String(gastoActualId) : String(conSaldo[0].id),
+    // Primero los que deben algo: es entre ellos que hay que decidir.
+    opciones: conSaldo.concat(suyos.filter(g => !conSaldo.includes(g))).map(g => {
       const s = saldoDelGasto(g);
       return {
         valor: String(g.id),
         // El saldo va en el propio rótulo: es lo que decide, y en un
         // desplegable no hay lugar para una segunda línea.
-        texto: g.concepto + ' — ' + (s.saldo > 0
+        texto: g.concepto + ' — ' + (s.saldo > 0.005
           ? 'faltan ' + comoDinero(s.saldo, false)
-          : s.estado),
+          : comoSeLeeElSaldo(s.estado)),
       };
     }),
   });
+}
+
+/**
+ * El estado de un saldo, en palabras de una persona.
+ *
+ * `saldoDelGasto()` devuelve la clave en minúsculas para comparar, y
+ * eso terminaba escrito crudo dentro de un desplegable: "Barra libre —
+ * liquidado". Son palabras de contador, y encima en minúscula en medio
+ * de una frase.
+ *
+ * @param {string} estado
+ * @returns {string}
+ */
+function comoSeLeeElSaldo(estado) {
+  return {
+    'sin pagar':     'sin pagar todavía',
+    'abonado':       'abonado en parte',
+    'liquidado':     'ya está pagado',
+    'pagado de más': 'pagado de más',
+  }[estado] || estado;
 }
 
 
@@ -2343,20 +2503,22 @@ function formularioPadrino(padrino) {
                    { valor: 'especie', texto: 'En especie (pone la cosa)' },
                  ] }) +
 
-    campoTexto({ id: 'pad-monto', rotulo: 'Cuánto prometió', tipo: 'number',
-                 paso: '0.01', valor: d.monto ? desdePesos(d.monto) : '',
-                 ayuda: 'Si aporta en especie, pon el valor aproximado o dejalo en 0.' }) +
+    /* campoDinero y no campoTexto: los montos de padrino eran los
+       únicos sin separador de miles —30000 se veía "30000" acá y
+       "30,000" en el formulario de al lado— y sin el aviso de en qué
+       moneda se está escribiendo. */
+    campoDinero({ id: 'pad-monto', rotulo: 'Cuánto prometió',
+                  valor: d.monto ? desdePesos(d.monto) : '',
+                  pista: 'Si aporta en especie, el valor aproximado' }) +
 
     /* ⚡ CUÁNTO ENTREGÓ DE VERDAD (2026-09-03). `estado` es un sí/no, así
        que una entrega parcial —"de los $30,000 me dio $10,000 y el
        resto en octubre", que es lo más común— era irrepresentable: había
        que elegir entre mentir diciendo que ya entregó todo o mentir
        diciendo que no entregó nada. */
-    campoTexto({ id: 'pad-entregado', rotulo: 'Cuánto entregó ya', tipo: 'number',
-                 paso: '0.01',
-                 valor: d.monto_entregado ? desdePesos(d.monto_entregado) : '',
-                 ayuda: 'Déjalo vacío si todavía no entregó nada. ' +
-                        'Puede ser una parte: el resto queda como pendiente.' }) +
+    campoDinero({ id: 'pad-entregado', rotulo: 'Cuánto entregó ya',
+                  valor: d.monto_entregado ? desdePesos(d.monto_entregado) : '',
+                  pista: 'Vacío si todavía no entregó nada' }) +
 
     campoLista({ id: 'pad-estado', rotulo: 'En qué va',
                  valor: d.estado || 'hablado',
@@ -2375,6 +2537,10 @@ function formularioPadrino(padrino) {
     pieDeFormulario('Guardar', !!padrino)
   );
 
+  // campoDinero necesita esto para el separador de miles en vivo.
+  activarFormatoDeMiles('pad-monto', cuerpo);
+  activarFormatoDeMiles('pad-entregado', cuerpo);
+
   engancharFormularioDinero(cuerpo, () => {
     const nombre = valorDe('pad-nombre', cuerpo);
     if (!nombre) { avisar('Falta el nombre.', true); return null; }
@@ -2392,6 +2558,94 @@ function formularioPadrino(padrino) {
   }, 'padrino', padrino);
 }
 
+
+/**
+ * Anota que un padrino entregó dinero. Un campo, y listo.
+ *
+ * POR QUÉ NO ES "EDITAR EL PADRINO"
+ * Es la acción más frecuente sobre un padrino y costaba siete toques:
+ * abrir la ficha, bajar, Editar, bajar hasta el quinto campo de nueve,
+ * escribir, cambiar el estado en un desplegable, guardar. Todo para
+ * tocar un número.
+ *
+ * EL ESTADO SE DEDUCE, NO SE PREGUNTA
+ * `monto_entregado` y `estado` decían lo mismo por dos caminos que
+ * nadie mantenía sincronizados: se podía guardar "entregó $30,000" con
+ * estado "Hablado", y las dos pantallas que resumen padrinos —una
+ * agrupa por estado, la otra suma montos— se contradecían. Acá el
+ * estado sale de la cifra: si completó lo prometido queda 'entregado',
+ * si entregó una parte queda 'confirmado' (comprometido en firme, y con
+ * plata puesta), y eso es coherente por construcción.
+ *
+ * @param {Object} padrino
+ * @param {number} prometido
+ * @param {number} entregado - Lo que ya había entregado antes de esto.
+ * @returns {void}
+ */
+function anotarEntregaDePadrino(padrino, prometido, entregado) {
+  const falta = Math.max(0, prometido - entregado);
+
+  const cuerpo = abrirHoja('Entrega de ' + padrino.nombre,
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+      'Prometió <strong>' + seguro(comoDinero(prometido, false)) + '</strong>' +
+      (entregado > 0.005
+        ? ' y ya entregó ' + seguro(comoDinero(entregado, false)) + '.'
+        : '.') +
+      (falta > 0.005
+        ? ' Faltan <strong>' + seguro(comoDinero(falta, false)) + '</strong>.'
+        : '') +
+    '</p>' +
+
+    campoDinero({ id: 'entrega-monto', rotulo: 'Cuánto entregó ahora',
+                  valor: desdePesos(falta),
+                  pista: 'Puede ser una parte' }) +
+
+    campoTexto({ id: 'entrega-fecha', rotulo: 'Cuándo', tipo: 'date',
+                 valor: hoyEnFecha() }) +
+
+    pieDeFormulario('Guardar')
+  );
+
+  activarFormatoDeMiles('entrega-monto', cuerpo);
+
+  buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
+    const ahora = aPesos(valorDe('entrega-monto', cuerpo));
+    if (!ahora || ahora <= 0) { avisar('Pon cuánto entregó.', true); return; }
+
+    // Se SUMA a lo que ya había: son entregas parciales, no un reemplazo.
+    const total = entregado + ahora;
+
+    /* El estado sale de la cifra, no de un desplegable aparte: es lo
+       que evita que los dos datos se contradigan. */
+    const estado = (total >= prometido - 0.005) ? 'entregado' : 'confirmado';
+
+    try {
+      await mandar('presupuesto.php?accion=guardar_padrino', {
+        id:              padrino.id,
+        nombre:          padrino.nombre,
+        apadrina:        padrino.apadrina,
+        tipo_aporte:     padrino.tipo_aporte,
+        monto:           padrino.monto,
+        monto_entregado: total,
+        estado:          estado,
+        telefono:        padrino.telefono,
+        correo:          padrino.correo,
+        notas:           padrino.notas,
+        fecha_entrega:   valorDe('entrega-fecha', cuerpo),
+      });
+
+      cerrarHoja(true);
+      avisar(total >= prometido - 0.005
+        ? 'Anotado: ya entregó todo lo que prometió.'
+        : 'Anotado. Le faltan ' + comoDinero(prometido - total, false) + '.');
+
+      ensuciarVistas('resumen');
+      dibujarDinero();
+    } catch (error) {
+      avisar(error.message, true);
+    }
+  });
+}
 
 /**
  * Ficha de solo lectura de un proveedor, antes de editar. Mismo patrón
@@ -2447,6 +2701,19 @@ function abrirDetalleDeProveedor(proveedor) {
 
   const cuerpo = abrirHoja(proveedor.nombre,
     '<div class="detalle">' + detalle + '</div>' +
+
+    /* ⚡ PAGARLE DESDE SU FICHA (2026-09-03). La ficha decía cuánto le
+       falta y no dejaba hacer nada al respecto: había que cerrar, ir a
+       Pagos, bajar hasta el final, tocar "Nuevo pago" y volver a elegir
+       el proveedor que se estaba mirando. Se abre pre-llenado con lo
+       que falta. */
+    (falta > 0.005
+      ? '<button class="boton boton--principal boton--ancho" ' +
+                'id="detalle-pagar-proveedor" style="margin-top:var(--esp-2)">' +
+          'Registrar un pago de ' + seguro(comoDinero(falta, false)) +
+        '</button>'
+      : '') +
+
     seccionPagosReales +
     vinetasDeQueIncluye(proveedor.detalle_items) +
     botonesDeContacto(proveedor) +
@@ -2486,6 +2753,21 @@ function abrirDetalleDeProveedor(proveedor) {
   buscar('#detalle-ver-contratos', cuerpo).addEventListener('click',
     () => abrirListaDeDocumentos('contrato', proveedor));
 
+  /* El pago abre con el proveedor y el monto ya puestos. Si tiene un
+     solo gasto, el formulario ni siquiera va a preguntar a cuál va. */
+  const pagarAlProveedor = buscar('#detalle-pagar-proveedor', cuerpo);
+  if (pagarAlProveedor) {
+    pagarAlProveedor.addEventListener('click', () => {
+      const suyos = (DINERO.gastos || []).filter(g => g.proveedor_id === proveedor.id);
+      formularioPago({
+        gasto_id: suyos.length === 1 ? suyos[0].id : 0,
+        concepto: proveedor.servicio || proveedor.nombre,
+        monto:    falta,
+        estado:   'pagado',
+      });
+    });
+  }
+
   buscar('#detalle-recibo', cuerpo).addEventListener('click', () => abrirGeneradorDeRecibo(proveedor));
   buscar('#detalle-contrato', cuerpo).addEventListener('click', () => abrirGeneradorDeContrato(proveedor));
 
@@ -2514,7 +2796,7 @@ function abrirDetalleDeProveedor(proveedor) {
  */
 function abrirGeneradorDeRecibo(proveedor) {
   const falta = (Number(proveedor.monto_total) || 0) - (Number(proveedor.pagado_real) || 0);
-  const hoy   = new Date().toISOString().slice(0, 10);
+  const hoy   = hoyEnFecha();   // local, no UTC: ver hoyEnFecha()
 
   const cuerpo = abrirHoja('Recibo · ' + proveedor.nombre,
     '<button type="button" class="lista__fila" id="rec-configurar" ' +
@@ -2620,7 +2902,7 @@ async function abrirGeneradorDeReciboGenerico() {
   const dinero = await datosDeDineroParaElAsistente();
   if (!dinero) { avisar('No se pudo cargar Presupuesto.', true); return; }
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyEnFecha();   // local, no UTC: ver hoyEnFecha()
 
   const opcionesDeQuien = (dinero.proveedores || [])
     .map(p => ({ valor: 'prov:' + p.id, texto: p.nombre }))
@@ -3123,7 +3405,7 @@ const CANCELACION_SUGERIDA = [
 ];
 
 function abrirGeneradorDeContrato(proveedor) {
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyEnFecha();   // local, no UTC: ver hoyEnFecha()
   const fechaDelEvento = (CONFIGURACION.fiesta.fechaYHora || '').slice(0, 10);
   const horaDelEvento = (CONFIGURACION.fiesta.fechaYHora || '').slice(11, 16);
 
@@ -3431,10 +3713,10 @@ function formularioCotizacion(cotizacion) {
                  ] }) +
 
     '<div class="campo-par">' +
-      campoTexto({ id: 'cot-monto', rotulo: 'Precio cerrado', tipo: 'number',
-                   paso: '0.01', valor: d.monto ? desdePesos(d.monto) : '' }) +
-      campoTexto({ id: 'cot-pp', rotulo: 'Precio por persona', tipo: 'number',
-                   paso: '0.01', valor: d.precio_pp ? desdePesos(d.precio_pp) : '' }) +
+      campoDinero({ id: 'cot-monto', rotulo: 'Precio cerrado',
+                    valor: d.monto ? desdePesos(d.monto) : '' }) +
+      campoDinero({ id: 'cot-pp', rotulo: 'Precio por persona',
+                    valor: d.precio_pp ? desdePesos(d.precio_pp) : '' }) +
     '</div>' +
 
     campoTexto({ id: 'cot-vigencia', rotulo: 'Vale hasta', tipo: 'date',
@@ -3457,6 +3739,9 @@ function formularioCotizacion(cotizacion) {
   );
 
   engancharListaDeDetalle('cot-incluye', cuerpo);
+
+  activarFormatoDeMiles('cot-monto', cuerpo);
+  activarFormatoDeMiles('cot-pp', cuerpo);
 
   engancharFormularioDinero(cuerpo, () => {
     const servicio  = valorDe('cot-servicio', cuerpo);

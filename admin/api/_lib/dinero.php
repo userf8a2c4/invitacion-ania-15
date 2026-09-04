@@ -111,6 +111,35 @@ function conMontosNumericos(array $filas, array $columnas) {
    ══════════════════════════════════════════════════════════════════════ */
 
 /**
+ * Cuánta GENTE va a la fiesta. Una sola definición, para todos.
+ *
+ * POR QUÉ EXISTE
+ * Había tres fórmulas para esto, en tres archivos:
+ *   · `SUM(adultos) + SUM(ninos)`      (_lib/dinero.php)
+ *   · `SUM(adultos + ninos)`           (cotizador.php)
+ *   · `SUM(CASE WHEN asiste=1 …)`      (estadisticas.php)
+ * Hoy dan lo mismo porque las columnas son NOT NULL, pero la segunda
+ * descarta la fila entera si alguna llegara a ser NULL y las otras no.
+ * Y de acá salen dos divisores para el mismo concepto —el costo por
+ * invitado de Dinero y el `real_pp` del cotizador—, que es justo el
+ * tipo de divergencia que este módulo ya pagó caro.
+ *
+ * Se cuenta GENTE (adultos + niños), no confirmaciones: contar
+ * "familia López" como una sola persona daría un número falso.
+ *
+ * @return int
+ */
+function genteQueAsiste() {
+    if (!existeTabla('confirmaciones')) return 0;
+
+    $fila = consultarUno(
+        'SELECT COALESCE(SUM(adultos), 0) + COALESCE(SUM(ninos), 0) AS n
+         FROM confirmaciones WHERE asiste = 1'
+    );
+    return (int) ($fila['n'] ?? 0);
+}
+
+/**
  * LA REGLA DEL COSTO, escrita una sola vez.
  *
  * Un gasto cuesta lo que costó de verdad (`monto_real`) o, mientras eso
@@ -248,11 +277,7 @@ function cifrasDelPresupuesto($activo, $porPlan) {
        persona daría un número falso. Sin nadie confirmado se deja en
        null explícito, en vez de dividir por cero o mostrar un $0 que
        parecería un error. */
-    $personas = existeTabla('confirmaciones')
-        ? (int) consultarUno(
-            'SELECT COALESCE(SUM(adultos), 0) + COALESCE(SUM(ninos), 0) AS n
-             FROM confirmaciones WHERE asiste = 1')['n']
-        : 0;
+    $personas = genteQueAsiste();
 
     $costoTotal = (float) $t['costo'];
     $pagadoTotal = (float) $pagos['pagado'];
@@ -273,10 +298,31 @@ function cifrasDelPresupuesto($activo, $porPlan) {
         'por_pagar'         => (float) $pagos['por_pagar'],
         'por_pagar_cuantos' => (int) $pagos['por_pagar_cuantos'],
 
-        // La cifra que manda: todo lo que queda por pagar de verdad.
-        'falta' => round($costoTotal - $pagadoTotal, 2),
+        /* La cifra que manda: todo lo que queda por pagar de verdad.
+         *
+         * ⚡ NO PUEDE DAR NEGATIVA POR UNA MEZCLA DE ALCANCES
+         * (2026-09-03). `costo` está filtrado por plan, pero `pagado`
+         * incluye a propósito los pagos sueltos (sin gasto), que no
+         * pertenecen a ningún plan. Es la decisión correcta —esconder
+         * plata que salió de verdad sería peor— pero significa que la
+         * resta puede dar negativa sin que nadie haya pagado de más:
+         * basta con mirar un escenario chico teniendo pagos sueltos
+         * grandes.
+         *
+         * Se corta en cero. "Falta pagar −$8,000" no es información:
+         * es una pantalla que se contradice sola, y el caso real de
+         * pagar de más lo cubre `pagado_de_mas`, que es explícito. */
+        'falta' => round(max(0, $costoTotal - $pagadoTotal), 2),
 
-        'bolsillo_si_nadie_mas_entrega' => round($costoTotal - $entregado, 2),
+        /* Cuánto se pagó por encima del costo cargado, si es que pasó.
+           Separado de `falta` porque son dos hechos distintos y meterlos
+           en un solo número con signo obligaba a interpretarlo. */
+        'pagado_de_mas' => round(max(0, $pagadoTotal - $costoTotal), 2),
+
+        /* Lo mismo acá: `entregado` es global (los padrinos apadrinan la
+           fiesta, no un escenario) y `costo` es por plan. Con un plan
+           chico y padrinos generosos, la resta se iba abajo de cero. */
+        'bolsillo_si_nadie_mas_entrega' => round(max(0, $costoTotal - $entregado), 2),
 
         'sin_ningun_pago'        => (int) $sinPago['cuantos'],
         'sin_ningun_pago_monto'  => (float) $sinPago['monto'],
@@ -301,7 +347,8 @@ function cifrasVacias() {
         'prometido_padrinos' => 0.0, 'entregado_padrinos' => 0.0,
         'padrinos_pendientes' => 0.0, 'padrinos_pendientes_cuantos' => 0,
         'pagado' => 0.0, 'por_pagar' => 0.0, 'por_pagar_cuantos' => 0,
-        'falta' => 0.0, 'bolsillo_si_nadie_mas_entrega' => 0.0,
+        'falta' => 0.0, 'pagado_de_mas' => 0.0,
+        'bolsillo_si_nadie_mas_entrega' => 0.0,
         'sin_ningun_pago' => 0, 'sin_ningun_pago_monto' => 0.0,
         'confirmados' => 0, 'costo_por_invitado' => null,
     ];
@@ -325,14 +372,41 @@ function cifrasVacias() {
  * arreglar de un toque.
  *
  * @param int  $activo
- * @param bool $porPlan
+ * @param bool $porPlan  ⚠️ Con `true`, esta función emite
+ *   `presupuesto_id` sobre **DOS** tablas: `gastos` Y `categorias_gasto`.
+ *   Quien la llama tiene que haber comprobado las dos columnas, no una.
+ *   (presupuesto.php lo hace; estadisticas.php comprobaba solo `gastos`
+ *   y por eso Inicio podía reventar mientras Dinero degradaba bien.)
+ *   Igual se verifica acá abajo, porque un contrato que solo vive en un
+ *   comentario no es un contrato.
  * @return array
  */
 function categoriasConGasto($activo, $porPlan) {
     if (!existeTabla('categorias_gasto') || !existeTabla('gastos')) return [];
 
+    /* Red de seguridad del contrato de arriba: si falta la columna en
+       cualquiera de las dos tablas, se ignora el plan y se devuelven
+       todas las categorías. Se ve de más, que es entendible; reventar
+       la pantalla, no. */
+    if ($porPlan
+        && (!in_array('presupuesto_id', columnasDe('gastos'), true)
+            || !in_array('presupuesto_id', columnasDe('categorias_gasto'), true))) {
+        $porPlan = false;
+    }
+
     $costo = sqlCostoDeUnGasto('g.');
-    $args  = $porPlan ? [':activo' => $activo] : [];
+
+    /* ⚠️ DOS NOMBRES PARA EL MISMO VALOR, Y ES OBLIGATORIO.
+       El plan se filtra en DOS lugares de esta consulta (el ON del JOIN
+       y el WHERE), y PDO está en modo no emulado (ATTR_EMULATE_PREPARES
+       => false, ver bd.php). En ese modo, un named parameter repetido
+       necesita UN VALOR POR APARICIÓN: con `:activo` dos veces y una
+       sola entrada en el array, PDO tira SQLSTATE[HY093] y se cae la
+       consulta entera — que acá significa la pantalla de Dinero Y la de
+       Inicio, porque las dos llaman a esta función. */
+    $args = $porPlan
+        ? [':plan_gasto' => $activo, ':plan_categoria' => $activo]
+        : [];
 
     /* El filtro de plan va en el ON del JOIN y no en el WHERE: en un
        LEFT JOIN, ponerlo en el WHERE descarta las categorías que
@@ -345,8 +419,8 @@ function categoriasConGasto($activo, $porPlan) {
                 COUNT(g.id)                         AS cuantos_gastos
          FROM categorias_gasto c
          LEFT JOIN gastos g ON g.categoria_id = c.id" .
-            ($porPlan ? ' AND g.presupuesto_id = :activo' : '') .
-        ($porPlan ? ' WHERE c.presupuesto_id = :activo' : '') .
+            ($porPlan ? ' AND g.presupuesto_id = :plan_gasto' : '') .
+        ($porPlan ? ' WHERE c.presupuesto_id = :plan_categoria' : '') .
         ' GROUP BY c.id, c.nombre, c.techo, c.orden
           ORDER BY c.orden, c.nombre',
         $args
@@ -358,8 +432,9 @@ function categoriasConGasto($activo, $porPlan) {
                 COUNT(g.id)                       AS cuantos_gastos
          FROM gastos g
          WHERE g.categoria_id IS NULL" .
-        ($porPlan ? ' AND g.presupuesto_id = :activo' : ''),
-        $args
+        ($porPlan ? ' AND g.presupuesto_id = :plan_gasto' : ''),
+        // Solo el que esta consulta usa: un valor de más también es HY093.
+        $porPlan ? [':plan_gasto' => $activo] : []
     );
 
     if ((int) $huerfanos['cuantos_gastos'] > 0) {
