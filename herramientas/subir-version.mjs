@@ -6,7 +6,8 @@
    Cambia de una sola pasada el número de versión en TODOS los lugares
    donde vive:
 
-     · los ~40 `?v=NN` de index.html (las hojas de estilo y los scripts)
+     · los ~28 `?v=NN` de index.html (los scripts y las imágenes) — el
+       <style> empaquetado NO se toca: es territorio de empaquetar.mjs
      · la constante VERSION de sw.js (el service worker del sitio)
      · la constante VERSION de admin/sw.js (el service worker del panel)
 
@@ -59,6 +60,9 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+/* La comprobación del CSS la hace el propio empaquetador: así no hay
+   una copia del minificador ni del orden de los archivos acá. */
+import { comprobarElCssInline } from './empaquetar.mjs';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -115,6 +119,46 @@ if (existsSync(dirProduccion)) {
     process.exit(1);
   }
 }
+/* ─── 0C. ¿EL CSS QUE SE VA A SERVIR ESTÁ AL DÍA? ─────────────────
+ *
+ * ⚡ POR QUÉ ESTO EXISTE (2026-09-04)
+ * Lo mismo que la guarda de arriba, pero para el CSS — y esta vez costó
+ * caro. El CSS de la invitación NO se sirve desde estilos/: va empaquetado
+ * y minificado DENTRO de index.html, y ese bloque solo se regenera si
+ * alguien se acuerda de correr `node herramientas/empaquetar.mjs`.
+ *
+ * Alguien no se acordó. Producción quedó dos días con el CSS viejo y el
+ * JavaScript nuevo, que esperaban cosas distintas el uno del otro: el CSS
+ * escondía diez bloques por su cuenta —el formulario de confirmar entre
+ * ellos— y el JS solo los mostraba si veía una clase que ese CSS ya no
+ * conocía. Una invitada real tocó el botón de animaciones en su teléfono
+ * y se le vació media invitación, para siempre, sin ningún error.
+ *
+ * La guarda 0A compara FECHAS. Esta compara CONTENIDO, y tiene que ser
+ * así: index.html se reescribe por otros motivos —este mismo script le
+ * cambia los ?v=— así que su fecha siempre sería la más nueva y no
+ * delataría nada. Rearmar el paquete en memoria y compararlo byte a byte
+ * no se puede engañar.
+ */
+const elCss = comprobarElCssInline();
+
+if (!elCss.alDia) {
+  console.error('');
+  console.error('✗ NO se subió la versión: el CSS incrustado está viejo.');
+  console.error('');
+  console.error(`  ${elCss.motivo}`);
+  console.error('');
+  console.error('  index.html lleva el CSS adentro, en un <style>. Si un archivo');
+  console.error('  de estilos/ cambió y no se volvió a empaquetar, la web sirve');
+  console.error('  el CSS de antes con el JavaScript de ahora — y eso ya dejó');
+  console.error('  media invitación en blanco en el teléfono de una invitada.');
+  console.error('');
+  console.error('  Corré esto y volvé a intentar:');
+  console.error('    node herramientas/empaquetar.mjs');
+  console.error('');
+  process.exit(1);
+}
+
 /* ─── 0B. ¿LA IMAGEN DE LA TARJETA SIGUE EN PIE? ─────────────────
  *
  * ⚡ POR QUÉ ESTO EXISTE (2026-09-04)
@@ -149,7 +193,7 @@ if (laImagenDeLaTarjeta && laImagenDeLaTarjeta.startsWith('http')) {
     console.warn('');
     console.warn('! No se pudo comprobar la imagen de la tarjeta (¿sin internet?).');
     console.warn(`  ${laImagenDeLaTarjeta}`);
-    console.warn('  Se sigue igual, pero conviené mirarla a mano.');
+    console.warn('  Se sigue igual, pero conviene mirarla a mano.');
     console.warn('');
   }
 
@@ -181,11 +225,44 @@ const sw = readFileSync(rutaSw, 'utf8');
 // no tiene por qué dejar de funcionar para el sitio público.
 const swAdmin = existsSync(rutaSwAdmin) ? readFileSync(rutaSwAdmin, 'utf8') : null;
 
+/* ─── 0D. EL <style> EMPAQUETADO QUEDA FUERA DE TODO ESTO ──────────
+ *
+ * ⚡ POR QUÉ (2026-09-04)
+ * index.html lleva el CSS adentro, en un <style> que genera
+ * empaquetar.mjs. Ese CSS tiene UN `?v=` propio y deliberado:
+ * `fondo-ornamental.svg?v=1`, puesto a mano porque el .htaccess le da un
+ * año de caché inmutable al SVG y sin querystring propia no habría forma
+ * de renovarlo (ver la nota en estilos/01-fundamentos.css).
+ *
+ * Este script reescribía TODOS los `?v=` de index.html, ese incluido. O
+ * sea que cada subida de versión lo pisaba, el siguiente empaquetado lo
+ * devolvía a 1, y los dos scripts se estaban peleando por la misma línea
+ * sin que nadie lo notara. Además —y esto sí importaba— dejaba el
+ * <style> distinto del que sale de estilos/, con lo cual la guarda 0C
+ * habría cortado con una falsa alarma en la ronda siguiente.
+ *
+ * El <style> es territorio de empaquetar.mjs. Acá se lo saltea entero:
+ * ni se lee para averiguar la versión, ni se reescribe.
+ */
+const MARCA_CSS_INICIO = '<!-- ESTILOS-EMPAQUETADOS-INICIO -->';
+const MARCA_CSS_FIN = '<!-- ESTILOS-EMPAQUETADOS-FIN -->';
+
+const _i = html.indexOf(MARCA_CSS_INICIO);
+const _f = html.indexOf(MARCA_CSS_FIN);
+const hayStyle = _i >= 0 && _f > _i;
+
+/** Las partes de index.html que este script SÍ puede tocar. */
+const antesDelStyle = hayStyle ? html.slice(0, _i) : html;
+/** El <style> empaquetado, tal cual, para devolverlo intacto. */
+const elStyle = hayStyle ? html.slice(_i, _f) : '';
+const despuesDelStyle = hayStyle ? html.slice(_f) : '';
+
 /* ─── 1. Averiguar en qué versión estamos ─────────────────────────────
-   Se mira el número MÁS ALTO que haya en index.html. Si alguna vez
-   quedaron desincronizados, así se parte del mayor y se los alinea a
-   todos, en vez de arrastrar el error. */
-const versionesEncontradas = [...html.matchAll(/\?v=(\d+)/g)].map(m => Number(m[1]));
+   Se mira el número MÁS ALTO que haya en index.html, FUERA del <style>.
+   Si alguna vez quedaron desincronizados, así se parte del mayor y se
+   los alinea a todos, en vez de arrastrar el error. */
+const versionesEncontradas = [...(antesDelStyle + despuesDelStyle).matchAll(/\?v=(\d+)/g)]
+  .map(m => Number(m[1]));
 
 if (versionesEncontradas.length === 0) {
   console.error('✗ No se encontró ningún ?v=NN en index.html. ¿Está bien la ruta?');
@@ -207,12 +284,14 @@ if (versionNueva <= versionActual && pedidaPorElUsuario === null) {
   process.exit(1);
 }
 
-/* ─── 2. Reescribir index.html ────────────────────────────────────── */
+/* ─── 2. Reescribir index.html (sin tocar el <style>) ─────────────── */
 let cuantosCambiaron = 0;
-const htmlNuevo = html.replace(/\?v=\d+/g, () => {
+const renumerar = (texto) => texto.replace(/\?v=\d+/g, () => {
   cuantosCambiaron++;
   return `?v=${versionNueva}`;
 });
+
+const htmlNuevo = renumerar(antesDelStyle) + elStyle + renumerar(despuesDelStyle);
 
 /* ─── 3. Reescribir la VERSION del service worker ─────────────────── */
 const patronSw = /const VERSION = '([\w-]+?)-v\d+';/;
