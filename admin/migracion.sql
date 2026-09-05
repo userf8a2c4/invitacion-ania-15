@@ -1252,6 +1252,13 @@ CREATE TABLE IF NOT EXISTS chat_mensajes (
   -- por si hace falta depurar sin ir a reconstruirlo desde las filas.
   propuestas_json TEXT NULL,
   estado          ENUM('pendiente','enviado','error','visto') NOT NULL DEFAULT 'enviado',
+  -- A qué mensaje contesta, cuando no es al de justo arriba (2026-09-04).
+  -- La cadena de agentes trabaja por cola: una respuesta puede llegar
+  -- tanto después que ya se olvidó qué se preguntó, y sin esto el panel
+  -- la pinta al final del hilo sin nada que la ate a su pregunta. Sin
+  -- FK a propósito: si algún día se borra el mensaje citado, la
+  -- respuesta tiene que seguir existiendo — se deja de citar y ya.
+  en_respuesta_a  INT DEFAULT NULL,
   creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY por_hilo (hilo_id, id),
   CONSTRAINT chat_msg_hilo FOREIGN KEY (hilo_id)
