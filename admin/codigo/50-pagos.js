@@ -118,6 +118,49 @@ function pedirContrasenaParaDinero(motivo) {
 }
 
 /**
+ * Manda algo que toca el dinero, pidiendo la contraseña SOLO si el
+ * servidor la exige.
+ *
+ * ⚡ POR QUÉ ASÍ Y NO PREGUNTANDO ANTES (2026-09-05)
+ * La contraseña vale un rato (ver la nota en compras.php), así que el
+ * panel no puede saber por su cuenta si hace falta: el sello puede haber
+ * caducado hace un segundo, o haberlo puesto otra pestaña. Preguntarle
+ * al servidor primero sería un viaje de más en cada compra.
+ *
+ * Se intenta, y si contesta que falta la contraseña, se pide y se
+ * reintenta. Quien manda sobre si hace falta es siempre el servidor —
+ * el panel nunca decide saltársela.
+ *
+ * @param {string} ruta
+ * @param {Object} cuerpo
+ * @param {string} motivo - Qué se va a hacer, para la ventana.
+ * @returns {Promise<*>} Lo que devolvió el servidor.
+ * @throws Si falla por cualquier otra cosa, o si se canceló (código 0).
+ */
+async function mandarTocandoDinero(ruta, cuerpo, motivo) {
+  try {
+    return await mandar(ruta, cuerpo);
+  } catch (error) {
+    /* Solo se reintenta cuando el servidor dice EXACTAMENTE que falta la
+       contraseña. Un 403 por otra cosa —o una contraseña equivocada— se
+       deja pasar tal cual: reintentar ahí sería pedirla en bucle. */
+    const laPide = error && error.codigo === 403 &&
+                   /escribe tu contraseña/i.test(error.message || '');
+    if (!laPide) throw error;
+
+    const clave = await pedirContrasenaParaDinero(motivo);
+    if (clave === null) {
+      // Cancelado a propósito: no es un fallo que haya que gritar.
+      const corte = new Error('');
+      corte.codigo = 0;
+      throw corte;
+    }
+
+    return await mandar(ruta, Object.assign({}, cuerpo, { contrasena: clave }));
+  }
+}
+
+/**
  * Abre la pantalla de formas de pago.
  *
  * @returns {void}
@@ -448,15 +491,16 @@ function pintarTarjetas(donde, tarjetas, cuerpo) {
         'que ya se pagaron con ella la siguen nombrando.',
         { confirmar: 'Quitarla', cancelar: 'Dejarla' })) return;
 
-      const clave = await pedirContrasenaParaDinero('Vas a quitar una tarjeta.');
-      if (clave === null) return;
-
       try {
-        await mandar('compras.php?accion=desactivar_metodo',
-                     { id: Number(boton.dataset.quitar), contrasena: clave });
+        await mandarTocandoDinero('compras.php?accion=desactivar_metodo',
+                                  { id: Number(boton.dataset.quitar) },
+                                  'Vas a quitar una tarjeta.');
         avisar('Tarjeta quitada.');
         cargarTarjetas(cuerpo);
-      } catch (error) { avisar(error.message, true); }
+      } catch (error) {
+        // codigo 0 = lo canceló ella misma; no hay nada que avisar.
+        if (error && error.codigo !== 0) avisar(error.message, true);
+      }
     });
   });
 }
@@ -523,15 +567,22 @@ async function abrirAgregarTarjeta(cfg, deVuelta) {
   guardar.disabled = false;
 
   guardar.addEventListener('click', async () => {
-    /* ⚡ LA CONTRASEÑA SE PIDE ANTES DE HABLAR CON STRIPE (2026-09-05)
-       Y no después, aunque ahí quedaría más "al final". Si se pidiera
-       después de confirmSetup(), cancelar dejaría la tarjeta YA adjunta
-       al cliente en Stripe y sin fila de este lado: un token huérfano,
-       cobrable, que no aparece en ninguna pantalla. Pidiéndola primero,
-       cancelar no deja rastro en ningún lado. */
-    const clave = await pedirContrasenaParaDinero(
-      'Vas a guardar una tarjeta para las compras del evento.');
-    if (clave === null) return;
+    /* ⚡ ACÁ SÍ SE PREGUNTA ANTES, Y NO AL REINTENTAR (2026-09-05)
+       En el resto se usa mandarTocandoDinero(), que intenta y pide la
+       contraseña solo si el servidor la exige. Acá no sirve ese orden:
+       si se pidiera DESPUÉS de confirmSetup(), cancelar dejaría la
+       tarjeta ya adjunta al cliente en Stripe y sin fila de este lado —
+       un token huérfano, cobrable, que no aparece en ninguna pantalla.
+
+       Por eso se mira `cfg.pide_contrasena`, que el servidor calculó al
+       abrir la pantalla: si el sello sigue vivo, no se molesta a nadie.
+       Y si caducó en el medio, el envío de abajo la pide igual. */
+    let clave = null;
+    if (cfg.pide_contrasena) {
+      clave = await pedirContrasenaParaDinero(
+        'Vas a guardar una tarjeta para las compras del evento.');
+      if (clave === null) return;
+    }
 
     guardar.disabled = true;
     const rotulo = guardar.textContent;
@@ -564,13 +615,16 @@ async function abrirAgregarTarjeta(cfg, deVuelta) {
       /* Se manda solo el identificador. La marca y los últimos cuatro
          los averigua el servidor preguntándole a Stripe: si los mandara
          el navegador, cualquiera podría guardar una "Visa ···0000". */
-      await mandar('compras.php?accion=guardar_metodo',
-                   { payment_method_id: pm, contrasena: clave });
+      const cuerpo = { payment_method_id: pm };
+      if (clave !== null) cuerpo.contrasena = clave;
+
+      await mandarTocandoDinero('compras.php?accion=guardar_metodo', cuerpo,
+                                'Vas a guardar una tarjeta para las compras del evento.');
       avisar('Tarjeta guardada.');
       cerrarHoja(true);
       if (deVuelta) cargarTarjetas(deVuelta);
     } catch (error) {
-      avisar(error.message, true);
+      if (error && error.codigo !== 0) avisar(error.message, true);
       guardar.disabled = false;
       guardar.textContent = rotulo;
     }

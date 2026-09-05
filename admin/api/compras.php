@@ -421,12 +421,85 @@ function losPagosEstanListos() {
    acabes de entrar: la sesión dice que SIGUES ahí, no que SEAS tú.
 
    Se pide en las tres acciones que mueven dinero o pueden habilitarlo, y
-   en ninguna otra: son raras, y conviene que cuesten.
+   en ninguna otra.
 
-   NO SE GUARDA NADA. No hay sello temporal ni tabla nueva: se comprueba
-   contra el mismo hash del login y se descarta. Un sello de "ya me
-   identifiqué hace 5 minutos" sería otra cosa que robar.
+   ⚡ Y VALE UN RATO, NO UNA SOLA VEZ (2026-09-05)
+   Al principio se pedía en CADA cobro. Pero la idea de todo esto es que
+   MegaBot le automatice las compras a Lucila con algo de fricción, no
+   que la frene: si él le propone cinco cosas en una tarde, escribir la
+   contraseña cinco veces deja de ser una guarda y pasa a ser un motivo
+   para no usar el sistema. Y una guarda que empuja a la gente a
+   esquivarla protege menos que una más floja que sí se usa.
+
+   Lo que de verdad autoriza cada compra es que ella toque Confirmar en
+   esa propuesta concreta: sin eso no se cobra nada, y eso no tiene
+   atajo ni caducidad. La contraseña es la capa de abajo — demuestra que
+   quien está del otro lado es ella y no alguien con su teléfono
+   desbloqueado— y para eso alcanza con demostrarlo una vez cada tanto.
+
+   LO QUE SE GUARDA ES UN SELLO, NUNCA LA CONTRASEÑA. Un timestamp y la
+   IP desde donde se confirmó, en `ajustes`. La contraseña se compara
+   contra el hash del login y se descarta en la misma línea.
    ══════════════════════════════════════════════════════════════════════ */
+
+/** Cuánto vale haber escrito la contraseña, antes de volver a pedirla. */
+const MINUTOS_DE_CONFIRMACION_DE_DINERO = 20;
+
+/** Dónde se anota ese sello, por persona. */
+function claveDelSelloDeDinero($usuarioId) {
+    return 'dinero_confirmado_' . (int) $usuarioId;
+}
+
+/**
+ * Si esta persona ya demostró hace poco que es ella, desde acá mismo.
+ *
+ * Se ata a la IP a propósito: un sello que valiera desde cualquier lado
+ * sería un permiso que viaja con la sesión robada, que es justo lo que
+ * esto tiene que evitar.
+ *
+ * @param array $yo
+ * @return bool
+ */
+function confirmoHacePoco($yo) {
+    if (!existeTabla('ajustes')) return false;
+
+    $fila = consultarUno('SELECT valor FROM ajustes WHERE clave = :c',
+                         [':c' => claveDelSelloDeDinero($yo['id'] ?? 0)]);
+    if (!$fila) return false;
+
+    $sello = json_decode((string) $fila['valor'], true);
+    if (!is_array($sello)) return false;
+
+    $cuando = (int) ($sello['cuando'] ?? 0);
+    $desde  = (string) ($sello['ip'] ?? '');
+    $ahora  = substr($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0', 0, 45);
+
+    if ($desde !== $ahora) return false;
+
+    return (time() - $cuando) < (MINUTOS_DE_CONFIRMACION_DE_DINERO * 60);
+}
+
+/**
+ * Anota que esta persona acaba de escribir bien su contraseña.
+ *
+ * @param array $yo
+ * @return void
+ */
+function anotarQueConfirmo($yo) {
+    if (!existeTabla('ajustes')) return;
+
+    ejecutar(
+        'INSERT INTO ajustes (clave, valor) VALUES (:c, :v)
+         ON DUPLICATE KEY UPDATE valor = VALUES(valor)',
+        [
+            ':c' => claveDelSelloDeDinero($yo['id'] ?? 0),
+            ':v' => json_encode([
+                'cuando' => time(),
+                'ip'     => substr($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0', 0, 45),
+            ]),
+        ]
+    );
+}
 
 /** Cuántos intentos fallidos de contraseña se toleran, y en cuánto rato. */
 const INTENTOS_DE_CLAVE_PARA_DINERO = 5;
@@ -446,6 +519,9 @@ const MARCA_DE_CLAVE_PARA_DINERO = '__dinero__';
  * @return void
  */
 function exigirContrasenaDeNuevo($yo, $datos) {
+    // Ya lo demostró hace poco y desde acá: no se le vuelve a pedir.
+    if (confirmoHacePoco($yo)) return;
+
     $ip = substr($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0', 0, 45);
 
     if (existeTabla('intentos_login')) {
@@ -494,6 +570,9 @@ function exigirContrasenaDeNuevo($yo, $datos) {
         }
         responderMal('Esa no es tu contraseña.', 403);
     }
+
+    // Era ella: no se lo volvemos a preguntar en un rato.
+    anotarQueConfirmo($yo);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -656,6 +735,13 @@ case 'config':
         'modo_secreta'     => $modoSecreta,
 
         // Para que el panel no tenga que repetir estas reglas.
+        /* Si al tocar algo de dinero va a hacer falta la contraseña, o
+           si todavía vale la de hace un rato. El panel lo usa para no
+           abrir una ventana que el servidor no va a exigir — pero la
+           decisión de verdad la toma el servidor en cada acción; esto
+           es solo para no molestar de más. */
+        'pide_contrasena'  => !confirmoHacePoco($yo),
+
         'nombre_en_env'    => STRIPE_CLAVE_SECRETA_EN_ENV,
         'modos_coinciden'  => ($modoPublicable !== '' && $modoPublicable === $modoSecreta),
         'modo_esperado'    => $esPruebas ? 'prueba' : 'real',
