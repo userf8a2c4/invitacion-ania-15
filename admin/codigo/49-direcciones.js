@@ -337,7 +337,15 @@ function abrirFichaDeDireccion(d, deVuelta) {
    llevarse puesto lo esencial. Sin mapa se guarda la dirección escrita,
    que es lo que de verdad hace falta para que algo llegue. */
 
-/** El centro cuando todavía no hay punto: Toluca, donde es la fiesta. */
+/* El centro cuando todavía no hay punto: la zona de Toluca, que es
+   donde Lucila va a recibir sus compras.
+
+   ⚠️ ESTO NO TIENE NADA QUE VER CON EL LUGAR DE LA FIESTA.
+   Son direcciones logísticas: su casa, la de su mamá, a dónde mandar un
+   ramo. El salón tiene su propia dirección, vive en
+   codigo/01-configuracion.js y no se toca desde acá. Confundir las dos
+   cosas llevaría a "arreglar" el domicilio que leen 114 invitados por
+   corregir el centro de un mapa que solo usa ella. */
 const CENTRO_DEL_MAPA = [19.2926, -99.6569];
 
 /** La carga de Leaflet, guardada para no pedirla dos veces. */

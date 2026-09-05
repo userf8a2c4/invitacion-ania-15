@@ -61,6 +61,18 @@ const ACCIONES_PERMITIDAS_PARA_MEGABOT = [
     'mesas.php?accion=autoasignar',
     'mesas.php?accion=deshacer',
     'planificador.php?accion=estado_tarea',
+
+    /* ⚠️ LA ÚNICA ACCIÓN DE ESTA LISTA QUE MUEVE DINERO (2026-09-04)
+       Entra porque el circuito entero se apoya en que MegaBot pueda
+       PROPONER una compra. Proponer no cobra: la propuesta queda
+       esperando, y el cobro sale recién cuando Lucila toca Confirmar en
+       el panel (ver 32-asistente.js). No hay ningún camino donde el
+       webhook cobre solo.
+
+       `setup_intent` y `guardar_metodo` NO entran a propósito: guardar
+       una tarjeta se hace en Ajustes, mirando la pantalla. No es algo
+       que tenga sentido proponer desde una conversación. */
+    'compras.php?accion=cobrar',
 ];
 
 $accion = (string) ($_GET['accion'] ?? '');
@@ -231,6 +243,60 @@ function construirContexto($pantalla, $usuario) {
             'vencidas'   => (int) ($t['vencidas'] ?? 0),
             'vencen_hoy' => (int) ($t['vencen_hoy'] ?? 0),
         ];
+    }
+
+    /* ─── COMPRAS ────────────────────────────────────────────────────
+       Lo mínimo para que MegaBot pueda proponer una compra sensata sin
+       tener que preguntar lo que ya se sabe: si hay a dónde mandarla, si
+       hay con qué pagarla, y cómo se llaman las predeterminadas.
+
+       ⚠️ ACÁ NO VIAJA NINGÚN TOKEN. Ni el `pm_` de la tarjeta, ni la
+       clave de Stripe, ni la dirección completa. Este bloque sale del
+       repositorio por un webhook hacia un servicio de afuera: lo único
+       que cruza es lo que hace falta para redactar una propuesta -un
+       alias, una marca y cuatro dígitos que no sirven para comprar.
+
+       Los CONTEOS van además de los nombres a propósito: con
+       `metodos_activos: 0` MegaBot sabe que tiene que decir "primero
+       guardá una tarjeta" en vez de proponer un cobro que va a fallar. */
+    if (existeTabla('direcciones_entrega')) {
+        $dirs = consultarUno(
+            'SELECT COUNT(*) AS n FROM direcciones_entrega WHERE activa = 1');
+        $dirPredet = consultarUno(
+            'SELECT alias FROM direcciones_entrega
+              WHERE activa = 1 AND es_predeterminada = 1 LIMIT 1');
+
+        $contexto['compras'] = [
+            'direcciones_activas'      => (int) ($dirs['n'] ?? 0),
+            'direccion_predeterminada' => $dirPredet
+                ? (string) $dirPredet['alias'] : null,
+            'metodos_activos'          => 0,
+            'metodo_predeterminado'    => null,
+            'pagos_listos'             => false,
+        ];
+    }
+
+    if (existeTabla('metodos_pago') && isset($contexto['compras'])) {
+        $met = consultarUno('SELECT COUNT(*) AS n FROM metodos_pago WHERE activo = 1');
+        $metPredet = consultarUno(
+            'SELECT brand, last4 FROM metodos_pago
+              WHERE activo = 1 AND es_predeterminado = 1 LIMIT 1');
+
+        $contexto['compras']['metodos_activos'] = (int) ($met['n'] ?? 0);
+        $contexto['compras']['metodo_predeterminado'] = $metPredet
+            ? trim((string) $metPredet['brand'] . ' ···' . (string) $metPredet['last4'])
+            : null;
+
+        /* «Listo» quiere decir que un cobro puede salir: las dos claves
+           puestas Y algo con qué pagar. Se calcula igual que en
+           compras.php para que las dos pantallas nunca se contradigan. */
+        $pub = trim((string) (consultarUno(
+            "SELECT valor FROM ajustes WHERE clave = 'stripe_clave_publica'")['valor'] ?? ''));
+        if ($pub === '') $pub = trim((string) env('STRIPE_CLAVE_PUBLICA', ''));
+        $sec = trim((string) env('STRIPE_CLAVE_SECRETA', ''));
+
+        $contexto['compras']['pagos_listos'] =
+            $pub !== '' && $sec !== '' && $contexto['compras']['metodos_activos'] > 0;
     }
 
     return $contexto;

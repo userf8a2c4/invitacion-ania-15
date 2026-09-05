@@ -963,12 +963,20 @@
        formulario mostraba "confirmado" sin haber mandado nada, que es
        justo como este problema pasó desapercibido tanto tiempo. */
     let seGuardoEnElServidor = false;
+    /* Lo que el servidor haya dicho sobre POR QUÉ no se guardó. Vacío si
+       de verdad fue la conexión. Ver la nota en 15-registro-de-
+       confirmaciones.js: mostrar siempre "revisa tu conexión" tapó un
+       problema real durante días. */
+    let motivoDelServidor = '';
     try {
       const [resultadoDelServidor] = await Promise.all([
         enviarAlServidor(datosDeLaConfirmacion),  // PHP: MySQL + correos
         anotarEnLaHoja(datosDeLaConfirmacion),    // Google Sheets: respaldo
       ]);
       seGuardoEnElServidor = !!(resultadoDelServidor && resultadoDelServidor.ok);
+      if (!seGuardoEnElServidor && resultadoDelServidor) {
+        motivoDelServidor = resultadoDelServidor.error || '';
+      }
 
       /* La última palabra sobre el código la tiene el servidor: es el
          único que sabe qué quedó escrito en la base, y es lo que va a
@@ -990,11 +998,15 @@
     /* Si no se guardó, se dice. Nunca un "éxito" que no ocurrió: la
        persona debe poder reintentar en vez de creer que ya confirmó. */
     if (!seGuardoEnElServidor) {
-      return mostrarError(
-        'No pudimos registrar tu confirmación. Revisa tu conexión e ' +
-        'inténtalo de nuevo. Si vuelve a fallar, escríbenos a ' +
-        'info@aniaxv.com y te confirmamos a mano.'
-      );
+      /* Si el servidor explicó qué pasó, se dice ESO. Solo cuando no
+         hubo respuesta se habla de la conexión, que es el único caso en
+         que esa frase es cierta. */
+      return mostrarError(motivoDelServidor
+        ? motivoDelServidor + ' Si vuelve a fallar, escríbenos a ' +
+          'info@aniaxv.com y te confirmamos a mano.'
+        : 'No pudimos registrar tu confirmación. Revisa tu conexión e ' +
+          'inténtalo de nuevo. Si vuelve a fallar, escríbenos a ' +
+          'info@aniaxv.com y te confirmamos a mano.');
     }
 
     guardarEnMemoria('pase', datosDeLaConfirmacion);

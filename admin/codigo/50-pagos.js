@@ -99,7 +99,26 @@ async function abrirFormasDePago() {
       '</p>' +
     '</div>' +
 
+    /* Las tarjetas van DESPUÉS de las claves, y solo tienen sentido
+       cuando la conexión está lista: sin claves no hay con qué hablarle
+       a Stripe, y un formulario de tarjeta que no puede funcionar es
+       peor que no mostrarlo. */
+    (cfg.listo
+      ? '<div class="campo" style="margin-top:var(--esp-4)">' +
+          '<span class="campo__rotulo">Tarjetas guardadas</span>' +
+          '<div id="pagos-tarjetas"><p class="vacio__texto">Buscando…</p></div>' +
+          '<button type="button" class="boton" id="pagos-agregar" ' +
+                  'style="margin-top:var(--esp-2)">Agregar una tarjeta</button>' +
+        '</div>'
+      : '') +
+
     pieDeFormulario('Guardar'));
+
+  if (cfg.listo) {
+    cargarTarjetas(cuerpo);
+    buscar('#pagos-agregar', cuerpo).addEventListener('click', () =>
+      abrirAgregarTarjeta(cfg, cuerpo));
+  }
 
   buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
     const publicable = valorDe('pagos-publicable', cuerpo).trim();
@@ -169,4 +188,254 @@ function estadoDeLaConexionDePagos(cfg) {
 
   return caja('aviso-ok',
     'Conexión lista, en modo <strong>' + seguro(cfg.modo_publicable) + '</strong>.');
+}
+
+
+/* ═══ LAS TARJETAS ═════════════════════════════════════
+
+   ⚠️ ESTE ARCHIVO NUNCA VE UN NÚMERO DE TARJETA.
+   El formulario donde se escribe la tarjeta lo dibuja Stripe dentro de
+   un iframe suyo, servido desde su dominio. Nuestro JavaScript no puede
+   leer adentro de ese iframe -el navegador no lo permite entre
+   dominios distintos- y ese es justamente el punto: aunque este archivo
+   quisiera espiar el número, no podría.
+
+   Lo que vuelve de ahí es un `pm_...`: una etiqueta que solo sirve
+   contra la clave secreta que vive en el .env del servidor.
+
+   POR QUÉ STRIPE.JS SE CARGA DESDE SU DOMINIO Y NO SE COPIA ACÁ
+   Porque Stripe no lo permite, y con razón: si el archivo estuviera
+   copiado en nuestro servidor, cualquiera que entrara al hosting podría
+   cambiarlo por uno que sí robe el número. Cargándolo de js.stripe.com,
+   la única forma de manipularlo es entrar a Stripe.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** La carga de Stripe.js, para no pedirla dos veces. */
+let cargaDeStripeJs = null;
+
+/**
+ * Trae Stripe.js si todavía no está.
+ *
+ * Mismo patrón y mismo tope de tiempo que cargarLeaflet() en
+ * 49-direcciones.js: bajo demanda, al abrir la hoja, y con reloj — una
+ * conexión que no cierra dejaría la promesa colgada para siempre.
+ *
+ * @returns {Promise<boolean>} true si quedó usable.
+ */
+function cargarStripeJs() {
+  if (typeof Stripe !== 'undefined') return Promise.resolve(true);
+  if (cargaDeStripeJs) return cargaDeStripeJs;
+
+  cargaDeStripeJs = new Promise(resolver => {
+    let yaTermino = false;
+    const terminar = () => {
+      if (yaTermino) return;
+      yaTermino = true;
+      resolver(typeof Stripe !== 'undefined');
+    };
+
+    const reloj = setTimeout(terminar, 8000);
+    const listo = () => { clearTimeout(reloj); terminar(); };
+
+    const script = document.createElement('script');
+    script.src = 'https://js.stripe.com/v3/';
+    script.onload = listo;
+    script.onerror = listo;
+    document.head.appendChild(script);
+  });
+
+  return cargaDeStripeJs;
+}
+
+/**
+ * Pide las tarjetas y las pinta.
+ *
+ * @param {Element} cuerpo
+ * @returns {Promise<void>}
+ */
+async function cargarTarjetas(cuerpo) {
+  const donde = buscar('#pagos-tarjetas', cuerpo);
+  if (!donde) return;
+
+  try {
+    const r = await traer('compras.php?accion=listar_metodos');
+    pintarTarjetas(donde, (r.filas || []).filter(t => Number(t.activo) === 1), cuerpo);
+  } catch (error) {
+    pintarError(donde, error.message, () => cargarTarjetas(cuerpo));
+  }
+}
+
+/**
+ * Dibuja la lista de tarjetas.
+ *
+ * @param {Element} donde
+ * @param {Array} tarjetas
+ * @param {Element} cuerpo
+ * @returns {void}
+ */
+function pintarTarjetas(donde, tarjetas, cuerpo) {
+  if (!tarjetas.length) {
+    donde.innerHTML = '<p class="vacio__texto">Todavía no hay ninguna. ' +
+      'Sin una tarjeta guardada, el equipo puede proponerte compras pero ' +
+      'no se pueden cobrar.</p>';
+    return;
+  }
+
+  donde.innerHTML = tarjetas.map(t => {
+    const deSiempre = Number(t.es_predeterminado) === 1;
+
+    /* El vencimiento con dos dígitos: "3/2027" se lee mal al lado de
+       "11/2027", y esta lista existe para reconocer de un vistazo. */
+    const mes = String(t.exp_month || '').padStart(2, '0');
+
+    return '<div class="lista__fila" style="cursor:default">' +
+      '<span class="lista__cuerpo">' +
+        '<span class="lista__titulo">' +
+          seguro(t.brand || 'Tarjeta') + ' ···' + seguro(t.last4 || '????') +
+          (deSiempre ? ' <span class="etiqueta etiqueta--bien">la de siempre</span>' : '') +
+        '</span>' +
+        '<span class="lista__pie">Vence ' + seguro(mes) + '/' + seguro(t.exp_year) + '</span>' +
+      '</span>' +
+      '<span class="acciones">' +
+        (deSiempre ? '' :
+          '<button type="button" class="boton boton--chico" data-siempre="' +
+            seguro(t.id) + '">Usar esta</button>') +
+        '<button type="button" class="boton boton--chico boton--peligro" data-quitar="' +
+          seguro(t.id) + '">Quitar</button>' +
+      '</span>' +
+    '</div>';
+  }).join('');
+
+  buscarTodos('[data-siempre]', donde).forEach(boton => {
+    boton.addEventListener('click', async () => {
+      try {
+        await mandar('compras.php?accion=predeterminar_metodo',
+                     { id: Number(boton.dataset.siempre) });
+        avisar('Ahora las compras se cobran a esa tarjeta.');
+        cargarTarjetas(cuerpo);
+      } catch (error) { avisar(error.message, true); }
+    });
+  });
+
+  buscarTodos('[data-quitar]', donde).forEach(boton => {
+    boton.addEventListener('click', async () => {
+      if (!await confirmarAccion(
+        '¿Quitar esta tarjeta?\n\n' +
+        'Deja de poder usarse para cobrar, acá y en Stripe. Las compras ' +
+        'que ya se pagaron con ella la siguen nombrando.',
+        { confirmar: 'Quitarla', cancelar: 'Dejarla' })) return;
+
+      try {
+        await mandar('compras.php?accion=desactivar_metodo',
+                     { id: Number(boton.dataset.quitar) });
+        avisar('Tarjeta quitada.');
+        cargarTarjetas(cuerpo);
+      } catch (error) { avisar(error.message, true); }
+    });
+  });
+}
+
+/**
+ * La hoja para agregar una tarjeta.
+ *
+ * @param {Object} cfg      - Lo que devolvió compras.php?accion=config.
+ * @param {Element} deVuelta - La pantalla de pagos, para repintarla.
+ * @returns {Promise<void>}
+ */
+async function abrirAgregarTarjeta(cfg, deVuelta) {
+  const cuerpo = abrirHoja('Agregar una tarjeta',
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
+      (cfg.modo_publicable === 'prueba'
+        ? 'Estás en <strong>pruebas</strong>: usa la tarjeta de mentira ' +
+          '4242 4242 4242 4242, cualquier fecha futura y cualquier código. ' +
+          'No se mueve un peso.'
+        : 'Esta tarjeta va a quedar guardada para cobrar las compras que ' +
+          'confirmes. El número lo recibe Stripe directamente: este panel ' +
+          'no lo ve ni lo guarda.') +
+    '</p>' +
+
+    '<div id="pagos-recuadro" style="min-height:120px">' +
+      '<p class="vacio__texto">Cargando el formulario seguro…</p>' +
+    '</div>' +
+
+    pieDeFormulario('Guardar la tarjeta'));
+
+  const guardar = buscar('#pie-guardar', cuerpo);
+  const recuadro = buscar('#pagos-recuadro', cuerpo);
+
+  // Hasta que Stripe no esté listo, el botón no puede hacer nada útil.
+  guardar.disabled = true;
+
+  const hay = await cargarStripeJs();
+  if (!cuerpo.isConnected) return;      // la cerró mientras cargaba
+
+  if (!hay || !cfg.publicable) {
+    recuadro.innerHTML = '<p class="aviso-error">No se pudo cargar el ' +
+      'formulario seguro de Stripe. Revisa tu conexión y vuelve a intentar.</p>';
+    return;
+  }
+
+  let intento = null;
+  try {
+    intento = await mandar('compras.php?accion=setup_intent', {});
+  } catch (error) {
+    recuadro.innerHTML = '<p class="aviso-error">' + seguro(error.message) + '</p>';
+    return;
+  }
+
+  const stripe = Stripe(cfg.publicable);
+  const elementos = stripe.elements({
+    clientSecret: intento.client_secret,
+    /* Que el formulario de Stripe no desentone con el panel, que es
+       oscuro. Sin esto aparece un recuadro blanco en medio de una
+       pantalla negra y parece que se rompió algo. */
+    appearance: { theme: 'night' },
+  });
+
+  recuadro.innerHTML = '';
+  elementos.create('payment').mount(recuadro);
+  guardar.disabled = false;
+
+  guardar.addEventListener('click', async () => {
+    guardar.disabled = true;
+    const rotulo = guardar.textContent;
+    guardar.textContent = 'Guardando…';
+
+    /* `redirect: 'if_required'` evita que Stripe se lleve la página a
+       otro lado salvo que el banco lo exija de verdad. Con una tarjeta
+       normal se resuelve acá mismo y la hoja no se pierde. */
+    const r = await stripe.confirmSetup({
+      elements: elementos,
+      redirect: 'if_required',
+    });
+
+    if (r.error) {
+      avisar(r.error.message || 'No se pudo guardar la tarjeta.', true);
+      guardar.disabled = false;
+      guardar.textContent = rotulo;
+      return;
+    }
+
+    const pm = r.setupIntent && r.setupIntent.payment_method;
+    if (!pm) {
+      avisar('Stripe no devolvió la tarjeta. Vuelve a intentar.', true);
+      guardar.disabled = false;
+      guardar.textContent = rotulo;
+      return;
+    }
+
+    try {
+      /* Se manda solo el identificador. La marca y los últimos cuatro
+         los averigua el servidor preguntándole a Stripe: si los mandara
+         el navegador, cualquiera podría guardar una "Visa ···0000". */
+      await mandar('compras.php?accion=guardar_metodo', { payment_method_id: pm });
+      avisar('Tarjeta guardada.');
+      cerrarHoja(true);
+      if (deVuelta) cargarTarjetas(deVuelta);
+    } catch (error) {
+      avisar(error.message, true);
+      guardar.disabled = false;
+      guardar.textContent = rotulo;
+    }
+  });
 }

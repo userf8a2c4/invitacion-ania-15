@@ -1318,3 +1318,99 @@ CREATE TABLE IF NOT EXISTS direcciones_entrega (
   creado_en         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY por_activa (activa)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- LA TARJETA CON LA QUE SE PAGA (2026-09-04)
+--
+-- ⚠️ ACÁ NO HAY NINGÚN NÚMERO DE TARJETA. NI UNO.
+--
+-- El número y el CVV los captura Stripe dentro de su propio iframe y
+-- nunca pasan por nuestro servidor ni por nuestro JavaScript. Lo que
+-- guardamos es el TOKEN que Stripe devuelve a cambio -- una cadena
+-- `pm_...` que solo sirve para decirle a Stripe "cobrá con aquella
+-- tarjeta", y que sin la clave secreta no vale nada.
+--
+-- El resto de las columnas -marca, últimos cuatro, vencimiento- existen
+-- para una sola cosa: que Lucila reconozca cuál es cuál cuando tenga
+-- dos. "Visa ···4242" no identifica a nadie ni sirve para comprar.
+--
+-- SON DEL EVENTO, NO DE CADA CUENTA, igual que las direcciones: hay una
+-- sola fiesta y una sola tarjeta con la que se le paga.
+--
+-- `activo` EXISTE PARA NO BORRAR, mismo motivo que en las direcciones:
+-- un pedido viejo tiene que poder seguir diciendo con qué se pagó.
+-- ══════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS metodos_pago (
+  id                       INT AUTO_INCREMENT PRIMARY KEY,
+  -- El token de Stripe (`pm_...`). Es lo único que sirve para cobrar, y
+  -- solo desde nuestro servidor, con la clave secreta del .env.
+  stripe_payment_method_id VARCHAR(255) NOT NULL,
+  -- Para que ella distinga una tarjeta de otra. Nada más.
+  brand                    VARCHAR(40) NOT NULL DEFAULT '',
+  last4                    VARCHAR(4) NOT NULL DEFAULT '',
+  exp_month                INT NOT NULL DEFAULT 0,
+  exp_year                 INT NOT NULL DEFAULT 0,
+  es_predeterminado        TINYINT(1) NOT NULL DEFAULT 0,
+  activo                   TINYINT(1) NOT NULL DEFAULT 1,
+  creado_en                DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Un mismo token no se guarda dos veces: agregar la misma tarjeta de
+  -- nuevo tiene que actualizar la fila que ya está, no crear una gemela
+  -- que después obligue a elegir entre dos cosas idénticas.
+  UNIQUE KEY token_unico (stripe_payment_method_id),
+  KEY por_activo (activo)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ══════════════════════════════════════════════════════════════════════
+-- LAS COMPRAS QUE SE PAGARON (2026-09-04)
+--
+-- Una fila por compra que el equipo propuso y Lucila confirmó. Es el
+-- historial: qué se compró, cuánto salió, a dónde iba y con qué se pagó.
+--
+-- POR QUÉ SE ESCRIBE LA FILA ANTES DE COBRAR
+-- Se crea en estado `propuesta` y recién después se le pide el cobro a
+-- Stripe. Si se hiciera al revés -cobrar primero, anotar después- un
+-- corte de luz entre las dos cosas dejaría dinero salido de la cuenta
+-- sin ninguna fila que lo explique. Al revés, lo peor que queda es una
+-- fila `propuesta` que no llegó a cobrarse: se ve, se entiende y no
+-- costó nada.
+--
+-- `estado` ES CHICO A PROPÓSITO. Cuatro valores y ninguno más:
+--   propuesta  se anotó, todavía no se cobró
+--   cobrada    Stripe confirmó el cobro
+--   fallida    Stripe lo rechazó (fondos, banco, 3DS sin resolver)
+--   cancelada  se descartó antes de cobrar
+-- Un estado que nadie sabe explicar es un estado que nadie va a mirar.
+--
+-- SIN FOREIGN KEY hacia direcciones/métodos, mismo criterio que el resto
+-- del proyecto: esas filas se desactivan pero nunca se borran, así que
+-- el id siempre va a resolver.
+-- ══════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS compras_pedidos (
+  id                       INT AUTO_INCREMENT PRIMARY KEY,
+  -- Qué se compró, en palabras: "Ramo de rosas rojas - florería X".
+  concepto                 VARCHAR(300) NOT NULL,
+  -- DECIMAL y no FLOAT: con dinero, un flotante redondea mal y las
+  -- sumas dejan de cuadrar. Mismo criterio que `gastos` y `pagos`.
+  monto                    DECIMAL(12,2) NOT NULL DEFAULT 0,
+  moneda                   VARCHAR(3) NOT NULL DEFAULT 'mxn',
+  direccion_id             INT DEFAULT NULL,
+  metodo_pago_id           INT DEFAULT NULL,
+  -- El identificador del cobro en Stripe, para poder rastrearlo en su
+  -- panel si algo se discute. Nulo mientras no se haya cobrado.
+  stripe_payment_intent_id VARCHAR(255) DEFAULT NULL,
+  estado                   ENUM('propuesta','cobrada','fallida','cancelada')
+                           NOT NULL DEFAULT 'propuesta',
+  -- Lo que el equipo haya adjuntado (color, proveedor, enlace): texto
+  -- JSON y no columnas sueltas, porque cada compra trae lo suyo.
+  detalle_json             TEXT,
+  -- Por qué falló, en palabras, cuando falla. Lo que Stripe contesta,
+  -- recortado: nunca lleva secretos, pero tampoco hace falta guardar
+  -- media respuesta.
+  motivo_falla             VARCHAR(300) NOT NULL DEFAULT '',
+  creado_en                DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  cobrado_en               DATETIME DEFAULT NULL,
+  KEY por_estado (estado),
+  KEY por_fecha (creado_en)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

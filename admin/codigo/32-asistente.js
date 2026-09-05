@@ -540,6 +540,9 @@ const ACCIONES_PERMITIDAS_PARA_MEGABOT = [
   'mesas.php?accion=autoasignar',
   'mesas.php?accion=deshacer',
   'planificador.php?accion=estado_tarea',
+  // La única que mueve dinero. Ver la nota en chat.php: proponer no
+  // cobra; el cobro sale del botón Confirmar de acá abajo.
+  'compras.php?accion=cobrar',
 ];
 
 /** El id del último mensaje ya pintado, para pedir solo los nuevos. */
@@ -582,6 +585,8 @@ function vistasParaEnsuciarPorAccion(accion) {
   if (accion.startsWith('presupuesto.php')) return ['resumen', 'dinero'];
   if (accion.startsWith('mesas.php'))       return ['resumen', 'evento', 'invitados'];
   if (accion.startsWith('planificador.php')) return ['resumen', 'evento'];
+  // Una compra cobrada cambia lo gastado, así que Dinero queda viejo.
+  if (accion.startsWith('compras.php'))     return ['resumen', 'dinero'];
   return ['resumen'];
 }
 
