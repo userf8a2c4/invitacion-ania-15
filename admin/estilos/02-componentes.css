@@ -1191,6 +1191,39 @@ select.campo__control {
    muestra lo que SÍ está puesto — que es lo único que hace falta ver
    sin abrir. Ver el bloque de etiquetas en 06-piezas.js. */
 
+/* ─── LO TÉCNICO, PLEGADO (2026-09-05) ────────────────────────────────
+ *
+ * La pantalla de Formas de pago abría con las claves de Stripe y las
+ * instrucciones del .env. Para quien usa el panel a diario eso es ruido
+ * que compite con lo único que necesita ver —si se puede pagar y con qué
+ * tarjeta— y además invita a tocar un campo que rompe los cobros.
+ *
+ * Mismo mecanismo que .etiquetas-acordeon (details nativo), con el borde
+ * más apagado: esto no es contenido, es una gaveta que casi nunca se
+ * abre. */
+.pagos-tecnico {
+  border: 1px solid var(--borde);
+  border-radius: var(--redondeo);
+  padding: 0 var(--esp-2);
+}
+.pagos-tecnico[open] { padding-bottom: var(--esp-2); }
+
+.pagos-tecnico__titulo {
+  min-height: 44px;          /* objetivo táctil, igual que el acordeón */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  cursor: pointer;
+  font-size: var(--letra-chica);
+  color: var(--texto-suave);
+  list-style: none;          /* el triángulo de Safari se sale del sistema */
+}
+.pagos-tecnico__titulo::-webkit-details-marker { display: none; }
+.pagos-tecnico__titulo:focus-visible {
+  outline: 2px solid var(--oro);
+  outline-offset: 2px;
+}
+
 .etiquetas-acordeon {
   border: 1px solid var(--borde);
   border-radius: var(--redondeo);

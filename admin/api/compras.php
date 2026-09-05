@@ -29,6 +29,39 @@
    necesita para orientar a quien configura.
 
    ══════════════════════════════════════════════════════════════════════
+   LA SECRETA DEBERÍA SER UNA CLAVE RESTRINGIDA (rk_...)
+
+   Una `sk_` puede hacer CUALQUIER COSA en la cuenta de Stripe: leer
+   todos los clientes, mover dinero, cambiar la configuración. Si el .env
+   se filtrara, eso es lo que se llevarían.
+
+   Stripe permite crear claves con permisos recortados, y este archivo
+   solo necesita cuatro cosas. Con una clave restringida a esto, un .env
+   robado sirve para muy poco:
+
+       Customers ......... escritura   (clienteDeStripe)
+       SetupIntents ...... escritura   (accion=setup_intent)
+       PaymentMethods .... escritura   (guardar_metodo pregunta qué es un
+                           token, y desactivar_metodo lo despega con
+                           .../detach, que es un POST)
+       PaymentIntents .... escritura   (accion=cobrar)
+
+   Todo lo demás se deja en "ninguno".
+
+   PaymentMethods va en ESCRITURA y no en solo lectura a propósito.
+   Tentaba dejarlo en lectura —la tarjeta la crea el navegador, no este
+   archivo— pero entonces `detach` falla y el token seguiría adjunto en
+   Stripe después de quitar la tarjeta del panel: desactivada de este
+   lado, viva del otro. Y no compra nada a cambio: para cobrar hace falta
+   PaymentIntents en escritura de todos modos, así que quien robe la
+   clave ya puede cobrar. Recortar ahí sería aceptar una baja a medias
+   sin ganar seguridad.
+
+   Se genera en Stripe → Desarrolladores → Claves de API → "Crear clave
+   restringida", y se pone en el .env en lugar de la `sk_`. El código no
+   cambia: la lee del mismo sitio.
+
+   ══════════════════════════════════════════════════════════════════════
    DOS GUARDAS QUE EVITAN ERRORES CAROS
 
    1. NO SE DEJA GUARDAR UNA CLAVE SECRETA EN EL CAMPO PÚBLICO. Es el
@@ -56,6 +89,10 @@ require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
 require_once __DIR__ . '/_lib/entorno.php';
+// Para avisar de cada movimiento de dinero — ver
+// avisarDeMovimientoDeDinero() más abajo.
+require_once __DIR__ . '/_lib/correo.php';
+require_once __DIR__ . '/_lib/push.php';
 
 $yo     = exigirAdministrador();
 $accion = (string) ($_GET['accion'] ?? 'config');
@@ -121,12 +158,36 @@ function claveStripePublicable() {
 /**
  * Le pide algo a la API de Stripe.
  *
+ * ⚡ LA CLAVE DE IDEMPOTENCIA NO ES UN LUJO (2026-09-05)
+ *
+ * EL PROBLEMA
+ * Sin ella, una petición POST que se repite crea DOS cosas. En
+ * `payment_intents` eso es cobrar dos veces, y no hace falta mala fe
+ * para provocarlo: un doble toque, un reintento del navegador, o una
+ * red que se corta después de que Stripe recibió el pedido pero antes
+ * de que volviera la respuesta. Desde acá los tres casos se ven igual
+ * —"no sé si llegó"— y reintentar es lo natural.
+ *
+ * CÓMO FUNCIONA
+ * Stripe guarda el resultado de la primera petición con esa clave
+ * durante 24 h. Si llega otra igual, devuelve la MISMA respuesta en vez
+ * de ejecutar de nuevo. Es su forma oficial de resolver esto y la
+ * recomiendan para todos los POST.
+ *
+ * LA CLAVE TIENE QUE SER ESTABLE, NO ALEATORIA
+ * Un UUID nuevo en cada intento no protege de nada: cada reintento
+ * traería una clave distinta y Stripe lo trataría como un cobro nuevo.
+ * Por eso `cobrar` usa el id del pedido, que ya existe en la base ANTES
+ * de llamar acá — mismo pedido, misma clave, pase lo que pase.
+ *
  * @param string $metodo 'GET' o 'POST'.
  * @param string $ruta   Por ejemplo 'setup_intents'.
  * @param array  $datos  Se manda como formulario (así lo espera Stripe).
+ * @param string $idempotencia Clave estable para no repetir un POST. Se
+ *        ignora en GET, que no crea nada.
  * @return array ['ok' => bool, 'codigo' => int, 'datos' => array, 'error' => string]
  */
-function pedirleAStripe($metodo, $ruta, $datos = []) {
+function pedirleAStripe($metodo, $ruta, $datos = [], $idempotencia = '') {
     $secreta = trim((string) env(STRIPE_CLAVE_SECRETA_EN_ENV, ''));
 
     if ($secreta === '') {
@@ -150,18 +211,27 @@ function pedirleAStripe($metodo, $ruta, $datos = []) {
         $url .= '?' . $cuerpo;
     }
 
+    $cabeceras = [
+        'Authorization: Bearer ' . $secreta,
+        'Content-Type: application/x-www-form-urlencoded',
+        /* Fija la versión de la API: así una actualización del lado
+           de Stripe no cambia la forma de las respuestas de un día
+           para el otro sin que nadie haya tocado nada acá. */
+        'Stripe-Version: 2024-06-20',
+    ];
+
+    /* Solo en POST: un GET no crea nada, así que repetirlo es inofensivo
+       y Stripe ignora la cabecera ahí. El prefijo evita que dos cosas
+       distintas del proyecto choquen si algún día comparten número. */
+    if ($metodo === 'POST' && $idempotencia !== '') {
+        $cabeceras[] = 'Idempotency-Key: ania-' . $idempotencia;
+    }
+
     $curl = curl_init($url);
     curl_setopt_array($curl, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 25,
-        CURLOPT_HTTPHEADER     => [
-            'Authorization: Bearer ' . $secreta,
-            'Content-Type: application/x-www-form-urlencoded',
-            /* Fija la versión de la API: así una actualización del lado
-               de Stripe no cambia la forma de las respuestas de un día
-               para el otro sin que nadie haya tocado nada acá. */
-            'Stripe-Version: 2024-06-20',
-        ],
+        CURLOPT_HTTPHEADER     => $cabeceras,
     ]);
 
     if ($metodo === 'POST') {
@@ -243,9 +313,13 @@ function clienteDeStripe() {
     $guardado = trim((string) ($fila['valor'] ?? ''));
     if ($guardado !== '') return $guardado;
 
+    /* Clave fija a propósito: este cliente de Stripe es UNO solo para
+       todo el evento (por eso se guarda en `ajustes`). Si dos peticiones
+       simultáneas llegaran acá con la tabla vacía, sin esto quedarían
+       dos clientes en Stripe y las tarjetas repartidas entre ambos. */
     $r = pedirleAStripe('POST', 'customers', [
         'description' => 'XV de Ania - compras del evento',
-    ]);
+    ], 'cliente-unico-del-evento');
 
     if (!$r['ok'] || empty($r['datos']['id'])) return '';
 
@@ -286,6 +360,197 @@ function losPagosEstanListos() {
 
     $modoPub = modoDeClaveStripe($pub);
     return $modoPub !== '' && $modoPub === modoDeClaveStripe($sec);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   VOLVER A DEMOSTRAR QUIÉN ERES, PARA TOCAR EL DINERO
+
+   ⚡ POR QUÉ (2026-09-05)
+   Hasta ahora, estar dentro del panel bastaba para agregar una tarjeta o
+   disparar un cobro. Y las sesiones duran semanas: un teléfono
+   desbloqueado, prestado o perdido era acceso directo al dinero, sin que
+   nadie tuviera que saber ninguna contraseña.
+
+   Es la misma idea que usa cualquier tienda seria —Amazon incluido— al
+   pedir la contraseña otra vez para tocar un método de pago aunque
+   acabes de entrar: la sesión dice que SIGUES ahí, no que SEAS tú.
+
+   Se pide en las tres acciones que mueven dinero o pueden habilitarlo, y
+   en ninguna otra: son raras, y conviene que cuesten.
+
+   NO SE GUARDA NADA. No hay sello temporal ni tabla nueva: se comprueba
+   contra el mismo hash del login y se descarta. Un sello de "ya me
+   identifiqué hace 5 minutos" sería otra cosa que robar.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Cuántos intentos fallidos de contraseña se toleran, y en cuánto rato. */
+const INTENTOS_DE_CLAVE_PARA_DINERO = 5;
+const MINUTOS_DE_FRENO_DE_DINERO    = 15;
+/** La marca propia en `intentos_login`, para no mezclar con el login. */
+const MARCA_DE_CLAVE_PARA_DINERO = '__dinero__';
+
+/**
+ * Corta la petición si quien pide esto no reescribió su contraseña.
+ *
+ * El freno va ANTES de comprobar nada: sin él, este endpoint sería un
+ * sitio cómodo para probar contraseñas una tras otra sin límite. Mismo
+ * patrón y misma tabla que llaveDeArranqueCorrecta() (_lib/entorno.php).
+ *
+ * @param array $yo    El usuario de la sesión.
+ * @param array $datos El cuerpo del POST.
+ * @return void
+ */
+function exigirContrasenaDeNuevo($yo, $datos) {
+    $ip = substr($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0', 0, 45);
+
+    if (existeTabla('intentos_login')) {
+        $fila = consultarUno(
+            'SELECT COUNT(*) AS n FROM intentos_login
+             WHERE ip = :ip AND correo = :marca
+               AND cuando > DATE_SUB(NOW(), INTERVAL ' . MINUTOS_DE_FRENO_DE_DINERO . ' MINUTE)',
+            [':ip' => $ip, ':marca' => MARCA_DE_CLAVE_PARA_DINERO]
+        );
+        if ($fila && (int) $fila['n'] >= INTENTOS_DE_CLAVE_PARA_DINERO) {
+            responderMal('Demasiados intentos con la contraseña. Espera '
+                       . MINUTOS_DE_FRENO_DE_DINERO . ' minutos.', 429);
+        }
+    }
+
+    /* Se lee del cuerpo crudo y NO con campoTexto(): esa función recorta
+       y normaliza, y una contraseña tiene que compararse tal cual se
+       escribió. */
+    $contrasena = isset($datos['contrasena']) ? (string) $datos['contrasena'] : '';
+
+    if ($contrasena === '') {
+        responderMal('Escribe tu contraseña para confirmar.', 401);
+    }
+
+    $fila = consultarUno('SELECT password_hash FROM usuarios WHERE id = :i',
+                         [':i' => (int) ($yo['id'] ?? 0)]);
+
+    if (!$fila || !contrasenaCorrecta($contrasena, (string) $fila['password_hash'])) {
+        if (existeTabla('intentos_login')) {
+            insertar('intentos_login', ['ip' => $ip, 'correo' => MARCA_DE_CLAVE_PARA_DINERO]);
+        }
+        responderMal('Esa no es tu contraseña.', 403);
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   AVISAR DE CADA MOVIMIENTO DE DINERO
+
+   ⚡ POR QUÉ ES LA DEFENSA QUE MÁS VALE (2026-09-05)
+   Un cobro pasaba sin que nadie se enterara. Quedaba en la bitácora,
+   pero hay que ir a mirarla, y nadie mira la bitácora de un sistema que
+   funciona bien.
+
+   Lo que protege de verdad no es impedir todo cargo raro —eso es
+   imposible— sino VERLO en minutos. Un cobro que no reconoces, visto el
+   mismo día, se disputa; visto en la factura del mes siguiente, ya no.
+
+   Se avisa de tres cosas: un cobro, una tarjeta nueva y una tarjeta
+   quitada. Las dos últimas porque son lo que pasa ANTES de que el dinero
+   se mueva: dan tiempo a reaccionar.
+
+   ⚠️ EL PUSH VA SIN TEXTO. mandarAviso() (_lib/push.php) despierta al
+   service worker sin cuerpo, así que el teléfono avisa de que pasó algo
+   pero no dice cuánto. El detalle va en el correo. Meterle contenido al
+   push exige cifrado ECDH y es otra ronda.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Avisa por correo y por push de algo que tocó el dinero.
+ *
+ * NUNCA CORTA NADA. Un servidor de correo caído no puede dejar un cobro
+ * a medias ni impedir que se guarde una tarjeta: el aviso es una
+ * consecuencia del hecho, no una condición para que ocurra. Si falla, se
+ * anota en el registro del servidor y se sigue.
+ *
+ * @param string $asunto  Para el correo.
+ * @param string $resumen Una línea, en lenguaje normal.
+ * @param array  $detalle Pares rótulo => valor, ya listos para leer.
+ * @param array  $yo      Quién lo hizo.
+ * @return void
+ */
+function avisarDeMovimientoDeDinero($asunto, $resumen, $detalle, $yo) {
+    try {
+        $filas = '';
+        foreach ($detalle as $rotulo => $valor) {
+            $filas .= '<tr>'
+                . '<td style="padding:6px 12px 6px 0;color:#7A6B8A">' . htmlspecialchars($rotulo) . '</td>'
+                . '<td style="padding:6px 0"><b>' . htmlspecialchars((string) $valor) . '</b></td>'
+                . '</tr>';
+        }
+
+        $html = '<html><body style="font-family:system-ui,sans-serif;color:#241c1a">'
+            . '<p style="font-size:16px">' . htmlspecialchars($resumen) . '</p>'
+            . '<table style="font-size:14px;border-collapse:collapse">' . $filas . '</table>'
+            . '<p style="font-size:13px;color:#7A6B8A;margin-top:18px">'
+            . 'Lo hizo <b>' . htmlspecialchars((string) ($yo['nombre'] ?? '¿?')) . '</b> el '
+            . date('d/m/Y \a \l\a\s H:i') . '.<br>'
+            . 'Si no fuiste tú, entra al panel y quita la tarjeta ahora mismo.'
+            . '</p></body></html>';
+
+        $destinatarios = array_filter(array_map('trim',
+            explode(',', (string) env('CORREO_ADMINISTRADORA', 'info@aniaxv.com'))));
+
+        foreach ($destinatarios as $destino) {
+            $resultado = enviarCorreo($destino, $asunto, $html);
+            if ($resultado !== true) {
+                error_log('[Ania XV · compras] No salió el aviso a ' . $destino . ': ' . $resultado);
+            }
+        }
+
+        if (function_exists('avisarATodos')) avisarATodos();
+    } catch (Throwable $e) {
+        // Cualquier cosa que pase acá es menos grave que perder el cobro.
+        error_log('[Ania XV · compras] Falló el aviso de dinero: ' . $e->getMessage());
+    }
+}
+
+/** Cuántos cobros como mucho, y en cuánto rato. */
+const COBROS_MAXIMOS_SEGUIDOS = 5;
+const MINUTOS_DE_VENTANA_DE_COBRO = 10;
+const MARCA_DE_COBRO = '__cobro__';
+
+/**
+ * Frena una ráfaga de cobros.
+ *
+ * ⚡ POR QUÉ HACE FALTA UNO PROPIO (2026-09-05)
+ * El techo general del panel es de 300 peticiones cada 5 minutos
+ * (PETICIONES_API_MAXIMAS, _lib/sesion.php). Para leer la lista de
+ * invitados está bien; para SACAR DINERO es absurdo: caben decenas de
+ * cobros seguidos sin que nada se queje.
+ *
+ * Cinco en diez minutos es holgado para el uso real —se compran cosas
+ * de a una, mirando— y corta en seco cualquier ráfaga, venga de una
+ * sesión robada o de un bucle mal escrito.
+ *
+ * Se cuentan los INTENTOS, no los cobros que salieron bien: si están
+ * fallando cinco seguidos, con más razón hay que parar.
+ *
+ * @return void
+ */
+function exigirRitmoDeCobro() {
+    if (!existeTabla('intentos_login')) return;
+
+    $ip = substr($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0', 0, 45);
+
+    $fila = consultarUno(
+        'SELECT COUNT(*) AS n FROM intentos_login
+         WHERE ip = :ip AND correo = :marca
+           AND cuando > DATE_SUB(NOW(), INTERVAL ' . MINUTOS_DE_VENTANA_DE_COBRO . ' MINUTE)',
+        [':ip' => $ip, ':marca' => MARCA_DE_COBRO]
+    );
+
+    if ($fila && (int) $fila['n'] >= COBROS_MAXIMOS_SEGUIDOS) {
+        responderMal('Van muchos cobros seguidos. Por seguridad hay que esperar '
+                   . MINUTOS_DE_VENTANA_DE_COBRO . ' minutos antes de otro.', 429);
+    }
+
+    // Se anota ANTES de cobrar: si se anotara después, un cobro que
+    // tarda o falla a medias no contaría y el freno sería salteable.
+    insertar('intentos_login', ['ip' => $ip, 'correo' => MARCA_DE_COBRO]);
 }
 
 /**
@@ -412,7 +677,14 @@ case 'setup_intent':
            le permite al banco autorizar el cobro más tarde sin pedir
            confirmación en ese momento. */
         'usage'                  => 'off_session',
-    ]);
+    ],
+    /* Acá la clave NO puede ser fija: un SetupIntent se consume al
+       guardar una tarjeta, y con una clave fija la segunda alta
+       recibiría el mismo intento ya usado y no se podría agregar otra
+       tarjeta nunca más. Con el minuto adentro, un doble toque reusa el
+       mismo intento —que es el caso a evitar— y una alta de verdad más
+       tarde consigue el suyo. */
+    'setup-' . (int) $yo['id'] . '-' . floor(time() / 60));
 
     if (!$r['ok']) responderMal($r['error'], 502);
 
@@ -432,6 +704,9 @@ case 'guardar_metodo':
     exigirMetodo('POST');
     exigirPagosListos();
     $datos = cuerpoJson();
+    // Dar de alta una tarjeta es habilitar futuros cobros: se confirma
+    // con la contraseña, no solo con la sesión abierta.
+    exigirContrasenaDeNuevo($yo, $datos);
 
     $pm = trim(campoTexto($datos, 'payment_method_id', 255));
     if (strpos($pm, 'pm_') !== 0) {
@@ -475,6 +750,16 @@ case 'guardar_metodo':
     // En la bitácora, la marca y los últimos cuatro. Nunca el token.
     anotarEnBitacora($yo, 'guardó una tarjeta', 'metodos_pago', $id,
                      trim($valores['brand'] . ' ···' . $valores['last4']));
+
+    avisarDeMovimientoDeDinero(
+        'Se guardó una tarjeta en el panel',
+        'Alguien acaba de dar de alta una tarjeta para pagar las compras del evento.',
+        [
+            'Tarjeta' => trim($valores['brand'] . ' ···' . $valores['last4']),
+            'Vence'   => $valores['exp_month'] . '/' . $valores['exp_year'],
+        ],
+        $yo
+    );
 
     responderBien(['id' => $id]);
     break;
@@ -533,6 +818,10 @@ case 'predeterminar_metodo':
 case 'desactivar_metodo':
     exigirMetodo('POST');
     $datos = cuerpoJson();
+    /* Quitar la tarjeta también se confirma. No mueve dinero, pero sí es
+       lo primero que haría alguien para tapar un rastro — y quedarse sin
+       forma de pagar a dos días del evento tampoco es gratis. */
+    exigirContrasenaDeNuevo($yo, $datos);
 
     $id = campoEntero($datos, 'id', 0);
     $fila = $id > 0
@@ -564,6 +853,14 @@ case 'desactivar_metodo':
 
     anotarEnBitacora($yo, 'quitó una tarjeta', 'metodos_pago', $id,
                      trim((string) $fila['brand'] . ' ···' . (string) $fila['last4']));
+
+    avisarDeMovimientoDeDinero(
+        'Se quitó una tarjeta del panel',
+        'Se acaba de dar de baja una tarjeta de las compras del evento.',
+        ['Tarjeta' => trim((string) $fila['brand'] . ' ···' . (string) $fila['last4'])],
+        $yo
+    );
+
     responderBien(['id' => $id]);
     break;
 
@@ -591,6 +888,9 @@ case 'cobrar':
     exigirMetodo('POST');
     exigirPagosListos();
     $datos = cuerpoJson();
+    // El único sitio del proyecto que saca dinero de verdad.
+    exigirContrasenaDeNuevo($yo, $datos);
+    exigirRitmoDeCobro();
 
     $concepto = campoTexto($datos, 'concepto', 300);
     if ($concepto === '') responderMal('Falta decir qué se está comprando.', 400);
@@ -670,7 +970,14 @@ case 'cobrar':
         // cobro colgado esperando a alguien que no va a llegar.
         'off_session'    => 'true',
         'description'    => mb_substr($concepto, 0, 200),
-    ]);
+    ],
+    /* ⚡ EL SEGURO CONTRA EL COBRO DOBLE (2026-09-05)
+       `$pedidoId` es de la fila que se acaba de insertar unas líneas más
+       arriba: existe antes de que Stripe sepa nada, es único, y NO
+       cambia si esta misma petición se repite. Eso es justo lo que hace
+       falta — con un número al azar, cada reintento sería un cobro
+       nuevo. Ver la nota larga en pedirleAStripe(). */
+    'pedido-' . $pedidoId);
 
     if (!$r['ok']) {
         actualizar('compras_pedidos', $pedidoId, [
@@ -694,6 +1001,18 @@ case 'cobrar':
         '$' . number_format($monto, 2) . ' · ' . mb_substr($concepto, 0, 80)
         . ' · ' . trim((string) $metodo['brand'] . ' ···' . (string) $metodo['last4'])
         . ' · a ' . (string) $direccion['alias']);
+
+    avisarDeMovimientoDeDinero(
+        'Se cobró $' . number_format($monto, 2) . ' · Ania XV',
+        'Se acaba de hacer un cargo a la tarjeta del evento.',
+        [
+            'Concepto'  => mb_substr($concepto, 0, 120),
+            'Monto'     => '$' . number_format($monto, 2) . ' MXN',
+            'Tarjeta'   => trim((string) $metodo['brand'] . ' ···' . (string) $metodo['last4']),
+            'Se entrega en' => (string) $direccion['alias'],
+        ],
+        $yo
+    );
 
     responderBien([
         'id'       => $pedidoId,

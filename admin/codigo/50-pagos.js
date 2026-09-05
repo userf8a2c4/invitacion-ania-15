@@ -25,6 +25,98 @@
    la pantalla lo dice arriba para que no haya dudas.
    ══════════════════════════════════════════════════════════════════════ */
 
+/* ══════════════════════════════════════════════════════════════════════
+   VOLVER A ESCRIBIR LA CONTRASEÑA PARA TOCAR EL DINERO
+
+   ⚡ POR QUÉ (2026-09-05)
+   Estar dentro del panel bastaba para agregar una tarjeta o disparar un
+   cobro, y las sesiones duran semanas. Un teléfono desbloqueado,
+   prestado o perdido era acceso directo al dinero sin saber ninguna
+   contraseña.
+
+   Es lo mismo que hace cualquier tienda seria al pedirte la contraseña
+   otra vez para tocar un método de pago aunque acabes de entrar: la
+   sesión prueba que SIGUES ahí, no que SEAS tú.
+
+   Esto es solo la mitad de la guarda. La que manda es la del servidor
+   (exigirContrasenaDeNuevo en compras.php): sin ella, bastaría con
+   llamar al endpoint saltándose esta pantalla.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Pide la contraseña en una ventana y la devuelve.
+ *
+ * Reusa el CSS y la guarda de confirmarAccion() (06-piezas.js) —
+ * incluida CONFIRMACION_ABIERTA, para que esto y una confirmación no se
+ * apilen tapándose. Lo que no reusa es la función misma: aquella
+ * devuelve sí/no y acá hace falta un texto.
+ *
+ * @param {string} motivo - Qué se va a hacer, en una línea.
+ * @returns {Promise<string|null>} La contraseña, o null si canceló.
+ */
+function pedirContrasenaParaDinero(motivo) {
+  if (CONFIRMACION_ABIERTA) return Promise.resolve(null);
+
+  return new Promise(resolve => {
+    const capa = document.createElement('div');
+    capa.className = 'confirmar';
+    capa.setAttribute('role', 'alertdialog');
+    capa.setAttribute('aria-modal', 'true');
+    capa.innerHTML =
+      '<div class="confirmar__fondo" data-clave="no"></div>' +
+      '<div class="confirmar__panel">' +
+        '<div class="confirmar__titulo">Confirma que eres tú</div>' +
+        '<div class="confirmar__detalle">' + seguro(motivo) + '</div>' +
+        '<input type="password" id="clave-dinero" class="campo__control" ' +
+               'autocomplete="current-password" ' +
+               'style="margin:var(--esp-2) 0" ' +
+               'placeholder="Tu contraseña del panel">' +
+        '<div class="confirmar__acciones">' +
+          '<button class="boton" data-clave="no">Cancelar</button>' +
+          '<button class="boton boton--principal" data-clave="si">Confirmar</button>' +
+        '</div>' +
+      '</div>';
+
+    const campo = capa.querySelector('#clave-dinero');
+
+    const responder = valor => {
+      if (CONFIRMACION_ABIERTA !== capa) return;
+      CONFIRMACION_ABIERTA = null;
+      document.removeEventListener('keydown', porTecla, true);
+      /* La contraseña se va con el nodo: no queda en ninguna variable
+         viva, ni en el DOM, ni en un dataset. */
+      campo.value = '';
+      capa.remove();
+      resolve(valor);
+    };
+
+    const porTecla = evento => {
+      if (evento.key === 'Escape') {
+        evento.stopPropagation();   // que no cierre además la hoja de atrás
+        responder(null);
+      }
+    };
+
+    capa.addEventListener('click', evento => {
+      const boton = evento.target.closest('[data-clave]');
+      if (!boton) return;
+      responder(boton.dataset.clave === 'si' ? (campo.value || '') : null);
+    });
+
+    // Enter manda, que es lo que espera cualquiera en un campo de clave.
+    campo.addEventListener('keydown', evento => {
+      if (evento.key !== 'Enter') return;
+      evento.preventDefault();
+      responder(campo.value || '');
+    });
+
+    document.addEventListener('keydown', porTecla, true);
+    CONFIRMACION_ABIERTA = capa;
+    document.body.appendChild(capa);
+    campo.focus();
+  });
+}
+
 /**
  * Abre la pantalla de formas de pago.
  *
@@ -46,6 +138,80 @@ async function abrirFormasDePago() {
 
   const esPbe = cfg.entorno === 'pbe';
 
+  /* ⚡ LO TÉCNICO YA NO ES LO PRIMERO QUE SE VE (2026-09-05)
+   *
+   * Esta pantalla abría con la clave publicable entera en un campo
+   * ancho, un segundo campo con `STRIPE_CLAVE_SECRETA=sk_test_…`, e
+   * instrucciones para editar el .env del servidor. Nada de eso le sirve
+   * a quien usa el panel todos los días — y peor: le compite la atención
+   * a lo único que importa, que es si se puede pagar y con qué tarjeta.
+   * Un campo rotulado "clave secreta" invita a tocarlo, y tocarlo rompe
+   * los pagos.
+   *
+   * Ahora arriba va solo lo que se usa —cómo está la conexión y las
+   * tarjetas— y la configuración queda plegada, que hace falta una vez
+   * en la vida. Ninguna comprobación se quita: los cuatro avisos de
+   * estadoDeLaConexionDePagos() siguen enteros, arriba, donde se ven.
+   *
+   * Se usa <details>/<summary> nativo, igual que el acordeón de
+   * etiquetas (06-piezas.js): sin JavaScript propio, con el teclado y el
+   * lector de pantalla funcionando solos. */
+  const tecnico =
+    '<details class="pagos-tecnico" style="margin-top:var(--esp-4)">' +
+      '<summary class="pagos-tecnico__titulo">' +
+        'Configuración de la cuenta de pagos' +
+        '<span class="vacio__texto" style="display:block;font-weight:400">' +
+          'Solo hace falta al conectarla por primera vez' +
+        '</span>' +
+      '</summary>' +
+
+      '<div style="padding-top:var(--esp-2)">' +
+        '<p class="vacio__texto" style="margin:0 0 var(--esp-3)">' +
+          (esPbe
+            ? 'Acá van las claves de <strong>prueba</strong> de Stripe. Se puede ' +
+              'guardar una tarjeta de mentira y probar todo sin mover un peso.'
+            : 'Acá van las claves <strong>reales</strong>. Lo que se cobre con ' +
+              'estas sale de la cuenta de verdad.') +
+        '</p>' +
+
+        campoTexto({
+          id: 'pagos-publicable',
+          rotulo: 'Clave publicable de Stripe',
+          valor: cfg.publicable || '',
+          ayuda: 'Empieza con pk_. Es la única que puede vivir acá: está hecha ' +
+                 'para que la vea cualquiera.',
+        }) +
+
+        /* La secreta no tiene campo, a propósito: no hay dónde pegarla
+           porque no tiene que pasar por acá. Solo se dice cómo ponerla. */
+        '<div class="campo">' +
+          '<span class="campo__rotulo">Clave secreta</span>' +
+          '<p class="vacio__texto" style="margin:4px 0 8px">' +
+            (cfg.secreta_puesta
+              ? 'Ya está puesta en el servidor, en modo <strong>' +
+                seguro(cfg.modo_secreta === 'real' ? 'real' : 'prueba') + '</strong>. ' +
+                'No se muestra nunca, ni acá ni en ningún lado.'
+              : '<strong>Todavía no está.</strong> No se pega en el panel: hay que ' +
+                'agregarla al archivo <code>.env</code> de este servidor, por el ' +
+                'administrador de archivos del hosting.') +
+          '</p>' +
+          '<div class="caja-codigo" style="font-family:monospace;font-size:13px;' +
+               'padding:10px;border:1px solid var(--borde);border-radius:8px;' +
+               'overflow-x:auto;white-space:nowrap">' +
+            seguro(cfg.nombre_en_env) + '=' +
+            (esPbe ? 'sk_test_...' : 'sk_live_...') +
+          '</div>' +
+          '<p class="vacio__texto" style="margin-top:6px">' +
+            'Esa línea va al final del <code>.env</code>, igual que se hizo con ' +
+            '<code>CARPETA_ARCHIVOS</code>. Después de guardarla, vuelve a abrir ' +
+            'esta pantalla.' +
+          '</p>' +
+        '</div>' +
+
+        pieDeFormulario('Guardar') +
+      '</div>' +
+    '</details>';
+
   const cuerpo = abrirHoja('Formas de pago',
     /* Lo primero, y bien visible: en qué entorno estás. Configurar la
        cuenta real creyendo que era la de pruebas es el error que hay
@@ -55,56 +221,13 @@ async function abrirFormasDePago() {
       (esPbe ? 'Estás en PRUEBAS (pbe)' : 'Estás en el sitio REAL (producción)') +
     '</div>' +
 
-    '<p class="vacio__texto" style="margin:var(--esp-2) 0 var(--esp-3)">' +
-      (esPbe
-        ? 'Acá van las claves de <strong>prueba</strong> de Stripe. Se puede ' +
-          'guardar una tarjeta de mentira y probar todo sin mover un peso.'
-        : 'Acá van las claves <strong>reales</strong>. Lo que se cobre con ' +
-          'estas sale de la cuenta de verdad.') +
-    '</p>' +
+    '<div style="margin-top:var(--esp-3)">' + estadoDeLaConexionDePagos(cfg) + '</div>' +
 
-    estadoDeLaConexionDePagos(cfg) +
-
-    campoTexto({
-      id: 'pagos-publicable',
-      rotulo: 'Clave publicable de Stripe',
-      valor: cfg.publicable || '',
-      ayuda: 'Empieza con pk_. Es la única que puede vivir acá: está hecha ' +
-             'para que la vea cualquiera.',
-    }) +
-
-    /* La secreta no tiene campo, a propósito: no hay dónde pegarla
-       porque no tiene que pasar por acá. Solo se dice cómo ponerla. */
-    '<div class="campo">' +
-      '<span class="campo__rotulo">Clave secreta</span>' +
-      '<p class="vacio__texto" style="margin:4px 0 8px">' +
-        (cfg.secreta_puesta
-          ? 'Ya está puesta en el servidor, en modo <strong>' +
-            seguro(cfg.modo_secreta === 'real' ? 'real' : 'prueba') + '</strong>. ' +
-            'No se muestra nunca, ni acá ni en ningún lado.'
-          : '<strong>Todavía no está.</strong> No se pega en el panel: hay que ' +
-            'agregarla al archivo <code>.env</code> de este servidor, por el ' +
-            'administrador de archivos del hosting.') +
-      '</p>' +
-      '<div class="caja-codigo" style="font-family:monospace;font-size:13px;' +
-           'padding:10px;border:1px solid var(--borde);border-radius:8px;' +
-           'overflow-x:auto;white-space:nowrap">' +
-        seguro(cfg.nombre_en_env) + '=' +
-        (esPbe ? 'sk_test_...' : 'sk_live_...') +
-      '</div>' +
-      '<p class="vacio__texto" style="margin-top:6px">' +
-        'Esa línea va al final del <code>.env</code>, igual que se hizo con ' +
-        '<code>CARPETA_ARCHIVOS</code>. Después de guardarla, vuelve a abrir ' +
-        'esta pantalla.' +
-      '</p>' +
-    '</div>' +
-
-    /* Las tarjetas van DESPUÉS de las claves, y solo tienen sentido
-       cuando la conexión está lista: sin claves no hay con qué hablarle
-       a Stripe, y un formulario de tarjeta que no puede funcionar es
-       peor que no mostrarlo. */
+    /* Las tarjetas solo tienen sentido cuando la conexión está lista:
+       sin claves no hay con qué hablarle a Stripe, y un formulario de
+       tarjeta que no puede funcionar es peor que no mostrarlo. */
     (cfg.listo
-      ? '<div class="campo" style="margin-top:var(--esp-4)">' +
+      ? '<div class="campo">' +
           '<span class="campo__rotulo">Tarjetas guardadas</span>' +
           '<div id="pagos-tarjetas"><p class="vacio__texto">Buscando…</p></div>' +
           '<button type="button" class="boton" id="pagos-agregar" ' +
@@ -112,7 +235,7 @@ async function abrirFormasDePago() {
         '</div>'
       : '') +
 
-    pieDeFormulario('Guardar'));
+    tecnico);
 
   if (cfg.listo) {
     cargarTarjetas(cuerpo);
@@ -325,9 +448,12 @@ function pintarTarjetas(donde, tarjetas, cuerpo) {
         'que ya se pagaron con ella la siguen nombrando.',
         { confirmar: 'Quitarla', cancelar: 'Dejarla' })) return;
 
+      const clave = await pedirContrasenaParaDinero('Vas a quitar una tarjeta.');
+      if (clave === null) return;
+
       try {
         await mandar('compras.php?accion=desactivar_metodo',
-                     { id: Number(boton.dataset.quitar) });
+                     { id: Number(boton.dataset.quitar), contrasena: clave });
         avisar('Tarjeta quitada.');
         cargarTarjetas(cuerpo);
       } catch (error) { avisar(error.message, true); }
@@ -397,6 +523,16 @@ async function abrirAgregarTarjeta(cfg, deVuelta) {
   guardar.disabled = false;
 
   guardar.addEventListener('click', async () => {
+    /* ⚡ LA CONTRASEÑA SE PIDE ANTES DE HABLAR CON STRIPE (2026-09-05)
+       Y no después, aunque ahí quedaría más "al final". Si se pidiera
+       después de confirmSetup(), cancelar dejaría la tarjeta YA adjunta
+       al cliente en Stripe y sin fila de este lado: un token huérfano,
+       cobrable, que no aparece en ninguna pantalla. Pidiéndola primero,
+       cancelar no deja rastro en ningún lado. */
+    const clave = await pedirContrasenaParaDinero(
+      'Vas a guardar una tarjeta para las compras del evento.');
+    if (clave === null) return;
+
     guardar.disabled = true;
     const rotulo = guardar.textContent;
     guardar.textContent = 'Guardando…';
@@ -428,7 +564,8 @@ async function abrirAgregarTarjeta(cfg, deVuelta) {
       /* Se manda solo el identificador. La marca y los últimos cuatro
          los averigua el servidor preguntándole a Stripe: si los mandara
          el navegador, cualquiera podría guardar una "Visa ···0000". */
-      await mandar('compras.php?accion=guardar_metodo', { payment_method_id: pm });
+      await mandar('compras.php?accion=guardar_metodo',
+                   { payment_method_id: pm, contrasena: clave });
       avisar('Tarjeta guardada.');
       cerrarHoja(true);
       if (deVuelta) cargarTarjetas(deVuelta);

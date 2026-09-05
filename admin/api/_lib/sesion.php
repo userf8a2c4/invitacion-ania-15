@@ -68,15 +68,27 @@ function normalizarRespuestaSeguridad($respuesta) {
     return mb_strtolower(trim(preg_replace('/\s+/', ' ', (string) $respuesta)));
 }
 
-/** Cuántos días vive un token antes de pedir contraseña otra vez. */
-const DIAS_DE_SESION = 90;
+/* Cuántos días vive un token antes de pedir contraseña otra vez.
+ *
+ * ⚡ DE 90 A 30 (2026-09-05). Noventa días era razonable cuando el panel
+ * solo mostraba y ordenaba datos de la fiesta. Desde que se le puede
+ * cobrar a una tarjeta, no: un teléfono perdido o prestado eran tres
+ * meses de acceso al dinero.
+ *
+ * Treinta sigue siendo cómodo —nadie vuelve a escribir la contraseña por
+ * usar el panel a diario— y acorta a un tercio la ventana de un
+ * dispositivo que se salió de las manos.
+ *
+ * Al subir esto, TODA sesión con más de 30 días caduca de golpe y hay
+ * que volver a entrar en cada dispositivo. Es esperado, no un fallo. */
+const DIAS_DE_SESION = 30;
 
 /**
  * Cuánto puede durar una sesión COMO MÁXIMO, desde que se abrió.
  *
- * Cada uso corre la caducidad noventa días más adelante. Sin un tope,
- * un token usado a diario no vencía nunca: un teléfono perdido o
- * prestado conservaba el acceso para siempre.
+ * Cada uso corre la caducidad otros DIAS_DE_SESION hacia adelante. Sin
+ * un tope, un token usado a diario no vencía nunca: un teléfono perdido
+ * o prestado conservaba el acceso para siempre.
  *
  * Un año da de sobra para organizar la fiesta —faltan menos de tres
  * meses— sin que nadie tenga que volver a escribir la contraseña por
