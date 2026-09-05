@@ -828,9 +828,23 @@ function engancharHiloDeMegaBot(hilo) {
         if (!await confirmarAcomodoConVistaPrevia()) return;
       }
 
+      /* ⚡ COBRAR PIDE LA CONTRASEÑA, AUNQUE VENGA DE UNA PROPUESTA
+         (2026-09-05). Es la única acción de la whitelist que saca dinero
+         de una cuenta, y este botón es uno de sus dos caminos. El
+         servidor la exige igual (exigirContrasenaDeNuevo en
+         compras.php); pedirla acá es para que el rechazo no llegue como
+         un error suelto después de haber tocado Confirmar. */
+      let claveDeCobro = null;
+      if (filaPropuesta.accion.indexOf('compras.php') !== -1) {
+        claveDeCobro = await pedirContrasenaParaDinero(
+          'Esta propuesta va a cobrar a la tarjeta del evento.');
+        if (claveDeCobro === null) return;
+      }
+
       botonConfirmar.disabled = true;
       try {
         const cuerpo = JSON.parse(filaPropuesta.cuerpo_json || '{}');
+        if (claveDeCobro !== null) cuerpo.contrasena = claveDeCobro;
         await mandar(filaPropuesta.accion, cuerpo);
         await mandar('chat.php?accion=propuesta_estado', { id: id, estado: 'aceptada' });
         ensuciarVistas.apply(null, vistasParaEnsuciarPorAccion(filaPropuesta.accion));
