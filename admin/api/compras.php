@@ -609,9 +609,21 @@ function exigirContrasenaDeNuevo($yo, $datos) {
  * @param string $resumen Una línea, en lenguaje normal.
  * @param array  $detalle Pares rótulo => valor, ya listos para leer.
  * @param array  $yo      Quién lo hizo.
- * @return void
+ * @return array Qué pasó con el aviso, para poder verlo desde el panel:
+ *         ['correos' => int, 'push' => int, 'fallos' => string[]]
  */
 function avisarDeMovimientoDeDinero($asunto, $resumen, $detalle, $yo) {
+    /* ⚡ EL AVISO YA NO FALLA EN SILENCIO (2026-09-05)
+     *
+     * Se guardó una tarjeta y el correo no llegó, y no había forma de
+     * saber por qué: el fallo se anotaba en error_log del servidor, que
+     * desde el panel no se lee. Un aviso que no avisa Y no dice que no
+     * avisó es peor que no tenerlo, porque se confía en él.
+     *
+     * Ahora devuelve qué pasó y la respuesta lo lleva. Sigue sin poder
+     * tumbar la operación: el cobro manda, el aviso acompaña. */
+    $resultado = ['correos' => 0, 'push' => 0, 'fallos' => []];
+
     try {
         $filas = '';
         foreach ($detalle as $rotulo => $valor) {
@@ -633,64 +645,52 @@ function avisarDeMovimientoDeDinero($asunto, $resumen, $detalle, $yo) {
         $destinatarios = array_filter(array_map('trim',
             explode(',', (string) env('CORREO_ADMINISTRADORA', 'info@aniaxv.com'))));
 
+        if (!$destinatarios) {
+            $resultado['fallos'][] = 'No hay a quién avisar: falta CORREO_ADMINISTRADORA en el .env.';
+        }
+
         foreach ($destinatarios as $destino) {
-            $resultado = enviarCorreo($destino, $asunto, $html);
-            if ($resultado !== true) {
-                error_log('[Ania XV · compras] No salió el aviso a ' . $destino . ': ' . $resultado);
+            $salio = enviarCorreo($destino, $asunto, $html);
+            if ($salio === true) {
+                $resultado['correos']++;
+            } else {
+                /* El motivo entero, no un "no se pudo": si el SMTP
+                   rechaza, lo que dice es exactamente lo que hace falta
+                   para arreglarlo. Va al panel Y al log. */
+                $resultado['fallos'][] = $destino . ': ' . $salio;
+                error_log('[Ania XV · compras] No salió el aviso a ' . $destino . ': ' . $salio);
             }
         }
 
-        if (function_exists('avisarATodos')) avisarATodos();
+        if (function_exists('avisarATodos')) {
+            $push = avisarATodos();
+            $resultado['push'] = (int) ($push['enviados'] ?? 0);
+            if (!empty($push['fallidos'])) {
+                $resultado['fallos'][] = 'Push: ' . (int) $push['fallidos'] . ' no salieron.';
+            }
+        }
     } catch (Throwable $e) {
         // Cualquier cosa que pase acá es menos grave que perder el cobro.
+        $resultado['fallos'][] = $e->getMessage();
         error_log('[Ania XV · compras] Falló el aviso de dinero: ' . $e->getMessage());
     }
+
+    return $resultado;
 }
 
-/** Cuántos cobros como mucho, y en cuánto rato. */
-const COBROS_MAXIMOS_SEGUIDOS = 5;
-const MINUTOS_DE_VENTANA_DE_COBRO = 10;
-const MARCA_DE_COBRO = '__cobro__';
+/* El ritmo de los cobros lo lleva MegaBot (2026-09-05)
 
-/**
- * Frena una ráfaga de cobros.
- *
- * ⚡ POR QUÉ HACE FALTA UNO PROPIO (2026-09-05)
- * El techo general del panel es de 300 peticiones cada 5 minutos
- * (PETICIONES_API_MAXIMAS, _lib/sesion.php). Para leer la lista de
- * invitados está bien; para SACAR DINERO es absurdo: caben decenas de
- * cobros seguidos sin que nada se queje.
- *
- * Cinco en diez minutos es holgado para el uso real —se compran cosas
- * de a una, mirando— y corta en seco cualquier ráfaga, venga de una
- * sesión robada o de un bucle mal escrito.
- *
- * Se cuentan los INTENTOS, no los cobros que salieron bien: si están
- * fallando cinco seguidos, con más razón hay que parar.
- *
- * @return void
- */
-function exigirRitmoDeCobro() {
-    if (!existeTabla('intentos_login')) return;
+   Acá hubo un freno propio: cinco cobros por diez minutos. Se saca a
+   pedido, porque el ritmo de las compras se decide del lado del
+   asistente y no con un tope ciego en el servidor — un limite que no
+   sabe si son cinco compras legitimas de un martes o una rafaga rara
+   estorba mas de lo que protege.
 
-    $ip = substr($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0', 0, 45);
-
-    $fila = consultarUno(
-        'SELECT COUNT(*) AS n FROM intentos_login
-         WHERE ip = :ip AND correo = :marca
-           AND cuando > DATE_SUB(NOW(), INTERVAL ' . MINUTOS_DE_VENTANA_DE_COBRO . ' MINUTE)',
-        [':ip' => $ip, ':marca' => MARCA_DE_COBRO]
-    );
-
-    if ($fila && (int) $fila['n'] >= COBROS_MAXIMOS_SEGUIDOS) {
-        responderMal('Van muchos cobros seguidos. Por seguridad hay que esperar '
-                   . MINUTOS_DE_VENTANA_DE_COBRO . ' minutos antes de otro.', 429);
-    }
-
-    // Se anota ANTES de cobrar: si se anotara después, un cobro que
-    // tarda o falla a medias no contaría y el freno sería salteable.
-    insertar('intentos_login', ['ip' => $ip, 'correo' => MARCA_DE_COBRO]);
-}
+   Lo que sigue en pie, y es lo que de verdad frena: cada cobro necesita
+   que una persona toque Confirmar en esa propuesta, y la contrasena
+   (exigirContrasenaDeNuevo). Ademas, repetir el MISMO pedido no cobra
+   dos veces: eso lo cubre la clave de idempotencia, que no es un freno
+   de ritmo sino una garantia por operacion. */
 
 /**
  * Corta la petición si no se puede cobrar todavía.
@@ -897,7 +897,7 @@ case 'guardar_metodo':
     anotarEnBitacora($yo, 'guardó una tarjeta', 'metodos_pago', $id,
                      trim($valores['brand'] . ' ···' . $valores['last4']));
 
-    avisarDeMovimientoDeDinero(
+    $aviso = avisarDeMovimientoDeDinero(
         'Se guardó una tarjeta en el panel',
         'Alguien acaba de dar de alta una tarjeta para pagar las compras del evento.',
         [
@@ -907,7 +907,7 @@ case 'guardar_metodo':
         $yo
     );
 
-    responderBien(['id' => $id]);
+    responderBien(['id' => $id, 'aviso' => $aviso]);
     break;
 
 
@@ -1000,14 +1000,14 @@ case 'desactivar_metodo':
     anotarEnBitacora($yo, 'quitó una tarjeta', 'metodos_pago', $id,
                      trim((string) $fila['brand'] . ' ···' . (string) $fila['last4']));
 
-    avisarDeMovimientoDeDinero(
+    $aviso = avisarDeMovimientoDeDinero(
         'Se quitó una tarjeta del panel',
         'Se acaba de dar de baja una tarjeta de las compras del evento.',
         ['Tarjeta' => trim((string) $fila['brand'] . ' ···' . (string) $fila['last4'])],
         $yo
     );
 
-    responderBien(['id' => $id]);
+    responderBien(['id' => $id, 'aviso' => $aviso]);
     break;
 
 
@@ -1036,7 +1036,6 @@ case 'cobrar':
     $datos = cuerpoJson();
     // El único sitio del proyecto que saca dinero de verdad.
     exigirContrasenaDeNuevo($yo, $datos);
-    exigirRitmoDeCobro();
 
     $concepto = campoTexto($datos, 'concepto', 300);
     if ($concepto === '') responderMal('Falta decir qué se está comprando.', 400);
@@ -1148,7 +1147,7 @@ case 'cobrar':
         . ' · ' . trim((string) $metodo['brand'] . ' ···' . (string) $metodo['last4'])
         . ' · a ' . (string) $direccion['alias']);
 
-    avisarDeMovimientoDeDinero(
+    $aviso = avisarDeMovimientoDeDinero(
         'Se cobró $' . number_format($monto, 2) . ' · Ania XV',
         'Se acaba de hacer un cargo a la tarjeta del evento.',
         [
@@ -1164,6 +1163,7 @@ case 'cobrar':
         'id'       => $pedidoId,
         'estado'   => 'cobrada',
         'mensaje'  => 'Cobrado $' . number_format($monto, 2) . '. Va a ' . $direccion['alias'] . '.',
+        'aviso'    => $aviso,
     ]);
     break;
 

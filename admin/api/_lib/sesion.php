@@ -70,18 +70,18 @@ function normalizarRespuestaSeguridad($respuesta) {
 
 /* Cuántos días vive un token antes de pedir contraseña otra vez.
  *
- * ⚡ DE 90 A 30 (2026-09-05). Noventa días era razonable cuando el panel
- * solo mostraba y ordenaba datos de la fiesta. Desde que se le puede
- * cobrar a una tarjeta, no: un teléfono perdido o prestado eran tres
- * meses de acceso al dinero.
+ * ⚡ 60 DÍAS (2026-09-05). Eran 90. Se bajaron a 30 al conectar los
+ * pagos —un teléfono perdido eran tres meses de acceso al dinero— y
+ * subieron a 60 en el mismo día por un motivo mejor: faltan menos de
+ * dos meses para la fiesta, así que 60 días cubre todo lo que queda sin
+ * obligar a nadie a volver a entrar en la semana del evento, que es
+ * cuando menos ganas hay de pelear con una pantalla de login.
  *
- * Treinta sigue siendo cómodo —nadie vuelve a escribir la contraseña por
- * usar el panel a diario— y acorta a un tercio la ventana de un
- * dispositivo que se salió de las manos.
- *
- * Al subir esto, TODA sesión con más de 30 días caduca de golpe y hay
- * que volver a entrar en cada dispositivo. Es esperado, no un fallo. */
-const DIAS_DE_SESION = 30;
+ * Lo que protege el dinero no es este número: es que cobrar exige
+ * volver a escribir la contraseña (ver exigirContrasenaDeNuevo en
+ * compras.php). Esta sesión larga da acceso a ver y organizar, no a
+ * mover plata. */
+const DIAS_DE_SESION = 60;
 
 /**
  * Cuánto puede durar una sesión COMO MÁXIMO, desde que se abrió.

@@ -409,22 +409,27 @@ class BuzonImap {
 
         if ($crudo === null) return null;
 
-        $tipo = 'application/octet-stream';
-        if ($cab !== null && preg_match('/Content-Type:\s*([^;\r\n]+)/i', $cab, $m)) {
-            $tipo = trim($m[1]);
+        /* Mismas cabeceras, mismo cuidado que en analizarParteMime(): se
+           leen ancladas al principio de línea. Un patrón suelto muerde
+           dentro de la firma DKIM y devuelve basura — ver la nota de
+           valorDeCabecera(). */
+        $cabecera  = (string) $cab;
+        $tipoCrudo = valorDeCabecera($cabecera, 'Content-Type');
+
+        $tipo = trim(explode(';', $tipoCrudo)[0]);
+        if ($tipo === '' || !preg_match('~^[a-z0-9.!#$&^_-]+/[a-z0-9.!#$&^_+-]+$~i', $tipo)) {
+            $tipo = 'application/octet-stream';
         }
 
-        $nombre = 'archivo';
-        if ($cab !== null && preg_match('/filename\*?=\s*"?([^"\r\n;]+)"?/i', $cab, $m)) {
-            $nombre = decodificarEncabezado(trim($m[1]));
-        } elseif ($cab !== null && preg_match('/name="?([^"\r\n;]+)"?/i', $cab, $m)) {
-            $nombre = decodificarEncabezado(trim($m[1]));
-        }
+        $disposicion = valorDeCabecera($cabecera, 'Content-Disposition');
 
-        $codificacion = '';
-        if ($cab !== null && preg_match('/Content-Transfer-Encoding:\s*([^\r\n;]+)/i', $cab, $m)) {
-            $codificacion = strtolower(trim($m[1]));
+        $nombre = decodificarEncabezado(parametroDeCabecera($disposicion, 'filename'));
+        if ($nombre === '') {
+            $nombre = decodificarEncabezado(parametroDeCabecera($tipoCrudo, 'name'));
         }
+        if ($nombre === '') $nombre = 'archivo';
+
+        $codificacion = strtolower(valorDeCabecera($cabecera, 'Content-Transfer-Encoding'));
 
         $datos = desarmarCodificacion("Content-Transfer-Encoding: $codificacion", $crudo);
 
@@ -671,18 +676,90 @@ function decodificarEncabezado($texto) {
  * @param string $ruta La ruta MIME acumulada hasta acá ('' en la raíz).
  * @return array ['texto' => string, 'html' => string, 'adjuntos' => array[]]
  */
+
+/**
+ * El valor de una cabecera, buscándola como cabecera de verdad.
+ *
+ * ⚡ POR QUÉ NO ALCANZA CON UN preg_match SUELTO (2026-09-05)
+ *
+ * EL CORREO QUE NO SE VEÍA
+ * Los avisos de confirmación llegaban al panel como "(sin contenido)" y
+ * un adjunto "(sin nombre)". El tipo que el analizador creía haber leído
+ * era, literalmente, `content-type:` — que no es ningún tipo MIME.
+ *
+ * La causa: se buscaba /Content-Type:\s*(...)/ SIN anclar al principio
+ * de línea. Y hay cabeceras cuyo VALOR contiene ese texto — la firma
+ * DKIM lleva la lista de cabeceras firmadas adentro:
+ *
+ *     DKIM-Signature: v=1; ...; h=From:Subject:Content-Type:...
+ *
+ * El patrón mordía ahí, mucho antes de llegar al Content-Type real. Y
+ * como lo que sacaba no era `multipart/...` ni `text/...`, el mensaje
+ * ENTERO se clasificaba como un adjunto y el cuerpo desaparecía. Lo
+ * mismo valía para boundary, name y Content-Transfer-Encoding.
+ *
+ * QUÉ HACE ESTA
+ *   · Une las cabeceras plegadas: el RFC permite partir una en varias
+ *     líneas si las siguientes empiezan con espacio o tabulador, y sin
+ *     unirlas se pierde media cabecera (típico en boundary largos).
+ *   · Busca el nombre SOLO al principio de una línea.
+ *   · Devuelve la primera, que es la que manda.
+ *
+ * @param string $cabecera El bloque de encabezados.
+ * @param string $nombre   'Content-Type', 'Content-Transfer-Encoding'…
+ * @return string El valor, o '' si esa cabecera no está.
+ */
+function valorDeCabecera($cabecera, $nombre) {
+    if ($cabecera === '' || $cabecera === null) return '';
+
+    // Cabecera plegada → una sola línea, antes de buscar nada.
+    $plano = preg_replace("/\r?\n[ \t]+/", ' ', (string) $cabecera);
+
+    $patron = '/^' . preg_quote($nombre, '/') . ':[ \t]*(.*)$/im';
+    if (!preg_match($patron, $plano, $m)) return '';
+
+    return trim($m[1]);
+}
+
+/**
+ * Un parámetro de una cabecera, del estilo `name="algo"`.
+ *
+ * Se busca DENTRO del valor de esa cabecera y no en todo el bloque, por
+ * el mismo motivo que arriba: `name=` aparece en sitios que no son el
+ * que se busca.
+ *
+ * @param string $valorDeLaCabecera Lo que devolvió valorDeCabecera().
+ * @param string $parametro 'boundary', 'name', 'filename'…
+ * @return string
+ */
+function parametroDeCabecera($valorDeLaCabecera, $parametro) {
+    // `filename*=` es la forma con juego de caracteres (RFC 2231); se
+    // acepta igual, y decodificarEncabezado() se ocupa después.
+    $patron = '/(?:^|;)\s*' . preg_quote($parametro, '/') . '\*?\s*=\s*'
+            . '(?:"([^"]*)"|([^;\s]+))/i';
+    if (!preg_match($patron, (string) $valorDeLaCabecera, $m)) return '';
+
+    return trim($m[1] !== '' ? $m[1] : ($m[2] ?? ''));
+}
 function analizarParteMime($cabecera, $contenido, $ruta) {
-    $tipo = '';
-    if (preg_match('/Content-Type:\s*([^;\r\n]+)/i', $cabecera, $m)) {
-        $tipo = strtolower(trim($m[1]));
+    $tipoCrudo = valorDeCabecera($cabecera, 'Content-Type');
+    $tipo = strtolower(trim(explode(';', $tipoCrudo)[0]));
+
+    /* Un Content-Type es siempre "algo/algo". Si lo que salió no tiene
+       esa forma, es basura y se trata como si no hubiera tipo — que es
+       lo honesto, y hace que el mensaje se muestre en vez de acabar de
+       adjunto anónimo. Ver la nota de valorDeCabecera(). */
+    if ($tipo !== '' && !preg_match('~^[a-z0-9.!#$&^_-]+/[a-z0-9.!#$&^_+-]+$~', $tipo)) {
+        $tipo = '';
     }
 
     /* ─── ES UN CONTENEDOR: bajar un nivel más ─────────────────────── */
     if (strpos($tipo, 'multipart/') === 0) {
-        if (!preg_match('/boundary="?([^"\s;]+)"?/i', $cabecera, $mb)) {
+        $frontera = parametroDeCabecera($tipoCrudo, 'boundary');
+        if ($frontera === '') {
             return ['texto' => '', 'html' => '', 'adjuntos' => []];
         }
-        $separador = '--' . $mb[1];
+        $separador = '--' . $frontera;
         $trozos    = explode($separador, $contenido);
 
         $texto = '';
@@ -714,15 +791,18 @@ function analizarParteMime($cabecera, $contenido, $ruta) {
     }
 
     /* ─── ES UNA HOJA: texto del mensaje o adjunto ─────────────────── */
-    $nombre = '';
-    if (preg_match('/filename\*?=\s*"?([^"\r\n;]+)"?/i', $cabecera, $mf)) {
-        $nombre = decodificarEncabezado(trim($mf[1]));
-    } elseif (preg_match('/[^-]name="?([^"\r\n;]+)"?/i', $cabecera, $mn)) {
-        $nombre = decodificarEncabezado(trim($mn[1]));
+    /* El nombre del archivo vive en Content-Disposition (`filename=`) o,
+       en correos viejos, dentro del propio Content-Type (`name=`). Se
+       busca dentro del valor de cada cabecera, nunca en todo el bloque. */
+    $disposicion = valorDeCabecera($cabecera, 'Content-Disposition');
+
+    $nombre = decodificarEncabezado(parametroDeCabecera($disposicion, 'filename'));
+    if ($nombre === '') {
+        $nombre = decodificarEncabezado(parametroDeCabecera($tipoCrudo, 'name'));
     }
 
     $esAdjunto = $nombre !== ''
-        || preg_match('/Content-Disposition:\s*attachment/i', $cabecera)
+        || stripos($disposicion, 'attachment') === 0
         || (!in_array($tipo, ['text/plain', 'text/html'], true) && $tipo !== '');
 
     if (!$esAdjunto) {
@@ -731,17 +811,25 @@ function analizarParteMime($cabecera, $contenido, $ruta) {
         if ($tipo === 'text/html') {
             return ['texto' => '', 'html' => $decodificado, 'adjuntos' => []];
         }
-        // Sin Content-Type declarado, se asume texto plano.
+
+        /* ⚡ SIN TIPO DECLARADO, MIRAR EL CONTENIDO (2026-09-05)
+           Antes se asumía texto plano siempre. Un correo cuyo
+           Content-Type no se pudo leer —o que no lo trae— acababa
+           mostrando etiquetas HTML crudas en pantalla. Si lo que hay
+           empieza por <html o <!doctype, es HTML y hay que tratarlo como
+           tal: la regla es que TODO correo se vea entero, aunque venga
+           mal armado de origen. */
+        if ($tipo === '' && preg_match('/^\s*<(?:!doctype\s+html|html\b)/i', $decodificado)) {
+            return ['texto' => '', 'html' => $decodificado, 'adjuntos' => []];
+        }
+
         return ['texto' => $decodificado, 'html' => '', 'adjuntos' => []];
     }
 
     if ($nombre === '') $nombre = '(sin nombre)';
     if ($ruta === '') $ruta = '1';   // mensaje de una sola parte con adjunto raro
 
-    $codificacion = '';
-    if (preg_match('/Content-Transfer-Encoding:\s*([^\r\n;]+)/i', $cabecera, $mc)) {
-        $codificacion = strtolower(trim($mc[1]));
-    }
+    $codificacion = strtolower(valorDeCabecera($cabecera, 'Content-Transfer-Encoding'));
 
     return [
         'texto' => '', 'html' => '',
@@ -770,10 +858,12 @@ function analizarParteMime($cabecera, $contenido, $ruta) {
  * @return string
  */
 function aTextoUtf8($cabecera, $texto) {
-    $charset = 'UTF-8';
-    if (preg_match('/charset="?([^"\r\n;]+)"?/i', $cabecera, $m)) {
-        $charset = trim($m[1]);
-    }
+    // El juego de caracteres es un parámetro del Content-Type, no algo
+    // que se busque suelto por todo el bloque — mismo motivo que el
+    // resto: otras cabeceras pueden contener ese texto.
+    $tipo = valorDeCabecera($cabecera, 'Content-Type');
+    $charset = parametroDeCabecera($tipo, 'charset');
+    if ($charset === '') $charset = 'UTF-8';
 
     if (strcasecmp($charset, 'UTF-8') === 0 || strcasecmp($charset, 'US-ASCII') === 0) {
         return $texto;
@@ -791,10 +881,30 @@ function aTextoUtf8($cabecera, $texto) {
  * @return string
  */
 function desarmarCodificacion($cabecera, $contenido) {
-    if (stripos($cabecera, 'base64') !== false) {
+    /* ⚡ SE MIRA LA CABECERA QUE ES, NO EL BLOQUE ENTERO (2026-09-05)
+     *
+     * Acá se hacía stripos($cabecera, 'base64') sobre TODOS los
+     * encabezados. Y la firma DKIM lleva su hash en base64 —y a veces la
+     * palabra suelta— así que un correo en texto plano firmado se
+     * "decodificaba" como si fuera base64: el resultado es basura o una
+     * cadena vacía, y el correo aparece sin contenido.
+     *
+     * Ahora se lee el valor de Content-Transfer-Encoding, anclado a su
+     * línea. El respaldo de abajo mantiene el comportamiento viejo para
+     * quien llame pasando solo esa cabecera suelta. */
+    $como = strtolower(valorDeCabecera($cabecera, 'Content-Transfer-Encoding'));
+
+    if ($como === '') {
+        // Sin esa cabecera: si lo que llegó es solo el nombre de la
+        // codificación (algunas llamadas lo pasan así), se usa tal cual.
+        $suelto = strtolower(trim((string) $cabecera));
+        if ($suelto === 'base64' || $suelto === 'quoted-printable') $como = $suelto;
+    }
+
+    if ($como === 'base64') {
         return (string) base64_decode(preg_replace('/\s+/', '', $contenido));
     }
-    if (stripos($cabecera, 'quoted-printable') !== false) {
+    if ($como === 'quoted-printable') {
         return quoted_printable_decode($contenido);
     }
     return $contenido;

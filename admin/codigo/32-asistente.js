@@ -840,8 +840,10 @@ function engancharHiloDeMegaBot(hilo) {
            compras seguidas no la piden cinco veces (ver compras.php)—.
            Por eso se manda y solo si la exige se pregunta. */
         if (filaPropuesta.accion.indexOf('compras.php') !== -1) {
-          await mandarTocandoDinero(filaPropuesta.accion, cuerpo,
+          const hecho = await mandarTocandoDinero(filaPropuesta.accion, cuerpo,
             'Esta propuesta va a cobrar a la tarjeta del evento.');
+          // Si el cobro salió pero el aviso no, hay que decirlo.
+          contarComoSalioElAviso(hecho && hecho.aviso);
         } else {
           await mandar(filaPropuesta.accion, cuerpo);
         }
