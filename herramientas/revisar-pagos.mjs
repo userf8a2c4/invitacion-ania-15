@@ -104,19 +104,14 @@ comprobar('el texto del servidor dispara el reintento del panel',
     ? 'el panel busca /' + elPatron[1] + '/i y el servidor dice "' + elTexto[1] + '"'
     : 'no se encontró el patrón del panel o el mensaje del servidor');
 
-/* ─── 2. El freno de ritmo del cobro ──────────────────────────────── */
+/* ─── 2. El ritmo de los cobros ───────────────────────────────────
 
-console.log('\nFreno de ráfagas\n');
+   Hubo acá un freno propio (cinco cobros por diez minutos) y estas
+   comprobaciones lo exigían. Se quitó a pedido el 2026-09-05: el ritmo
+   de las compras lo decide MegaBot, no un tope ciego en el servidor.
 
-comprobar('cobrar pasa por exigirRitmoDeCobro',
-  cuerpoDelCaso('cobrar').includes('exigirRitmoDeCobro('),
-  'el techo general del panel (300 cada 5 min) es absurdo para cobros');
-
-comprobar('el freno se anota ANTES de cobrar, no después',
-  /insertar\('intentos_login'[\s\S]{0,120}MARCA_DE_COBRO/.test(php) &&
-  php.indexOf("insertar('intentos_login', ['ip' => $ip, 'correo' => MARCA_DE_COBRO]);")
-    > php.indexOf('function exigirRitmoDeCobro'),
-  'si se anotara después, un cobro que falla a medias no contaría');
+   Lo que sí sigue comprobándose es lo que de verdad frena un cobro
+   indebido: la contraseña (arriba) y la idempotencia (abajo). */
 
 /* ─── 3. Idempotencia: el seguro contra el cobro doble ────────────── */
 
@@ -173,9 +168,28 @@ for (const [accion, que] of [
     cuerpoDelCaso(accion).includes('avisarDeMovimientoDeDinero('));
 }
 
+/* Se mira DENTRO de la función, no contando caracteres: la primera
+   versión usaba un tope de 2600 y empezó a fallar sola en cuanto la
+   función creció. Una comprobación que se rompe al editar el código que
+   vigila no sirve. */
+function cuerpoDeFuncion(nombre) {
+  const desde = php.indexOf('function ' + nombre);
+  if (desde === -1) return '';
+  // Una función de nivel superior termina en la primera llave sola al
+  // principio de línea. No hace falta más para lo que se comprueba acá.
+  const hasta = php.indexOf('\n}', desde);
+  return hasta === -1 ? php.slice(desde) : php.slice(desde, hasta + 2);
+}
+
+const avisoEntero = cuerpoDeFuncion('avisarDeMovimientoDeDinero');
+
 comprobar('el aviso no puede tumbar la operación',
-  /function avisarDeMovimientoDeDinero[\s\S]{0,2600}catch \(Throwable/.test(php),
+  avisoEntero.includes('catch (Throwable'),
   'un correo caído no puede dejar un cobro a medias');
+
+comprobar('el aviso dice si salió o no',
+  avisoEntero.includes('return $resultado') && /'fallos'/.test(avisoEntero),
+  'un aviso que falla en silencio es peor que no tenerlo: se confía en él');
 
 comprobar('correo.php y push.php están requeridos',
   php.includes("require_once __DIR__ . '/_lib/correo.php'") &&

@@ -161,6 +161,33 @@ async function mandarTocandoDinero(ruta, cuerpo, motivo) {
 }
 
 /**
+ * Dice si el aviso de un movimiento de dinero salió, y si no, por qué.
+ *
+ * ⚡ POR QUÉ SE MUESTRA (2026-09-05)
+ * Se guardó una tarjeta, el correo no llegó, y desde el panel no había
+ * forma de saber si se había intentado siquiera: el fallo iba a un log
+ * del servidor que nadie puede leer desde el teléfono. Un aviso que no
+ * avisa Y no dice que falló es peor que no tenerlo, porque se confía.
+ *
+ * @param {Object|undefined} aviso - Lo que devolvió compras.php.
+ * @returns {void}
+ */
+function contarComoSalioElAviso(aviso) {
+  if (!aviso) return;
+
+  if (aviso.fallos && aviso.fallos.length) {
+    // El motivo entero: si el SMTP rechazó, ahí está lo que hay que arreglar.
+    avisar('Se hizo, pero el aviso falló: ' + aviso.fallos.join(' · '), true);
+    return;
+  }
+
+  if (!aviso.correos) {
+    avisar('Se hizo, pero no se mandó ningún correo de aviso. ' +
+           'Revisa CORREO_ADMINISTRADORA en el .env.', true);
+  }
+}
+
+/**
  * Abre la pantalla de formas de pago.
  *
  * @returns {void}
@@ -492,10 +519,11 @@ function pintarTarjetas(donde, tarjetas, cuerpo) {
         { confirmar: 'Quitarla', cancelar: 'Dejarla' })) return;
 
       try {
-        await mandarTocandoDinero('compras.php?accion=desactivar_metodo',
-                                  { id: Number(boton.dataset.quitar) },
-                                  'Vas a quitar una tarjeta.');
+        const r = await mandarTocandoDinero('compras.php?accion=desactivar_metodo',
+                                            { id: Number(boton.dataset.quitar) },
+                                            'Vas a quitar una tarjeta.');
         avisar('Tarjeta quitada.');
+        contarComoSalioElAviso(r && r.aviso);
         cargarTarjetas(cuerpo);
       } catch (error) {
         // codigo 0 = lo canceló ella misma; no hay nada que avisar.
@@ -618,9 +646,10 @@ async function abrirAgregarTarjeta(cfg, deVuelta) {
       const cuerpo = { payment_method_id: pm };
       if (clave !== null) cuerpo.contrasena = clave;
 
-      await mandarTocandoDinero('compras.php?accion=guardar_metodo', cuerpo,
+      const r = await mandarTocandoDinero('compras.php?accion=guardar_metodo', cuerpo,
                                 'Vas a guardar una tarjeta para las compras del evento.');
       avisar('Tarjeta guardada.');
+      contarComoSalioElAviso(r && r.aviso);
       cerrarHoja(true);
       if (deVuelta) cargarTarjetas(deVuelta);
     } catch (error) {
