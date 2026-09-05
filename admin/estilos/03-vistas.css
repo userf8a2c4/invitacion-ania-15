@@ -1507,6 +1507,67 @@
   max-width: 100%;
 }
 
+/* ─── QUIÉN CONTESTÓ: MEGABOT O FAB (2026-09-04) ──────────────────────
+ *
+ * Las respuestas que resuelve el teléfono se pintaban idénticas a las
+ * del servicio en línea, y eso se dispara solo (webhook que no acepta,
+ * o MegaBot en reposo tras un fallo). No es un detalle de etiqueta:
+ * FAB contesta con lo que hay acá y sin la cuota de GrokBot detrás.
+ *
+ * La diferencia no puede depender solo de leer el rótulo: el borde
+ * izquierdo azul se ve de reojo, que es como se mira un hilo de chat.
+ */
+
+/* Quién atiende, arriba del hilo. Solo aparece cuando MegaBot no está
+   contestando: con él en pie, el rótulo de cada burbuja ya lo dice y
+   una línea fija repitiéndolo sería ruido. */
+.megabot-quien {
+  font-size: var(--letra-chica);
+  color: var(--info);
+  background: var(--fondo-hundido);
+  border-left: 3px solid var(--info);
+  border-radius: var(--redondeo-chico);
+  padding: 8px 10px;
+  margin-bottom: var(--esp-2);
+}
+
+.megabot-autor {
+  font-size: var(--letra-minima);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--texto-tenue);
+  margin-bottom: 3px;
+  padding-left: 2px;
+}
+.megabot-autor--fab { color: var(--info); }
+
+.megabot-burbuja--fab {
+  border-left: 3px solid var(--info);
+}
+
+/* La cita de una respuesta que llegó tarde y contesta algo de más
+   arriba. Va antes del rótulo: primero a qué contesta, después quién. */
+.megabot-cita {
+  max-width: 85%;
+  font-size: var(--letra-chica);
+  color: var(--texto-tenue);
+  border-left: 2px solid var(--borde);
+  padding-left: 8px;
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+
+/* El pie de la burbuja de espera: en qué punto está la entrega y
+   cuántas preguntas hay en cola. Tenue a propósito — es un dato de
+   fondo, no la conversación. */
+.megabot-espera__nota {
+  font-size: var(--letra-minima);
+  color: var(--texto-tenue);
+  margin-top: 4px;
+  padding-left: 2px;
+  max-width: 85%;
+}
+
 .megabot-burbuja__error {
   margin-top: 6px;
   font-size: .85em;

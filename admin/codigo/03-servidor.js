@@ -217,6 +217,9 @@ function pedir(ruta, opciones) {
  * @param {boolean} [opciones.noEncolar=false] - Que falle en vez de
  *        guardarse para más tarde. Para lo que no tiene sentido
  *        reintentar después, como cerrar sesión.
+ * @param {number} [opciones.segundosDeEspera] - Tope propio, para lo
+ *        que tarda mucho a propósito (el long-poll del chat). Sin esto
+ *        vale el general de CONFIGURACION.servidor.
  * @returns {Promise<*>} El contenido de "datos".
  * @throws {ErrorDelServidor}
  *
@@ -269,12 +272,21 @@ async function pedirAlServidor(ruta, opciones) {
     );
   }
 
-  // AbortController es lo que corta la espera. Sin esto, con mala señal
-  // el girador daría vueltas para siempre y parecería que la app colgó.
+  /* AbortController es lo que corta la espera. Sin esto, con mala señal
+     el girador daría vueltas para siempre y parecería que la app colgó.
+
+     ⚡ `segundosDeEspera` PROPIO (2026-09-04). Los 8 s de
+     CONFIGURACION son la medida de "el servidor no contesta" para todo
+     el panel, y están bien para todo el panel. Pero el long-poll del
+     chat (chat.php?accion=listar&esperar=1) se queda abierto A
+     PROPÓSITO hasta 25 s esperando que MegaBot conteste: con el tope
+     general, el navegador lo abortaba SIEMPRE a los 8 s y esa espera no
+     habría servido para nada. Quien pide una espera larga la declara
+     acá; nadie más cambia de comportamiento. */
   const cortador = new AbortController();
   const reloj = setTimeout(
     () => cortador.abort(),
-    CONFIGURACION.servidor.segundosDeEspera * 1000
+    (config.segundosDeEspera || CONFIGURACION.servidor.segundosDeEspera) * 1000
   );
 
   let respuesta;
@@ -431,10 +443,12 @@ async function pedirAlServidor(ruta, opciones) {
  * Atajo de lectura.
  *
  * @param {string} ruta
+ * @param {Object} [opciones] - Ver pedirAlServidor(). Se usa para el
+ *        long-poll del chat, que necesita su propio tope de espera.
  * @returns {Promise<*>}
  */
-function traer(ruta) {
-  return pedir(ruta);
+function traer(ruta, opciones) {
+  return pedir(ruta, opciones);
 }
 
 /**

@@ -32,6 +32,8 @@
 
    QUÉ SE LE PUEDE PEDIR
      GET  ?accion=listar&despues_de=0        mensajes del hilo, nuevos primero
+                        &esperar=1           deja la petición abierta hasta
+                                             25 s y contesta apenas hay algo
      POST ?accion=enviar        {texto, pantalla}
      POST ?accion=propuesta_estado  {id, estado: 'aceptada'|'rechazada'}
      POST ?accion=reenviar      {mensaje_id}
@@ -409,6 +411,25 @@ function megabotEstaDisponible() {
 }
 
 /**
+ * Si una pregunta de ahora mismo llegaría a MegaBot, o la va a
+ * contestar el teléfono.
+ *
+ * Junta los dos motivos por los que puede no llegar —no hay webhook
+ * configurado, o falló hace poco y está en reposo— porque desde el
+ * panel son el mismo hecho: contesta FAB. Ver `case 'enviar'`, que
+ * decide con estas dos mismas condiciones.
+ *
+ * @return bool
+ */
+function megabotVaAContestar() {
+    $url = (string) (consultarUno(
+        "SELECT valor FROM ajustes WHERE clave = 'megabot_webhook_url'")['valor'] ?? '');
+    if ($url === '') return false;
+
+    return megabotEstaDisponible();
+}
+
+/**
  * Anota cómo salió el último intento de hablar con MegaBot.
  *
  * @param bool $vivo
@@ -435,6 +456,40 @@ function anotarSaludDeMegabot($vivo) {
  *
  * @return array|null
  */
+/* Cuánto se queda abierta una petición de `listar&esperar=1` antes de
+   contestar vacía. Corto a propósito: cada espera ocupa un worker de
+   PHP, y esto es hosting compartido. El panel reconecta solo. */
+const SEGUNDOS_DE_ESPERA_DE_LISTAR = 25;
+
+/**
+ * Los mensajes del hilo posteriores a un id, con sus propuestas.
+ *
+ * Se separó de `case 'listar'` porque el long-poll la llama una vez por
+ * segundo: tenerla suelta evita repetir la consulta y sus propuestas en
+ * dos lugares que después se desincronizan.
+ *
+ * @param int $hiloId
+ * @param int $despuesDe
+ * @return array
+ */
+function mensajesDelHiloDesde($hiloId, $despuesDe) {
+    $mensajes = consultarTodo(
+        'SELECT * FROM chat_mensajes WHERE hilo_id = :h AND id > :d ORDER BY id ASC',
+        [':h' => $hiloId, ':d' => $despuesDe]
+    );
+
+    // Las propuestas de cada mensaje, en el mismo viaje.
+    foreach ($mensajes as &$m) {
+        $m['propuestas'] = consultarTodo(
+            'SELECT * FROM chat_propuestas WHERE mensaje_id = :m ORDER BY id ASC',
+            [':m' => $m['id']]
+        );
+    }
+    unset($m);
+
+    return $mensajes;
+}
+
 function usoDeMegabotGuardado() {
     $fila = consultarUno("SELECT valor FROM ajustes WHERE clave = 'megabot_uso'");
     $valor = (string) ($fila['valor'] ?? '');
@@ -455,9 +510,17 @@ function usoDeMegabotGuardado() {
      * vuelve a cero y deja de estar agotado, que es lo que significa
      * que el reloj llegue al final. */
     $guardadoEn = (int) ($uso['guardado_en'] ?? 0);
-    $faltaban   = (int) ($uso['reinicia_en'] ?? 0);
+    /* ⚡ "SIN RELOJ" NO ES "RELOJ EN CERO" (2026-09-04)
+     * Cuando MegaBot no manda `reinicia_en` se guardaba 0, y 0 es
+     * justamente lo que significa "la cuota ya se reinició". Como el
+     * descuento de abajo exige `$faltaban > 0`, ese uso no envejecía
+     * NUNCA: un "80 % usado" sin reloj se quedaba en el encabezado para
+     * siempre. Ahora ausente es null y se trata como lo que es: no se
+     * sabe cuándo vuelve. */
+    $faltaban = isset($uso['reinicia_en']) && $uso['reinicia_en'] !== null
+        ? (int) $uso['reinicia_en'] : null;
 
-    if ($guardadoEn > 0 && $faltaban > 0) {
+    if ($guardadoEn > 0 && $faltaban !== null && $faltaban > 0) {
         $transcurrido = max(0, time() - $guardadoEn);
         $uso['reinicia_en'] = max(0, $faltaban - $transcurrido);
 
@@ -466,6 +529,14 @@ function usoDeMegabotGuardado() {
             $uso['agotado']    = false;
         }
     }
+
+    /* ⚡ LA EDAD DEL DATO VIAJA; EL TIMESTAMP NO (2026-09-04)
+     * `guardado_en` se borraba y estaba bien —es de adentro— pero con él
+     * se iba la única forma que tenía el panel de saber si el número era
+     * de hace un minuto o de hace tres días. Los pintaba iguales. Sobre
+     * una cuota SEMANAL eso es afirmar algo que ya no se sabe. La edad
+     * en segundos alcanza y no cuenta nada de adentro. */
+    $uso['hace_segundos'] = $guardadoEn > 0 ? max(0, time() - $guardadoEn) : null;
 
     unset($uso['guardado_en']);   // detalle interno, no viaja al panel
     return $uso;
@@ -502,6 +573,15 @@ function usoDeMegabotGuardado() {
       panel se queda vacío. Un número inventado sobre la cuota de un
       servicio ajeno sería peor que no decir nada.
 
+      Vale también para `reinicia_en`: si no se sabe cuándo vuelve, se
+      OMITE. Mandar 0 no dice "no sé", dice "ya se reinició" — que es
+      justo lo contrario, y dejaba el número clavado para siempre.
+
+   LO QUE SALE HACIA EL PANEL lleva además `hace_segundos`: cuán viejo
+   es el dato. El panel lo usa para no afirmar como actual un
+   porcentaje de hace días (ver pintarUsoDeMegaBot). `guardado_en` no
+   sale nunca: es de adentro.
+
    Del otro lado lo pinta pintarUsoDeMegaBot() en
    admin/codigo/32-asistente.js, que tiene su propio reloj de diez
    segundos para que el número se vea correr entre viaje y viaje.
@@ -523,7 +603,11 @@ function guardarUsoDeMegabotSiVino($usoCrudo) {
     $porcentaje = isset($usoCrudo['porcentaje']) ? (int) $usoCrudo['porcentaje'] : null;
     if ($porcentaje !== null) $porcentaje = max(0, min(100, $porcentaje));
 
-    $reiniciaEn = isset($usoCrudo['reinicia_en']) ? max(0, (int) $usoCrudo['reinicia_en']) : 0;
+    /* null, no 0, cuando no vino: son cosas distintas y guardarlas igual
+       dejaba el dato congelado para siempre. Ver usoDeMegabotGuardado(). */
+    $reiniciaEn = isset($usoCrudo['reinicia_en']) && $usoCrudo['reinicia_en'] !== null
+        ? max(0, (int) $usoCrudo['reinicia_en'])
+        : null;
     $agotado = !empty($usoCrudo['agotado']);
 
     // Sin porcentaje no hay nada honesto que mostrar (ver tabla del
@@ -553,25 +637,65 @@ switch ($accion) {
 
 case 'listar':
     exigirMetodo('GET');
+    /* La sesión se valida UNA vez, acá. Abajo puede haber una espera de
+       hasta 25 s, y revalidar en cada vuelta del bucle gastaría el
+       techo de peticiones de la API con la misma persona esperando su
+       propia respuesta. */
     $yo = exigirSesion();
     $hiloId = hiloDe((int) $yo['id']);
     $despuesDe = campoEntero($_GET, 'despues_de', 0);
 
-    $mensajes = consultarTodo(
-        'SELECT * FROM chat_mensajes WHERE hilo_id = :h AND id > :d ORDER BY id ASC',
-        [':h' => $hiloId, ':d' => $despuesDe]
-    );
+    $mensajes = mensajesDelHiloDesde($hiloId, $despuesDe);
 
-    // Las propuestas de cada mensaje, en el mismo viaje.
-    foreach ($mensajes as &$m) {
-        $m['propuestas'] = consultarTodo(
-            'SELECT * FROM chat_propuestas WHERE mensaje_id = :m ORDER BY id ASC',
-            [':m' => $m['id']]
-        );
+    /* ⚡ LONG-POLLING: CONTESTAR APENAS HAY ALGO (2026-09-04)
+     *
+     * EL PROBLEMA
+     * El panel preguntaba cada 2 s el primer minuto y cada 15 s después.
+     * Una respuesta que llega al segundo 66 —la que MegaBot midió con
+     * cronómetro— se pintaba hasta 15 s más tarde. Puro retraso
+     * agregado a una espera que ya era larga.
+     *
+     * CÓMO
+     * Con `esperar=1` y nada nuevo que devolver, la petición se queda
+     * abierta mirando la tabla una vez por segundo, y contesta EN CUANTO
+     * aparece una fila. Entrega en ≤1 s, y de paso gasta menos cuota:
+     * ~8 peticiones en tres minutos de espera contra ~38 de antes.
+     *
+     * POR QUÉ ACÁ SE PUEDE
+     * El panel no usa session_start() — la sesión va por token en la
+     * base (_lib/sesion.php). Con sesiones de archivo, una petición
+     * abierta bloquearía el archivo de sesión y dejaría clavado todo lo
+     * demás que hiciera esta misma persona mientras espera.
+     *
+     * EL TOPE ES LA GARANTÍA, NO EL ABORTO
+     * connection_aborted() solo se entera de que el otro lado se fue
+     * cuando el script INTENTA escribir, y acá no se puede escribir
+     * nada antes del JSON final sin romperlo. Así que lo que asegura
+     * que ningún worker quede girando es el tope de segundos, no la
+     * detección de la desconexión. Por eso es corto. */
+    if (!$mensajes && !empty($_GET['esperar'])) {
+        @set_time_limit(SEGUNDOS_DE_ESPERA_DE_LISTAR + 15);
+
+        $hasta = time() + SEGUNDOS_DE_ESPERA_DE_LISTAR;
+        while (time() < $hasta) {
+            sleep(1);
+            $mensajes = mensajesDelHiloDesde($hiloId, $despuesDe);
+            if ($mensajes) break;
+        }
     }
-    unset($m);
 
-    responderBien(['hilo_id' => $hiloId, 'mensajes' => $mensajes, 'uso' => usoDeMegabotGuardado()]);
+    responderBien([
+        'hilo_id'  => $hiloId,
+        'mensajes' => $mensajes,
+        'uso'      => usoDeMegabotGuardado(),
+        /* Si MegaBot va a contestar esta vez, o si va a contestar el
+           teléfono. El panel lo dice arriba del hilo: conviene saberlo
+           ANTES de preguntar, y no al leer una respuesta que parecía
+           suya. Son DOS motivos para que no conteste —sin webhook
+           configurado, o en reposo tras fallar— y los dos terminan
+           igual, así que se responden juntos. */
+        'megabot_vivo' => megabotVaAContestar(),
+    ]);
     break;
 
 
@@ -593,6 +717,18 @@ case 'enviar':
 
     $url = (string) (consultarUno("SELECT valor FROM ajustes WHERE clave = 'megabot_webhook_url'")['valor'] ?? '');
     $offline = true;
+
+    /* ⚡ EL PANEL TIENE QUE PODER DECIR EN QUÉ PUNTO SE QUEDÓ (2026-09-04)
+     *
+     * Los tres finales de este bloque se veían iguales desde el chat, y
+     * la espera contestaba siempre lo mismo: "revisa la conexión". Pero
+     * son tres cosas distintas —el webhook aceptó y MegaBot está
+     * pensando, el webhook no aceptó, o ni se intentó porque venía
+     * fallando— y solo una de las tres tiene algo que ver con la red.
+     * Es el mismo error de diagnóstico que se corrigió en confirmar.php
+     * el 4 de septiembre: un mensaje que no distingue causas desorienta
+     * más que el silencio. */
+    $estadoDeEntrega = 'pendiente';
 
     if ($url === '') {
         // Sin webhook configurado: se guarda igual, sin burbuja de
@@ -630,10 +766,18 @@ case 'enviar':
 
         $offline = !$enviado;
         anotarSaludDeMegabot($enviado);
-        actualizar('chat_mensajes', $mensajeId, ['estado' => $enviado ? 'enviado' : 'error']);
+        $estadoDeEntrega = $enviado ? 'enviado' : 'error';
+        actualizar('chat_mensajes', $mensajeId, ['estado' => $estadoDeEntrega]);
     }
 
-    responderBien(['id' => $mensajeId, 'hilo_id' => $hiloId, 'offline' => $offline]);
+    responderBien([
+        'id' => $mensajeId,
+        'hilo_id' => $hiloId,
+        'offline' => $offline,
+        // Cuál de los tres finales fue. El panel lo muestra en la
+        // burbuja de espera (anotarEntregaDeMegaBot).
+        'estado' => $estadoDeEntrega,
+    ]);
     break;
 
 
@@ -755,6 +899,33 @@ case 'responder':
     $propuestasCrudas = is_array($datos['propuestas'] ?? null) ? $datos['propuestas'] : [];
     guardarUsoDeMegabotSiVino($datos['uso'] ?? null);
 
+    /* ⚡ `en_respuesta_a` ESTABA PROMETIDO Y SE TIRABA (2026-09-04)
+     *
+     * La cabecera de este archivo documenta el campo desde el primer
+     * día, pero no existía la columna, nadie lo leía y el panel no lo
+     * conocía: si el Orquestador lo mandaba, se descartaba sin dejar
+     * rastro.
+     *
+     * Mientras las respuestas llegaban en orden no se notaba. Con la
+     * cola atrasada sí: llegó una contestando algo pedido hacía tanto
+     * que ya se había olvidado qué era, y el panel la pintó al final del
+     * hilo debajo de cuatro mensajes distintos. Con esto, el panel puede
+     * encabezarla con la pregunta que contesta.
+     *
+     * Se comprueba que el mensaje citado sea DE ESTE HILO — mismo
+     * criterio que `propuesta_estado`: sin eso, bastaría un número para
+     * hacer que una respuesta cite la conversación de otra persona. */
+    $enRespuestaA = campoEntero($datos, 'en_respuesta_a', 0);
+    if ($enRespuestaA > 0) {
+        $citado = consultarUno(
+            'SELECT id FROM chat_mensajes WHERE id = :m AND hilo_id = :h',
+            [':m' => $enRespuestaA, ':h' => $hiloId]
+        );
+        // No es de este hilo (o no existe): se ignora en silencio. El
+        // texto de la respuesta importa más que la cita.
+        if (!$citado) $enRespuestaA = 0;
+    }
+
     // Cada propuesta se valida contra la whitelist ACÁ, en el servidor —
     // nunca confiar en que el Orquestador solo mande lo permitido. La
     // que no pasa se descarta en silencio; el texto igual llega.
@@ -770,11 +941,20 @@ case 'responder':
         ];
     }
 
-    $mensajeId = insertar('chat_mensajes', [
+    $filaNueva = [
         'hilo_id' => $hiloId, 'rol' => 'megabot', 'texto' => $texto,
         'propuestas_json' => $propuestasCrudas ? json_encode($propuestasCrudas, JSON_UNESCAPED_UNICODE) : null,
         'estado' => 'enviado',
-    ]);
+    ];
+    if ($enRespuestaA > 0) $filaNueva['en_respuesta_a'] = $enRespuestaA;
+
+    /* `en_respuesta_a` es de una ronda posterior a la que creó esta
+       tabla, así que puede faltar en una base a la que todavía no se le
+       volvió a correr instalar.php. Mismo criterio que contratos.php con
+       `archivo_id`: se guarda lo que la tabla tenga hoy, en vez de tumbar
+       la respuesta entera con "columna desconocida". */
+    $mensajeId = insertar('chat_mensajes',
+                          soloColumnasQueExisten('chat_mensajes', $filaNueva));
 
     foreach ($propuestasValidas as $p) {
         insertar('chat_propuestas', [

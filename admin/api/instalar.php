@@ -256,6 +256,16 @@ $agregarColumna('contratos', 'archivo_id',     'INT DEFAULT NULL');
 $agregarColumna('contratos', 'creado_por',     'INT DEFAULT NULL');
 $agregarColumna('pagos',     'comprobante_id', 'INT DEFAULT NULL');
 
+/* A qué pregunta contesta una respuesta de MegaBot (2026-09-04).
+   El campo estaba documentado en el contrato de chat.php desde el
+   principio, pero no existía en ningún lado: si el Orquestador lo
+   mandaba, se tiraba. Con la cadena de agentes trabajando por cola, una
+   respuesta puede llegar tanto después que ya se olvidó qué se preguntó
+   — y sin esto el panel la pinta al final del hilo, sin nada que la ate
+   a su pregunta. NULL porque la enorme mayoría no lo necesita: solo se
+   cita cuando la respuesta NO viene pegada a lo que contesta. */
+$agregarColumna('chat_mensajes', 'en_respuesta_a', 'INT DEFAULT NULL');
+
 /* Esto no es agregar una columna, es AFLOJAR una que ya exigía
    NOT NULL — por eso no usa $agregarColumna(). Se comprueba antes de
    tocar nada, tanto para no fallar si ya se corrió como para no
