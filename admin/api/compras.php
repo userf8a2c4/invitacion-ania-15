@@ -286,7 +286,14 @@ function explicarErrorDeStripe($respuesta) {
         'incorrect_cvc'           => 'El código de seguridad no coincide.',
         'authentication_required' => 'El banco pide confirmar este cobro desde la app del banco. '
                                    . 'Como no se puede hacer desde acá, paga esta compra a mano.',
-        'resource_missing'        => 'Esa tarjeta ya no existe en Stripe. Vuelve a cargarla.',
+        /* `resource_missing` NO siempre es la tarjeta: también sale
+           cuando el cliente del evento ya no está en Stripe, y decir
+           "tarjeta" ahí manda a buscar el problema donde no está — pasó
+           el 5 de septiembre al estrenar la clave restringida. El texto
+           nombra las dos posibilidades y el registro del servidor dice
+           cuál fue (ver clienteDeStripe). */
+        'resource_missing'        => 'Stripe no encuentra la tarjeta o la cuenta del evento. '
+                                   . 'Vuelve a intentar; si sigue, hay que cargar la tarjeta de nuevo.',
     ];
 
     if ($codigo !== '' && isset($conocidos[$codigo])) return $conocidos[$codigo];
@@ -311,15 +318,53 @@ function explicarErrorDeStripe($respuesta) {
 function clienteDeStripe() {
     $fila = consultarUno("SELECT valor FROM ajustes WHERE clave = 'stripe_cliente_id'");
     $guardado = trim((string) ($fila['valor'] ?? ''));
-    if ($guardado !== '') return $guardado;
 
-    /* Clave fija a propósito: este cliente de Stripe es UNO solo para
-       todo el evento (por eso se guarda en `ajustes`). Si dos peticiones
-       simultáneas llegaran acá con la tabla vacía, sin esto quedarían
-       dos clientes en Stripe y las tarjetas repartidas entre ambos. */
+    /* ⚡ EL CLIENTE GUARDADO PUEDE HABER DEJADO DE EXISTIR (2026-09-05)
+     *
+     * Acá se devolvía el id guardado a ojos cerrados. Y un id de Stripe
+     * no es eterno: el entorno de prueba se puede vaciar, el dato se
+     * puede borrar a mano, o la cuenta puede cambiar. Cuando eso pasa,
+     * Stripe contesta `resource_missing` a TODO —guardar tarjeta,
+     * cobrar— y el panel lo traducía como "esa tarjeta ya no existe",
+     * mandando a buscar el problema donde no estaba. El sistema de pagos
+     * quedaba muerto para siempre, porque nadie iba a ir a borrar a mano
+     * una fila de `ajustes` que nadie sabía que existía.
+     *
+     * Pasó de verdad al estrenar la clave restringida: el cliente de
+     * antes ya no estaba y no había forma de salir de ese estado desde
+     * el panel.
+     *
+     * Ahora se comprueba, y si no está se hace uno nuevo. Cuesta un
+     * viaje a Stripe en operaciones que ya hacen varios, y solo ocurren
+     * cuando alguien está comprando algo. */
+    if ($guardado !== '') {
+        $r = pedirleAStripe('GET', 'customers/' . rawurlencode($guardado));
+
+        // Está y responde: es el de siempre.
+        if ($r['ok'] && empty($r['datos']['deleted'])) return $guardado;
+
+        /* 404 es "ya no existe" y se resuelve creando otro. Cualquier
+           otro fallo (500 de Stripe, red caída, permisos) NO significa
+           eso: devolver '' hace que quien llama avise y no se cobre, en
+           vez de crear clientes nuevos cada vez que Stripe tosa. */
+        if ($r['codigo'] !== 404) return '';
+
+        error_log('[Ania XV · compras] El cliente ' . $guardado
+                . ' ya no existe en Stripe. Se crea uno nuevo.');
+    }
+
+    /* La hora adentro de la clave, y no una clave fija.
+       Fija protegía de que dos peticiones a la vez crearan dos clientes,
+       que es lo que se quería. Pero Stripe recuerda una clave de
+       idempotencia 24 h: si hay que RECREAR el cliente porque el
+       anterior se borró, una clave fija devolvería durante un día entero
+       el mismo id borrado — y no habría forma de salir de ese estado.
+       Con la hora dentro se conservan las dos cosas: sigue siendo
+       idempotente para peticiones simultáneas, y una recreación
+       posterior consigue un cliente de verdad. */
     $r = pedirleAStripe('POST', 'customers', [
         'description' => 'XV de Ania - compras del evento',
-    ], 'cliente-unico-del-evento');
+    ], 'cliente-' . date('Y-m-d-H'));
 
     if (!$r['ok'] || empty($r['datos']['id'])) return '';
 
