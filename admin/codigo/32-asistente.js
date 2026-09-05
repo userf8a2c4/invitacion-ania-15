@@ -828,24 +828,23 @@ function engancharHiloDeMegaBot(hilo) {
         if (!await confirmarAcomodoConVistaPrevia()) return;
       }
 
-      /* ⚡ COBRAR PIDE LA CONTRASEÑA, AUNQUE VENGA DE UNA PROPUESTA
-         (2026-09-05). Es la única acción de la whitelist que saca dinero
-         de una cuenta, y este botón es uno de sus dos caminos. El
-         servidor la exige igual (exigirContrasenaDeNuevo en
-         compras.php); pedirla acá es para que el rechazo no llegue como
-         un error suelto después de haber tocado Confirmar. */
-      let claveDeCobro = null;
-      if (filaPropuesta.accion.indexOf('compras.php') !== -1) {
-        claveDeCobro = await pedirContrasenaParaDinero(
-          'Esta propuesta va a cobrar a la tarjeta del evento.');
-        if (claveDeCobro === null) return;
-      }
-
       botonConfirmar.disabled = true;
       try {
         const cuerpo = JSON.parse(filaPropuesta.cuerpo_json || '{}');
-        if (claveDeCobro !== null) cuerpo.contrasena = claveDeCobro;
-        await mandar(filaPropuesta.accion, cuerpo);
+
+        /* ⚡ COBRAR PUEDE PEDIR LA CONTRASEÑA (2026-09-05)
+           Es la única acción de la whitelist que saca dinero, y este
+           botón es uno de sus dos caminos. Lo que autoriza la compra es
+           este Confirmar; la contraseña es la capa de abajo, y el
+           servidor decide si hace falta —vale un rato, así que cinco
+           compras seguidas no la piden cinco veces (ver compras.php)—.
+           Por eso se manda y solo si la exige se pregunta. */
+        if (filaPropuesta.accion.indexOf('compras.php') !== -1) {
+          await mandarTocandoDinero(filaPropuesta.accion, cuerpo,
+            'Esta propuesta va a cobrar a la tarjeta del evento.');
+        } else {
+          await mandar(filaPropuesta.accion, cuerpo);
+        }
         await mandar('chat.php?accion=propuesta_estado', { id: id, estado: 'aceptada' });
         ensuciarVistas.apply(null, vistasParaEnsuciarPorAccion(filaPropuesta.accion));
         if (tarjeta) {
@@ -855,7 +854,10 @@ function engancharHiloDeMegaBot(hilo) {
         }
       } catch (error) {
         botonConfirmar.disabled = false;
-        avisar(error.message, true);
+        /* codigo 0 = cerró la ventana de la contraseña. La propuesta
+           queda como estaba, lista para confirmarla cuando quiera: no es
+           un fallo del que haya que avisar. */
+        if (error && error.codigo !== 0) avisar(error.message, true);
       }
       return;
     }
