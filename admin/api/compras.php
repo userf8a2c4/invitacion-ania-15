@@ -421,8 +421,23 @@ function exigirContrasenaDeNuevo($yo, $datos) {
        escribió. */
     $contrasena = isset($datos['contrasena']) ? (string) $datos['contrasena'] : '';
 
+    /* ⚡ 403 Y NUNCA 401 (2026-09-05)
+     *
+     * Con 401 esto echaba del panel. El panel trata TODO 401 como
+     * "sesión vencida" y llama a manejarSesionVencida(), que borra el
+     * token y manda al login (03-servidor.js:420) — con razón, porque
+     * hasta ahora un 401 solo podía significar eso.
+     *
+     * O sea: escribir mal la contraseña, o cancelar, cerraba la sesión
+     * entera. Una guarda que expulsa a quien se equivoca de tecla no es
+     * una guarda, es una trampa.
+     *
+     * Y 403 es además lo correcto: 401 es "no sé quién eres"; acá sí se
+     * sabe —la sesión es válida— lo que falta es autorización para ESTA
+     * acción, que es exactamente un 403. Se descubrió probándolo contra
+     * el servidor de pbe; leyendo el código no se veía. */
     if ($contrasena === '') {
-        responderMal('Escribe tu contraseña para confirmar.', 401);
+        responderMal('Escribe tu contraseña para confirmar.', 403);
     }
 
     $fila = consultarUno('SELECT password_hash FROM usuarios WHERE id = :i',
