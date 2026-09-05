@@ -88,6 +88,22 @@ comprobar('ningún rechazo de contraseña devuelve 401',
   guarda !== '' && !/responderMal\([^;]*,\s*401\s*\)/.test(guarda),
   'un 401 acá cierra la sesión y expulsa a quien escribió mal la contraseña');
 
+/* El panel y el servidor se ponen de acuerdo POR EL TEXTO del error:
+   mandarTocandoDinero() (50-pagos.js) solo pide la contraseña y
+   reintenta si el mensaje coincide con su patrón. Cambiar esa frase en
+   un archivo y no en el otro haría que el panel deje de pedirla EN
+   SILENCIO — y quien lo cambie no tiene por qué saber que hay un regex
+   esperándola del otro lado. */
+const panel = readFileSync(join(AQUI, '..', 'admin', 'codigo', '50-pagos.js'), 'utf8');
+const elPatron = /const laPide[\s\S]{0,200}?\/([^/]+)\/i\.test/.exec(panel);
+const elTexto  = /responderMal\('([^']*contraseña[^']*)',\s*403\)/.exec(guarda);
+
+comprobar('el texto del servidor dispara el reintento del panel',
+  !!(elPatron && elTexto) && new RegExp(elPatron[1], 'i').test(elTexto[1]),
+  elPatron && elTexto
+    ? 'el panel busca /' + elPatron[1] + '/i y el servidor dice "' + elTexto[1] + '"'
+    : 'no se encontró el patrón del panel o el mensaje del servidor');
+
 /* ─── 2. El freno de ritmo del cobro ──────────────────────────────── */
 
 console.log('\nFreno de ráfagas\n');
