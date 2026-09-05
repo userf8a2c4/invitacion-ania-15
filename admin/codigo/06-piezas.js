@@ -2153,6 +2153,14 @@ async function pintarEtiquetasDe(tipo, id, contenedor) {
           // reusó): hace falta para poder quitarla después sin recargar.
           puestas.push({ id: (r && r.etiqueta_id) || (r && r.id), nombre: nombre });
         }
+
+        /* ⚡ AVISAR TAMBIÉN CUANDO SALE BIEN (2026-09-04)
+           Antes solo se hablaba para dar un error. Con el chip cambiando
+           de color como única señal, no había forma de distinguir "ya
+           quedó guardado" de "se ve distinto pero todavía no se mandó",
+           y eso llevó a buscar un botón de guardar que no existía —
+           porque no hacía falta. Un aviso corto lo resuelve. */
+        avisar(estaba ? 'Etiqueta quitada.' : 'Etiqueta puesta.');
       } catch (error) {
         // Se deshace el cambio optimista: el chip vuelve a como estaba.
         chip.classList.toggle('etiqueta-chip--activa', estaba);

@@ -40,7 +40,12 @@ let FECHA_LIMITE_TEXTO = '';
 const HUECOS_DE_LA_INVITACION = [
   { marca: '{nombre}',       rotulo: 'el nombre',       ejemplo: 'Familia Zelaya' },
   { marca: '{lugares}',      rotulo: 'los lugares',     ejemplo: '4 lugares' },
-  { marca: '{link}',         rotulo: 'el link',         ejemplo: 'https://aniaxv.com/?i=…' },
+  /* El ejemplo sale del dominio donde estás parado, no escrito a mano:
+     en PBE tiene que decir pbe.aniaxv.com. Un ejemplo con el dominio
+     equivocado invita a copiarlo, y un token de pruebas abierto contra
+     el sitio real da 404 — que es el error que ya nos pasó. */
+  { marca: '{link}',         rotulo: 'el link',
+    ejemplo: location.origin + '/?i=…' },
   { marca: '{fecha_limite}', rotulo: 'la fecha límite', ejemplo: '10 de octubre' },
   /* No es un hueco que se rellena: son las DOS formas de decir lo
      mismo. La primera va a las invitaciones de un solo pase; la
@@ -1221,7 +1226,7 @@ async function abrirConfiguracionDeInvitaciones() {
   const muestra = real
     ? { nombre: real.nombre, pases: real.invitacion_pases, link: real.invitacion_link }
     : { nombre: 'Familia Zelaya', pases: 4,
-        link: 'https://aniaxv.com/?i=EJEMPLO' };
+        link: location.origin + '/?i=EJEMPLO' };
 
   const cuerpo = abrirHoja('Invitaciones',
     '<div class="tarjeta__titulo">Fecha límite para confirmar</div>' +
