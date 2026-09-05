@@ -75,6 +75,19 @@ for (const accion of DE_DINERO) {
     'la comprobación tiene que ir antes de hablar con Stripe o escribir en la base');
 }
 
+/* Ningún rechazo de contraseña puede ser 401.
+   Se coló una vez: el panel trata TODO 401 como sesión vencida y manda
+   al login (03-servidor.js:420), así que equivocarse de tecla echaba a
+   la persona del panel entero. Tiene que ser 403 — la sesión es válida,
+   lo que falta es autorización para esa acción. */
+const guarda = php.slice(
+  php.indexOf('function exigirContrasenaDeNuevo'),
+  php.indexOf('function exigirRitmoDeCobro'));
+
+comprobar('ningún rechazo de contraseña devuelve 401',
+  guarda !== '' && !/responderMal\([^;]*,\s*401\s*\)/.test(guarda),
+  'un 401 acá cierra la sesión y expulsa a quien escribió mal la contraseña');
+
 /* ─── 2. El freno de ritmo del cobro ──────────────────────────────── */
 
 console.log('\nFreno de ráfagas\n');
