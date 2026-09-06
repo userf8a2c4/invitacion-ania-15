@@ -81,14 +81,21 @@ RedirectMatch 404 ^/admin/archivos/
   # a otro servidor. El panel maneja nombres, teléfonos, correos y
   # alergias de 115 personas, y desde hoy también cobros.
   #
-  # ⚠️ VA EN «Report-Only» A PROPÓSITO.
-  # Una CSP mal escrita rompe el panel entero y en silencio, y acá no hay
-  # PHP local donde probarla. En este modo el navegador NO bloquea nada:
-  # solo escribe en la consola lo que habría bloqueado. Hay que navegar
-  # el panel completo —incluido agregar una tarjeta, que carga el iframe
-  # de Stripe, y el mapa de direcciones— y comprobar que no reporta
-  # nada. Recién entonces se cambia el nombre del encabezado por
-  # `Content-Security-Policy` a secas.
+  # ✅ YA NO ES «Report-Only»: AHORA BLOQUEA DE VERDAD (2026-09-06)
+  #
+  # Se subió primero en modo Report-Only —que reporta en consola pero no
+  # impide nada— porque una CSP mal escrita rompe el panel entero y en
+  # silencio, y acá no hay PHP local donde probarla.
+  #
+  # Se navegó el panel completo en PBE con la consola abierta, incluido
+  # lo que más permisos necesita: agregar una tarjeta (que carga
+  # js.stripe.com y su iframe) y el mapa de direcciones (Leaflet desde
+  # cdnjs y los tiles de OpenStreetMap). CERO violaciones reportadas en
+  # los dos casos. Recién con esa prueba hecha se le quitó el sufijo.
+  #
+  # Si algún día hace falta agregar un origen, conviene volver a
+  # `Content-Security-Policy-Report-Only` mientras se comprueba, y
+  # recién después dejarlo bloqueando.
   #
   # DE DÓNDE SALE CADA PERMISO (verificado en el código, no supuesto):
   #   · js.stripe.com ......... Stripe.js y el iframe de la tarjeta
@@ -106,7 +113,7 @@ RedirectMatch 404 ^/admin/archivos/
   #
   # `frame-ancestors 'none'` hace lo mismo que X-Frame-Options, que se
   # deja igual para navegadores viejos.
-  Header always set Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://js.stripe.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.stripe.com; font-src 'self' data:; connect-src 'self' https://*.stripe.com https://cdnjs.cloudflare.com; frame-src https://js.stripe.com https://hooks.stripe.com blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://js.stripe.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.stripe.com; font-src 'self' data:; connect-src 'self' https://*.stripe.com https://cdnjs.cloudflare.com; frame-src https://js.stripe.com https://hooks.stripe.com blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 </IfModule>
 
 # ─── Que Authorization llegue a PHP ────────────────────────────────────
