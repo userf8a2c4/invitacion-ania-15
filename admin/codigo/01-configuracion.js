@@ -253,50 +253,111 @@ const CONFIGURACION = {
         ['escanear',  'Leer el QR del pase en la puerta y marcar quién llegó'],
       ],
     },
+    /* ⚡ REORDENADO (2026-09-06)
+     *
+     * QUÉ ESTABA MAL
+     * Eran cinco grupos, y uno —«Ajustes»— se había convertido en un
+     * cajón de doce cosas que no tienen nada que ver entre sí: la
+     * contraseña, los colores, las claves de MegaBot, la cuenta de
+     * cobro y el respaldo, todo en la misma lista. Encontrar algo ahí
+     * era leer las doce.
+     *
+     * Y había parejas separadas que se buscan juntas:
+     *   · «Dónde recibes las compras» estaba en Herramientas y «Formas
+     *     de pago» en Ajustes, cuando son los dos lados de lo mismo.
+     *   · «MegaBot» y «Comandos del asistente» quedaban a ocho filas de
+     *     distancia siendo los dos del asistente.
+     *   · «Alarmas» (Herramientas) y «Avisos y recordatorios» (Ajustes)
+     *     suenan igual desde afuera y estaban en grupos distintos: la
+     *     duda de "¿cuál de los dos era?" no se resolvía mirando.
+     *
+     * EL CRITERIO
+     * Grupos chicos y por TAREA, no por naturaleza técnica. Más
+     * encabezados y listas de dos o tres se recorren de un vistazo;
+     * una lista de doce hay que leerla entera. Lo que se busca junto,
+     * junto.
+     *
+     * Correo entra acá y es nuevo: la burbuja de correos sin leer vive
+     * en el botón «Más» y no había ninguna fila que la explicara ni
+     * llevara a la bandeja (ver `case 'correo'` en 05-navegacion.js). */
     {
-      titulo: 'Herramientas',
+      titulo: 'Correo y proveedores',
       filas: [
+        ['correo', 'La bandeja de info@aniaxv.com'],
         /* Solo admin: compartir.php exige rol admin y una cuenta de
            entrada recibía un 403 al abrirlo, después de haberlo visto
            en su menú como cualquier otra herramienta. */
         ['compartir', 'Mandar los datos del evento a un proveedor por WhatsApp', true],
-        ['importar',  'Cargar invitados o gastos desde una hoja de cálculo'],
+      ],
+    },
+    {
+      /* Los dos lados de lo mismo: con qué se paga y a dónde llega.
+         Antes vivían en grupos distintos. */
+      titulo: 'Compras y pagos',
+      filas: [
+        /* Solo admin: acá se ve si la clave secreta del procesador está
+           puesta. Nunca se muestra su valor —vive en el .env del
+           servidor— pero saber que existe ya es información que una
+           cuenta de entrada no necesita. */
+        ['pagos', 'Conectar la cuenta con la que se paga', true],
         /* Solo admin, igual que el resto del dinero: direcciones.php
            usa exigirAdministrador() y una cuenta de entrada recibiría un
            403 después de haberlo visto en su menú. */
         ['direcciones', 'Dónde recibes las compras que le pides al equipo', true],
-        // ⚡ (2026-08-28) Antes las etiquetas de acomodo (Entrega 2) solo
-        // se podían crear o ver desde adentro de la ficha de una persona
-        // o de una mesa — no había ningún lugar central para verlas
-        // todas juntas ni para borrar las que ya no sirven.
-        ['etiquetas_acomodo', 'Ver y borrar las etiquetas de personas y mesas'],
-        ['alarmas',   'Ver y probar los recordatorios activos'],
-        ['bitacora',  'Quién cambió qué y cuándo', true],
       ],
     },
     {
-      titulo: 'Ajustes',
+      titulo: 'El asistente',
       filas: [
-        ['cuenta',     'Tu nombre, tu correo y tu contraseña'],
-        ['usuarios',   'Quién más tiene acceso al panel', true],
-        ['nuevo-admin','Agregar a alguien más', true],
-        ['avisos',     'Notificaciones de pagos y fechas en este teléfono'],
-        ['etiquetas',  'Cambiar cómo se llaman las cosas en la app', true],
-        ['colores',    'Elegir la paleta de colores del panel', true],
-        ['fab-config', 'Elegir qué hace el botón redondo de abajo'],
         // ⚡ (2026-08-30) Solo admin: acá van la URL del webhook y las
         // dos claves de MegaBot — la de servicio nunca se muestra
         // (solo al rotarla), así que no tiene sentido que una cuenta
         // no-admin ni siquiera vea si hay una configurada.
         ['megabot', 'URL y claves para conectar el chat con MegaBot', true],
-        /* Solo admin, y por el mismo motivo que MegaBot: acá se ve si la
-           clave secreta del procesador está puesta. Nunca se muestra su
-           valor —vive en el .env del servidor— pero saber que existe ya
-           es información que una cuenta de entrada no necesita. */
-        ['pagos', 'Conectar la cuenta con la que se paga', true],
         ['comandos-asistente', 'Ver y agregar frases del asistente'],
-        ['respaldo',   'Cuándo se guardó por última vez la copia de todo', true],
+      ],
+    },
+    {
+      /* Juntos a propósito: desde afuera «alarmas» y «avisos» son la
+         misma palabra, y separados obligaban a entrar en uno para
+         descubrir que era el otro. La línea de cada uno dice cuál es
+         cuál. */
+      titulo: 'Avisos',
+      filas: [
+        ['avisos',  'Notificaciones de pagos y fechas en este teléfono'],
+        ['alarmas', 'Ver y probar los recordatorios activos'],
+      ],
+    },
+    {
+      titulo: 'Herramientas',
+      filas: [
+        ['importar', 'Cargar invitados o gastos desde una hoja de cálculo'],
+        // ⚡ (2026-08-28) Antes las etiquetas de acomodo (Entrega 2) solo
+        // se podían crear o ver desde adentro de la ficha de una persona
+        // o de una mesa — no había ningún lugar central para verlas
+        // todas juntas ni para borrar las que ya no sirven.
+        ['etiquetas_acomodo', 'Ver y borrar las etiquetas de personas y mesas'],
+        ['bitacora', 'Quién cambió qué y cuándo', true],
+      ],
+    },
+    {
+      titulo: 'Tu cuenta',
+      filas: [
+        ['cuenta',      'Tu nombre, tu correo y tu contraseña'],
+        ['usuarios',    'Quién más tiene acceso al panel', true],
+        ['nuevo-admin', 'Agregar a alguien más', true],
+      ],
+    },
+    {
+      /* Cómo se ve y cómo se comporta la app, que es distinto de los
+         datos de la fiesta y distinto de la cuenta de quien la usa. */
+      titulo: 'La app',
+      filas: [
+        ['colores',    'Elegir la paleta de colores del panel', true],
+        ['etiquetas',  'Cambiar cómo se llaman las cosas en la app', true],
+        ['fab-config', 'Elegir qué hace el botón redondo de abajo'],
         ['instalar',   'Poner el acceso directo en la pantalla de inicio'],
+        ['respaldo',   'Cuándo se guardó por última vez la copia de todo', true],
       ],
     },
     {

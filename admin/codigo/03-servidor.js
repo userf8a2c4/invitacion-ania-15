@@ -262,7 +262,8 @@ async function pedirAlServidor(ruta, opciones) {
   if (metodo === 'GET' && !config.sinSesion && Date.now() < ESPERAR_LECTURAS_HASTA) {
     const copia = await leerLectura(ruta);
     if (copia) {
-      avisarDatosGuardados(copia.guardado_en);
+      // 'ocupado' y no falta de red: se llega acá por un 429 anterior.
+      avisarDatosGuardados(copia.guardado_en, 'ocupado');
       return copia.datos;
     }
     throw new ErrorDelServidor(
@@ -374,7 +375,10 @@ async function pedirAlServidor(ruta, opciones) {
     if (metodo === 'GET') {
       const copia = await leerLectura(ruta);
       if (copia) {
-        avisarDatosGuardados(copia.guardado_en);
+        /* El servidor CONTESTÓ, y rápido: decir "sin conexión" acá
+           manda a revisar el wifi cuando lo que hay que hacer es
+           esperar medio minuto. */
+        avisarDatosGuardados(copia.guardado_en, 'ocupado');
         return copia.datos;
       }
     }

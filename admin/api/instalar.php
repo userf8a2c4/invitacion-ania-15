@@ -31,6 +31,24 @@ exigirMetodo(['GET', 'POST']);
 /* ─── PUERTA ──────────────────────────────────────────────────────────── */
 
 if (!llaveDeArranqueCorrecta($_GET['llave'] ?? '')) {
+    /* ⚡ SE DISTINGUE «MAL ESCRITA» DE «NO HAY NINGUNA CONFIGURADA»
+     *   (2026-09-06)
+     *
+     * Los dos casos contestaban «Llave incorrecta», y son problemas
+     * distintos con arreglos distintos: uno se corrige escribiendo bien,
+     * el otro entrando al servidor a agregar una línea al .env. Pasó al
+     * promover a producción, cuya copia del .env no se despliega y por
+     * eso no tenía LLAVE_DIAGNOSTICO: se perdió un rato probando
+     * variantes de una llave que no podía funcionar de ninguna forma.
+     *
+     * Decir que falta la variable no le sirve a nadie de afuera: sin
+     * acceso al .env no hay nada que hacer con esa información. */
+    if (env('LLAVE_DIAGNOSTICO', '') === '') {
+        responderMal('Este servidor no tiene LLAVE_DIAGNOSTICO en su .env. '
+                   . 'Agrégala en el archivo .env de la raíz del sitio y '
+                   . 'vuelve a intentar con ese valor.', 403);
+    }
+
     responderMal('Llave incorrecta.', 403);
 }
 
@@ -104,7 +122,22 @@ foreach ($instrucciones as $instruccion) {
 
 $columnasQueFaltaban = [];
 
-$agregarColumna = function ($tabla, $columna, $definicion) use (&$columnasQueFaltaban) {
+/* ⚡ SE ANOTA CADA COLUMNA QUE ESTE ARCHIVO ESPERA (2026-09-06)
+ *
+ * Se registra al pedirla, exista o no, para poder COMPROBAR al final
+ * que quedó puesta. Ver la nota de `columnas_faltantes` más abajo: sin
+ * esto, "no se agregó ninguna" no distinguía entre "ya estaban todas" y
+ * "fallaron todas en silencio". */
+$columnasEsperadas   = [];
+
+/** Las que se intentaron agregar y el servidor rechazó. */
+$columnasQueFallaron = [];
+
+$agregarColumna = function ($tabla, $columna, $definicion)
+        use (&$columnasQueFaltaban, &$columnasEsperadas, &$columnasQueFallaron) {
+
+    $columnasEsperadas[] = [$tabla, $columna];
+
     if (!existeTabla($tabla)) return;
     if (in_array($columna, columnasDe($tabla), true)) return;
 
@@ -112,6 +145,14 @@ $agregarColumna = function ($tabla, $columna, $definicion) use (&$columnasQueFal
         bd()->exec("ALTER TABLE `$tabla` ADD COLUMN `$columna` $definicion");
         $columnasQueFaltaban[] = "$tabla.$columna";
     } catch (PDOException $e) {
+        /* ⚠️ EL FALLO TAMBIÉN SALE EN LA RESPUESTA, NO SOLO AL LOG.
+           Antes esto solo se escribía en el log del servidor —que en un
+           hosting compartido no mira nadie— y la respuesta seguía
+           diciendo que todo había ido bien. */
+        $columnasQueFallaron[] = [
+            'columna' => "$tabla.$columna",
+            'porque'  => $e->getMessage(),
+        ];
         error_log("[Ania XV · instalar] No se pudo agregar $tabla.$columna: " . $e->getMessage());
     }
 };
@@ -467,7 +508,28 @@ if ($carpetaNueva !== $carpetaVieja && is_dir($carpetaVieja)) {
 }
 
 
-$listo = empty($faltantes);
+/* ⚠️ QUE «NO SE AGREGÓ NINGUNA» NO SE PUEDA LEER MAL (2026-09-06)
+ *
+ * `columnas_agregadas: []` significaba dos cosas OPUESTAS —ya estaban
+ * todas, o todas fallaron y el error se fue al log del servidor— y
+ * desde afuera se veían idénticas. Al promover a producción eso deja la
+ * duda de si la base quedó completa, justo cuando más importa saberlo.
+ *
+ * Ahora se comprueban una por una y se dice cuáles siguen sin estar.
+ * Es el mismo criterio que ya se usaba con las tablas; las columnas se
+ * habían quedado sin él. */
+$columnasFaltantes = [];
+foreach ($columnasEsperadas as $par) {
+    list($tabla, $columna) = $par;
+    // Si falta la tabla entera, ya sale en tablas_faltantes: no se
+    // repite el mismo problema contado de dos formas.
+    if (!existeTabla($tabla)) continue;
+    if (!in_array($columna, columnasDe($tabla), true)) {
+        $columnasFaltantes[] = "$tabla.$columna";
+    }
+}
+
+$listo = empty($faltantes) && empty($columnasFaltantes);
 
 responderBien([
     'listo'             => $listo,
@@ -475,11 +537,22 @@ responderBien([
     'fallidas'          => $fallidas,
     'tablas_faltantes'  => $faltantes,
     'columnas_agregadas'=> $columnasQueFaltaban,
+    /* Las que SIGUEN sin estar después de todo esto. Vacío es la única
+       prueba de que la base quedó completa — ver la nota de arriba. */
+    'columnas_faltantes'=> $columnasFaltantes,
+    'columnas_con_error'=> $columnasQueFallaron,
     'cuentas_existentes'=> $cuentas,
     'mudanza_de_archivos' => $mudanzaDeArchivos,
     'siguiente_paso'    => $listo
         ? ($cuentas > 0
             ? 'Todo listo. Entra a https://' . ($_SERVER['HTTP_HOST'] ?? 'aniaxv.com') . '/admin/'
             : 'Las tablas están creadas. Falta crear la primera cuenta.')
-        : 'Faltan tablas. Revisa la lista de fallidas.',
+        /* Se dice CUÁL de los dos problemas es. "Faltan tablas" cuando
+           lo que faltaba era una columna mandaba a buscar al lado
+           equivocado — y con la base a medias el panel se rompe al
+           abrir la pantalla que usa lo que falta. */
+        : (empty($faltantes)
+            ? 'Faltan columnas: ' . implode(', ', $columnasFaltantes) .
+              '. Revisa columnas_con_error para ver por qué.'
+            : 'Faltan tablas. Revisa la lista de fallidas.'),
 ]);
