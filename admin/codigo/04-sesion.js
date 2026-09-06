@@ -164,14 +164,45 @@ async function haySesionValida() {
        datos guardados de la última vez, para que la app abra y muestre
        lo que tenga en vez de exigir una contraseña que tampoco se puede
        comprobar sin internet. */
-    if (error.codigo === 0) {
-      const guardado = recordado('usuario', null);
-      if (guardado) {
-        USUARIO = guardado;
-        avisar('Sin conexión. Puede que veas datos viejos.', true);
-        return true;
-      }
+    /* ⚡ SOLO EL 401 CIERRA LA SESIÓN (2026-09-06)
+     *
+     * EL SÍNTOMA
+     * Un refresco fuerte sacaba del panel y pedía la contraseña otra
+     * vez. La sesión estaba VIVA: lo comprobamos pidiendo el mismo
+     * endpoint a mano y contestaba 429, no 401.
+     *
+     * LA CAUSA
+     * Acá solo se perdonaba el código 0 —sin señal—. Todo lo demás caía
+     * en el `return false` de abajo, que lleva a la pantalla de entrada.
+     * O sea que "el servidor está ocupado" y "tu token ya no vale" se
+     * trataban igual, y son cosas opuestas: de una se sale esperando
+     * treinta segundos, de la otra escribiendo la contraseña.
+     *
+     * El 429 pasa seguido porque el panel gasta de una cuota por IP que
+     * comparten el long-poll del chat y todas las vistas. Un 500 o un
+     * 503 son lo mismo: problemas DEL SERVIDOR, que no dicen
+     * absolutamente nada sobre si el token sirve.
+     *
+     * QUÉ SE HACE AHORA
+     * Se entra igual con los datos guardados, como con la falta de
+     * señal, y se dice qué pasó de verdad. Si el token estuviera
+     * vencido, la primera petición que haga la app va a devolver 401 y
+     * ESA sí manda al login (manejarSesionVencida, 03-servidor.js).
+     * No se pierde la protección: se deja de expulsar a quien no
+     * corresponde. */
+    const guardado = recordado('usuario', null);
+
+    if (error.codigo !== 401 && guardado) {
+      USUARIO = guardado;
+
+      avisar(error.codigo === 429
+        ? 'El servidor pidió esperar un momento. Puede que veas datos ' +
+          'de hace un rato.'
+        : 'Sin conexión. Puede que veas datos viejos.', true);
+
+      return true;
     }
+
     return false;
   }
 }
