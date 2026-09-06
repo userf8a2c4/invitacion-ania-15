@@ -326,6 +326,47 @@ $agregarColumna('chat_mensajes', 'en_respuesta_a', 'INT DEFAULT NULL');
    tiene ninguna marca, y no hay nada honesto que inventarles. */
 $agregarColumna('chat_mensajes', 'latencia_json', 'TEXT NULL');
 
+/* ⚡ EL ESTADO «reembolsada» (2026-09-06)
+ *
+ * La tabla nació con cuatro estados —propuesta, cobrada, fallida,
+ * cancelada— y ninguno sirve para una compra que SÍ se cobró y después
+ * se devolvió. Usar «cancelada» para eso mentiría en dos sitios: el
+ * total gastado dejaría de cuadrar con lo que Stripe movió de verdad, y
+ * el historial no distinguiría «esto nunca se cobró» de «esto se cobró
+ * y se devolvió», que ante una discusión con el banco es justo lo que
+ * hay que poder demostrar.
+ *
+ * No usa $agregarColumna() porque no agrega nada: MODIFICA el ENUM de
+ * una columna que ya existe. Se comprueba antes para no tocar nada dos
+ * veces —mismo criterio que el aflojado de recibos.proveedor_id, acá
+ * abajo. */
+if (existeTabla('compras_pedidos')) {
+    $columna = consultarUno(
+        "SELECT COLUMN_TYPE FROM information_schema.columns
+         WHERE table_schema = DATABASE() AND table_name = 'compras_pedidos'
+           AND column_name = 'estado'"
+    );
+    $tipo = (string) ($columna['COLUMN_TYPE'] ?? $columna['column_type'] ?? '');
+
+    if ($tipo !== '' && strpos($tipo, 'reembolsada') === false) {
+        try {
+            bd()->exec(
+                "ALTER TABLE `compras_pedidos` MODIFY `estado`
+                 ENUM('propuesta','cobrada','fallida','cancelada','reembolsada')
+                 NOT NULL DEFAULT 'propuesta'"
+            );
+            $columnasQueFaltaban[] = 'compras_pedidos.estado (+reembolsada)';
+        } catch (PDOException $e) {
+            $columnasQueFallaron[] = [
+                'columna' => 'compras_pedidos.estado',
+                'porque'  => $e->getMessage(),
+            ];
+            error_log('[Ania XV · instalar] No se pudo ampliar compras_pedidos.estado: '
+                . $e->getMessage());
+        }
+    }
+}
+
 /* Esto no es agregar una columna, es AFLOJAR una que ya exigía
    NOT NULL — por eso no usa $agregarColumna(). Se comprueba antes de
    tocar nada, tanto para no fallar si ya se corrió como para no
