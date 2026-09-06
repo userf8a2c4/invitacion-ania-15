@@ -858,7 +858,7 @@ case 'config':
     /* El entorno lo decide el SERVIDOR mirando su propio dominio, no el
        navegador: es el mismo criterio que usa reiniciar-prueba.php para
        no existir en producción. */
-    $esPruebas = strpos((string) ($_SERVER['HTTP_HOST'] ?? ''), 'pbe.') !== false;
+    $esPruebas = estamosEnPruebas();
 
     responderBien([
         'entorno'          => $esPruebas ? 'pbe' : 'produccion',
