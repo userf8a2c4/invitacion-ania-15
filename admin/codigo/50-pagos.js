@@ -598,8 +598,28 @@ async function abrirAgregarTarjeta(cfg, deVuelta) {
   }
 
   const stripe = Stripe(cfg.publicable);
+
+  /* ⚡ EL ELEMENTO DE TARJETA, NO EL "PAYMENT ELEMENT" (2026-09-05)
+   *
+   * EL PROBLEMA
+   * El Payment Element daba «Se produjo un error de procesamiento» al
+   * guardar, sin más detalle. Se comprobó contra esta misma cuenta que
+   * Stripe procesa tarjetas sin problema —dos tarjetas de prueba
+   * distintas, las dos succeeded, por confirmCardSetup— así que el
+   * fallo estaba en ese componente y no en la cuenta.
+   *
+   * POR QUÉ ESTE EN SU LUGAR
+   * El Payment Element está pensado para una tienda: trae Link, país,
+   * billetera, correo y teléfono. Acá no se está cobrando a un cliente
+   * que llega de fuera: se está guardando LA tarjeta del evento, la de
+   * quien organiza, para cobrar compras que ella misma confirma. De todo
+   * eso, lo único que hace falta son tres campos.
+   *
+   * Menos piezas es menos superficie de fallo, y este camino
+   * —elements.create('card') + confirmCardSetup()— es exactamente el que
+   * se verificó funcionando contra esta cuenta antes de cambiarlo.
+   */
   const elementos = stripe.elements({
-    clientSecret: intento.client_secret,
     /* Que el formulario de Stripe no desentone con el panel, que es
        oscuro. Sin esto aparece un recuadro blanco en medio de una
        pantalla negra y parece que se rompió algo. */
@@ -626,7 +646,11 @@ async function abrirAgregarTarjeta(cfg, deVuelta) {
    * hoja muda con un botón que no lleva a ningún lado. */
   recuadro.innerHTML = '';
 
-  const campos = elementos.create('payment');
+  const campos = elementos.create('card', {
+    // El nombre del titular no hace falta para guardar la tarjeta, y
+    // pedirlo es un campo más donde equivocarse.
+    hidePostalCode: true,
+  });
   let listo = false;
 
   campos.on('ready', () => {
@@ -691,17 +715,29 @@ async function abrirAgregarTarjeta(cfg, deVuelta) {
        otro lado salvo que el banco lo exija de verdad. Con una tarjeta
        normal se resuelve acá mismo y la hoja no se pierde. */
     /* Con tope: si Stripe no contesta —su iframe caído, la red a medias—
-       confirmSetup() se queda esperando y el botón diría "Guardando…"
+       la promesa se queda esperando y el botón diría "Guardando…"
        indefinidamente. Un minuto es de sobra para una tarjeta. */
     const r = await Promise.race([
-      stripe.confirmSetup({ elements: elementos, redirect: 'if_required' }),
+      stripe.confirmCardSetup(intento.client_secret, { payment_method: { card: campos } }),
       new Promise(rendirse => setTimeout(
         () => rendirse({ error: { message: 'Stripe no respondió a tiempo. Vuelve a intentar.' } }),
         60000)),
     ]);
 
     if (r.error) {
-      avisar(r.error.message || 'No se pudo guardar la tarjeta.', true);
+      /* ⚡ EL MENSAJE SOLO NO ALCANZA (2026-09-05)
+       * Stripe contestó «Se produjo un error de procesamiento» y ahí se
+       * acababa la información: ese texto es el mismo para causas muy
+       * distintas y no se puede arreglar nada con él. El código y el
+       * tipo sí dicen qué pasó, y no cuestan nada: van a la pantalla
+       * junto al mensaje, y completos a la consola. */
+      const e = r.error;
+      const pistas = [e.code, e.decline_code, e.type].filter(Boolean).join(' · ');
+
+      console.error('[Ania XV · pagos] confirmSetup falló:', e);
+      avisar((e.message || 'No se pudo guardar la tarjeta.') +
+             (pistas ? ' (' + pistas + ')' : ''), true);
+
       guardar.disabled = false;
       guardar.textContent = rotulo;
       return;
