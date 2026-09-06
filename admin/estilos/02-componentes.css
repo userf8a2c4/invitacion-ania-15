@@ -779,12 +779,39 @@ select.campo__control {
    llena — abrirHoja()/cerrarHoja() lo vacían y ocultan para que el
    resto de las hojas no lo hereden (06-piezas.js). Nada de fondo,
    borde ni barra: es texto, no una tarjeta. */
+/* ⚡ DOS RENGLONES, Y EL COLOR DE LA CASA (2026-09-06)
+   Era una línea larga en gris tenue que había que leer entera para
+   enterarse, y esto se mira de reojo mientras se escribe. Ahora la
+   cifra va sola —lo único que se mira casi siempre— y el cuándo vuelve
+   queda abajo en chico.
+
+   El color normal es --oro (el morado del panel, el mismo que ya
+   significa "esto es de la app"), NO rojo: el rojo está reservado para
+   estados de alarma y si apareciera de adorno dejaría de leerse como
+   tal. Ver la nota de "colores con significado" en 01-fundamentos. */
 .hoja__uso {
-  font-size: 12px;
-  color: var(--texto-tenue);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  color: var(--oro-claro);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  line-height: 1;
+  line-height: 1.15;
+  text-align: right;
+}
+
+.hoja__uso-cifra {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* El pie siempre en tenue, aunque la cifra se ponga ámbar o roja: si
+   los dos renglones gritan, ninguno se lee. */
+.hoja__uso-pie {
+  font-size: 10.5px;
+  color: var(--texto-tenue);
+  letter-spacing: .01em;
 }
 
 .hoja__cuerpo {
@@ -1283,8 +1310,11 @@ select.campo__control {
 /* El contador de cuota de MegaBot cambia de color según cuánto margen
    queda: es lo que se mira de reojo mientras se escribe, sin llegar a
    leer el número. Ver pintarUsoDeMegaBot() en 32-asistente.js. */
-.hoja__uso--ojo    { color: var(--ojo); }
-.hoja__uso--alerta { color: var(--alerta); font-weight: 600; }
+/* Solo la CIFRA cambia de color, no el pie: el pie tiene su propio gris
+   en .hoja__uso-pie y ahí se queda. Ámbar desde el 70%, rojo desde el
+   90 o sin cuota — el rojo es alarma, no decoración. */
+.hoja__uso--ojo    .hoja__uso-cifra { color: var(--ojo); }
+.hoja__uso--alerta .hoja__uso-cifra { color: var(--alerta); }
 
 
 /* ─── 16. MEGABOT: "ESTÁ ESCRIBIENDO" Y EL CAMPO QUE CRECE ──────────── */

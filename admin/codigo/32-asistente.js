@@ -1895,7 +1895,8 @@ function pintarUsoDeMegaBot(uso, esDelReloj) {
    * comprobable, no una estimación. */
   if (MEGABOT_EN_PRUEBAS && (!uso || (!tienePorcentaje && !uso.agotado))) {
     span.className = 'hoja__uso';
-    span.textContent = 'cuota: MegaBot no la informa';
+    span.innerHTML = '<span class="hoja__uso-cifra">Uso &mdash;</span>' +
+                     '<span class="hoja__uso-pie">MegaBot no informa la cuota</span>';
     span.hidden = false;
     return;
   }
@@ -1920,24 +1921,33 @@ function pintarUsoDeMegaBot(uso, esDelReloj) {
     ? ' · hace ' + compactarTiempoDeUsoDeMegaBot(edad)
     : '';
 
-  let texto = '';
+  /* ⚡ DOS RENGLONES, NO UNO (2026-09-06)
+   *
+   * Antes era una sola línea larga: "14% usado · se reinicia en 2 d 4 h".
+   * Cabía, pero había que LEERLA para enterarse, y esto es un dato que
+   * se mira de reojo mientras se escribe.
+   *
+   * Ahora la cifra va sola y grande —que es lo único que se mira el 90%
+   * de las veces— y el cuándo vuelve queda abajo en chico, para cuando
+   * de verdad importa. Es el dibujo que pidió Carlos.
+   *
+   * El color sigue diciendo de un vistazo si hay margen: normal hasta
+   * el 70%, ámbar hasta el 90, rojo por encima o sin cuota. */
+  const cifra = uso.agotado ? 'Sin cuota' : 'Uso ' + uso.porcentaje + '%';
 
-  if (uso.agotado) {
-    // Agotado: lo único que importa es cuándo vuelve.
-    texto = tiempo ? 'Sin cuota · vuelve en ' + tiempo : 'Sin cuota' + antiguedad;
-  } else if (tienePorcentaje) {
-    texto = tiempo
-      ? uso.porcentaje + '% usado · se reinicia en ' + tiempo
-      : uso.porcentaje + '% usado' + antiguedad;
-  }
+  const pie = tiempo
+    ? 'Se restablece en ' + tiempo
+    : (antiguedad ? antiguedad.replace(/^ · /, '') : '');
 
-  /* El color dice de un vistazo si hay margen o no, sin tener que leer
-     el número: es lo que se mira de reojo mientras se escribe. */
   span.className = 'hoja__uso' +
     (uso.agotado || uso.porcentaje >= 90 ? ' hoja__uso--alerta'
      : uso.porcentaje >= 70 ? ' hoja__uso--ojo' : '');
 
-  span.textContent = texto;
+  span.innerHTML =
+    '<span class="hoja__uso-cifra">' + seguro(cifra) + '</span>' +
+    (pie ? '<span class="hoja__uso-pie">' + seguro(pie) + '</span>' : '');
+
+  const texto = cifra + (pie ? ' · ' + pie : '');
   span.hidden = !texto;
 
   if (texto && !esDelReloj) arrancarRelojDeUsoDeMegaBot();
