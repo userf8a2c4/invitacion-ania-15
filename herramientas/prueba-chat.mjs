@@ -93,6 +93,7 @@ const fabrica = new Function(...nombres, codigo + `
     htmlDeBurbujaMegaBot, htmlDeCitaDeMegaBot, repintarEsperaDeMegaBot,
     pintarUsoDeMegaBot, compactarTiempoDeUsoDeMegaBot,
     TOPE_DE_ESPERA_MEGABOT_MS, EDAD_MAXIMA_DE_USO_S, EDAD_VISIBLE_DE_USO_S,
+    esperaDeMegaBotEnPalabras, msEnPalabras, htmlDeTiemposDeMegaBot,
   };
 `);
 
@@ -245,6 +246,82 @@ comprobar('pero con el reloj corriendo NO se calla (se mantiene solo)',
 
 M.pintarUsoDeMegaBot(null);
 comprobar('sin dato, oculto', span.hidden === true);
+
+
+/* ─── A8 · el cronómetro de la espera ──────────────────────────────── */
+
+console.log('\nA8 · la espera se puede leer\n');
+
+const hace = s => Date.now() - s * 1000;
+
+comprobar('segundos sueltos',
+  M.esperaDeMegaBotEnPalabras(hace(38)) === '38 s',
+  M.esperaDeMegaBotEnPalabras(hace(38)));
+
+comprobar('pasado el minuto, cambia de unidad',
+  M.esperaDeMegaBotEnPalabras(hace(95)) === '1 min 35 s',
+  M.esperaDeMegaBotEnPalabras(hace(95)));
+
+comprobar('minutos justos no dicen "0 s"',
+  M.esperaDeMegaBotEnPalabras(hace(120)) === '2 min',
+  M.esperaDeMegaBotEnPalabras(hace(120)));
+
+/* Que el tiempo aparezca en la burbuja de espera, que es el punto: sin
+   esto la espera vuelve a ser muda. */
+const filaEspera = new ElementoFalso();
+filaEspera.dataset.enCola = '1';
+filaEspera.dataset.desde = String(hace(42));
+filaEspera.dataset.entrega = 'enviado';
+M.repintarEsperaDeMegaBot(filaEspera);
+comprobar('la burbuja de espera muestra cuánto lleva',
+  filaEspera.innerHTML.includes('42 s'), filaEspera.innerHTML);
+
+// Y con la espera agotada TAMBIÉN: es cuando más importa saberlo.
+filaEspera.dataset.agotado = '1';
+M.repintarEsperaDeMegaBot(filaEspera);
+comprobar('agotada, sigue diciendo cuánto lleva',
+  filaEspera.innerHTML.includes('42 s'), filaEspera.innerHTML);
+
+// Una burbuja de antes de esta versión no trae la marca: no debe
+// inventar un tiempo ni romperse.
+const filaVieja = new ElementoFalso();
+filaVieja.dataset.enCola = '1';
+filaVieja.dataset.entrega = 'enviado';
+M.repintarEsperaDeMegaBot(filaVieja);
+comprobar('sin marca de inicio, no inventa un tiempo',
+  !/\d+ s/.test(filaVieja.innerHTML), filaVieja.innerHTML);
+
+comprobar('«enviando» tiene texto propio, no queda muda',
+  (() => {
+    const f = new ElementoFalso();
+    f.dataset.enCola = '1';
+    f.dataset.entrega = 'enviando';
+    M.repintarEsperaDeMegaBot(f);
+    return f.innerHTML.includes('Entregando');
+  })());
+
+
+/* ─── A9 · los tiempos de cada salto ───────────────────────────────── */
+
+console.log('\nA9 · los tiempos no se muestran a quien no corresponde\n');
+
+comprobar('sin el campo latencia, no se pinta nada',
+  M.htmlDeTiemposDeMegaBot({ id: 1, rol: 'megabot', texto: 'hola' }) === '');
+
+comprobar('con tramos vacíos tampoco',
+  M.htmlDeTiemposDeMegaBot({ id: 1, latencia: { tramos: {} } }) === '');
+
+const conTiempos = M.htmlDeTiemposDeMegaBot({
+  id: 1, latencia: { tramos: { enviar_a_webhook: 180, total_servidor: 41200 } },
+});
+comprobar('con tramos, sale plegado', conTiempos.startsWith('<details'), conTiempos);
+comprobar('los milisegundos chicos se dicen en ms',
+  conTiempos.includes('180 ms'), conTiempos);
+comprobar('y los grandes en segundos con coma decimal',
+  conTiempos.includes('41,2 s'), conTiempos);
+
+comprobar('un minuto largo se dice en minutos',
+  M.msEnPalabras(149800) === '2 min 30 s', M.msEnPalabras(149800));
 
 console.log('');
 if (fallos) {
