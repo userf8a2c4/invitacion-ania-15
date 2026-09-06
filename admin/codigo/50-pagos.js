@@ -369,6 +369,22 @@ function estadoDeLaConexionDePagos(cfg) {
       'el cobro va a fallar.');
   }
 
+  /* ⚡ LAS DOS DE PRUEBA, PERO DE CUENTAS DISTINTAS (2026-09-05)
+     El caso que costó una tarde: las dos claves eran de prueba, todo
+     parecía bien, y la pantalla de agregar tarjeta salía sin campos
+     donde escribirla. Stripe solo lo explicaba dentro de su iframe y en
+     inglés. Es un error facilísimo de cometer —basta crear la clave
+     restringida en otro sandbox— y no se ve hasta que alguien intenta
+     guardar una tarjeta. Ahora se dice acá, antes de llegar ahí. */
+  if (cfg.misma_cuenta === false) {
+    return caja('aviso-error',
+      '<strong>Las dos claves son de cuentas de Stripe distintas.</strong> ' +
+      'Las dos son de ' + seguro(cfg.modo_publicable || 'prueba') + ', pero ' +
+      'salieron de sitios diferentes, y así no se puede guardar ninguna ' +
+      'tarjeta. Copia las dos claves de la <strong>misma</strong> pantalla de ' +
+      'Stripe: la publicable de arriba y la restringida que crees ahí mismo.');
+  }
+
   /* Coinciden entre sí, pero no con el entorno. No es un error: puede
      haber un motivo. Se informa y se sigue. */
   if (cfg.modo_publicable !== cfg.modo_esperado) {
