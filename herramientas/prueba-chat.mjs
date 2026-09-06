@@ -19,15 +19,28 @@ class ElementoFalso {
     this.className = '';
     this.dataset = {};
     this.hijos = [];
-    this.innerHTML = '';
+    this._html = '';
     this.textContent = '';
     this.hidden = false;
     this.scrollTop = 0;
     this.scrollHeight = 0;
     this.style = {};
   }
+  /* innerHTML de verdad: al escribirlo, el navegador recalcula
+     textContent sin las etiquetas. Sin esto, una prueba que mira
+     textContent daba vacío para todo lo que se pinta con innerHTML —y
+     el código que se quiere probar usa las dos formas. */
+  get innerHTML() { return this._html; }
+  set innerHTML(v) {
+    this._html = String(v);
+    this.textContent = this._html
+      .replace(/<[^>]*>/g, '')
+      .replace(/&mdash;/g, '—')
+      .replace(/&middot;/g, '·')
+      .replace(/&amp;/g, '&');
+  }
   appendChild(h) { this.hijos.push(h); return h; }
-  insertAdjacentHTML(_, html) { this.innerHTML += html; }
+  insertAdjacentHTML(_, html) { this.innerHTML = this._html + html; }
   querySelector(sel) {
     const m = /^\[data-mensaje-id="(.+)"\]$/.exec(sel);
     if (m) return this._porId(m[1]);
@@ -221,12 +234,12 @@ documentoFalso._porId['hoja-uso'] = span;
 
 M.pintarUsoDeMegaBot({ porcentaje: 45, reinicia_en: 3600, agotado: false, hace_segundos: 30 });
 comprobar('dato fresco con reloj: se muestra con el tiempo',
-  span.textContent.includes('45% usado') && span.textContent.includes('se reinicia en'),
+  span.textContent.includes('Uso 45%') && span.textContent.includes('Se restablece en'),
   span.textContent);
 
 M.pintarUsoDeMegaBot({ porcentaje: 45, reinicia_en: 0, agotado: false, hace_segundos: 30 });
 comprobar('dato fresco sin reloj: solo el porcentaje, sin antigüedad',
-  span.textContent === '45% usado', span.textContent);
+  span.textContent === 'Uso 45%', span.textContent);
 
 M.pintarUsoDeMegaBot({ porcentaje: 45, reinicia_en: 0, agotado: false, hace_segundos: 10800 });
 comprobar('dato de hace 3 h sin reloj: dice de cuándo es',
@@ -241,11 +254,34 @@ comprobar('dato de hace más de dos días: se calla',
 M.pintarUsoDeMegaBot({ porcentaje: 45, reinicia_en: 7200, agotado: false,
                        hace_segundos: M.EDAD_MAXIMA_DE_USO_S + 60 });
 comprobar('pero con el reloj corriendo NO se calla (se mantiene solo)',
-  span.hidden === false && span.textContent.includes('45% usado'),
+  span.hidden === false && span.textContent.includes('Uso 45%'),
   'quedó "' + span.textContent + '"');
 
 M.pintarUsoDeMegaBot(null);
 comprobar('sin dato, oculto', span.hidden === true);
+
+/* El dibujo que pidio Carlos: cifra arriba, cuando vuelve abajo. */
+M.pintarUsoDeMegaBot({ porcentaje: 14, reinicia_en: 187200, agotado: false, hace_segundos: 5 });
+comprobar('la cifra va en su propio renglon',
+  span.innerHTML.includes('hoja__uso-cifra') && span.innerHTML.includes('Uso 14%'),
+  span.innerHTML);
+comprobar('y el cuando vuelve en el de abajo',
+  span.innerHTML.includes('hoja__uso-pie') && span.innerHTML.includes('Se restablece en'),
+  span.innerHTML);
+comprobar('hasta el 70% NO se pinta de alarma',
+  !span.className.includes('alerta') && !span.className.includes('ojo'), span.className);
+
+M.pintarUsoDeMegaBot({ porcentaje: 75, reinicia_en: 3600, agotado: false, hace_segundos: 5 });
+comprobar('desde el 70% pasa a ambar',
+  span.className.includes('hoja__uso--ojo'), span.className);
+
+M.pintarUsoDeMegaBot({ porcentaje: 94, reinicia_en: 3600, agotado: false, hace_segundos: 5 });
+comprobar('desde el 90% pasa a alarma',
+  span.className.includes('hoja__uso--alerta'), span.className);
+
+M.pintarUsoDeMegaBot({ porcentaje: null, reinicia_en: 0, agotado: true, hace_segundos: 5 });
+comprobar('sin cuota lo dice sin inventar porcentaje',
+  span.innerHTML.includes('Sin cuota') && !/\d+%/.test(span.innerHTML), span.innerHTML);
 
 
 /* ─── A8 · el cronómetro de la espera ──────────────────────────────── */

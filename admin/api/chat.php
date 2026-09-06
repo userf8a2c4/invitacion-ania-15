@@ -975,6 +975,75 @@ function deltasDeLatencia($marcas) {
 }
 
 
+/**
+ * Lee la cuota del encabezado `X-MegaBot-Uso` y la guarda.
+ *
+ * ⚡ POR QUÉ EN UN ENCABEZADO Y NO EN EL CUERPO (2026-09-06)
+ *
+ * El campo `uso` viaja dentro de `accion=responder` desde el principio
+ * y en semanas no llegó ni una vez. No es mala voluntad: ese camino
+ * obliga a que haya una conversación abierta Y a acordarse de
+ * adjuntarlo mientras se redacta la respuesta. Si nadie escribió al
+ * chat no hay por dónde mandarlo aunque la cuota haya cambiado; y si
+ * escribió, compite con el trabajo de contestar.
+ *
+ * Un encabezado no compite con nada. Se pone UNA vez en el cliente HTTP
+ * y viaja solo en todas las peticiones que ya se hacen —`responder`,
+ * `contexto`, la que sea— sin tocar el JSON ni la lógica de redacción.
+ * Es el camino de menos fricción que hay, y por eso es el que tiene
+ * chance de usarse.
+ *
+ * SE ACEPTAN TRES FORMAS, porque discutir el formato costaría más que
+ * soportarlas:
+ *     X-MegaBot-Uso: 14
+ *     X-MegaBot-Uso: 14; reinicia=187200
+ *     X-MegaBot-Uso: {"porcentaje":14,"reinicia_en":187200}
+ *
+ * El CONTENIDO se valida con el contrato de siempre
+ * (guardarUsoDeMegabotSiVino): esto solo cambia por dónde entra, no
+ * qué se acepta. Sin porcentaje sigue sin guardarse nada.
+ *
+ * @return void
+ */
+function guardarUsoDelEncabezado() {
+    $crudo = trim(encabezadoDeLaPeticion('X-MegaBot-Uso'));
+    if ($crudo === '') return;
+
+    // Forma 3: JSON tal cual.
+    if ($crudo[0] === '{') {
+        $json = json_decode($crudo, true);
+        if (is_array($json)) guardarUsoDeMegabotSiVino($json);
+        return;
+    }
+
+    // Formas 1 y 2: el porcentaje primero, y lo demás como `clave=valor`
+    // separado por ';' o ','.
+    $partes = preg_split('/[;,]/', $crudo);
+    $uso = [];
+
+    $primero = trim((string) array_shift($partes));
+    if (!preg_match('/^(\d{1,3})\s*%?$/', $primero, $m)) return;
+    $uso['porcentaje'] = (int) $m[1];
+
+    foreach ($partes as $parte) {
+        if (strpos($parte, '=') === false) continue;
+        list($clave, $valor) = explode('=', $parte, 2);
+        $clave = strtolower(trim($clave));
+        $valor = trim($valor);
+
+        // `reinicia` y `reinicia_en` son la misma cosa: no se pierde un
+        // reporte por una palabra de más.
+        if ($clave === 'reinicia' || $clave === 'reinicia_en') {
+            if (is_numeric($valor)) $uso['reinicia_en'] = (int) $valor;
+        } elseif ($clave === 'agotado') {
+            $uso['agotado'] = ($valor === '1' || strtolower($valor) === 'true');
+        }
+    }
+
+    guardarUsoDeMegabotSiVino($uso);
+}
+
+
 switch ($accion) {
 
 /* ═══════════════════ CON SESIÓN DE LUCILA/CARLOS ═══════════════════ */
@@ -1443,6 +1512,47 @@ case 'responder':
     anotarMarcasDeLatencia($mensajeId, $marcas);
 
     responderBien(['id' => $mensajeId]);
+    break;
+
+
+case 'uso':
+    /* ⚡ UN LUGAR PROPIO PARA REPORTAR LA CUOTA (2026-09-06)
+     *
+     * POR QUÉ NO ALCANZABA CON `responder`
+     * El campo `uso` viaja dentro de accion=responder desde el
+     * principio, y en semanas no llegó ni una vez. No es mala voluntad:
+     * ese camino exige que haya una conversación abierta Y que se
+     * acuerde de adjuntarlo mientras redacta la respuesta. Si nadie
+     * escribió al chat, no hay por dónde mandarlo aunque la cuota haya
+     * cambiado; si escribió, compite con el trabajo de contestar.
+     *
+     * Acá no depende de nada de eso: un POST suelto, cuando quiera y
+     * cuantas veces quiera. Un cron suyo cada hora alcanza, y el panel
+     * descuenta el tiempo solo entre reporte y reporte.
+     *
+     * Se acepta el cuerpo de las dos formas —{"uso":{…}} o {…} pelado—
+     * porque la diferencia no vale un reporte perdido.
+     *
+     * El contrato del contenido es el MISMO de siempre y está escrito
+     * una sola vez, junto a guardarUsoDeMegabotSiVino(). Acá no se
+     * repite ni se relaja: lo que no cumple, no se guarda. */
+    exigirMetodo('POST');
+    exigirClaveDeServicio();
+    $datos = cuerpoJson();
+
+    guardarUsoDeMegabotSiVino(
+        is_array($datos['uso'] ?? null) ? $datos['uso'] : $datos
+    );
+
+    $guardado = usoDeMegabotGuardado();
+
+    /* Se contesta lo que quedó guardado, no un "ok" a secas: así, del
+       otro lado, se ve en el acto si el formato entró bien o si se
+       descartó en silencio por no traer porcentaje. */
+    responderBien([
+        'guardado' => $guardado !== null,
+        'uso'      => $guardado,
+    ]);
     break;
 
 
