@@ -557,19 +557,49 @@ function pintarTarjetas(donde, tarjetas, cuerpo) {
  * @returns {Promise<void>}
  */
 async function abrirAgregarTarjeta(cfg, deVuelta) {
+  /* ⚡ LA HOJA NO PUEDE SER UN CAMPO FLOTANDO EN EL VACÍO (2026-09-06)
+   *
+   * EL PROBLEMA
+   * Quedaba una línea de texto, un campo de una sola fila, y ochenta
+   * píxeles de nada hasta el botón. Era el ÚNICO formulario del panel
+   * sin un solo rótulo —compárese con "Nueva dirección", que rotula
+   * cada campo— y en producción se veía peor todavía, porque el aviso
+   * de arriba es más corto que el de pruebas.
+   *
+   * Los 120 px de hueco venían de un `min-height` puesto para el
+   * Payment Element, que era alto porque traía país, correo y billetera.
+   * Al cambiarlo por el elemento de tarjeta —tres campos en una fila—
+   * el mínimo dejó de tener sentido y quedó como vacío.
+   *
+   * QUÉ SE HACE
+   * Se rotula el campo como cualquier otro del panel, y debajo va lo que
+   * de verdad tranquiliza a quien está por escribir un número de
+   * tarjeta: que el número no pasa por acá. Eso NO es relleno — es la
+   * respuesta a la pregunta que uno se hace justo en ese momento, y
+   * antes solo se decía en producción y perdida en el párrafo de arriba.
+   *
+   * El mínimo se queda en lo que mide el campo real (44 px), y solo
+   * mientras carga: así no salta al aparecer, pero tampoco sobra. */
   const cuerpo = abrirHoja('Agregar una tarjeta',
-    '<p class="vacio__texto" style="margin-bottom:var(--esp-3)">' +
-      (cfg.modo_publicable === 'prueba'
-        ? 'Estás en <strong>pruebas</strong>: usa la tarjeta de mentira ' +
-          '4242 4242 4242 4242, cualquier fecha futura y cualquier código. ' +
-          'No se mueve un peso.'
-        : 'Esta tarjeta va a quedar guardada para cobrar las compras que ' +
-          'confirmes. El número lo recibe Stripe directamente: este panel ' +
-          'no lo ve ni lo guarda.') +
-    '</p>' +
+    (cfg.modo_publicable === 'prueba'
+      ? '<div class="etiqueta etiqueta--ojo" style="margin-bottom:var(--esp-3)">' +
+          'Estás en pruebas: usa 4242 4242 4242 4242, cualquier fecha ' +
+          'futura y cualquier código. No se mueve un peso.' +
+        '</div>'
+      : '') +
 
-    '<div id="pagos-recuadro" style="min-height:120px">' +
-      '<p class="vacio__texto">Cargando el formulario seguro…</p>' +
+    '<div class="campo">' +
+      '<span class="campo__rotulo">Datos de la tarjeta</span>' +
+      '<div id="pagos-recuadro" style="min-height:44px">' +
+        '<p class="vacio__texto">Cargando el formulario seguro…</p>' +
+      '</div>' +
+      // `vacio__texto` es la clase de ayuda que usa campoTexto()
+      // (06-piezas.js): el mismo gris tenue que el resto del panel.
+      '<span class="vacio__texto" style="margin-top:var(--esp-2)">' +
+        'El número lo recibe Stripe directamente: este panel no lo ve ni ' +
+        'lo guarda. Queda para cobrar las compras que confirmes, y puedes ' +
+        'quitarla cuando quieras.' +
+      '</span>' +
     '</div>' +
 
     pieDeFormulario('Guardar la tarjeta'));
@@ -645,6 +675,10 @@ async function abrirAgregarTarjeta(cfg, deVuelta) {
    * si Stripe no puede cargarlo lo dice en pantalla en vez de dejar una
    * hoja muda con un botón que no lleva a ningún lado. */
   recuadro.innerHTML = '';
+  /* El mínimo era para que no saltara mientras cargaba el cartel. Con el
+     campo ya dibujado sobra: dejarlo puesto es el hueco vacío que había
+     debajo del formulario. */
+  recuadro.style.minHeight = '';
 
   const campos = elementos.create('card', {
     // El nombre del titular no hace falta para guardar la tarjeta, y

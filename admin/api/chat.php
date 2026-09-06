@@ -1047,6 +1047,24 @@ case 'listar':
         'hilo_id'  => $hiloId,
         'mensajes' => $mensajes,
         'uso'      => usoDeMegabotGuardado(),
+        /* ⚡ SI ESTAMOS EN PRUEBAS, PARA PODER VER QUE NO HAY DATO
+         *   (2026-09-06)
+         *
+         * El contador de uso se esconde entero cuando MegaBot no manda
+         * el campo —correcto: inventar un porcentaje sobre la cuota de
+         * un servicio ajeno sería peor que callar—. Pero esconderlo
+         * hace que "no lo manda" y "todo bien" se vean IGUAL: un hueco.
+         * Así se pasaron días creyendo que el contador estaba roto
+         * cuando lo que faltaba era el dato del otro lado.
+         *
+         * En PBE el panel dice cuál de las dos cosas pasa. En
+         * producción no: ahí Lucila no tiene por qué leer el estado de
+         * una integración, y está dicho que nada técnico queda a su
+         * vista.
+         *
+         * Mismo criterio de detección que compras.php: lo decide el
+         * SERVIDOR mirando su dominio, no el navegador. */
+        'pruebas'  => strpos((string) ($_SERVER['HTTP_HOST'] ?? ''), 'pbe.') !== false,
         /* Cómo terminó la entrega de lo último que ella mandó. El panel
            lo necesita porque `enviar` ya no lo puede saber a tiempo —ver
            entregaDelUltimoMensajeSuyo(). */
