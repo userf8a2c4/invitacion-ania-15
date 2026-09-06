@@ -261,6 +261,10 @@ const CONFIGURACION = {
            en su menú como cualquier otra herramienta. */
         ['compartir', 'Mandar los datos del evento a un proveedor por WhatsApp', true],
         ['importar',  'Cargar invitados o gastos desde una hoja de cálculo'],
+        /* Solo admin, igual que el resto del dinero: direcciones.php
+           usa exigirAdministrador() y una cuenta de entrada recibiría un
+           403 después de haberlo visto en su menú. */
+        ['direcciones', 'Dónde recibes las compras que le pides al equipo', true],
         // ⚡ (2026-08-28) Antes las etiquetas de acomodo (Entrega 2) solo
         // se podían crear o ver desde adentro de la ficha de una persona
         // o de una mesa — no había ningún lugar central para verlas
@@ -285,6 +289,11 @@ const CONFIGURACION = {
         // (solo al rotarla), así que no tiene sentido que una cuenta
         // no-admin ni siquiera vea si hay una configurada.
         ['megabot', 'URL y claves para conectar el chat con MegaBot', true],
+        /* Solo admin, y por el mismo motivo que MegaBot: acá se ve si la
+           clave secreta del procesador está puesta. Nunca se muestra su
+           valor —vive en el .env del servidor— pero saber que existe ya
+           es información que una cuenta de entrada no necesita. */
+        ['pagos', 'Conectar la cuenta con la que se paga', true],
         ['comandos-asistente', 'Ver y agregar frases del asistente'],
         ['respaldo',   'Cuándo se guardó por última vez la copia de todo', true],
         ['instalar',   'Poner el acceso directo en la pantalla de inicio'],

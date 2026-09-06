@@ -65,24 +65,46 @@ async function enviarAlServidor(datos) {
       body:    JSON.stringify(carga),
     });
 
+    /* ⚡ SE DEVUELVE LO QUE DIJO EL SERVIDOR, NO `null` (2026-09-04)
+       Antes, cualquier fallo devolvía null y el formulario mostraba
+       siempre lo mismo: "revisa tu conexión". Eso hizo INDIAGNOSTICABLE
+       un problema real en producción: el servidor contestaba
+       "demasiados envíos seguidos" y la persona leía que su internet
+       andaba mal. Miraba el wifi, reintentaba, y volvía a fallar.
+
+       Un mensaje de error que no distingue entre causas no es un
+       mensaje de error: es ruido que además desorienta. */
     if (!respuesta.ok) {
       console.warn('[Ania XV] El servidor respondió con error HTTP:', respuesta.status);
-      return null;
+
+      // El cuerpo de un 4xx suele traer el motivo en español. Vale la
+      // pena intentar leerlo aunque el código HTTP sea de error.
+      let motivo = '';
+      let esperar = 0;
+      try {
+        const cuerpo = await respuesta.json();
+        motivo = (cuerpo && cuerpo.error) || '';
+        esperar = (cuerpo && cuerpo.reintentar_en) || 0;
+      } catch (noEraJson) { /* algunos errores del hosting son HTML */ }
+
+      return { ok: false, error: motivo, reintentarEn: esperar, http: respuesta.status };
     }
 
     const json = await respuesta.json();
     if (json && json.ok) {
       console.info('[Ania XV] ✅ Confirmación guardada en MySQL y correos enviados.');
       return json;
-    } else {
-      console.warn('[Ania XV] El servidor devolvió ok:false, ',
-                   (json && json.error) ?? 'sin detalle');
-      return null;
     }
 
+    console.warn('[Ania XV] El servidor devolvió ok:false, ',
+                 (json && json.error) ?? 'sin detalle');
+    return { ok: false, error: (json && json.error) || '' };
+
   } catch (error) {
+    /* Acá sí es un problema de red de verdad: el fetch ni siquiera
+       llegó. Es el único caso donde "revisa tu conexión" es cierto. */
     console.warn('[Ania XV] No se pudo contactar con confirmar.php:', error);
-    return null;
+    return { ok: false, error: '', sinRed: true };
   }
 }
 

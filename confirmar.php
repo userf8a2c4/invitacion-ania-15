@@ -108,37 +108,117 @@ if (!$hayToken && !$correoValido) {
     exit;
 }
 
-/* ─── FRENO POR IP ────────────────────────────────────────────────────── */
-/* Este es el único punto del sitio abierto a internet sin sesión: no pide
-   ni contraseña ni token. Sin freno, cualquiera puede mandar
-   confirmaciones falsas en bucle y llenar la lista de invitados de
-   basura. Reutiliza la tabla `intentos_login` del panel, con su propia
-   marca, para no tener que sumar una tabla nueva solo para esto.
+/* ─── FRENO ───────────────────────────────────────────────────────────
 
-   Diez por hora por IP alcanza de sobra para una familia real —a veces
-   se manda, se corrige y se reenvía— y frena un script en bucle. */
+   ⚠️ REESCRITO EL 2026-09-04, PORQUE EL ANTERIOR ROMPÍA LO QUE LA PROPIA
+   INVITACIÓN PROMETE.
+
+   Decía: «diez por hora por IP alcanza de sobra para una familia real».
+   No alcanzaba, y el error se veía en producción: una familia corrigiendo
+   su respuesta -que es exactamente lo que la pantalla los invita a
+   hacer, "pueden modificar su respuesta cuantas veces gusten"- llegaba a
+   diez envíos y quedaba bloqueada una hora.
+
+   Dos cosas lo empeoraban:
+
+   1. CONTABA LOS ENVÍOS BUENOS. El límite existe para frenar basura,
+      pero gastaba cuota con cada confirmación legítima.
+
+   2. LA IP NO IDENTIFICA A UNA FAMILIA. Detrás del mismo operador móvil
+      hay miles de personas con la misma IP de salida. Varios invitados
+      confirmando desde el mismo pueblo se gastaban la cuota entre ellos
+      sin tener nada que ver.
+
+   Es el MISMO error que ya se había corregido en invitacion.php el
+   2026-09-03 -«pasó a gastarle cuota a los invitados de verdad, que
+   comparten IP entre ellos»- y que aquí quedó sin corregir. Vale la pena
+   dejarlo escrito: cuando se arregla un freno, hay que buscar sus
+   hermanos.
+
+   CÓMO QUEDA
+
+   · CON TOKEN, el freno cuenta POR TOKEN y no por IP, y es holgado.
+     Quien tiene el link es un invitado de verdad, y cada envío suyo
+     SOBRESCRIBE SU PROPIA FILA: por más veces que mande, no ensucia
+     nada de nadie. El tope alto queda solo por si un script se
+     desboca.
+
+   · SIN TOKEN (el formulario abierto de siempre) el freno sigue siendo
+     por IP: ahí sí cada envío crea una fila nueva, y es el único camino
+     por el que puede entrar basura.
+
+   · Y CUANDO FRENA, DICE CUÁNTO FALTA. Un «espera un rato» sin número
+     es lo mismo que no decir nada.                                    */
+
+/* Con link personal: alto a propósito. Con 60 confirmaciones en una hora
+   ya no hay nadie corrigiendo su menú, hay algo repitiendo solo. */
+const TOPE_CON_TOKEN = 60;
+
+/* Sin link: cada envío crea una fila nueva. Acá el número sí protege. */
+const TOPE_SIN_TOKEN = 10;
+
+const VENTANA_DEL_FRENO_EN_MINUTOS = 60;
+
 try {
     $pdoFreno = new PDO("mysql:host=$DB_HOST;dbname=$DB_NAME;charset=utf8mb4", $DB_USER, $DB_PASSWORD,
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 
     $ipFreno = substr($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0', 0, 45);
 
-    $stmt = $pdoFreno->prepare(
-        'SELECT COUNT(*) AS n FROM intentos_login
-         WHERE ip = :ip AND correo = :marca
-           AND cuando > DATE_SUB(NOW(), INTERVAL 60 MINUTE)'
-    );
-    $stmt->execute([':ip' => $ipFreno, ':marca' => '__confirmar__']);
-    $conteo = (int) ($stmt->fetch(PDO::FETCH_ASSOC)['n'] ?? 0);
+    /* El token normalizado, para contar por él. Se calcula acá porque el
+       freno corre antes de la sección que resuelve la invitación. */
+    $tokenParaElFreno = preg_replace('/[^a-f0-9]/', '', strtolower((string) ($datos['token'] ?? '')));
+    $conToken = $tokenParaElFreno !== '';
 
-    if ($conteo >= 10) {
+    // La marca separa los dos conteos para que no se mezclen entre sí.
+    $marcaDelFreno = $conToken ? '__conf_token__' : '__confirmar__';
+    $claveDelFreno = $conToken ? substr($tokenParaElFreno, 0, 45) : $ipFreno;
+    $topeDelFreno  = $conToken ? TOPE_CON_TOKEN : TOPE_SIN_TOKEN;
+
+    /* Se piden el conteo Y el más viejo de la ventana en una sola
+       consulta: con el más viejo se sabe exactamente cuándo se libera
+       un lugar, que es lo que hay que poder decirle a la persona. */
+    $stmt = $pdoFreno->prepare(
+        'SELECT COUNT(*) AS n, MIN(cuando) AS primero
+           FROM intentos_login
+          WHERE ip = :clave AND correo = :marca
+            AND cuando > DATE_SUB(NOW(), INTERVAL ' . VENTANA_DEL_FRENO_EN_MINUTOS . ' MINUTE)'
+    );
+    $stmt->execute([':clave' => $claveDelFreno, ':marca' => $marcaDelFreno]);
+    $delFreno = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    $conteo = (int) ($delFreno['n'] ?? 0);
+
+    if ($conteo >= $topeDelFreno) {
+
+        /* Cuándo se libera el primer lugar: la hora del más viejo más la
+           ventana. Si por lo que sea no se pudo leer, se cae a la ventana
+           entera, que es el peor caso honesto. */
+        $esperaEnSegundos = VENTANA_DEL_FRENO_EN_MINUTOS * 60;
+        if (!empty($delFreno['primero'])) {
+            $liberaEn = strtotime((string) $delFreno['primero'])
+                      + VENTANA_DEL_FRENO_EN_MINUTOS * 60;
+            $esperaEnSegundos = max(60, $liberaEn - time());
+        }
+
+        $minutos = (int) ceil($esperaEnSegundos / 60);
+
         http_response_code(429);
-        echo json_encode(['ok' => false, 'error' => 'Demasiados envíos seguidos. Espera un rato e intenta de nuevo.']);
+        // Cabecera estándar, para que un navegador o un proxy lo entiendan.
+        header('Retry-After: ' . $esperaEnSegundos);
+        echo json_encode([
+            'ok'    => false,
+            'error' => 'Recibimos muchos envíos seguidos desde aquí. '
+                     . 'Vuelve a intentarlo en ' . $minutos
+                     . ($minutos === 1 ? ' minuto' : ' minutos')
+                     . '. Tu respuesta anterior sigue guardada.',
+            // Para que el formulario pueda contar solo, si quiere.
+            'reintentar_en' => $esperaEnSegundos,
+        ]);
         exit;
     }
 
-    $pdoFreno->prepare('INSERT INTO intentos_login (ip, correo) VALUES (:ip, :marca)')
-             ->execute([':ip' => $ipFreno, ':marca' => '__confirmar__']);
+    $pdoFreno->prepare('INSERT INTO intentos_login (ip, correo) VALUES (:clave, :marca)')
+             ->execute([':clave' => $claveDelFreno, ':marca' => $marcaDelFreno]);
 } catch (PDOException $e) {
     // Si el freno mismo falla (por ejemplo, la tabla no existe todavía en
     // una instalación vieja), no puede impedir que la confirmación real

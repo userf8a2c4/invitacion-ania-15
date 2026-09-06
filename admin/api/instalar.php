@@ -124,6 +124,12 @@ $agregarColumna('invitaciones', 'veces_respondida', 'INT NOT NULL DEFAULT 0');
 // Fijar una asignación de mesa para que la autoasignación no la toque.
 $agregarColumna('asignacion_mesas', 'fijada', 'TINYINT(1) NOT NULL DEFAULT 0');
 
+/* El punto en el mapa de una dirección de entrega. Van aparte del CREATE
+   TABLE porque una instalación que ya tenga la tabla no recibiría las
+   columnas de otra forma. */
+$agregarColumna('direcciones_entrega', 'lat', 'DECIMAL(10,7) NULL');
+$agregarColumna('direcciones_entrega', 'lng', 'DECIMAL(10,7) NULL');
+
 // Precio por persona en las cotizaciones, para poder compararlas.
 $agregarColumna('cotizaciones', 'tipo_precio',
                 "ENUM('por_persona','fijo') NOT NULL DEFAULT 'fijo'");
@@ -250,6 +256,35 @@ $agregarColumna('contratos', 'archivo_id',     'INT DEFAULT NULL');
 $agregarColumna('contratos', 'creado_por',     'INT DEFAULT NULL');
 $agregarColumna('pagos',     'comprobante_id', 'INT DEFAULT NULL');
 
+/* A qué pregunta contesta una respuesta de MegaBot (2026-09-04).
+   El campo estaba documentado en el contrato de chat.php desde el
+   principio, pero no existía en ningún lado: si el Orquestador lo
+   mandaba, se tiraba. Con la cadena de agentes trabajando por cola, una
+   respuesta puede llegar tanto después que ya se olvidó qué se preguntó
+   — y sin esto el panel la pinta al final del hilo, sin nada que la ate
+   a su pregunta. NULL porque la enorme mayoría no lo necesita: solo se
+   cita cuando la respuesta NO viene pegada a lo que contesta. */
+$agregarColumna('chat_mensajes', 'en_respuesta_a', 'INT DEFAULT NULL');
+
+/* Las marcas de tiempo de cada salto de la cadena de agentes
+   (2026-09-06).
+
+   POR QUÉ EXISTE
+   Una respuesta de MegaBot tarda decenas de segundos, y hasta ahora los
+   únicos números de dónde se iban venían de él: 55 s en una medición,
+   149,8 s en la siguiente, con el primer salto pasando de 8 s a 59 s.
+   Sin marcas propias, cada conversación sobre latencia empieza
+   discutiendo el cronómetro en vez del problema.
+
+   Guarda un JSON chico con lo que se sabe de ESE mensaje: cuándo entró
+   al servidor, cuándo salió su webhook, y —si MegaBot las manda— cuándo
+   lo recibió él y cuándo despertó al cerebro. Ver el contrato completo
+   en chat.php, junto al de `uso`.
+
+   TEXT NULL y no NOT NULL: la enorme mayoría de las filas viejas no
+   tiene ninguna marca, y no hay nada honesto que inventarles. */
+$agregarColumna('chat_mensajes', 'latencia_json', 'TEXT NULL');
+
 /* Esto no es agregar una columna, es AFLOJAR una que ya exigía
    NOT NULL — por eso no usa $agregarColumna(). Se comprueba antes de
    tocar nada, tanto para no fallar si ya se corrió como para no
@@ -330,6 +365,7 @@ $tablasEsperadas = [
     'escrituras_hechas', 'envios_proveedor', 'acomodo_respaldo',
     'etiquetas', 'etiquetas_asignadas',
     'chat_hilos', 'chat_mensajes', 'chat_propuestas',
+    'direcciones_entrega', 'metodos_pago', 'compras_pedidos',
 ];
 
 $faltantes = [];

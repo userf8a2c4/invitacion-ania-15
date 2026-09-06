@@ -59,6 +59,61 @@ function bd() {
         responderMal('No se pudo conectar con la base de datos.', 500, $e->getMessage());
     }
 
+    /* ⚡ MYSQL Y PHP TIENEN QUE ESTAR EN LA MISMA HORA (2026-09-06)
+     *
+     * EL PROBLEMA, CON EL CASO QUE LO DESTAPÓ
+     * En la primera compra de prueba quedó esto en la fila:
+     *     creado_en  18:15:17     ← lo escribió MySQL (CURRENT_TIMESTAMP)
+     *     cobrado_en 12:16:44     ← lo escribió PHP (date())
+     * Seis horas de diferencia en el mismo pedido, cobrado un minuto
+     * después de crearse. El servidor MySQL corre en UTC y PHP en
+     * America/Mexico_City (entorno.php), y las dos formas de escribir
+     * fechas conviven en las mismas tablas: 41 columnas con DEFAULT
+     * CURRENT_TIMESTAMP contra 12 lugares donde PHP escribe con date().
+     *
+     * LO QUE DE VERDAD ROMPÍA
+     * Que una fecha se vea corrida es feo. Lo grave era comparar:
+     *
+     *   · ALARMAS Y RECORDATORIOS. `alarmas.cuando` guarda la hora tal
+     *     como la escribió la persona ("09:00"), y cron_alarmas.php
+     *     pregunta `WHERE cuando <= NOW()`. Con NOW() seis horas
+     *     adelantado, una alarma puesta para las nueve de la mañana
+     *     sonaba a las TRES DE LA MADRUGADA. El día del evento eso es
+     *     avisarle a todo el mundo a deshora.
+     *   · SESIONES. `caduca_en` lo escribe PHP y se borra con
+     *     `WHERE caduca_en < NOW()`: caducaban seis horas antes.
+     *
+     * LA SOLUCIÓN
+     * Decirle a MySQL, en cada conexión, que hable en la misma hora que
+     * PHP. Se calcula el desfase desde la zona que PHP ya tiene puesta,
+     * en vez de escribir '-06:00' a mano: así sigue siendo correcto si
+     * algún día cambia la zona o vuelve el horario de verano.
+     *
+     * ⚠️ LO QUE ESTO NO ARREGLA
+     * Las filas que MySQL YA escribió quedaron en UTC, y desde ahora las
+     * nuevas van en hora local: los `creado_en` viejos se ven seis horas
+     * adelantados respecto a los nuevos. Es histórico y no se compara
+     * con nada, así que no rompe nada — pero conviene saberlo antes de
+     * sacar conclusiones de una fecha anterior a esta fecha.
+     *
+     * Si el hosting no deja poner la zona (pasa en algunos compartidos),
+     * se sigue igual que hasta ahora: es preferible una app que anda con
+     * las horas corridas a una que no conecta. */
+    try {
+        $desfase = (new DateTime('now', new DateTimeZone(date_default_timezone_get())))
+            ->format('P');                       // "-06:00"
+
+        /* Preparada y no interpolada. El valor sale de DateTime y no de
+           nadie de afuera, así que hoy no hay nada que inyectar — pero
+           una consulta armada con comillas a mano es una invitación a
+           que mañana alguien meta ahí una variable que sí venga de
+           afuera. Cuesta lo mismo hacerlo bien. */
+        $pdo->prepare('SET time_zone = ?')->execute([$desfase]);
+    } catch (Throwable $e) {
+        error_log('[Ania XV · bd] No se pudo alinear la zona horaria de MySQL: '
+            . $e->getMessage());
+    }
+
     return $pdo;
 }
 

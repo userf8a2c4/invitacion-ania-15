@@ -208,4 +208,26 @@ Options -Indexes
   Header always set X-Frame-Options "DENY"
   Header always set X-Content-Type-Options "nosniff"
   Header always set Referrer-Policy "same-origin"
+
+  # ─── HSTS: nunca más por HTTP (2026-09-05) ───────────────────────────
+  #
+  # Por acá pasa el formulario de confirmación, y ahí un invitado escribe
+  # su nombre, su correo, su teléfono y sus alergias. Sin esto, la
+  # primera petición de una visita puede salir en claro: basta un wifi
+  # público para leerla antes de que TLS entre en juego.
+  #
+  # Sin `includeSubDomains` ni `preload` a propósito, igual que en
+  # admin/.htaccess: los dos son decisiones que afectan a subdominios que
+  # aún no existen y que llevan meses deshacer.
+  Header always set Strict-Transport-Security "max-age=31536000"
+
+  # ⚠️ ACÁ NO HAY CSP TODAVÍA, Y NO ES UN OLVIDO.
+  # La invitación tiene 5 <script> en línea y 5 bloques <style> dentro de
+  # index.html, así que una CSP exigiría `script-src 'unsafe-inline'` —
+  # que es justo el permiso que hace inútil la mitad de una CSP. Hacerla
+  # bien pide hashes o nonces, y eso es una ronda propia.
+  #
+  # El panel (admin/.htaccess) sí la tiene, en modo Report-Only: ahí
+  # están los datos de las 115 personas y el cobro, y ahí no hay ni un
+  # script en línea.
 </IfModule>

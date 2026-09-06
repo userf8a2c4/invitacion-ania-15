@@ -26,7 +26,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy to /pbe/
+      # 2026-09-05 - POR QUE HAY DOS INTENTOS
+      #
+      # El 5 de septiembre el despliegue fallo con "Timeout (control socket)":
+      # el FTP de Hostinger no llego a ACEPTAR la conexion en 60 s. Se relanzo
+      # el mismo commit sin tocar una linea y entro a la primera, en 13 s. O
+      # sea: no fue el codigo, ni el tamano de los archivos, ni el timeout
+      # corto. Fue que el servidor no atendio ESE momento.
+      #
+      # Es la segunda vez en dos dias que pasa lo mismo (ver la nota de arriba,
+      # del 4 de septiembre). Un fallo que se arregla solo repitiendolo no
+      # deberia necesitar que alguien mire Actions y apriete "Re-run jobs" -
+      # mientras tanto el servidor se queda con la version vieja sin que nadie
+      # se entere, que es exactamente lo que paso.
+      #
+      # El bloque `with` esta duplicado a proposito: GitHub Actions no admite
+      # anclas de YAML ni permite reusar los parametros de un step. Si se
+      # cambia uno, HAY QUE CAMBIAR EL OTRO.
+      #
+      # No se toca el `protocol`: hoy conecta bien por FTP normal, y forzar
+      # FTPS para arreglar un timeout de conexion seria cambiar algo que
+      # funciona por una causa que no es la del fallo.
+
+      - name: Deploy to /pbe/ (primer intento)
+        id: primer_intento
+        continue-on-error: true
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -44,3 +68,41 @@ jobs:
             **/.env.*
             **/README.md
             **/.github/**
+
+      - name: Esperar antes de reintentar
+        if: steps.primer_intento.outcome == 'failure'
+        # Medio minuto. Reintentar al instante contra un servidor que acaba de
+        # no atender suele dar el mismo resultado.
+        run: |
+          echo "El primer intento fallo. Se reintenta en 30 segundos."
+          sleep 30
+
+      - name: Deploy to /pbe/ (segundo intento)
+        if: steps.primer_intento.outcome == 'failure'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./
+          server-dir: /
+          timeout: 60000
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            **/.env
+            **/.env.*
+            **/README.md
+            **/.github/**
+
+      # Si el primero fallo y el segundo tambien, el job ya viene en rojo por
+      # el segundo step. Pero si el primero fallo y el segundo salio bien, el
+      # job termina en VERDE con un step en rojo adentro - y eso se lee como
+      # "fallo algo" cuando en realidad se desplego. Esta linea lo deja dicho.
+      - name: Aviso de que hizo falta reintentar
+        if: steps.primer_intento.outcome == 'failure'
+        run: |
+          echo "::warning::El primer intento de FTP fallo y el segundo se hizo cargo."
+          echo "Si esto se repite seguido, el problema es del FTP de Hostinger,"
+          echo "no del despliegue."

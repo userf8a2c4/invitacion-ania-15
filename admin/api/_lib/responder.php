@@ -68,6 +68,77 @@ function responderBien($datos = null, $codigo = 200) {
 }
 
 /**
+ * Dice si este PHP sabe devolver la respuesta y seguir trabajando con la
+ * conexión ya cerrada.
+ *
+ * Se pregunta con function_exists y no se asume: llamar a una función
+ * que no existe es un error fatal, no un aviso, y acá no hay PHP local
+ * donde comprobarlo antes de subir.
+ *
+ * @return bool
+ */
+function sePuedeCerrarLaConexion() {
+    return function_exists('litespeed_finish_request')
+        || function_exists('fastcgi_finish_request');
+}
+
+/**
+ * Contesta AHORA y deja el script corriendo para lo que falte.
+ *
+ * PARA QUÉ SIRVE
+ * Para el trabajo que hay que hacer sí o sí pero que a quien preguntó no
+ * le aporta esperar: mandar un webhook, avisar por correo. Sin esto, el
+ * navegador se queda con la rueda girando mientras el servidor habla con
+ * un tercero que no tiene nada que ver con lo que se pidió.
+ *
+ * ⚠️ COMPROBAR sePuedeCerrarLaConexion() ANTES DE LLAMARLA.
+ * Si el servidor no sabe cerrar, esta función igual escribe la respuesta
+ * —pero el navegador no la va a ver hasta que el script termine—, así
+ * que ahí conviene hacer el trabajo primero y contestar al final, como
+ * siempre. Quien la usa decide, porque solo quien la usa sabe si lo que
+ * queda por hacer cambia la respuesta.
+ *
+ * NO HACE exit, a diferencia de responderBien(): el sentido de esto es
+ * justamente lo que viene después. Quien la llama termina cuando quiera.
+ *
+ * @param mixed $datos  Lo que se le manda a la app.
+ * @param int   $codigo Código HTTP.
+ * @return void
+ */
+function responderYSeguirTrabajando($datos = null, $codigo = 200) {
+    cabecerasJson();
+    http_response_code($codigo);
+
+    $json = json_encode(['ok' => true, 'datos' => $datos], JSON_UNESCAPED_UNICODE);
+
+    // Mismo freno a duplicados que responderBien(): un reintento con la
+    // misma clave recibe esto sin volver a ejecutar el endpoint.
+    if (!empty($GLOBALS['CLAVE_DE_ESTE_ENVIO']) && function_exists('guardarRespuestaDada')) {
+        guardarRespuestaDada($GLOBALS['CLAVE_DE_ESTE_ENVIO'], $json);
+    }
+
+    /* ⚠️ NADA DE Content-Length ACÁ, Y ES A PROPÓSITO.
+       Tentaba ponerlo "para que el navegador sepa cuándo terminó", pero
+       el .htaccess de la raíz comprime application/json con DEFLATE y
+       BROTLI: el cuerpo que sale por el cable NO mide lo que mide este
+       string. Un Content-Length equivocado corta la respuesta a la
+       mitad o deja al cliente esperando bytes que no llegan nunca.
+       Cerrar la conexión es justo el trabajo de finish_request. */
+    echo $json;
+
+    /* Que colgar el teléfono no mate lo que falta. Es lo que permite
+       terminar el trabajo aunque quien preguntó cierre la pestaña. */
+    @ignore_user_abort(true);
+
+    // Los buffers que haya abierto PHP o la app, antes de cerrar.
+    while (ob_get_level() > 0) @ob_end_flush();
+    @flush();
+
+    if (function_exists('litespeed_finish_request'))   litespeed_finish_request();
+    elseif (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+}
+
+/**
  * Responde con error y termina la ejecución.
  *
  * @param string      $mensaje  Texto para mostrarle a la persona.
