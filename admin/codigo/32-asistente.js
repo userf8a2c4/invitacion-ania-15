@@ -1785,6 +1785,9 @@ function compactarTiempoDeUsoDeMegaBot(segundos) {
 const EDAD_VISIBLE_DE_USO_S = 3600;      // 1 hora
 const EDAD_MAXIMA_DE_USO_S  = 172800;    // 2 días
 
+/** Si el servidor es el de pruebas. Lo dice `listar`, no el navegador. */
+let MEGABOT_EN_PRUEBAS = false;
+
 /** El último uso conocido y el reloj que lo hace bajar en pantalla. */
 let MEGABOT_USO = null;
 let MEGABOT_RELOJ_DE_USO = null;
@@ -1877,6 +1880,25 @@ function pintarUsoDeMegaBot(uso, esDelReloj) {
   const edad = uso && typeof uso.hace_segundos === 'number' ? uso.hace_segundos : null;
   const relojCorriendo = uso && uso.reinicia_en > 0;
   const demasiadoViejo = edad !== null && edad > EDAD_MAXIMA_DE_USO_S && !relojCorriendo;
+
+  /* ⚡ EN PRUEBAS, «NO HAY DATO» TAMBIÉN SE DICE (2026-09-06)
+   *
+   * Cuando MegaBot no manda el campo, esto se ocultaba entero. Es lo
+   * correcto para Lucila —inventar un porcentaje sobre la cuota de un
+   * servicio ajeno sería peor que callar— pero hacía que "no lo manda"
+   * y "todo bien" se vieran igual: un hueco. Se perdieron días
+   * creyendo que el contador estaba roto cuando lo que faltaba era el
+   * dato del otro lado.
+   *
+   * En PBE se dice cuál de las dos cosas pasa. Sigue sin inventarse
+   * ningún número: se informa la AUSENCIA, que es un hecho
+   * comprobable, no una estimación. */
+  if (MEGABOT_EN_PRUEBAS && (!uso || (!tienePorcentaje && !uso.agotado))) {
+    span.className = 'hoja__uso';
+    span.textContent = 'cuota: MegaBot no la informa';
+    span.hidden = false;
+    return;
+  }
 
   if (!uso || (!tienePorcentaje && !uso.agotado) || demasiadoViejo) {
     span.textContent = '';
@@ -2355,6 +2377,7 @@ function abrirAsistente() {
       if (huboNovedad) quitarEscribiendoDeMegaBot(hilo);
 
       pintarMensajesNuevosDeMegaBot(hilo, llegaron);
+      MEGABOT_EN_PRUEBAS = !!r.pruebas;
       pintarUsoDeMegaBot(r.uso);
       pintarQuienAtiendeMegaBot(r.megabot_vivo);
 

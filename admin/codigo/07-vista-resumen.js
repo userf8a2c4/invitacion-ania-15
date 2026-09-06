@@ -677,4 +677,28 @@ function ponerBurbuja(selector, cuantos) {
   const n = Number(cuantos) || 0;
   burbuja.textContent = n > 9 ? '9+' : String(n);
   burbuja.classList.toggle('oculto', n === 0);
+
+  /* ⚡ UN NÚMERO SUELTO NO DICE NADA (2026-09-06)
+   *
+   * Había cinco burbujas en pantalla y las cinco cuentan cosas
+   * distintas —avisos, cambios sin mandar, confirmaciones nuevas, pagos
+   * urgentes, correos sin leer— pero todas se ven igual: un número a
+   * secas. Ver un "6" y un "4" y no poder saber de qué son es tener el
+   * aviso sin la información.
+   *
+   * Cada burbuja declara qué cuenta en `data-cuenta` (admin/index.html)
+   * y acá se arma la frase completa. Sirve para el tooltip del ratón y,
+   * más importante, para quien usa lector de pantalla: antes leía "6" y
+   * nada más.
+   *
+   * ⚠️ ESTO NO ARREGLA EL CASO DE «MÁS». Esa burbuja cuenta correos sin
+   * leer, pero al abrir «Más» no hay ningún renglón que lleve el mismo
+   * número, así que el aviso muere ahí. Eso es del reordenamiento de ese
+   * menú, que va en su propia ronda. */
+  const queCuenta = burbuja.dataset.cuenta;
+  if (queCuenta) {
+    const frase = n + ' ' + queCuenta;
+    burbuja.setAttribute('aria-label', frase);
+    burbuja.setAttribute('title', frase);
+  }
 }
