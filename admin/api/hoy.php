@@ -180,7 +180,19 @@ if ($vePlata && existeTabla('padrinos')) {
         $aQuienLlamar[] = [
             'nombre'   => $p['nombre'],
             'telefono' => $p['telefono'],
-            'porque'   => 'Todavía no confirmó lo del ' . ($p['apadrina'] ?: 'aporte'),
+            /* ⚡ SIN PEGARLE UN ARTÍCULO AL NOMBRE (2026-09-06)
+             *
+             * Acá decía «lo del » . $apadrina, y `apadrina` es texto
+             * libre que escribe quien carga al padrino: en producción
+             * quedó «Todavía no confirmó lo del Mesa de dulces». El
+             * artículo no puede acertar el género de algo que no se
+             * conoce de antemano —«el pastel», «la limosina», «los
+             * centros de mesa»— así que no se pone ninguno y el nombre
+             * va entrecomillado, que además deja claro dónde empieza y
+             * dónde termina lo que escribió la persona. */
+            'porque'   => $p['apadrina']
+                ? 'Todavía no confirmó «' . $p['apadrina'] . '»'
+                : 'Todavía no confirmó su aporte',
         ];
     }
 }

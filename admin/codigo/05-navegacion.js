@@ -461,6 +461,20 @@ function atenderMenu(opcion) {
       irA('planificar');
       break;
 
+    /* ⚡ CORREO TAMBIÉN SE ABRE DESDE ACÁ (2026-09-06)
+     *
+     * La burbuja de correos sin leer vive en el botón «Más» de la barra
+     * de abajo (#burbuja-correo, admin/index.html) pero Correo NO estaba
+     * en este menú: colgaba del índice de Dinero. O sea que el número
+     * avisaba y al entrar no había nada con ese número ni forma de
+     * llegar a la bandeja — el aviso moría ahí.
+     *
+     * Se le da destino en vez de quitar el aviso: llegar a la bandeja
+     * desde dos lugares no molesta a nadie, y perder el aviso sí. */
+    case 'correo':
+      irA('correo');
+      break;
+
     case 'salir':
       salir();
       break;
