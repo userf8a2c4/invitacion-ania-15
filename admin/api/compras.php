@@ -1292,6 +1292,131 @@ case 'confirmar':
     break;
 
 
+/* ══════════════════════════════════════════════════════════════════════
+   DESHACER: CANCELAR Y DEVOLVER
+
+   Hasta hoy una compra solo iba hacia adelante. Una propuesta que ya no
+   servía se quedaba en la lista para siempre, y un cobro hecho por
+   error solo se podía devolver entrando al panel de Stripe a mano —o
+   sea, saliendo de esta app y usando una herramienta que Lucila no
+   tiene por qué saber usar.
+
+   SON DOS COSAS DISTINTAS Y POR ESO SON DOS ACCIONES
+
+   `cancelar`  · sobre una PROPUESTA. No se cobró nada, así que no hay
+                 nada que devolver: se marca y se acabó. No toca Stripe
+                 ni pide contraseña, porque no mueve un peso.
+
+   `reembolsar`· sobre una compra COBRADA. Hay dinero afuera y hay que
+                 pedirle a Stripe que lo devuelva. Mueve dinero, así que
+                 lleva las mismas guardas que cobrar: contraseña,
+                 bitácora, aviso por correo e idempotencia.
+
+   Mezclarlas en una sola acción «deshacer» habría hecho que la más
+   inocente arrastrara las guardas de la más seria, o —peor— que la
+   seria heredara la liviandad de la otra.
+   ══════════════════════════════════════════════════════════════════════ */
+
+case 'cancelar':
+    exigirMetodo('POST');
+    $datos = cuerpoJson();
+
+    $pedidoId = campoEntero($datos, 'id', 0);
+    if ($pedidoId <= 0) responderMal('Falta decir qué compra cancelar.', 400);
+
+    $pedido = consultarUno('SELECT * FROM compras_pedidos WHERE id = :i', [':i' => $pedidoId]);
+    if (!$pedido) responderMal('Esa compra no existe.', 404);
+
+    /* Solo lo que está esperando. Una cobrada se devuelve con
+       `reembolsar` —que sí habla con Stripe—, y dejar que «cancelar» la
+       tocara sería marcarla como no cobrada con la plata ya afuera. */
+    if ((string) $pedido['estado'] !== 'propuesta') {
+        responderMal('Esa compra está en «' . (string) $pedido['estado']
+                   . '». Solo se puede cancelar una que esté esperando.', 409);
+    }
+
+    actualizar('compras_pedidos', $pedidoId, ['estado' => 'cancelada']);
+
+    anotarEnBitacora($yo, 'canceló una compra propuesta', 'compras_pedidos', $pedidoId,
+        '$' . number_format((float) $pedido['monto'], 2) . ' · '
+        . mb_substr((string) $pedido['concepto'], 0, 80));
+
+    responderBien([
+        'id'      => $pedidoId,
+        'estado'  => 'cancelada',
+        'mensaje' => 'Cancelada. No se cobró nada.',
+    ]);
+    break;
+
+
+case 'reembolsar':
+    exigirMetodo('POST');
+    exigirPagosListos();
+    $datos = cuerpoJson();
+    // Devolver dinero es mover dinero: mismas guardas que cobrarlo.
+    exigirContrasenaDeNuevo($yo, $datos);
+
+    $pedidoId = campoEntero($datos, 'id', 0);
+    if ($pedidoId <= 0) responderMal('Falta decir qué compra devolver.', 400);
+
+    $pedido = consultarUno('SELECT * FROM compras_pedidos WHERE id = :i', [':i' => $pedidoId]);
+    if (!$pedido) responderMal('Esa compra no existe.', 404);
+
+    if ((string) $pedido['estado'] !== 'cobrada') {
+        responderMal('Esa compra está en «' . (string) $pedido['estado']
+                   . '», así que no hay nada que devolver.', 409);
+    }
+
+    $intento = trim((string) $pedido['stripe_payment_intent_id']);
+    if ($intento === '') {
+        /* Figura cobrada pero no quedó el identificador de Stripe: sin
+           él no se puede pedir la devolución, y decirlo así manda a
+           mirar el panel de Stripe en vez de dejar creer que se hizo. */
+        responderMal('Esa compra no tiene guardado su número de cobro en Stripe. '
+                   . 'Hay que devolverla desde el panel de Stripe.', 409);
+    }
+
+    $r = pedirleAStripe('POST', 'refunds', ['payment_intent' => $intento],
+        /* Mismo seguro que el cobro: la clave sale del id del pedido,
+           que ya existe y no cambia entre reintentos. Dos toques al
+           botón no devuelven dos veces. */
+        'devolucion-' . $pedidoId);
+
+    if (!$r['ok']) {
+        anotarEnBitacora($yo, 'no se pudo devolver una compra', 'compras_pedidos', $pedidoId,
+                         mb_substr($r['error'], 0, 120));
+        responderMal($r['error'], 402);
+    }
+
+    actualizar('compras_pedidos', $pedidoId, ['estado' => 'reembolsada']);
+
+    $monto = (float) $pedido['monto'];
+
+    anotarEnBitacora($yo, 'devolvió una compra', 'compras_pedidos', $pedidoId,
+        '$' . number_format($monto, 2) . ' · '
+        . mb_substr((string) $pedido['concepto'], 0, 80));
+
+    $aviso = avisarDeMovimientoDeDinero(
+        'Se devolvió $' . number_format($monto, 2) . ' · Ania XV',
+        'Se devolvió un cargo hecho a la tarjeta del evento.',
+        [
+            'Concepto'   => mb_substr((string) $pedido['concepto'], 0, 120),
+            'Monto'      => '$' . number_format($monto, 2) . ' MXN',
+            'Se cobró el' => (string) $pedido['cobrado_en'],
+        ],
+        $yo
+    );
+
+    responderBien([
+        'id'      => $pedidoId,
+        'estado'  => 'reembolsada',
+        'mensaje' => 'Devuelto $' . number_format($monto, 2) . '. '
+                   . 'El banco puede tardar unos días en mostrarlo.',
+        'aviso'   => $aviso,
+    ]);
+    break;
+
+
 /* ─── EL HISTORIAL ────────────────────────────────────────────────── */
 
 case 'listar_pedidos':

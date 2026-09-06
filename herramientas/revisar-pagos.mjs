@@ -314,6 +314,64 @@ comprobar('confirmar solo cobra lo que esta esperando',
   /\$pedido\['estado'\][\s\S]{0,120}!== 'propuesta'/.test(cuerpoDelCaso('confirmar')),
   'una compra ya cobrada no puede volver a cobrarse por tocar dos veces');
 
+
+/* ─── DESHACER: cancelar y devolver (2026-09-06) ─────────────────── */
+
+console.log('\nDeshacer una compra\n');
+
+const cancelar   = cuerpoDelCaso('cancelar');
+const reembolsar = cuerpoDelCaso('reembolsar');
+
+comprobar('cancelar solo toca propuestas',
+  /\$pedido\['estado'\][\s\S]{0,120}!== 'propuesta'/.test(cancelar),
+  'dejar que cancele una cobrada seria marcarla como no cobrada con la plata afuera');
+
+comprobar('cancelar NO habla con Stripe',
+  !cancelar.includes('pedirleAStripe('),
+  'no se cobro nada, no hay nada que devolver');
+
+comprobar('cancelar no pide contrasena',
+  !cancelar.includes('exigirContrasenaDeNuevo('),
+  'no mueve un peso: la friccion ahi solo estorba');
+
+comprobar('reembolsar solo toca cobradas',
+  /\$pedido\['estado'\][\s\S]{0,120}!== 'cobrada'/.test(reembolsar),
+  'devolver algo que nunca se cobro no tiene sentido');
+
+comprobar('reembolsar SI pide contrasena',
+  reembolsar.includes('exigirContrasenaDeNuevo('),
+  'devolver dinero es mover dinero: mismas guardas que cobrarlo');
+
+comprobar('reembolsar exige que los pagos esten listos',
+  reembolsar.includes('exigirPagosListos('));
+
+comprobar('reembolsar usa clave de idempotencia derivada del pedido',
+  /'devolucion-' \. \$pedidoId/.test(reembolsar),
+  'con una clave al azar, dos toques devolverian dos veces');
+
+/* La ventana es generosa a proposito: entre la lectura del campo y el
+   responderMal hay un comentario que explica por que se corta ahi, y una
+   ventana justa haria fallar la comprobacion cada vez que alguien
+   documente mejor el codigo. Lo que importa es que el corte exista
+   ANTES de llamar a Stripe, no cuantas lineas ocupe. */
+comprobar('reembolsar no sigue sin el id de Stripe',
+  /stripe_payment_intent_id[\s\S]{0,700}responderMal[\s\S]*?pedirleAStripe/.test(reembolsar),
+  'sin ese numero no se puede pedir la devolucion, y hay que decirlo');
+
+comprobar('las dos quedan en la bitacora',
+  cancelar.includes('anotarEnBitacora(') && reembolsar.includes('anotarEnBitacora('));
+
+comprobar('devolver avisa por correo',
+  reembolsar.includes('avisarDeMovimientoDeDinero('),
+  'todo movimiento de dinero se avisa, tambien el que lo devuelve');
+
+// El panel no puede ofrecer botones que el servidor va a rechazar.
+comprobar('el panel solo ofrece Cancelar en propuestas',
+  /estado === 'propuesta'[\s\S]{0,200}data-cancelar/.test(panel));
+
+comprobar('el panel solo ofrece Devolver en cobradas',
+  /estado === 'cobrada'[\s\S]{0,200}data-devolver/.test(panel));
+
 console.log('');
 if (fallos) {
   console.log('✗ ' + fallos + ' guarda(s) del dinero fallaron.\n');

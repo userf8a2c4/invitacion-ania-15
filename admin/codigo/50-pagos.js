@@ -302,6 +302,21 @@ async function abrirFormasDePago() {
           '<div id="pagos-tarjetas"><p class="vacio__texto">Buscando…</p></div>' +
           '<button type="button" class="boton" id="pagos-agregar" ' +
                   'style="margin-top:var(--esp-2)">Agregar una tarjeta</button>' +
+        '</div>' +
+
+        /* ⚡ LAS COMPRAS NO SE VEÍAN EN NINGÚN LADO (2026-09-06)
+         *
+         * `compras.php?accion=listar_pedidos` existía desde el primer
+         * día y NO lo llamaba nadie: se podía cobrar y después no había
+         * pantalla donde ver qué se había comprado, por cuánto, ni si
+         * había salido bien. Para saberlo había que entrar al panel de
+         * Stripe, que es exactamente lo que esta app viene a evitar.
+         *
+         * Y sin lista tampoco había dónde poner el botón de deshacer,
+         * que es lo que se vino a arreglar hoy. */
+        '<div class="campo">' +
+          '<span class="campo__rotulo">Compras</span>' +
+          '<div id="pagos-pedidos"><p class="vacio__texto">Buscando…</p></div>' +
         '</div>'
       : '') +
 
@@ -309,6 +324,7 @@ async function abrirFormasDePago() {
 
   if (cfg.listo) {
     cargarTarjetas(cuerpo);
+    cargarPedidos(cuerpo);
     buscar('#pagos-agregar', cuerpo).addEventListener('click', () =>
       abrirAgregarTarjeta(cfg, cuerpo));
   }
@@ -543,6 +559,132 @@ function pintarTarjetas(donde, tarjetas, cuerpo) {
         cargarTarjetas(cuerpo);
       } catch (error) {
         // codigo 0 = lo canceló ella misma; no hay nada que avisar.
+        if (error && error.codigo !== 0) avisar(error.message, true);
+      }
+    });
+  });
+}
+
+/**
+ * Trae el historial de compras.
+ *
+ * @param {Element} cuerpo
+ * @returns {Promise<void>}
+ */
+async function cargarPedidos(cuerpo) {
+  const donde = buscar('#pagos-pedidos', cuerpo);
+  if (!donde) return;
+
+  try {
+    const r = await traer('compras.php?accion=listar_pedidos');
+    pintarPedidos(donde, r.filas || [], cuerpo);
+  } catch (error) {
+    pintarError(donde, error.message, () => cargarPedidos(cuerpo));
+  }
+}
+
+/** Cómo se llama cada estado en pantalla, y de qué color va. */
+const ESTADO_DE_COMPRA = {
+  propuesta:   { texto: 'Esperando tu confirmación', clase: 'etiqueta--ojo' },
+  cobrada:     { texto: 'Cobrada',                   clase: 'etiqueta--bien' },
+  fallida:     { texto: 'No se pudo cobrar',         clase: 'etiqueta--alerta' },
+  cancelada:   { texto: 'Cancelada',                 clase: '' },
+  reembolsada: { texto: 'Devuelta',                  clase: '' },
+};
+
+/**
+ * Dibuja el historial de compras, con lo que se puede hacer sobre cada una.
+ *
+ * @param {Element} donde
+ * @param {Array} pedidos
+ * @param {Element} cuerpo
+ * @returns {void}
+ */
+function pintarPedidos(donde, pedidos, cuerpo) {
+  if (!pedidos.length) {
+    donde.innerHTML = '<p class="vacio__texto">Todavía no hay ninguna compra.</p>';
+    return;
+  }
+
+  donde.innerHTML = pedidos.map(p => {
+    const estado = ESTADO_DE_COMPRA[p.estado] ||
+                   { texto: String(p.estado || ''), clase: '' };
+
+    const monto = '$' + Number(p.monto || 0).toLocaleString(
+      CONFIGURACION.dinero.region, { minimumFractionDigits: 2 });
+
+    /* El pie dice lo que hace falta para reconocer la compra sin
+       abrirla: con qué se pagó y a dónde iba. Si algo falló, gana el
+       motivo — es lo único que importa en esa fila. */
+    const pie = p.estado === 'fallida' && p.motivo_falla
+      ? String(p.motivo_falla)
+      : [p.brand ? p.brand + ' ···' + p.last4 : null,
+         p.direccion_alias ? 'a ' + p.direccion_alias : null]
+          .filter(Boolean).join(' · ');
+
+    return '<div class="lista__fila" style="cursor:default">' +
+      '<span class="lista__cuerpo">' +
+        '<span class="lista__titulo">' +
+          seguro(p.concepto || 'Compra') + ' · ' + seguro(monto) +
+          ' <span class="etiqueta ' + estado.clase + '">' +
+            seguro(estado.texto) + '</span>' +
+        '</span>' +
+        (pie ? '<span class="lista__pie">' + seguro(pie) + '</span>' : '') +
+      '</span>' +
+      '<span class="acciones">' +
+        /* Cada estado ofrece SOLO lo que se puede hacer desde él. Una
+           propuesta se cancela y no se devuelve —no hay nada afuera—;
+           una cobrada se devuelve y no se cancela. Un botón que no
+           corresponde es un 409 esperando a pasar. */
+        (p.estado === 'propuesta'
+          ? '<button type="button" class="boton boton--chico" data-cancelar="' +
+              seguro(p.id) + '">Cancelar</button>'
+          : '') +
+        (p.estado === 'cobrada'
+          ? '<button type="button" class="boton boton--chico boton--peligro" ' +
+              'data-devolver="' + seguro(p.id) + '">Devolver</button>'
+          : '') +
+      '</span>' +
+    '</div>';
+  }).join('');
+
+  buscarTodos('[data-cancelar]', donde).forEach(boton => {
+    boton.addEventListener('click', async () => {
+      if (!await confirmarAccion(
+        '¿Cancelar esta compra?\n\n' +
+        'Todavía no se cobró nada, así que no se devuelve ningún dinero: ' +
+        'simplemente deja de estar esperando.',
+        { confirmar: 'Cancelarla', cancelar: 'Dejarla' })) return;
+
+      try {
+        // Sin contraseña a propósito: no mueve un peso. Ver el bloque
+        // «DESHACER» en compras.php.
+        await mandar('compras.php?accion=cancelar',
+                     { id: Number(boton.dataset.cancelar) });
+        avisar('Cancelada. No se cobró nada.');
+        cargarPedidos(cuerpo);
+      } catch (error) { avisar(error.message, true); }
+    });
+  });
+
+  buscarTodos('[data-devolver]', donde).forEach(boton => {
+    boton.addEventListener('click', async () => {
+      if (!await confirmarAccion(
+        '¿Devolver este cobro?\n\n' +
+        'Se le pide a Stripe que regrese el dinero a la tarjeta. El banco ' +
+        'puede tardar unos días en mostrarlo. Esto no se puede deshacer: ' +
+        'para volver a pagarlo hay que hacer una compra nueva.',
+        { confirmar: 'Devolver el dinero', cancelar: 'No' })) return;
+
+      try {
+        const r = await mandarTocandoDinero('compras.php?accion=reembolsar',
+                                            { id: Number(boton.dataset.devolver) },
+                                            'Vas a devolver un cobro ya hecho.');
+        avisar((r && r.mensaje) || 'Devuelto.');
+        contarComoSalioElAviso(r && r.aviso);
+        cargarPedidos(cuerpo);
+      } catch (error) {
+        // codigo 0 = cerró la ventana de la contraseña; no es un fallo.
         if (error && error.codigo !== 0) avisar(error.message, true);
       }
     });
