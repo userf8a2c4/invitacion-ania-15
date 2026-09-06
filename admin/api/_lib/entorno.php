@@ -225,3 +225,34 @@ function llaveDeArranqueCorrecta($recibida) {
 
     return $correcta;
 }
+
+
+/**
+ * Si esto es el ambiente de pruebas (pbe.aniaxv.com) o el sitio real.
+ *
+ * ⚡ UNA SOLA DEFINICIÓN, Y LA ESTRICTA (2026-09-06)
+ *
+ * Había CUATRO copias de esta pregunta y no todas contestaban igual:
+ * invitacion.php y reiniciar-prueba.php exigían que el host EMPEZARA
+ * con "pbe." (strpos === 0), mientras compras.php y chat.php se
+ * conformaban con que apareciera en cualquier parte (!== false).
+ *
+ * POR QUÉ IMPORTA
+ * De esta respuesta depende el cartel que separa «Estás en PRUEBAS» de
+ * «Estás en el sitio REAL» en la pantalla de pagos — el que existe para
+ * que nadie cobre con la cuenta de verdad creyendo que era la de
+ * mentira. Una versión laxa daría «pruebas» en cualquier dominio que
+ * llevara "pbe." en el medio, que es exactamente el error que ese
+ * cartel tiene que hacer imposible.
+ *
+ * Se queda la estricta: pruebas es el subdominio que EMPIEZA con "pbe.",
+ * y nada más. Ante la duda, el sitio real — que obliga a mirar dos veces
+ * en vez de dar confianza de más.
+ *
+ * Lo decide el SERVIDOR por su propio dominio, nunca el navegador.
+ *
+ * @return bool
+ */
+function estamosEnPruebas() {
+    return strpos((string) ($_SERVER['HTTP_HOST'] ?? ''), 'pbe.') === 0;
+}

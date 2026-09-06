@@ -496,7 +496,18 @@ function mandarWebhookDeMegabot($payload) {
  * @return string
  */
 function linkDeCallback() {
-    $host = preg_replace('/[^a-z0-9.\-]/i', '', $_SERVER['HTTP_HOST'] ?? 'pbe.aniaxv.com');
+    /* ⚠️ SIN RESPALDO A pbe.aniaxv.com (2026-09-06)
+     *
+     * Acá el valor por defecto era 'pbe.aniaxv.com'. O sea: si en
+     * producción faltara HTTP_HOST, el sitio real le diría a MegaBot que
+     * conteste al servidor de PRUEBAS. Las respuestas se irían a la base
+     * equivocada y en producción el chat se quedaría mudo sin que nada
+     * fallara a la vista.
+     *
+     * Ahora se usa el host de verdad y punto. Si no hay —que no pasa en
+     * una petición HTTP real— sale vacío, y un callback vacío se nota
+     * enseguida; uno que apunta al sitio equivocado, no. */
+    $host = preg_replace('/[^a-z0-9.\-]/i', '', (string) ($_SERVER['HTTP_HOST'] ?? ''));
     return 'https://' . $host . '/admin/api/chat.php';
 }
 
@@ -1133,7 +1144,7 @@ case 'listar':
          *
          * Mismo criterio de detección que compras.php: lo decide el
          * SERVIDOR mirando su dominio, no el navegador. */
-        'pruebas'  => strpos((string) ($_SERVER['HTTP_HOST'] ?? ''), 'pbe.') !== false,
+        'pruebas'  => estamosEnPruebas(),
         /* Cómo terminó la entrega de lo último que ella mandó. El panel
            lo necesita porque `enviar` ya no lo puede saber a tiempo —ver
            entregaDelUltimoMensajeSuyo(). */
