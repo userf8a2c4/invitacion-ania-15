@@ -38,8 +38,43 @@
      POST ?accion=propuesta_estado  {id, estado: 'aceptada'|'rechazada'}
      POST ?accion=reenviar      {mensaje_id}
      POST ?accion=rotar_clave   (solo admin)
-     POST ?accion=responder     {hilo_id, en_respuesta_a?, texto, propuestas?[]}  (X-MegaBot-Clave)
+     POST ?accion=responder     {hilo_id, en_respuesta_a?, texto, propuestas?[],
+                                 uso?, latencia?}                (X-MegaBot-Clave)
      GET  ?accion=contexto&hilo_id=          (X-MegaBot-Clave)
+
+   ══════════════════════════════════════════════════════════════════════
+   CÓMO SE PROPONE UNA COMPRA — EL CONTRATO, EN UN SOLO LUGAR
+
+   MegaBot NO cobra. Manda una PROPUESTA dentro de `accion=responder`, y
+   esa propuesta se pinta como una tarjeta con Confirmar / Cancelar. El
+   cobro sale del Confirmar y de ningún otro lado:
+
+       "propuestas": [{
+         "titulo":  "Comprar el ramo de la entrada",
+         "detalle": "Rosas blancas · Florería del Centro",
+         "accion":  "compras.php?accion=cobrar",
+         "cuerpo":  {
+           "concepto": "Ramo de rosas blancas",
+           "monto": 1250.00,
+           "direccion_id": 1,        ← opcional: sin él, la predeterminada
+           "metodo_pago_id": 3       ← opcional: sin él, la predeterminada
+         }
+       }]
+
+   LAS REGLAS
+     1. `accion` se compara contra ACCIONES_PERMITIDAS_PARA_MEGABOT acá
+        en el servidor. La que no esté en la lista se descarta en
+        silencio y el texto igual llega.
+     2. Los ids son los INTERNOS que vienen en el contexto, nunca un
+        `pm_` de Stripe — ese token no sale de este servidor.
+     3. Antes de proponer, mirar `contexto.compras.pagos_listos`. Si es
+        false, no hay con qué cobrar: corresponde decir que falta
+        guardar una tarjeta, no proponer un cobro que va a fallar.
+     4. `contexto.compras.pedidos` trae las últimas diez compras con su
+        estado. Sirve para no proponer dos veces lo mismo y para poder
+        contestar qué se lleva gastado.
+     5. Hay un tope por compra (TOPE_DE_COBRO_AUTOMATICO en compras.php).
+        Por encima, el servidor rechaza: eso se paga a mano.
    ══════════════════════════════════════════════════════════════════════ */
 
 require_once __DIR__ . '/_lib/bd.php';
@@ -356,6 +391,49 @@ function construirContexto($pantalla, $usuario) {
          * no de las claves. */
         $contexto['compras']['pagos_listos'] =
             losPagosEstanListos() && count($contexto['compras']['metodos']) > 0;
+
+        /* ⚡ LAS COMPRAS QUE YA EXISTEN (2026-09-06)
+         *
+         * POR QUÉ HACE FALTA
+         * Hasta acá el contexto decía con qué se puede pagar, pero no
+         * qué se pagó. O sea que MegaBot podía proponer una compra y no
+         * podía contestar "¿ya compré las flores?" ni "¿cuánto llevo
+         * gastado?" — y peor: sin saber que una compra igual ya está
+         * cobrada, lo natural es proponerla otra vez.
+         *
+         * Las últimas y nada más: el hilo del chat no es un libro de
+         * cuentas, y mandar el historial entero en CADA mensaje sería
+         * pagar el viaje de cien filas para redactar una frase.
+         *
+         * ⚠️ NO VIAJA NINGÚN TOKEN NI NINGÚN NÚMERO DE TARJETA — misma
+         * regla que gobierna todo este bloque. Concepto, monto, estado y
+         * fecha: lo que hace falta para hablar de una compra, y nada
+         * que sirva para cobrar. */
+        if (existeTabla('compras_pedidos')) {
+            $contexto['compras']['pedidos'] = [];
+            $contexto['compras']['gastado_total'] = 0.0;
+
+            foreach (consultarTodo(
+                'SELECT id, concepto, monto, estado, creado_en FROM compras_pedidos
+                  ORDER BY id DESC LIMIT 10') as $p) {
+
+                $contexto['compras']['pedidos'][] = [
+                    'id'       => (int) $p['id'],
+                    'concepto' => (string) $p['concepto'],
+                    'monto'    => (float) $p['monto'],
+                    'estado'   => (string) $p['estado'],
+                    'fecha'    => (string) $p['creado_en'],
+                ];
+            }
+
+            /* El total sí sale de TODAS las filas cobradas, no solo de
+               las diez de arriba: un total a medias es peor que ninguno,
+               porque parece completo. */
+            $suma = consultarUno(
+                "SELECT COALESCE(SUM(monto), 0) AS total FROM compras_pedidos
+                  WHERE estado = 'cobrada'");
+            $contexto['compras']['gastado_total'] = (float) ($suma['total'] ?? 0);
+        }
     }
 
     return $contexto;
@@ -525,11 +603,38 @@ const SEGUNDOS_DE_ESPERA_DE_LISTAR = 25;
  * segundo: tenerla suelta evita repetir la consulta y sus propuestas en
  * dos lugares que después se desincronizan.
  *
- * @param int $hiloId
- * @param int $despuesDe
+ * @param int  $hiloId
+ * @param int  $despuesDe
+ * @param bool $conLatencia  Si se incluyen los tramos medidos. Solo para
+ *                           la cuenta observadora — ver `case 'listar'`.
  * @return array
  */
-function mensajesDelHiloDesde($hiloId, $despuesDe) {
+/**
+ * El estado de entrega del último mensaje que mandó ella en este hilo.
+ *
+ * ⚡ POR QUÉ HACE FALTA (2026-09-06)
+ * Desde que `enviar` contesta ANTES de hablar con el webhook, la
+ * respuesta ya no puede decir si MegaBot lo aceptó: eso se sabe un
+ * instante después y se escribe en la fila. Si el webhook falla, esa
+ * fila queda en `error` — y el panel no se enteraría nunca, porque el
+ * poll solo trae mensajes NUEVOS y ese ya lo tiene pintado.
+ *
+ * Sin esto, un webhook fallido dejaba a Lucila esperando una respuesta
+ * que no venía, en vez de que contestaran los agentes del teléfono.
+ *
+ * @param int $hiloId
+ * @return string  'enviado' | 'error' | 'pendiente' | ''
+ */
+function entregaDelUltimoMensajeSuyo($hiloId) {
+    $fila = consultarUno(
+        "SELECT estado FROM chat_mensajes
+          WHERE hilo_id = :h AND rol = 'lucila' ORDER BY id DESC LIMIT 1",
+        [':h' => $hiloId]
+    );
+    return (string) ($fila['estado'] ?? '');
+}
+
+function mensajesDelHiloDesde($hiloId, $despuesDe, $conLatencia = false) {
     $mensajes = consultarTodo(
         'SELECT * FROM chat_mensajes WHERE hilo_id = :h AND id > :d ORDER BY id ASC',
         [':h' => $hiloId, ':d' => $despuesDe]
@@ -541,6 +646,21 @@ function mensajesDelHiloDesde($hiloId, $despuesDe) {
             'SELECT * FROM chat_propuestas WHERE mensaje_id = :m ORDER BY id ASC',
             [':m' => $m['id']]
         );
+
+        /* ⚠️ La consulta de arriba es SELECT *, así que `latencia_json`
+           viaja sin que nadie lo pida. Se saca SIEMPRE y recién después
+           se agregan los tramos, y solo a quien corresponde: si esto se
+           hiciera al revés, una columna nueva en la tabla se filtraría
+           sola a la pantalla de Lucila el día que alguien la agregue. */
+        $crudo = $m['latencia_json'] ?? null;
+        unset($m['latencia_json']);
+
+        if (!$conLatencia) continue;
+
+        $marcas = json_decode((string) $crudo, true);
+        if (!is_array($marcas) || !$marcas) continue;
+
+        $m['latencia'] = ['marcas' => $marcas, 'tramos' => deltasDeLatencia($marcas)];
     }
     unset($m);
 
@@ -688,6 +808,173 @@ function guardarUsoDeMegabotSiVino($usoCrudo) {
 }
 
 
+/* ══════════════════════════════════════════════════════════════════
+   EL CONTRATO DE `latencia` — LA ÚNICA DEFINICIÓN, NO REPETIR
+
+   POR QUÉ EXISTE (2026-09-06)
+   Una respuesta de MegaBot tarda decenas de segundos, y hasta ahora los
+   únicos números de dónde se iban venían de él: 55 s en una medición,
+   149,8 s en la siguiente, con el primer salto pasando de 8 s a 59 s.
+   Sin marcas propias, cada conversación sobre latencia empezaba
+   discutiendo el cronómetro en vez del problema.
+
+   LAS MARCAS (milisegundos epoch, enteros)
+
+     t_enviar             acá      al entrar a `accion=enviar`
+     t_webhook            acá      justo después de POSTear el webhook
+     t_webhook_recibido   MegaBot  cuando su receptor parsea el POST
+     t_orq_despierta      MegaBot  cuando despierta el cerebro
+     t_responder          acá      al entrar a `accion=responder`
+
+   Las dos de MegaBot llegan —opcionalmente— dentro del cuerpo de
+   `accion=responder`, en `"latencia": { … }`. Falta una sexta,
+   `t_pintado`, que solo existe en el navegador: el panel la calcula y
+   la muestra, pero no se guarda acá (ver más abajo por qué).
+
+   ⚠️ DOS RELOJES DISTINTOS, Y ESO NO SE PUEDE DISIMULAR
+
+   El servidor, la máquina de MegaBot y el teléfono de quien mira NO
+   están sincronizados. Restar una marca de un reloj menos una de otro
+   da un número con pinta de medición y contenido de basura — que es
+   peor que no medir, porque se defiende con autoridad.
+
+   Por eso:
+     · Solo se restan marcas del MISMO reloj. `t_enviar`, `t_webhook` y
+       `t_responder` son todas nuestras: esos deltas son de fiar.
+     · Las de MegaBot valen para su tramo interno
+       (t_orq_despierta - t_webhook_recibido) y NO se cruzan con las
+       nuestras.
+     · `t_pintado` se queda en el navegador y se resta contra otra marca
+       del navegador. Por eso no viaja hasta acá.
+
+   SIN DATO NO SE INVENTA NADA — igual que con `uso`. Una marca que no
+   vino, no está. Nunca se rellena con "ahora" ni se estima.
+
+   ESTO NO SALE HACIA LUCILA. Va solo a la cuenta observadora
+   (esObservador(), _lib/sesion.php): es dato de taller, y está dicho
+   que nada técnico queda a su vista.
+   ══════════════════════════════════════════════════════════════════ */
+
+/** Las marcas que se aceptan, y nadie más. Cualquier otra clave que
+    venga en el cuerpo se descarta: esto lo llena un servicio externo. */
+const MARCAS_DE_LATENCIA = [
+    't_enviar', 't_webhook', 't_webhook_recibido', 't_orq_despierta', 't_responder',
+];
+
+/** El reloj de este servidor, en milisegundos epoch. */
+function ahoraEnMs() {
+    return (int) round(microtime(true) * 1000);
+}
+
+/**
+ * Si la columna existe en ESTA base — se pregunta una sola vez por
+ * petición y se recuerda.
+ *
+ * ⚡ La memoria no es un lujo: columnasDe() consulta information_schema
+ * cada vez que se la llama, y el long-poll de `listar` recorre los
+ * mensajes UNA VEZ POR SEGUNDO durante 25 s. Sin esto, una espera
+ * tranquila haría veinticinco consultas de esquema para no enterarse de
+ * nada nuevo.
+ *
+ * @return bool
+ */
+function hayColumnaDeLatencia() {
+    static $tiene = null;
+    if ($tiene === null) {
+        $tiene = in_array('latencia_json', columnasDe('chat_mensajes'), true);
+    }
+    return $tiene;
+}
+
+/**
+ * Las marcas guardadas de un mensaje (vacío si no hay ninguna, o si a
+ * esta base todavía no se le corrió instalar.php).
+ *
+ * @param int $mensajeId
+ * @return array
+ */
+function marcasDeLatencia($mensajeId) {
+    if (!hayColumnaDeLatencia()) return [];
+
+    $fila = consultarUno('SELECT latencia_json FROM chat_mensajes WHERE id = :m',
+                         [':m' => $mensajeId]);
+    if (!$fila) return [];
+
+    $marcas = json_decode((string) ($fila['latencia_json'] ?? ''), true);
+    return is_array($marcas) ? $marcas : [];
+}
+
+/**
+ * Suma marcas a las que ya tenga el mensaje. No pisa una marca que ya
+ * existía: la primera vez que algo pasó es la que vale, y un reintento
+ * que la sobreescribiera borraría justo la demora que se quiere medir.
+ *
+ * Nunca tira error: si la columna no existe todavía —base a la que no
+ * se le volvió a correr instalar.php— no se guarda nada y el chat sigue
+ * igual. Medir es un extra; el mensaje es lo importante.
+ *
+ * @param int   $mensajeId
+ * @param array $nuevas     clave => ms epoch
+ * @return void
+ */
+function anotarMarcasDeLatencia($mensajeId, $nuevas) {
+    if ($mensajeId <= 0 || !$nuevas) return;
+    if (!hayColumnaDeLatencia()) return;
+
+    $marcas = marcasDeLatencia($mensajeId);
+
+    foreach ($nuevas as $clave => $valor) {
+        if (!in_array($clave, MARCAS_DE_LATENCIA, true)) continue;
+        if (isset($marcas[$clave])) continue;              // la primera manda
+        if (!is_numeric($valor)) continue;
+
+        $ms = (int) $valor;
+        if ($ms <= 0) continue;
+        $marcas[$clave] = $ms;
+    }
+
+    if (!$marcas) return;
+
+    try {
+        ejecutar('UPDATE chat_mensajes SET latencia_json = :j WHERE id = :m',
+                 [':j' => json_encode($marcas, JSON_UNESCAPED_UNICODE), ':m' => $mensajeId]);
+    } catch (Throwable $e) {
+        error_log('[Ania XV · chat] No se pudieron guardar las marcas: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Convierte las marcas en los tramos que se pueden afirmar. Cada delta
+ * solo aparece si sus DOS marcas existen y son del mismo reloj — ver la
+ * advertencia del contrato de arriba.
+ *
+ * @param array $marcas
+ * @return array  nombre del tramo => milisegundos
+ */
+function deltasDeLatencia($marcas) {
+    $deltas = [];
+
+    $tramo = function ($nombre, $desde, $hasta) use ($marcas, &$deltas) {
+        if (!isset($marcas[$desde], $marcas[$hasta])) return;
+        $ms = (int) $marcas[$hasta] - (int) $marcas[$desde];
+        // Un tramo negativo significa relojes cruzados o marcas de
+        // vueltas distintas: no se muestra un número imposible.
+        if ($ms < 0) return;
+        $deltas[$nombre] = $ms;
+    };
+
+    // Nuestro reloj, de punta a punta de lo que este servidor controla.
+    $tramo('enviar_a_webhook', 't_enviar', 't_webhook');
+    $tramo('webhook_a_responder', 't_webhook', 't_responder');
+    $tramo('total_servidor', 't_enviar', 't_responder');
+
+    // El reloj de MegaBot, solo contra sí mismo.
+    $tramo('megabot_interno', 't_webhook_recibido', 't_orq_despierta');
+
+    return $deltas;
+}
+
+
 switch ($accion) {
 
 /* ═══════════════════ CON SESIÓN DE LUCILA/CARLOS ═══════════════════ */
@@ -702,7 +989,14 @@ case 'listar':
     $hiloId = hiloDe((int) $yo['id']);
     $despuesDe = campoEntero($_GET, 'despues_de', 0);
 
-    $mensajes = mensajesDelHiloDesde($hiloId, $despuesDe);
+    /* Los tiempos de cada salto son dato de taller: van a la cuenta
+       observadora y a nadie más. No se usa el rol 'admin' porque Lucila
+       TAMBIÉN es admin, y está dicho que nada técnico queda a su vista.
+       esObservador() compara contra un correo del .env — mismo criterio
+       que el panel de métricas (_lib/sesion.php). */
+    $veLosTiempos = esObservador($yo);
+
+    $mensajes = mensajesDelHiloDesde($hiloId, $despuesDe, $veLosTiempos);
 
     /* ⚡ LONG-POLLING: CONTESTAR APENAS HAY ALGO (2026-09-04)
      *
@@ -733,11 +1027,19 @@ case 'listar':
     if (!$mensajes && !empty($_GET['esperar'])) {
         @set_time_limit(SEGUNDOS_DE_ESPERA_DE_LISTAR + 15);
 
+        /* La espera también termina si el envío se cayó: sin esto, un
+           webhook fallido dejaba la petición abierta 25 s enteros antes
+           de que el panel pudiera enterarse y pasarle la pregunta a los
+           agentes del teléfono. Se mira contra el estado del arranque
+           para reaccionar al CAMBIO y no a un error viejo del hilo. */
+        $entregaAlEmpezar = entregaDelUltimoMensajeSuyo($hiloId);
+
         $hasta = time() + SEGUNDOS_DE_ESPERA_DE_LISTAR;
         while (time() < $hasta) {
             sleep(1);
-            $mensajes = mensajesDelHiloDesde($hiloId, $despuesDe);
+            $mensajes = mensajesDelHiloDesde($hiloId, $despuesDe, $veLosTiempos);
             if ($mensajes) break;
+            if (entregaDelUltimoMensajeSuyo($hiloId) !== $entregaAlEmpezar) break;
         }
     }
 
@@ -745,6 +1047,10 @@ case 'listar':
         'hilo_id'  => $hiloId,
         'mensajes' => $mensajes,
         'uso'      => usoDeMegabotGuardado(),
+        /* Cómo terminó la entrega de lo último que ella mandó. El panel
+           lo necesita porque `enviar` ya no lo puede saber a tiempo —ver
+           entregaDelUltimoMensajeSuyo(). */
+        'entrega'  => entregaDelUltimoMensajeSuyo($hiloId),
         /* Si MegaBot va a contestar esta vez, o si va a contestar el
            teléfono. El panel lo dice arriba del hilo: conviene saberlo
            ANTES de preguntar, y no al leer una respuesta que parecía
@@ -758,6 +1064,10 @@ case 'listar':
 
 case 'enviar':
     exigirMetodo('POST');
+    /* La primera marca, antes de cualquier otra cosa: es el cero contra
+       el que se miden todos los tramos. Ver el contrato de `latencia`. */
+    $tEnviar = ahoraEnMs();
+
     $yo = exigirSesion();
     $datos = cuerpoJson();
 
@@ -771,6 +1081,7 @@ case 'enviar':
     ]);
 
     anotarEnBitacora($yo, 'chat_enviar', 'chat_mensajes', $mensajeId, mb_substr($texto, 0, 200));
+    anotarMarcasDeLatencia($mensajeId, ['t_enviar' => $tEnviar]);
 
     $url = (string) (consultarUno("SELECT valor FROM ajustes WHERE clave = 'megabot_webhook_url'")['valor'] ?? '');
     $offline = true;
@@ -809,30 +1120,77 @@ case 'enviar':
          * megabotEstaDisponible(). */
         actualizar('chat_mensajes', $mensajeId, ['estado' => 'pendiente']);
     } else {
-        $contexto = construirContexto($pantalla, $yo);
-        $enviado = mandarWebhookDeMegabot([
-            'v' => 1,
-            'hilo_id' => $hiloId,
-            'mensaje_id' => $mensajeId,
-            'texto' => $texto,
-            'pantalla' => $pantalla,
-            'usuario' => ['id' => (int) $yo['id'], 'nombre' => $yo['nombre'], 'rol' => $yo['rol']],
-            'contexto' => $contexto,
-            'callback' => linkDeCallback(),
-        ]);
+        /* ⚡ EL WEBHOOK SALE CON LA CONEXIÓN YA CERRADA (2026-09-06)
+         *
+         * EL PROBLEMA
+         * Hablar con MegaBot cuesta hasta 3 s (el timeout de
+         * mandarWebhookDeMegabot). Esos 3 s no le aportan NADA a quien
+         * escribió: su mensaje ya está guardado, y la respuesta de
+         * MegaBot llega después por otro camino (accion=responder). Lo
+         * único que hacían era tener un worker de PHP ocupado en un
+         * hosting compartido y retrasar la reconciliación de la burbuja.
+         *
+         * QUÉ CAMBIA PARA EL PANEL
+         * Antes recibía `estado: 'enviado'|'error'` ya resuelto. Ahora,
+         * en este camino, recibe `'enviando'`: todavía no se sabe. El
+         * resultado real se escribe en la fila un instante después y el
+         * long-poll lo trae en ≤1 s — que es cuando el panel decide si
+         * cae al modo local. Se pierde a lo sumo un segundo en el caso
+         * malo y se ganan tres en el bueno.
+         *
+         * ⚠️ EL CAMINO DE MEGABOT CAÍDO NO PASA POR ACÁ, Y ES A
+         * PROPÓSITO: ese ya contesta `offline: true` al instante en el
+         * elseif de arriba, sin tocar la red. Es el caso que más importa
+         * —el que hace que el teléfono conteste solo— y sigue igual de
+         * inmediato que antes. */
+        $mandarElWebhook = function () use ($pantalla, $yo, $hiloId, $mensajeId, $texto) {
+            $contexto = construirContexto($pantalla, $yo);
+            $enviado = mandarWebhookDeMegabot([
+                'v' => 1,
+                'hilo_id' => $hiloId,
+                'mensaje_id' => $mensajeId,
+                'texto' => $texto,
+                'pantalla' => $pantalla,
+                'usuario' => ['id' => (int) $yo['id'], 'nombre' => $yo['nombre'], 'rol' => $yo['rol']],
+                'contexto' => $contexto,
+                'callback' => linkDeCallback(),
+            ]);
 
+            anotarMarcasDeLatencia($mensajeId, ['t_webhook' => ahoraEnMs()]);
+            anotarSaludDeMegabot($enviado);
+            actualizar('chat_mensajes', $mensajeId, ['estado' => $enviado ? 'enviado' : 'error']);
+
+            return $enviado;
+        };
+
+        if (sePuedeCerrarLaConexion()) {
+            responderYSeguirTrabajando([
+                'id' => $mensajeId,
+                'hilo_id' => $hiloId,
+                // Todavía no se sabe: se sabrá en un segundo, por el poll.
+                'offline' => false,
+                'estado' => 'enviando',
+            ]);
+
+            $mandarElWebhook();
+            exit;
+        }
+
+        /* Este PHP no sabe cerrar la conexión antes de tiempo. Entonces
+           se hace el trabajo primero y se contesta al final, igual que
+           siempre: escribir la respuesta acá no serviría de nada porque
+           el navegador no la vería hasta que el script termine. */
+        $enviado = $mandarElWebhook();
         $offline = !$enviado;
-        anotarSaludDeMegabot($enviado);
         $estadoDeEntrega = $enviado ? 'enviado' : 'error';
-        actualizar('chat_mensajes', $mensajeId, ['estado' => $estadoDeEntrega]);
     }
 
     responderBien([
         'id' => $mensajeId,
         'hilo_id' => $hiloId,
         'offline' => $offline,
-        // Cuál de los tres finales fue. El panel lo muestra en la
-        // burbuja de espera (anotarEntregaDeMegaBot).
+        // Cuál de los finales fue. El panel lo muestra en la burbuja de
+        // espera (anotarEntregaDeMegaBot).
         'estado' => $estadoDeEntrega,
     ]);
     break;
@@ -937,6 +1295,9 @@ case 'rotar_clave':
 
 case 'responder':
     exigirMetodo('POST');
+    // Antes de parsear nada: es el final del cronómetro de ida y vuelta.
+    $tResponder = ahoraEnMs();
+
     exigirClaveDeServicio();
     $datos = cuerpoJson();
 
@@ -1025,6 +1386,43 @@ case 'responder':
 
     anotarEnBitacora(['id' => 0, 'nombre' => 'MegaBot'], 'chat_responder', 'chat_mensajes',
                      $mensajeId, mb_substr($texto, 0, 200));
+
+    /* ─── CERRAR EL CRONÓMETRO ────────────────────────────────────────
+     *
+     * Las marcas de ida (`t_enviar`, `t_webhook`) están en el mensaje de
+     * LUCILA. Se copian a esta fila junto con las de vuelta para que el
+     * viaje entero se lea en un solo lugar: el panel pinta esta burbuja,
+     * y tener que ir a buscar la mitad del dato a otra fila era pedir
+     * que alguien se equivocara al leerlo.
+     *
+     * A qué mensaje suyo pertenece: al que MegaBot citó con
+     * `en_respuesta_a`, si lo citó. Si no —que es lo normal cuando la
+     * respuesta viene pegada a la pregunta— al último que ella mandó en
+     * este hilo. Con la cola atrasada esa suposición se puede
+     * equivocar; para eso existe `en_respuesta_a`, y cuando viene, manda
+     * él. */
+    $suyo = $enRespuestaA > 0
+        ? consultarUno('SELECT id FROM chat_mensajes WHERE id = :m', [':m' => $enRespuestaA])
+        : consultarUno(
+            "SELECT id FROM chat_mensajes
+             WHERE hilo_id = :h AND rol = 'lucila' ORDER BY id DESC LIMIT 1",
+            [':h' => $hiloId]
+          );
+
+    $marcas = $suyo ? marcasDeLatencia((int) $suyo['id']) : [];
+    $marcas['t_responder'] = $tResponder;
+
+    /* Las de MegaBot llegan de su reloj, no del nuestro. Se guardan tal
+       cual y deltasDeLatencia() se encarga de no cruzarlas con las
+       nuestras. Si vienen mal formadas, anotarMarcasDeLatencia() las
+       descarta en silencio: la respuesta importa, la medición es un
+       extra —mismo criterio que guardarUsoDeMegabotSiVino(). */
+    $suyas = is_array($datos['latencia'] ?? null) ? $datos['latencia'] : [];
+    foreach (['t_webhook_recibido', 't_orq_despierta'] as $clave) {
+        if (isset($suyas[$clave])) $marcas[$clave] = $suyas[$clave];
+    }
+
+    anotarMarcasDeLatencia($mensajeId, $marcas);
 
     responderBien(['id' => $mensajeId]);
     break;

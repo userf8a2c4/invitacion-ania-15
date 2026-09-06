@@ -266,6 +266,25 @@ $agregarColumna('pagos',     'comprobante_id', 'INT DEFAULT NULL');
    cita cuando la respuesta NO viene pegada a lo que contesta. */
 $agregarColumna('chat_mensajes', 'en_respuesta_a', 'INT DEFAULT NULL');
 
+/* Las marcas de tiempo de cada salto de la cadena de agentes
+   (2026-09-06).
+
+   POR QUÉ EXISTE
+   Una respuesta de MegaBot tarda decenas de segundos, y hasta ahora los
+   únicos números de dónde se iban venían de él: 55 s en una medición,
+   149,8 s en la siguiente, con el primer salto pasando de 8 s a 59 s.
+   Sin marcas propias, cada conversación sobre latencia empieza
+   discutiendo el cronómetro en vez del problema.
+
+   Guarda un JSON chico con lo que se sabe de ESE mensaje: cuándo entró
+   al servidor, cuándo salió su webhook, y —si MegaBot las manda— cuándo
+   lo recibió él y cuándo despertó al cerebro. Ver el contrato completo
+   en chat.php, junto al de `uso`.
+
+   TEXT NULL y no NOT NULL: la enorme mayoría de las filas viejas no
+   tiene ninguna marca, y no hay nada honesto que inventarles. */
+$agregarColumna('chat_mensajes', 'latencia_json', 'TEXT NULL');
+
 /* Esto no es agregar una columna, es AFLOJAR una que ya exigía
    NOT NULL — por eso no usa $agregarColumna(). Se comprueba antes de
    tocar nada, tanto para no fallar si ya se corrió como para no
