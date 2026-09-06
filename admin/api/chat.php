@@ -46,6 +46,9 @@ require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
 require_once __DIR__ . '/_lib/mesas.php';
+// Para saber si se puede cobrar SIN volver a escribir la regla: la
+// definición vive en un solo sitio y compras.php lee la misma.
+require_once __DIR__ . '/_lib/pagos.php';
 
 if (!existeTabla('chat_hilos') || !existeTabla('chat_mensajes') || !existeTabla('chat_propuestas')) {
     responderMal('Falta una parte de la instalación del panel. Avísale a quien lo instaló.', 500);
@@ -75,6 +78,17 @@ const ACCIONES_PERMITIDAS_PARA_MEGABOT = [
        una tarjeta se hace en Ajustes, mirando la pantalla. No es algo
        que tenga sentido proponer desde una conversación. */
     'compras.php?accion=cobrar',
+
+    /* `proponer` deja la compra anotada sin cobrar nada, así que puede
+       entrar sin más: es literalmente el trabajo de MegaBot.
+
+       ⚠️ `confirmar` NO ENTRA, Y NO PUEDE ENTRAR. Es la acción que
+       dispara el cobro de una propuesta ya hecha, y confirmar es
+       exactamente lo que tiene que hacer una persona mirando la
+       pantalla. Meterla en esta lista sería darle a MegaBot las dos
+       mitades del circuito —proponer y aprobar— y con eso el Confirmar
+       de Lucila dejaría de ser la única puerta al dinero. */
+    'compras.php?accion=proponer',
 ];
 
 $accion = (string) ($_GET['accion'] ?? '');
@@ -261,44 +275,87 @@ function construirContexto($pantalla, $usuario) {
        Los CONTEOS van además de los nombres a propósito: con
        `metodos_activos: 0` MegaBot sabe que tiene que decir "primero
        guardá una tarjeta" en vez de proponer un cobro que va a fallar. */
+    /* ⚡ CON IDs, NO CON CONTEOS (2026-09-05)
+     *
+     * Esto mandaba `direcciones_activas: 1` y el alias de la
+     * predeterminada. MegaBot lo dijo con todas las letras: "sin IDs no
+     * puedo armar cobro ni elegir direccion". Tenia razon — se le pedia
+     * que propusiera una compra sin darle con que referirse a nada.
+     *
+     * ⚠️ LOS ids SON LOS INTERNOS, NO EL TOKEN DE STRIPE.
+     * El contrato que mando pedia `metodos[].id` = `pm_...`. Ese token
+     * es, junto con la clave secreta, lo unico que sirve para cobrar: es
+     * exactamente lo que la nota de arriba prohibe sacar de aca, y lo que
+     * `listar_metodos` tampoco devuelve al panel.
+     *
+     * Y no hace falta: `compras.php?accion=cobrar` recibe
+     * `metodo_pago_id` y `direccion_id` con campoEntero(), o sea el id de
+     * la fila. Con eso MegaBot propone igual y el token no sale del
+     * servidor. */
     if (existeTabla('direcciones_entrega')) {
-        $dirs = consultarUno(
-            'SELECT COUNT(*) AS n FROM direcciones_entrega WHERE activa = 1');
-        $dirPredet = consultarUno(
-            'SELECT alias FROM direcciones_entrega
-              WHERE activa = 1 AND es_predeterminada = 1 LIMIT 1');
-
         $contexto['compras'] = [
-            'direcciones_activas'      => (int) ($dirs['n'] ?? 0),
-            'direccion_predeterminada' => $dirPredet
-                ? (string) $dirPredet['alias'] : null,
-            'metodos_activos'          => 0,
-            'metodo_predeterminado'    => null,
-            'pagos_listos'             => false,
+            'pagos_listos' => false,
+            'direcciones'  => [],
+            'metodos'      => [],
+            'direccion_predeterminada_id' => null,
+            'metodo_predeterminado_id'    => null,
         ];
+
+        foreach (consultarTodo(
+            'SELECT id, alias, es_predeterminada FROM direcciones_entrega
+              WHERE activa = 1 ORDER BY es_predeterminada DESC, id ASC') as $d) {
+
+            $esPredet = (int) $d['es_predeterminada'] === 1;
+
+            // El alias y nada mas: la direccion completa no tiene por que
+            // salir del servidor para redactar una propuesta.
+            $contexto['compras']['direcciones'][] = [
+                'id'               => (int) $d['id'],
+                'alias'            => (string) $d['alias'],
+                'es_predeterminada' => $esPredet,
+            ];
+
+            if ($esPredet) {
+                $contexto['compras']['direccion_predeterminada_id'] = (int) $d['id'];
+            }
+        }
     }
 
     if (existeTabla('metodos_pago') && isset($contexto['compras'])) {
-        $met = consultarUno('SELECT COUNT(*) AS n FROM metodos_pago WHERE activo = 1');
-        $metPredet = consultarUno(
-            'SELECT brand, last4 FROM metodos_pago
-              WHERE activo = 1 AND es_predeterminado = 1 LIMIT 1');
+        foreach (consultarTodo(
+            'SELECT id, brand, last4, es_predeterminado FROM metodos_pago
+              WHERE activo = 1 ORDER BY es_predeterminado DESC, id ASC') as $m) {
 
-        $contexto['compras']['metodos_activos'] = (int) ($met['n'] ?? 0);
-        $contexto['compras']['metodo_predeterminado'] = $metPredet
-            ? trim((string) $metPredet['brand'] . ' ···' . (string) $metPredet['last4'])
-            : null;
+            $esPredet = (int) $m['es_predeterminado'] === 1;
 
-        /* «Listo» quiere decir que un cobro puede salir: las dos claves
-           puestas Y algo con qué pagar. Se calcula igual que en
-           compras.php para que las dos pantallas nunca se contradigan. */
-        $pub = trim((string) (consultarUno(
-            "SELECT valor FROM ajustes WHERE clave = 'stripe_clave_publica'")['valor'] ?? ''));
-        if ($pub === '') $pub = trim((string) env('STRIPE_CLAVE_PUBLICA', ''));
-        $sec = trim((string) env('STRIPE_CLAVE_SECRETA', ''));
+            $contexto['compras']['metodos'][] = [
+                'id'                => (int) $m['id'],
+                'brand'             => (string) $m['brand'],
+                'last4'             => (string) $m['last4'],
+                'es_predeterminada' => $esPredet,
+            ];
 
+            if ($esPredet) {
+                $contexto['compras']['metodo_predeterminado_id'] = (int) $m['id'];
+            }
+        }
+    }
+
+    if (isset($contexto['compras'])) {
+        /* ⚡ UNA SOLA FUENTE DE VERDAD (2026-09-05)
+         *
+         * Aca habia una copia de la regla de "se puede cobrar", escrita a
+         * mano. Y ya se habia separado de la de compras.php: ese archivo
+         * exige ademas que las dos claves sean de la MISMA CUENTA de
+         * Stripe, y esta copia no. O sea que el chat podia decirle a
+         * MegaBot que se podia cobrar, MegaBot proponerle la compra a
+         * Lucila, y el cobro fallar.
+         *
+         * Ahora las dos preguntan a la misma funcion (_lib/pagos.php).
+         * Se le suma que haya con que pagar, que es cosa del contexto y
+         * no de las claves. */
         $contexto['compras']['pagos_listos'] =
-            $pub !== '' && $sec !== '' && $contexto['compras']['metodos_activos'] > 0;
+            losPagosEstanListos() && count($contexto['compras']['metodos']) > 0;
     }
 
     return $contexto;

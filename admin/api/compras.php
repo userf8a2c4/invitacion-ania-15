@@ -93,93 +93,12 @@ require_once __DIR__ . '/_lib/entorno.php';
 // avisarDeMovimientoDeDinero() más abajo.
 require_once __DIR__ . '/_lib/correo.php';
 require_once __DIR__ . '/_lib/push.php';
+// La regla de "se puede cobrar" y como leer una clave: una sola
+// definicion, compartida con chat.php. Ver _lib/pagos.php.
+require_once __DIR__ . '/_lib/pagos.php';
 
 $yo     = exigirAdministrador();
 $accion = (string) ($_GET['accion'] ?? 'config');
-
-/** El nombre EXACTO de la clave secreta en el .env. Si esto cambia, hay
-    que cambiarlo también en la pantalla del panel y en el instructivo. */
-const STRIPE_CLAVE_SECRETA_EN_ENV = 'STRIPE_CLAVE_SECRETA';
-
-/** La publicable se puede poner por el panel o por el .env. La del panel
-    gana; ésta es el respaldo para quien prefiera dejar las dos juntas. */
-const STRIPE_CLAVE_PUBLICA_EN_ENV = 'STRIPE_CLAVE_PUBLICA';
-
-
-/**
- * En qué modo está una clave de Stripe, mirando solo su prefijo.
- *
- * No valida que la clave sirva —eso solo lo sabe Stripe— pero distingue
- * lo único que hace falta acá: si es de prueba o de la cuenta real.
- *
- * @param string $clave
- * @return string 'prueba', 'real' o '' si no se reconoce.
- */
-function modoDeClaveStripe($clave) {
-    $clave = trim((string) $clave);
-    if ($clave === '') return '';
-
-    if (strpos($clave, '_test_') !== false) return 'prueba';
-    if (strpos($clave, '_live_') !== false) return 'real';
-    return '';
-}
-
-/**
- * De qué cuenta de Stripe es una clave.
- *
- * ⚡ POR QUÉ HACE FALTA (2026-09-05)
- *
- * Las dos claves pueden ser las dos de prueba y aun así no servir: si
- * salieron de CUENTAS distintas —o de dos sandboxes— nada funciona. Y
- * falla tarde y feo: la pantalla de agregar tarjeta se abría sin campos
- * donde escribirla, y Stripe solo lo explicaba dentro de su propio
- * iframe, en inglés:
- *
- *     "The client_secret provided does not match any associated
- *      SetupIntent on this account."
- *
- * Pasó de verdad al crear la clave restringida en un sandbox distinto
- * del que tenía la publicable. Es un error facilísimo de cometer —las
- * dos son de prueba, las dos parecen bien— y no se ve hasta que alguien
- * intenta guardar una tarjeta.
- *
- * Stripe pone el identificador de la cuenta DENTRO de la clave, justo
- * después de `_test_`/`_live_` y antes del secreto: en `pk_test_51ABC…`
- * y `rk_test_51ABC…` ese `51ABC…` es el mismo si son de la misma
- * cuenta. No es documentación oficial de Stripe, así que se compara solo
- * cuando las dos claves tienen esa forma; si alguna no la tiene, se
- * devuelve '' y quien pregunte se queda sin opinar, en vez de inventar
- * una alarma falsa.
- *
- * @param string $clave
- * @return string El identificador de cuenta, o '' si no se reconoce.
- */
-function cuentaDeClaveStripe($clave) {
-    $clave = trim((string) $clave);
-    if ($clave === '') return '';
-
-    // pk_test_51ABC...  →  51ABC...  (los primeros caracteres alcanzan:
-    // es un prefijo estable, y comparar la clave entera no serviría
-    // porque el resto es el secreto de cada una).
-    if (!preg_match('/_(?:test|live)_([A-Za-z0-9]{10,})/', $clave, $m)) return '';
-
-    return substr($m[1], 0, 16);
-}
-
-/**
- * La clave publicable que se está usando: la del panel, o la del .env
- * si el panel no tiene ninguna.
- *
- * @return string
- */
-function claveStripePublicable() {
-    $fila = consultarUno("SELECT valor FROM ajustes WHERE clave = 'stripe_clave_publica'");
-    $delPanel = trim((string) ($fila['valor'] ?? ''));
-    if ($delPanel !== '') return $delPanel;
-
-    return trim((string) env(STRIPE_CLAVE_PUBLICA_EN_ENV, ''));
-}
-
 
 /* ══════════════════════════════════════════════════════════════════════
    HABLAR CON STRIPE
@@ -433,33 +352,6 @@ function clienteDeStripe() {
  */
 function enCentavos($pesos) {
     return (int) round(((float) $pesos) * 100);
-}
-
-/**
- * Si los pagos están listos para cobrar: las dos claves puestas.
- *
- * @return bool
- */
-function losPagosEstanListos() {
-    $pub = claveStripePublicable();
-    $sec = trim((string) env(STRIPE_CLAVE_SECRETA_EN_ENV, ''));
-    if ($pub === '' || $sec === '') return false;
-
-    $modoPub = modoDeClaveStripe($pub);
-    if ($modoPub === '' || $modoPub !== modoDeClaveStripe($sec)) return false;
-
-    /* Y de la misma cuenta. Dos claves de prueba de cuentas distintas
-       pasan todo lo anterior y no sirven para nada: Stripe rechaza el
-       client_secret al abrir el formulario. Si no se puede saber —una
-       clave con forma rara— no se bloquea nada: se deja pasar y que
-       Stripe opine, en vez de impedir cobrar por una sospecha. */
-    $cuentaPub = cuentaDeClaveStripe($pub);
-    $cuentaSec = cuentaDeClaveStripe($sec);
-    if ($cuentaPub !== '' && $cuentaSec !== '' && $cuentaPub !== $cuentaSec) {
-        return false;
-    }
-
-    return true;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -758,6 +650,197 @@ function exigirPagosListos() {
                . 'con la que se paga", y sigue lo que dice ahí.', 409);
 }
 
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   UNA COMPRA: PROPONERLA, Y DESPUES COBRARLA
+
+   ⚡ POR QUE SE PARTIO EN DOS (2026-09-05)
+
+   Hasta ahora `cobrar` hacia todo de un saque: validaba, creaba la fila y
+   cobraba. Y una propuesta de compra solo podia nacer de una
+   conversacion, porque vivia en `chat_propuestas` — atada al chat.
+
+   Eso deja fuera un caso que hace falta: dejar una compra propuesta
+   desde la pantalla de compras, para confirmarla mas tarde. Y obliga a
+   que MegaBot proponga y cobre con la misma accion, cuando son dos
+   momentos distintos y con dos permisos distintos.
+
+   Ahora hay tres puertas y una sola implementacion:
+
+     proponer   crea la fila en `propuesta`. NO cobra, NO pide contrasena
+                — proponer no mueve dinero, y pedirla aca seria cobrarle
+                friccion a algo que no la necesita.
+     confirmar  toma una fila en `propuesta` y la cobra. Pide contrasena.
+     cobrar     el atajo de siempre: propone y confirma de una. Se
+                mantiene porque es lo que ya usa la whitelist de MegaBot
+                y lo que hace el boton Confirmar del chat.
+
+   Las tres terminan en cobrarUnPedido(), asi que la idempotencia, los
+   avisos y la bitacora son identicos por los tres caminos.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** El tope de cordura de un cobro automatico, en pesos. */
+const TOPE_DE_COBRO_AUTOMATICO = 50000;
+
+/**
+ * Valida lo que hace falta para una compra y resuelve direccion y
+ * tarjeta. Corta la peticion si algo no cierra.
+ *
+ * @param array $datos El cuerpo del POST.
+ * @return array [concepto, monto, direccion, metodo]
+ */
+function armarLaCompra($datos) {
+    $concepto = campoTexto($datos, 'concepto', 300);
+    if ($concepto === '') responderMal('Falta decir qué se está comprando.', 400);
+
+    $monto = (float) ($datos['monto'] ?? 0);
+    if ($monto <= 0) responderMal('El monto tiene que ser mayor que cero.', 400);
+
+    /* Un tope de cordura. No protege de un error de mil pesos, pero sí
+       de un cero de más -que con un cobro automático es la diferencia
+       entre un ramo y un coche. */
+    if ($monto > TOPE_DE_COBRO_AUTOMATICO) {
+        responderMal('Ese monto es más alto de lo que este panel cobra solo ($'
+                   . number_format(TOPE_DE_COBRO_AUTOMATICO) . '). '
+                   . 'Si de verdad es correcto, hay que pagarlo a mano.', 400);
+    }
+
+    // Sin dirección ni tarjeta dichas, se usan las de siempre.
+    $direccionId = campoEntero($datos, 'direccion_id', 0);
+    if ($direccionId <= 0) {
+        $d = consultarUno('SELECT id FROM direcciones_entrega
+                            WHERE activa = 1 AND es_predeterminada = 1 LIMIT 1');
+        $direccionId = $d ? (int) $d['id'] : 0;
+    }
+
+    $metodoId = campoEntero($datos, 'metodo_pago_id', 0);
+    if ($metodoId <= 0) {
+        $m = consultarUno('SELECT id FROM metodos_pago
+                            WHERE activo = 1 AND es_predeterminado = 1 LIMIT 1');
+        $metodoId = $m ? (int) $m['id'] : 0;
+    }
+
+    $direccion = $direccionId > 0
+        ? consultarUno('SELECT * FROM direcciones_entrega WHERE id = :i AND activa = 1',
+                       [':i' => $direccionId])
+        : null;
+    if (!$direccion) {
+        responderMal('No hay a dónde entregar esta compra. Agrega una dirección '
+                   . 'en "¿Dónde recibes las compras?" antes de cobrar.', 400);
+    }
+
+    $metodo = $metodoId > 0
+        ? consultarUno('SELECT * FROM metodos_pago WHERE id = :i AND activo = 1',
+                       [':i' => $metodoId])
+        : null;
+    if (!$metodo) {
+        responderMal('No hay ninguna tarjeta guardada. Agrega una en Ajustes, '
+                   . '"Conectar la cuenta con la que se paga".', 400);
+    }
+
+    return [$concepto, (float) $monto, $direccion, $metodo];
+}
+
+/**
+ * Guarda una compra como propuesta. No cobra nada.
+ *
+ * @return int El id del pedido.
+ */
+function guardarLaPropuesta($concepto, $monto, $direccion, $metodo, $datos) {
+    return insertar('compras_pedidos', [
+        'concepto'       => $concepto,
+        'monto'          => $monto,
+        'moneda'         => 'mxn',
+        'direccion_id'   => (int) $direccion['id'],
+        'metodo_pago_id' => (int) $metodo['id'],
+        'estado'         => 'propuesta',
+        'detalle_json'   => isset($datos['detalle']) && is_array($datos['detalle'])
+            ? json_encode($datos['detalle'], JSON_UNESCAPED_UNICODE) : null,
+    ]);
+}
+
+/**
+ * Cobra un pedido que ya existe. NO valida permisos: quien llama tiene
+ * que haber pasado por exigirContrasenaDeNuevo() antes.
+ *
+ * Nunca devuelve: termina la petición con responderBien o responderMal.
+ *
+ * @return void
+ */
+function cobrarUnPedido($pedidoId, $concepto, $monto, $direccion, $metodo, $yo) {
+    $cliente = clienteDeStripe();
+    if ($cliente === '') {
+        actualizar('compras_pedidos', $pedidoId,
+                   ['estado' => 'fallida', 'motivo_falla' => 'No se pudo hablar con Stripe.']);
+        responderMal('No se pudo conectar con Stripe. No se cobró nada.', 502);
+    }
+
+    $r = pedirleAStripe('POST', 'payment_intents', [
+        'amount'         => enCentavos($monto),
+        'currency'       => 'mxn',
+        'customer'       => $cliente,
+        'payment_method' => (string) $metodo['stripe_payment_method_id'],
+        // Cobra ya, en esta misma petición.
+        'confirm'        => 'true',
+        // Ella no está mirando el formulario del banco: si el banco pide
+        // confirmación, que falle con un error claro en vez de dejar el
+        // cobro colgado esperando a alguien que no va a llegar.
+        'off_session'    => 'true',
+        'description'    => mb_substr($concepto, 0, 200),
+    ],
+    /* ⚡ EL SEGURO CONTRA EL COBRO DOBLE (2026-09-05)
+       `$pedidoId` es de una fila que ya existe antes de que Stripe sepa
+       nada: es único y NO cambia si esta misma petición se repite. Eso es
+       justo lo que hace falta — con un número al azar, cada reintento
+       sería un cobro nuevo. Y vale para los tres caminos: proponer +
+       confirmar dos veces tampoco cobra dos veces, porque el pedido es el
+       mismo. Ver la nota larga en pedirleAStripe(). */
+    'pedido-' . $pedidoId);
+
+    if (!$r['ok']) {
+        actualizar('compras_pedidos', $pedidoId, [
+            'estado'       => 'fallida',
+            'motivo_falla' => mb_substr($r['error'], 0, 300),
+        ]);
+        anotarEnBitacora($yo, 'no se pudo cobrar una compra', 'compras_pedidos', $pedidoId,
+                         mb_substr($concepto, 0, 120));
+        responderMal($r['error'], 402);
+    }
+
+    actualizar('compras_pedidos', $pedidoId, [
+        'estado'                   => 'cobrada',
+        'stripe_payment_intent_id' => (string) ($r['datos']['id'] ?? ''),
+        'cobrado_en'               => date('Y-m-d H:i:s'),
+    ]);
+
+    /* En la bitácora queda qué, cuánto, con qué tarjeta y a dónde. Ni
+       token ni número: "Visa ···4242" no le sirve a nadie para comprar. */
+    $laTarjeta = trim((string) $metodo['brand'] . ' ···' . (string) $metodo['last4']);
+
+    anotarEnBitacora($yo, 'cobró una compra', 'compras_pedidos', $pedidoId,
+        '$' . number_format($monto, 2) . ' · ' . mb_substr($concepto, 0, 80)
+        . ' · ' . $laTarjeta . ' · a ' . (string) $direccion['alias']);
+
+    $aviso = avisarDeMovimientoDeDinero(
+        'Se cobró $' . number_format($monto, 2) . ' · Ania XV',
+        'Se acaba de hacer un cargo a la tarjeta del evento.',
+        [
+            'Concepto'      => mb_substr($concepto, 0, 120),
+            'Monto'         => '$' . number_format($monto, 2) . ' MXN',
+            'Tarjeta'       => $laTarjeta,
+            'Se entrega en' => (string) $direccion['alias'],
+        ],
+        $yo
+    );
+
+    responderBien([
+        'id'      => $pedidoId,
+        'estado'  => 'cobrada',
+        'mensaje' => 'Cobrado $' . number_format($monto, 2) . '. Va a ' . $direccion['alias'] . '.',
+        'aviso'   => $aviso,
+    ]);
+}
 
 switch ($accion) {
 
@@ -1131,134 +1214,81 @@ case 'cobrar':
     // El único sitio del proyecto que saca dinero de verdad.
     exigirContrasenaDeNuevo($yo, $datos);
 
-    $concepto = campoTexto($datos, 'concepto', 300);
-    if ($concepto === '') responderMal('Falta decir qué se está comprando.', 400);
+    list($concepto, $monto, $direccion, $metodo) = armarLaCompra($datos);
+    $pedidoId = guardarLaPropuesta($concepto, $monto, $direccion, $metodo, $datos);
 
-    $monto = (float) ($datos['monto'] ?? 0);
-    if ($monto <= 0) responderMal('El monto tiene que ser mayor que cero.', 400);
+    cobrarUnPedido($pedidoId, $concepto, $monto, $direccion, $metodo, $yo);
+    break;
 
-    /* Un tope de cordura. No protege de un error de mil pesos, pero sí
-       de un cero de más -que con un cobro automático es la diferencia
-       entre un ramo y un coche. */
-    if ($monto > 50000) {
-        responderMal('Ese monto es más alto de lo que este panel cobra solo ($50,000). '
-                   . 'Si de verdad es correcto, hay que pagarlo a mano.', 400);
-    }
 
-    // Sin dirección ni tarjeta dichas, se usan las de siempre.
-    $direccionId = campoEntero($datos, 'direccion_id', 0);
-    if ($direccionId <= 0) {
-        $d = consultarUno('SELECT id FROM direcciones_entrega
-                            WHERE activa = 1 AND es_predeterminada = 1 LIMIT 1');
-        $direccionId = $d ? (int) $d['id'] : 0;
-    }
+/* ─── PROPONER: DEJARLA ANOTADA, SIN COBRAR ──────────────────────────
 
-    $metodoId = campoEntero($datos, 'metodo_pago_id', 0);
-    if ($metodoId <= 0) {
-        $m = consultarUno('SELECT id FROM metodos_pago
-                            WHERE activo = 1 AND es_predeterminado = 1 LIMIT 1');
-        $metodoId = $m ? (int) $m['id'] : 0;
-    }
+   No pide contraseña a propósito: proponer no mueve dinero. Lo que
+   cuesta es confirmar, y ahí sí se pide. */
 
-    $direccion = $direccionId > 0
-        ? consultarUno('SELECT * FROM direcciones_entrega WHERE id = :i AND activa = 1',
-                       [':i' => $direccionId])
-        : null;
-    if (!$direccion) {
-        responderMal('No hay a dónde entregar esta compra. Agrega una dirección '
-                   . 'en "¿Dónde recibes las compras?" antes de cobrar.', 400);
-    }
+case 'proponer':
+    exigirMetodo('POST');
+    exigirPagosListos();
+    $datos = cuerpoJson();
 
-    $metodo = $metodoId > 0
-        ? consultarUno('SELECT * FROM metodos_pago WHERE id = :i AND activo = 1',
-                       [':i' => $metodoId])
-        : null;
-    if (!$metodo) {
-        responderMal('No hay ninguna tarjeta guardada. Agrega una en Ajustes, '
-                   . '"Conectar la cuenta con la que se paga".', 400);
-    }
+    list($concepto, $monto, $direccion, $metodo) = armarLaCompra($datos);
+    $pedidoId = guardarLaPropuesta($concepto, $monto, $direccion, $metodo, $datos);
 
-    // La fila primero, en `propuesta`. Ver la nota de arriba.
-    $pedidoId = insertar('compras_pedidos', [
-        'concepto'       => $concepto,
-        'monto'          => $monto,
-        'moneda'         => 'mxn',
-        'direccion_id'   => $direccionId,
-        'metodo_pago_id' => $metodoId,
-        'estado'         => 'propuesta',
-        'detalle_json'   => isset($datos['detalle']) && is_array($datos['detalle'])
-            ? json_encode($datos['detalle'], JSON_UNESCAPED_UNICODE) : null,
-    ]);
-
-    $cliente = clienteDeStripe();
-    if ($cliente === '') {
-        actualizar('compras_pedidos', $pedidoId,
-                   ['estado' => 'fallida', 'motivo_falla' => 'No se pudo hablar con Stripe.']);
-        responderMal('No se pudo conectar con Stripe. No se cobró nada.', 502);
-    }
-
-    $r = pedirleAStripe('POST', 'payment_intents', [
-        'amount'         => enCentavos($monto),
-        'currency'       => 'mxn',
-        'customer'       => $cliente,
-        'payment_method' => (string) $metodo['stripe_payment_method_id'],
-        // Cobra ya, en esta misma petición.
-        'confirm'        => 'true',
-        // Ella no está mirando el formulario del banco: si el banco pide
-        // confirmación, que falle con un error claro en vez de dejar el
-        // cobro colgado esperando a alguien que no va a llegar.
-        'off_session'    => 'true',
-        'description'    => mb_substr($concepto, 0, 200),
-    ],
-    /* ⚡ EL SEGURO CONTRA EL COBRO DOBLE (2026-09-05)
-       `$pedidoId` es de la fila que se acaba de insertar unas líneas más
-       arriba: existe antes de que Stripe sepa nada, es único, y NO
-       cambia si esta misma petición se repite. Eso es justo lo que hace
-       falta — con un número al azar, cada reintento sería un cobro
-       nuevo. Ver la nota larga en pedirleAStripe(). */
-    'pedido-' . $pedidoId);
-
-    if (!$r['ok']) {
-        actualizar('compras_pedidos', $pedidoId, [
-            'estado'       => 'fallida',
-            'motivo_falla' => mb_substr($r['error'], 0, 300),
-        ]);
-        anotarEnBitacora($yo, 'no se pudo cobrar una compra', 'compras_pedidos', $pedidoId,
-                         mb_substr($concepto, 0, 120));
-        responderMal($r['error'], 402);
-    }
-
-    actualizar('compras_pedidos', $pedidoId, [
-        'estado'                   => 'cobrada',
-        'stripe_payment_intent_id' => (string) ($r['datos']['id'] ?? ''),
-        'cobrado_en'               => date('Y-m-d H:i:s'),
-    ]);
-
-    /* En la bitácora queda qué, cuánto, con qué tarjeta y a dónde. Ni
-       token ni número: "Visa ···4242" no le sirve a nadie para comprar. */
-    anotarEnBitacora($yo, 'cobró una compra', 'compras_pedidos', $pedidoId,
-        '$' . number_format($monto, 2) . ' · ' . mb_substr($concepto, 0, 80)
-        . ' · ' . trim((string) $metodo['brand'] . ' ···' . (string) $metodo['last4'])
-        . ' · a ' . (string) $direccion['alias']);
-
-    $aviso = avisarDeMovimientoDeDinero(
-        'Se cobró $' . number_format($monto, 2) . ' · Ania XV',
-        'Se acaba de hacer un cargo a la tarjeta del evento.',
-        [
-            'Concepto'  => mb_substr($concepto, 0, 120),
-            'Monto'     => '$' . number_format($monto, 2) . ' MXN',
-            'Tarjeta'   => trim((string) $metodo['brand'] . ' ···' . (string) $metodo['last4']),
-            'Se entrega en' => (string) $direccion['alias'],
-        ],
-        $yo
-    );
+    anotarEnBitacora($yo, 'propuso una compra', 'compras_pedidos', $pedidoId,
+        '$' . number_format($monto, 2) . ' · ' . mb_substr($concepto, 0, 80));
 
     responderBien([
-        'id'       => $pedidoId,
-        'estado'   => 'cobrada',
-        'mensaje'  => 'Cobrado $' . number_format($monto, 2) . '. Va a ' . $direccion['alias'] . '.',
-        'aviso'    => $aviso,
+        'id'      => $pedidoId,
+        'estado'  => 'propuesta',
+        // Lo que hace falta para mostrarla y confirmarla, sin volver a pedir.
+        'resumen' => [
+            'concepto'      => $concepto,
+            'monto'         => $monto,
+            'moneda'        => 'mxn',
+            'tarjeta'       => trim((string) $metodo['brand'] . ' ···' . (string) $metodo['last4']),
+            'se_entrega_en' => (string) $direccion['alias'],
+        ],
     ]);
+    break;
+
+
+/* ─── CONFIRMAR: COBRAR UNA PROPUESTA QUE YA ESTABA ──────────────── */
+
+case 'confirmar':
+    exigirMetodo('POST');
+    exigirPagosListos();
+    $datos = cuerpoJson();
+    exigirContrasenaDeNuevo($yo, $datos);
+
+    $pedidoId = campoEntero($datos, 'id', 0);
+    if ($pedidoId <= 0) responderMal('Falta decir qué compra confirmar.', 400);
+
+    $pedido = consultarUno('SELECT * FROM compras_pedidos WHERE id = :i', [':i' => $pedidoId]);
+    if (!$pedido) responderMal('Esa compra no existe.', 404);
+
+    /* Solo se cobra lo que está esperando. Una ya cobrada no se vuelve a
+       cobrar por más que se toque el botón dos veces, y una fallida se
+       vuelve a proponer, no se reintenta a ciegas. */
+    if ((string) $pedido['estado'] !== 'propuesta') {
+        responderMal('Esa compra ya está en «' . (string) $pedido['estado']
+                   . '», así que no se puede confirmar.', 409);
+    }
+
+    $direccion = consultarUno('SELECT * FROM direcciones_entrega WHERE id = :i',
+                              [':i' => (int) $pedido['direccion_id']]);
+    $metodo = consultarUno('SELECT * FROM metodos_pago WHERE id = :i AND activo = 1',
+                           [':i' => (int) $pedido['metodo_pago_id']]);
+
+    /* Entre proponer y confirmar puede haber pasado un rato, y en ese
+       rato la tarjeta pudo darse de baja o la dirección desactivarse. */
+    if (!$direccion) responderMal('La dirección de esa compra ya no está.', 409);
+    if (!$metodo) {
+        responderMal('La tarjeta de esa compra ya no está activa. '
+                   . 'Agrega una y vuelve a proponer la compra.', 409);
+    }
+
+    cobrarUnPedido($pedidoId, (string) $pedido['concepto'], (float) $pedido['monto'],
+                   $direccion, $metodo, $yo);
     break;
 
 

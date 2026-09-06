@@ -31,6 +31,13 @@ const AQUI = dirname(fileURLToPath(import.meta.url));
 const RUTA = join(AQUI, '..', 'admin', 'api', 'compras.php');
 const php = readFileSync(RUTA, 'utf8');
 
+/* La regla de "se puede cobrar" y como leer una clave viven en una
+   libreria aparte desde el 2026-09-05: chat.php necesitaba la misma y no
+   puede incluir compras.php (es un endpoint que exige admin al cargarse).
+   Se lee tambien, porque parte de lo que se comprueba aca vive alli. */
+const libPagos = readFileSync(
+  join(AQUI, '..', 'admin', 'api', '_lib', 'pagos.php'), 'utf8');
+
 let fallos = 0;
 const comprobar = (nombre, condicion, detalle) => {
   if (condicion) { console.log('  ok    ' + nombre); return; }
@@ -123,14 +130,28 @@ comprobar('pedirleAStripe acepta una clave',
 comprobar('y la manda como cabecera solo en POST',
   /\$metodo === 'POST' && \$idempotencia !== ''[\s\S]{0,120}Idempotency-Key/.test(php));
 
-const cobrar = cuerpoDelCaso('cobrar');
+/* El cobro salio del case a una funcion (2026-09-05), para que los tres
+   caminos —cobrar, proponer+confirmar— usen la misma y no se separen. */
+const elCobro = cuerpoDeFuncion('cobrarUnPedido');
+
 comprobar('el cobro la deriva del id del pedido',
-  /payment_intents[\s\S]*?'pedido-' \. \$pedidoId/.test(cobrar),
+  /payment_intents[\s\S]*?'pedido-' \. \$pedidoId/.test(elCobro),
   'con una clave al azar cada reintento sería un cobro nuevo');
 
 comprobar('la clave del cobro NO es aleatoria',
-  !/payment_intents[\s\S]{0,900}(uniqid|mt_rand|random_bytes|bin2hex)/.test(cobrar),
+  !/payment_intents[\s\S]{0,900}(uniqid|mt_rand|random_bytes|bin2hex)/.test(elCobro),
   'un valor distinto en cada intento no protege de nada');
+
+/* Y que sigan siendo la misma: si alguien copiara el cobro dentro de un
+   case, esa copia se quedaria sin idempotencia el dia que se cambie. */
+comprobar('solo hay UN sitio que llama a payment_intents',
+  (php.match(/'payment_intents'/g) || []).length === 1,
+  'dos caminos de cobro acaban teniendo dos reglas distintas');
+
+for (const via of ['cobrar', 'confirmar']) {
+  comprobar(via + ' cobra por esa misma función',
+    cuerpoDelCaso(via).includes('cobrarUnPedido('));
+}
 
 /* ─── 4. El token nunca sale hacia el panel ───────────────────────── */
 
@@ -162,11 +183,15 @@ console.log('\nAvisos de cada movimiento\n');
 for (const [accion, que] of [
   ['guardar_metodo',    'alta de tarjeta'],
   ['desactivar_metodo', 'baja de tarjeta'],
-  ['cobrar',            'cobro'],
 ]) {
   comprobar('avisa del ' + que,
     cuerpoDelCaso(accion).includes('avisarDeMovimientoDeDinero('));
 }
+
+// El del cobro vive en cobrarUnPedido(), asi que vale para los tres
+// caminos de una sola vez.
+comprobar('avisa del cobro',
+  cuerpoDeFuncion('cobrarUnPedido').includes('avisarDeMovimientoDeDinero('));
 
 /* Se mira DENTRO de la función, no contando caracteres: la primera
    versión usaba un tope de 2600 y empezó a fallar sola en cuanto la
@@ -241,11 +266,53 @@ comprobar('el servidor comprueba la cuenta al guardar la publicable',
   'hay que decirlo cuando se pega, no cuando falle el formulario');
 
 comprobar('y losPagosEstanListos la tiene en cuenta',
-  cuerpoDeFuncion('losPagosEstanListos').includes('cuentaDeClaveStripe('));
+  /function losPagosEstanListos[\s\S]*?cuentaDeClaveStripe\(/.test(libPagos),
+  'vive en _lib/pagos.php desde que chat.php necesito la misma regla');
+
+comprobar('la regla no esta duplicada en chat.php',
+  !/pagos_listos[\s\S]{0,400}\$pub !== ''/.test(
+    readFileSync(join(AQUI, '..', 'admin', 'api', 'chat.php'), 'utf8')),
+  'dos copias de "se puede cobrar" ya se contradijeron una vez');
 
 comprobar('config no repite la regla a mano',
   /'listo'\s*=>\s*losPagosEstanListos\(\)/.test(php),
   'dos definiciones de "se puede cobrar" acaban contradiciendose');
+
+
+/* --- 7. Quien puede confirmar un cobro ----------------------------- */
+
+console.log('\nMegaBot propone; confirmar lo hace una persona\n');
+
+const chat = readFileSync(join(AQUI, '..', 'admin', 'api', 'chat.php'), 'utf8');
+/* Ojo: la whitelist del panel está en 32-asistente.js, NO en 50-pagos.js
+   —que es lo que tiene cargado la variable `panel` de más arriba—. Se
+   lee el archivo que corresponde. */
+const asistente = readFileSync(
+  join(AQUI, '..', 'admin', 'codigo', '32-asistente.js'), 'utf8');
+
+const listaChat  = /ACCIONES_PERMITIDAS_PARA_MEGABOT = \[([\s\S]*?)\];/.exec(chat);
+const listaPanel = /ACCIONES_PERMITIDAS_PARA_MEGABOT = \[([\s\S]*?)\];/.exec(asistente);
+
+for (const [donde, m] of [['chat.php', listaChat], ['32-asistente.js', listaPanel]]) {
+  comprobar('confirmar NO esta en la whitelist de ' + donde,
+    !!m && !m[1].includes('accion=confirmar'),
+    'seria darle a MegaBot las dos mitades: proponer Y aprobar el cobro');
+}
+
+comprobar('proponer si esta permitido',
+  !!listaChat && listaChat[1].includes('accion=proponer'),
+  'proponer no cobra: es literalmente el trabajo de MegaBot');
+
+comprobar('proponer no pide contrasena',
+  !cuerpoDelCaso('proponer').includes('exigirContrasenaDeNuevo('),
+  'cobrarle friccion a algo que no mueve dinero solo estorba');
+
+comprobar('confirmar si la pide',
+  cuerpoDelCaso('confirmar').includes('exigirContrasenaDeNuevo('));
+
+comprobar('confirmar solo cobra lo que esta esperando',
+  /\$pedido\['estado'\][\s\S]{0,120}!== 'propuesta'/.test(cuerpoDelCaso('confirmar')),
+  'una compra ya cobrada no puede volver a cobrarse por tocar dos veces');
 
 console.log('');
 if (fallos) {
