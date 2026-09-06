@@ -2146,6 +2146,31 @@
           <button type="submit" class="boton-carmesi" id="boton-enviar">
             Confirmar mi asistencia ✦
           </button>
+
+          <!-- Qué pasa con estos datos. Va DESPUÉS del botón y en chico a
+               propósito: no es una advertencia legal que haya que leer
+               antes de seguir, es la respuesta a "¿y esto a dónde va?"
+               para quien se lo pregunte. Un muro de texto antes del botón
+               no lo leería nadie igual, y de paso haría que algunos no
+               confirmaran.
+
+               ⚠️ EL TEXTO DICE "TUS DATOS", NO "LO QUE ESCRIBAS".
+               Con link personalizado el nombre y el correo YA vienen
+               puestos — los cargó Lucila al invitar (ver la nota de
+               adaptarFormularioConToken en 11-formulario-confirmacion.js).
+               Lo único que agrega el invitado es quién viene y las
+               alergias. Decir "lo que escribas" daría a entender que sus
+               datos aparecieron acá porque él los tecleó, y no es así.
+
+               Las alergias son el dato delicado: es información de salud,
+               y se piden porque la cocina las necesita. Decir para qué
+               convierte "¿por qué me preguntan esto?" en "ah, claro". -->
+          <p class="nota-campo" style="margin-top:1.4rem;opacity:.62;font-size:.82em">
+            Tus datos los usamos solo para organizar la fiesta: saber
+            quiénes vienen, dónde sentarlos y avisarle a la cocina de
+            cualquier alergia. No se comparten con nadie más, y se borran
+            cuando pase el evento.
+          </p>
         </form>
 
         <!-- Lo que se ve después de confirmar -->
@@ -2449,10 +2474,10 @@
      que pesa un 80% menos. Acá abajo se pide la copia liviana; el
      original comentado sigue intacto en codigo/, es el que se edita.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/produccion/01-configuracion.js?v=210"></script>
-<script defer src="codigo/produccion/02-utilidades.js?v=210"></script>
-<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=210"></script>
-<script defer src="codigo/produccion/04-invitado-personalizado.js?v=210"></script>
+<script defer src="codigo/produccion/01-configuracion.js?v=222"></script>
+<script defer src="codigo/produccion/02-utilidades.js?v=222"></script>
+<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=222"></script>
+<script defer src="codigo/produccion/04-invitado-personalizado.js?v=222"></script>
 
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda) — es MARCADO, no script.
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
@@ -2510,7 +2535,7 @@
      para EXISTIR, solo para reaccionar al clic — y ese clic no puede
      llegar antes de que la lista termine de bajar el archivo 20. -->
 <script type="application/json" id="scripts-de-la-escena">
-["codigo/produccion/10-reproductor-de-musica.js?v=210", "codigo/produccion/05-cursor-personalizado.js?v=210", "codigo/produccion/24-lienzo-de-petalos.js?v=210", "codigo/produccion/06-petalos-con-fisica.js?v=210", "codigo/produccion/07-marco-y-enredaderas.js?v=210", "codigo/produccion/08-efectos-de-scroll.js?v=210", "codigo/produccion/09-cuenta-regresiva.js?v=210", "codigo/produccion/11-formulario-confirmacion.js?v=210", "codigo/produccion/12-pase-de-acceso.js?v=210", "codigo/produccion/13-agregar-al-calendario.js?v=210", "codigo/produccion/23-lienzo-de-luz.js?v=210", "codigo/produccion/27-fauna-nocturna.js?v=210", "codigo/produccion/14-haces-de-luz.js?v=210", "codigo/produccion/15-registro-de-confirmaciones.js?v=210", "codigo/produccion/16-volver-arriba.js?v=210", "codigo/produccion/17-joyas-colgantes.js?v=210", "codigo/produccion/18-motas-de-polvo.js?v=210", "codigo/produccion/19-velas.js?v=210", "codigo/produccion/20-boton-de-animaciones.js?v=210", "codigo/produccion/21-monitor-de-rendimiento.js?v=210", "codigo/produccion/22-luz-de-la-hora.js?v=210", "codigo/produccion/25-preguntas-frecuentes.js?v=210", "codigo/produccion/26-mapa-a-pedido.js?v=210"]
+["codigo/produccion/10-reproductor-de-musica.js?v=222", "codigo/produccion/05-cursor-personalizado.js?v=222", "codigo/produccion/24-lienzo-de-petalos.js?v=222", "codigo/produccion/06-petalos-con-fisica.js?v=222", "codigo/produccion/07-marco-y-enredaderas.js?v=222", "codigo/produccion/08-efectos-de-scroll.js?v=222", "codigo/produccion/09-cuenta-regresiva.js?v=222", "codigo/produccion/11-formulario-confirmacion.js?v=222", "codigo/produccion/12-pase-de-acceso.js?v=222", "codigo/produccion/13-agregar-al-calendario.js?v=222", "codigo/produccion/23-lienzo-de-luz.js?v=222", "codigo/produccion/27-fauna-nocturna.js?v=222", "codigo/produccion/14-haces-de-luz.js?v=222", "codigo/produccion/15-registro-de-confirmaciones.js?v=222", "codigo/produccion/16-volver-arriba.js?v=222", "codigo/produccion/17-joyas-colgantes.js?v=222", "codigo/produccion/18-motas-de-polvo.js?v=222", "codigo/produccion/19-velas.js?v=222", "codigo/produccion/20-boton-de-animaciones.js?v=222", "codigo/produccion/21-monitor-de-rendimiento.js?v=222", "codigo/produccion/22-luz-de-la-hora.js?v=222", "codigo/produccion/25-preguntas-frecuentes.js?v=222", "codigo/produccion/26-mapa-a-pedido.js?v=222"]
 </script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin

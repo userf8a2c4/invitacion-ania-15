@@ -56,6 +56,57 @@ RedirectMatch 404 ^/admin/archivos/
   Header always set X-Frame-Options "DENY"
   Header always set X-Content-Type-Options "nosniff"
   Header always set Referrer-Policy "same-origin"
+
+  # ─── HSTS: que el navegador no vuelva a hablar por HTTP ──────────────
+  #
+  # Sin esto, la PRIMERA petición de una sesión puede salir en claro —y
+  # ahí viaja el token del panel—. Basta una red hostil (un wifi de
+  # cafetería) para interceptarla antes de que TLS entre en juego. Con
+  # HSTS, el navegador recuerda que este sitio es solo HTTPS y ni lo
+  # intenta.
+  #
+  # Sin `includeSubDomains` a propósito: esa palabra afectaría a TODOS
+  # los subdominios de aniaxv.com, incluidos los que no existen todavía,
+  # y un año es mucho tiempo para una decisión que no se puede deshacer
+  # rápido. Acá el panel es lo que hay que proteger.
+  #
+  # Sin `preload` por lo mismo: entrar a la lista de precarga de los
+  # navegadores es fácil y salir lleva meses.
+  Header always set Strict-Transport-Security "max-age=31536000"
+
+  # ─── CSP: de dónde puede salir cada cosa (2026-09-05) ───────────────
+  #
+  # POR QUÉ
+  # Hasta ahora nada impedía que un script inyectado se llevara los datos
+  # a otro servidor. El panel maneja nombres, teléfonos, correos y
+  # alergias de 115 personas, y desde hoy también cobros.
+  #
+  # ⚠️ VA EN «Report-Only» A PROPÓSITO.
+  # Una CSP mal escrita rompe el panel entero y en silencio, y acá no hay
+  # PHP local donde probarla. En este modo el navegador NO bloquea nada:
+  # solo escribe en la consola lo que habría bloqueado. Hay que navegar
+  # el panel completo —incluido agregar una tarjeta, que carga el iframe
+  # de Stripe, y el mapa de direcciones— y comprobar que no reporta
+  # nada. Recién entonces se cambia el nombre del encabezado por
+  # `Content-Security-Policy` a secas.
+  #
+  # DE DÓNDE SALE CADA PERMISO (verificado en el código, no supuesto):
+  #   · js.stripe.com ......... Stripe.js y el iframe de la tarjeta
+  #                             (50-pagos.js:450)
+  #   · cdnjs.cloudflare.com .. Leaflet, el mapa de direcciones
+  #                             (49-direcciones.js:380 y :384)
+  #   · tile.openstreetmap.org  las imágenes de ese mapa (:427)
+  #   · blob: ................. el visor de archivos y PDF, que usa
+  #                             URL.createObjectURL (06-piezas.js:1368)
+  #   · 'unsafe-inline' EN ESTILOS y no en scripts: el JS del panel arma
+  #                             HTML con style="…" en 539 sitios. Un
+  #                             estilo no ejecuta código; un script sí, y
+  #                             ahí no hace falta: index.html no tiene ni
+  #                             un <script> inline.
+  #
+  # `frame-ancestors 'none'` hace lo mismo que X-Frame-Options, que se
+  # deja igual para navegadores viejos.
+  Header always set Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://js.stripe.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.stripe.com; font-src 'self' data:; connect-src 'self' https://*.stripe.com https://cdnjs.cloudflare.com; frame-src https://js.stripe.com https://hooks.stripe.com blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 </IfModule>
 
 # ─── Que Authorization llegue a PHP ────────────────────────────────────
