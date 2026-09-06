@@ -543,6 +543,11 @@ const ACCIONES_PERMITIDAS_PARA_MEGABOT = [
   // La única que mueve dinero. Ver la nota en chat.php: proponer no
   // cobra; el cobro sale del botón Confirmar de acá abajo.
   'compras.php?accion=cobrar',
+
+  /* Deja la compra anotada sin cobrar. `confirmar` NO está y no puede
+     estar: es la que dispara el cobro de una propuesta, y eso lo hace
+     una persona. Ver la nota larga en chat.php. */
+  'compras.php?accion=proponer',
 ];
 
 /** El id del último mensaje ya pintado, para pedir solo los nuevos. */
