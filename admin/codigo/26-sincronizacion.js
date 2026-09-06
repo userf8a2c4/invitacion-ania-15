@@ -316,9 +316,12 @@ let ULTIMO_AVISO_DE_COPIA = 0;
  * serían cuatro mensajes seguidos diciendo lo mismo.
  *
  * @param {number} guardadoEn - Marca de tiempo de cuando se guardó.
+ * @param {'sin-red'|'ocupado'} [motivo='sin-red'] - Por qué se está
+ *        mostrando una copia. 'ocupado' es el 429 del servidor, que NO
+ *        es falta de conexión — ver la nota de abajo.
  * @returns {void}
  */
-function avisarDatosGuardados(guardadoEn) {
+function avisarDatosGuardados(guardadoEn, motivo) {
   const ahora = Date.now();
   if (ahora - ULTIMO_AVISO_DE_COPIA < 8000) return;
   ULTIMO_AVISO_DE_COPIA = ahora;
@@ -333,9 +336,28 @@ function avisarDatosGuardados(guardadoEn) {
   const hoy = new Date();
   const esDeHoy = cuando.toDateString() === hoy.toDateString();
 
-  avisar(esDeHoy
-    ? 'Sin conexión. Estás viendo los datos de las ' + hora + '.'
-    : 'Sin conexión. Estás viendo los datos del ' + comoFecha(cuando) + '.', true);
+  /* ⚡ NO SIEMPRE ES FALTA DE CONEXIÓN (2026-09-06)
+   *
+   * Esto decía «Sin conexión» pase lo que pase, y de las tres formas de
+   * llegar acá (03-servidor.js) SOLO UNA es quedarse sin señal. Las
+   * otras dos son que el servidor contestó 429 —«pediste demasiado,
+   * esperá»— que es lo contrario: la red anda perfecta y el servidor
+   * respondió enseguida.
+   *
+   * Carlos lo reportó tal cual: «desde hace unas horas dice que no hay
+   * internet, cuando obviamente me comunico contigo usando internet».
+   * Tenía razón, y el mensaje lo mandaba a revisar el wifi cuando lo
+   * que había que hacer era esperar medio minuto.
+   *
+   * El aviso ahora dice cuál de las dos cosas pasó. Lo que se ve en
+   * pantalla es lo mismo —datos guardados— pero qué hacer al respecto
+   * es distinto, y eso es lo que un aviso tiene que resolver. */
+  const cuando_ = esDeHoy ? 'de las ' + hora : 'del ' + comoFecha(cuando);
+
+  avisar(motivo === 'ocupado'
+    ? 'El servidor pidió esperar un momento. Estás viendo los datos ' +
+      cuando_ + '.'
+    : 'Sin conexión. Estás viendo los datos ' + cuando_ + '.', true);
 }
 
 
