@@ -824,13 +824,20 @@ case 'setup_intent':
            confirmación en ese momento. */
         'usage'                  => 'off_session',
     ],
-    /* Acá la clave NO puede ser fija: un SetupIntent se consume al
-       guardar una tarjeta, y con una clave fija la segunda alta
-       recibiría el mismo intento ya usado y no se podría agregar otra
-       tarjeta nunca más. Con el minuto adentro, un doble toque reusa el
-       mismo intento —que es el caso a evitar— y una alta de verdad más
-       tarde consigue el suyo. */
-    'setup-' . (int) $yo['id'] . '-' . floor(time() / 60));
+    /* ⚡ SIN CLAVE DE IDEMPOTENCIA, A PROPÓSITO (2026-09-05)
+     *
+     * Antes llevaba una con el minuto adentro. Parecía prudente y era un
+     * error: dos aperturas del formulario en el mismo minuto recibían EL
+     * MISMO SetupIntent. Y un SetupIntent se consume al guardar una
+     * tarjeta — así que la segunda apertura se quedaba con uno ya usado,
+     * con el que Stripe no dibuja nada: la pantalla salía sin campos
+     * donde escribir la tarjeta y el botón se colgaba en "Guardando…".
+     *
+     * Acá la idempotencia no protege de nada real: esto no se dispara
+     * con un botón que se pueda tocar dos veces, sino al ABRIR la
+     * pantalla. Un SetupIntent de más no cobra, no cuesta y caduca solo.
+     * Cada apertura, el suyo. */
+    '');
 
     if (!$r['ok']) responderMal($r['error'], 502);
 

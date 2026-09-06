@@ -590,11 +590,66 @@ async function abrirAgregarTarjeta(cfg, deVuelta) {
     appearance: { theme: 'night' },
   });
 
+  /* ⚡ EL BOTÓN NO SE ENCIENDE HASTA QUE EL FORMULARIO ESTÁ DIBUJADO
+   *   (2026-09-05)
+   *
+   * EL SÍNTOMA
+   * La hoja mostraba el aviso y el botón "Guardar la tarjeta", pero sin
+   * ningún campo donde escribirla. Al pulsarlo, se quedaba en
+   * "Guardando…" para siempre.
+   *
+   * LA CAUSA
+   * Acá se hacía mount() y en la línea siguiente se habilitaba el botón.
+   * Pero mount() es asíncrono: solo ARRANCA el dibujado del formulario,
+   * que vive en un iframe de Stripe y puede tardar o fallar. Si no
+   * llegaba a montarse, el botón quedaba activo igual — y confirmSetup()
+   * sin campos que confirmar no resuelve nunca. De ahí el cuelgue.
+   *
+   * Ahora manda el propio elemento: el botón se enciende con `ready`, y
+   * si Stripe no puede cargarlo lo dice en pantalla en vez de dejar una
+   * hoja muda con un botón que no lleva a ningún lado. */
   recuadro.innerHTML = '';
-  elementos.create('payment').mount(recuadro);
-  guardar.disabled = false;
+
+  const campos = elementos.create('payment');
+  let listo = false;
+
+  campos.on('ready', () => {
+    listo = true;
+    guardar.disabled = false;
+  });
+
+  /* Stripe avisa por acá cuando no pudo cargar el formulario (una clave
+     que no corresponde, un SetupIntent ya usado, la red). Sin escucharlo
+     el fallo era invisible. */
+  campos.on('loaderror', evento => {
+    const porque = (evento && evento.error && evento.error.message) ||
+                   'Stripe no pudo cargar el formulario.';
+    recuadro.innerHTML = '<p class="aviso-error">' + seguro(porque) + '</p>';
+    guardar.disabled = true;
+  });
+
+  campos.mount(recuadro);
+
+  /* Y si no dice ni que está listo ni que falló —el caso mudo, que es el
+     peor— se avisa igual. Vale más un mensaje que una pantalla en la que
+     no se puede hacer nada y no se sabe por qué. */
+  setTimeout(() => {
+    if (listo || !recuadro.isConnected || !guardar.disabled) return;
+    recuadro.innerHTML = '<p class="aviso-error">El formulario de Stripe no ' +
+      'terminó de cargar. Cierra y vuelve a abrir esta pantalla; si sigue ' +
+      'igual, revisa la conexión.</p>';
+  }, 15000);
 
   guardar.addEventListener('click', async () => {
+    /* Doble seguro: si algo dejara el botón activo sin formulario
+       montado, confirmSetup() no resolvería nunca y la pantalla quedaría
+       en "Guardando…" para siempre. Antes que colgarse, se dice. */
+    if (!listo) {
+      avisar('El formulario de la tarjeta no terminó de cargar. Cierra y ' +
+             'vuelve a abrir esta pantalla.', true);
+      return;
+    }
+
     /* ⚡ ACÁ SÍ SE PREGUNTA ANTES, Y NO AL REINTENTAR (2026-09-05)
        En el resto se usa mandarTocandoDinero(), que intenta y pide la
        contraseña solo si el servidor la exige. Acá no sirve ese orden:
@@ -619,10 +674,15 @@ async function abrirAgregarTarjeta(cfg, deVuelta) {
     /* `redirect: 'if_required'` evita que Stripe se lleve la página a
        otro lado salvo que el banco lo exija de verdad. Con una tarjeta
        normal se resuelve acá mismo y la hoja no se pierde. */
-    const r = await stripe.confirmSetup({
-      elements: elementos,
-      redirect: 'if_required',
-    });
+    /* Con tope: si Stripe no contesta —su iframe caído, la red a medias—
+       confirmSetup() se queda esperando y el botón diría "Guardando…"
+       indefinidamente. Un minuto es de sobra para una tarjeta. */
+    const r = await Promise.race([
+      stripe.confirmSetup({ elements: elementos, redirect: 'if_required' }),
+      new Promise(rendirse => setTimeout(
+        () => rendirse({ error: { message: 'Stripe no respondió a tiempo. Vuelve a intentar.' } }),
+        60000)),
+    ]);
 
     if (r.error) {
       avisar(r.error.message || 'No se pudo guardar la tarjeta.', true);
