@@ -165,7 +165,7 @@
           <path d="M10 18a2 2 0 0 0 4 0" fill="none" stroke="currentColor"
                 stroke-width="1.5" stroke-linecap="round"/>
         </svg>
-        <em id="burbuja-campana" class="burbuja oculto"></em>
+        <em id="burbuja-campana" class="burbuja oculto" data-cuenta="avisos sin revisar"></em>
       </button>
       <!-- Antes acá estaban los tres puntitos del menú. Con las cuatro
            pestañas de abajo, "Más" ya es una de ellas — el menú no
@@ -179,7 +179,7 @@
           <path d="M18 3v4h-4M6 21v-4h4" fill="none" stroke="currentColor"
                 stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <em id="burbuja-cola" class="burbuja oculto"></em>
+        <em id="burbuja-cola" class="burbuja oculto" data-cuenta="cambios sin mandar"></em>
       </button>
     </div>
   </header>
@@ -252,7 +252,7 @@
               stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
       <span>Gente</span>
-      <em id="burbuja-gente" class="burbuja oculto"></em>
+      <em id="burbuja-gente" class="burbuja oculto" data-cuenta="confirmaciones nuevas"></em>
     </button>
 
     <button class="navegacion__boton" data-ir="dinero">
@@ -264,7 +264,7 @@
               stroke-width="1.5" stroke-linecap="round"/>
       </svg>
       <span>Dinero</span>
-      <em id="burbuja-resumen" class="burbuja burbuja--alerta oculto"></em>
+      <em id="burbuja-resumen" class="burbuja burbuja--alerta oculto" data-cuenta="pagos urgentes"></em>
     </button>
 
     <button class="navegacion__boton" data-ir="mas">
@@ -272,7 +272,7 @@
         <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
       </svg>
       <span>Más</span>
-      <em id="burbuja-correo" class="burbuja oculto"></em>
+      <em id="burbuja-correo" class="burbuja oculto" data-cuenta="correos sin leer"></em>
     </button>
   </nav>
 </div>
@@ -430,6 +430,12 @@
 <!-- Usa campoTelefono/campoListaAmpliable (06, 09) y traer/mandar (03);
      dibujarInvitaciones() se llama desde 08-vista-invitados.js. -->
 <script src="codigo/48-invitaciones.js"></script>
+<!-- Usa campoTexto/campoTelefono/pieDeFormulario (06), botonAgregar (09) y
+     traer/mandar (03); abrirDirecciones() se llama desde 05-navegacion.js. -->
+<script src="codigo/49-direcciones.js"></script>
+<!-- Usa campoTexto/pieDeFormulario (06) y traer/mandar (03);
+     abrirFormasDePago() se llama desde 05-navegacion.js. -->
+<script src="codigo/50-pagos.js"></script>
 <!-- 20-arranque.js va SIEMPRE último: es el que enciende la app y usa
      funciones de todos los anteriores. Por eso el 21 y el 22 se cargan
      antes que él aunque su número sea mayor. -->

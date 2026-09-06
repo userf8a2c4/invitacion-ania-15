@@ -68,15 +68,27 @@ function normalizarRespuestaSeguridad($respuesta) {
     return mb_strtolower(trim(preg_replace('/\s+/', ' ', (string) $respuesta)));
 }
 
-/** Cuántos días vive un token antes de pedir contraseña otra vez. */
-const DIAS_DE_SESION = 90;
+/* Cuántos días vive un token antes de pedir contraseña otra vez.
+ *
+ * ⚡ 60 DÍAS (2026-09-05). Eran 90. Se bajaron a 30 al conectar los
+ * pagos —un teléfono perdido eran tres meses de acceso al dinero— y
+ * subieron a 60 en el mismo día por un motivo mejor: faltan menos de
+ * dos meses para la fiesta, así que 60 días cubre todo lo que queda sin
+ * obligar a nadie a volver a entrar en la semana del evento, que es
+ * cuando menos ganas hay de pelear con una pantalla de login.
+ *
+ * Lo que protege el dinero no es este número: es que cobrar exige
+ * volver a escribir la contraseña (ver exigirContrasenaDeNuevo en
+ * compras.php). Esta sesión larga da acceso a ver y organizar, no a
+ * mover plata. */
+const DIAS_DE_SESION = 60;
 
 /**
  * Cuánto puede durar una sesión COMO MÁXIMO, desde que se abrió.
  *
- * Cada uso corre la caducidad noventa días más adelante. Sin un tope,
- * un token usado a diario no vencía nunca: un teléfono perdido o
- * prestado conservaba el acceso para siempre.
+ * Cada uso corre la caducidad otros DIAS_DE_SESION hacia adelante. Sin
+ * un tope, un token usado a diario no vencía nunca: un teléfono perdido
+ * o prestado conservaba el acceso para siempre.
  *
  * Un año da de sobra para organizar la fiesta —faltan menos de tres
  * meses— sin que nadie tenga que volver a escribir la contraseña por

@@ -1002,13 +1002,43 @@ function abrirDetalleDeInvitado(id) {
     '<div class="campo" style="margin-top:var(--esp-2)">' +
       '<div id="etiquetas-confirmacion"></div>' +
     '</div>' +
+    /* ⚡ EL BOTÓN QUE FALTABA (2026-09-04)
+       Todo lo de esta ficha se guarda SOLO en cuanto se toca: las
+       etiquetas, la mesa, el nombre de cada lugar. No hay ningún cambio
+       pendiente, así que técnicamente no hacía falta un "Guardar".
+
+       Pero desde el otro lado de la pantalla eso no se ve. Se toca una
+       etiqueta, cambia de color, y no pasa nada más: ni un aviso, ni un
+       botón que apretar. La sensación es que el cambio quedó a medias y
+       que falta confirmarlo — y sin dónde hacerlo, uno se queda con la
+       duda de si se guardó.
+
+       Este botón cierra la ficha y refresca la lista, y sobre todo dice
+       en voz alta lo que ya era cierto. La otra mitad del arreglo está
+       en pintarEtiquetasDe() (06-piezas.js): ahora cada etiqueta avisa
+       cuando se guarda, no solo cuando falla. */
+    '<p class="vacio__texto" style="margin-top:var(--esp-4);text-align:center">' +
+      'Todo lo de esta ficha se guarda solo, en cuanto lo tocas.' +
+    '</p>' +
+    '<div class="acciones" style="margin-top:var(--esp-1)">' +
+      '<button class="boton boton--principal boton--ancho" id="listo-invitado">' +
+        'Listo</button>' +
+    '</div>' +
+
     (INVITADOS_EDITABLES
-      ? '<div class="acciones" style="margin-top:var(--esp-4)">' +
+      ? '<div class="acciones" style="margin-top:var(--esp-3)">' +
           '<button class="boton boton--peligro boton--ancho" id="borrar-invitado">' +
             'Borrar</button>' +
         '</div>'
       : '')
   );
+
+  buscar('#listo-invitado', cuerpo).addEventListener('click', () => {
+    cerrarHoja(true);
+    // La lista de atrás puede haber quedado vieja: cambiar una etiqueta
+    // o una mesa cambia lo que muestra cada renglón.
+    dibujarGente();
+  });
 
   if (asiste && gente) {
     dibujarAcompanantes(fila.id, gente, buscar('#bloque-acompanantes', cuerpo));

@@ -187,7 +187,7 @@ if ($vieneDeUnaCarpeta !== '') {
         'siguiente_paso'    => $copiar
             ? ($noEstan
                 ? 'Quedan ' . count($noEstan) . ' sin reponer: buscá esos nombres en un ' .
-                  'respaldo anterior y volvé a correr esto con esa carpeta.'
+                  'respaldo anterior y vuelve a correr esto con esa carpeta.'
                 : 'No falta ninguno.')
             : ($sePueden
                 ? 'Volvé a correrlo con --aplicar para copiar ' . count($sePueden) . '.'
@@ -227,7 +227,7 @@ if (!is_array($respaldo) || !isset($respaldo['datos']) || !is_array($respaldo['d
     terminarRestauracion([
         'error' => 'Esto no parece un respaldo de Ania XV. Se esperaba un ' .
                    'JSON con una clave "datos". Si el archivo salió del ZIP ' .
-                   'cifrado, revisá que se haya extraído entero.',
+                   'cifrado, revisa que se haya extraído entero.',
     ], 1);
 }
 

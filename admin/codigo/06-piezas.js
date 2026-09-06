@@ -319,18 +319,24 @@ async function cerrarHoja(forzar) {
      * queda abierta mostrando el error, que es lo correcto. */
     const dondeGuardar = buscar('#pie-guardar', hoja);
 
-    const respuesta = await confirmarAccion(
-      'Escribiste cosas que todavía no se guardaron.\n\n' +
-      (dondeGuardar
-        ? 'Puedes guardarlas ahora, seguir editando, o cerrar y perderlas.'
-        : 'Si cierras ahora se pierden.'),
-      { confirmar: 'Cerrar y perderlas',
-        cancelar:  'Seguir editando',
-        extra:     dondeGuardar ? 'Guardar y cerrar' : '',
-        peligro:   true });
+    /* SIN DONDE GUARDAR, NO SE PREGUNTA (2026-09-05)
 
-    if (respuesta === 'extra') { dondeGuardar.click(); return; }
-    if (!respuesta) return;
+       Si la hoja no tiene boton de guardar, lo escrito no era un dato a
+       medias: era una busqueda o un filtro. El aviso ahi solo podia
+       ofrecer "Cerrar y perderlas" — una pregunta sin respuesta buena,
+       porque no habia NADA que guardar. Se cierra y ya. */
+    if (dondeGuardar) {
+      const respuesta = await confirmarAccion(
+        'Escribiste cosas que todavía no se guardaron.\n\n' +
+        'Puedes guardarlas ahora, seguir editando, o cerrar y perderlas.',
+        { confirmar: 'Cerrar y perderlas',
+          cancelar:  'Seguir editando',
+          extra:     'Guardar y cerrar',
+          peligro:   true });
+
+      if (respuesta === 'extra') { dondeGuardar.click(); return; }
+      if (!respuesta) return;
+    }
   }
 
   /* Fase 8, la señal más valiosa que antes no existía: qué formulario se
@@ -418,8 +424,26 @@ function prepararHoja() {
  *
  * @returns {string}
  */
+/* BUSCAR NO ES ESCRIBIR (2026-09-05)
+
+   Esto miraba TODOS los campos de la hoja, y ahi caian los buscadores y
+   los filtros. Escribir "lu" para encontrar a alguien en Escanear pases
+   disparaba «Escribiste cosas que todavia no se guardaron» — con la
+   unica salida de "Cerrar y perderlas", porque en esa hoja no hay nada
+   que guardar: es una busqueda.
+
+   Un aviso que salta donde no corresponde ensena a ignorarlo, y el dia
+   que avise de algo de verdad ya nadie lo lee.
+
+   Quedan fuera los campos de busqueda y los que lleven `data-no-es-dato`,
+   para lo que sirve para navegar y no para guardar. */
+const CAMPOS_QUE_SON_DATOS =
+  '#hoja-cuerpo input:not([type="search"]):not([data-no-es-dato]),' +
+  '#hoja-cuerpo textarea:not([data-no-es-dato]),' +
+  '#hoja-cuerpo select:not([data-no-es-dato])';
+
 function loEscritoEnLaHoja() {
-  return buscarTodos('#hoja-cuerpo input, #hoja-cuerpo textarea, #hoja-cuerpo select')
+  return buscarTodos(CAMPOS_QUE_SON_DATOS)
     .map(c => (c.type === 'checkbox' ? (c.checked ? '1' : '0') : c.value))
     .join('');
 }
@@ -2153,6 +2177,14 @@ async function pintarEtiquetasDe(tipo, id, contenedor) {
           // reusó): hace falta para poder quitarla después sin recargar.
           puestas.push({ id: (r && r.etiqueta_id) || (r && r.id), nombre: nombre });
         }
+
+        /* ⚡ AVISAR TAMBIÉN CUANDO SALE BIEN (2026-09-04)
+           Antes solo se hablaba para dar un error. Con el chip cambiando
+           de color como única señal, no había forma de distinguir "ya
+           quedó guardado" de "se ve distinto pero todavía no se mandó",
+           y eso llevó a buscar un botón de guardar que no existía —
+           porque no hacía falta. Un aviso corto lo resuelve. */
+        avisar(estaba ? 'Etiqueta quitada.' : 'Etiqueta puesta.');
       } catch (error) {
         // Se deshace el cambio optimista: el chip vuelve a como estaba.
         chip.classList.toggle('etiqueta-chip--activa', estaba);

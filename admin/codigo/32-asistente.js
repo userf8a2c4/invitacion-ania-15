@@ -540,6 +540,14 @@ const ACCIONES_PERMITIDAS_PARA_MEGABOT = [
   'mesas.php?accion=autoasignar',
   'mesas.php?accion=deshacer',
   'planificador.php?accion=estado_tarea',
+  // La única que mueve dinero. Ver la nota en chat.php: proponer no
+  // cobra; el cobro sale del botón Confirmar de acá abajo.
+  'compras.php?accion=cobrar',
+
+  /* Deja la compra anotada sin cobrar. `confirmar` NO está y no puede
+     estar: es la que dispara el cobro de una propuesta, y eso lo hace
+     una persona. Ver la nota larga en chat.php. */
+  'compras.php?accion=proponer',
 ];
 
 /** El id del último mensaje ya pintado, para pedir solo los nuevos. */
@@ -582,18 +590,87 @@ function vistasParaEnsuciarPorAccion(accion) {
   if (accion.startsWith('presupuesto.php')) return ['resumen', 'dinero'];
   if (accion.startsWith('mesas.php'))       return ['resumen', 'evento', 'invitados'];
   if (accion.startsWith('planificador.php')) return ['resumen', 'evento'];
+  // Una compra cobrada cambia lo gastado, así que Dinero queda viejo.
+  if (accion.startsWith('compras.php'))     return ['resumen', 'dinero'];
   return ['resumen'];
+}
+
+/** Cuánto de la pregunta citada se muestra antes de cortar. */
+const LARGO_DE_CITA_MEGABOT = 80;
+
+/**
+ * El encabezado "En respuesta a: …" de una burbuja que contesta algo
+ * que NO es el mensaje justo anterior.
+ *
+ * ⚡ POR QUÉ EXISTE (2026-09-04)
+ * La cadena de agentes trabaja con cola, y cuando la cola trae atraso
+ * una respuesta puede llegar tanto después que ya se olvidó qué se
+ * preguntó. Pasó: llegó una contestando algo pedido hacía rato, y el
+ * panel la pintó al final del hilo, debajo de cuatro mensajes
+ * distintos, sin nada que la conectara con su pregunta.
+ *
+ * Solo se cita cuando hace falta. Si la respuesta viene pegada a su
+ * pregunta —el caso normal— citarla es ruido: se ve igual mirando la
+ * burbuja de arriba.
+ *
+ * @param {Object} m - La fila que se está por pintar.
+ * @param {Element} hilo - El contenedor, para buscar la pregunta.
+ * @returns {string} HTML, o '' si no hay nada que citar.
+ */
+function htmlDeCitaDeMegaBot(m, hilo) {
+  if (!hilo || !m.en_respuesta_a) return '';
+
+  const citada = hilo.querySelector('[data-mensaje-id="' + m.en_respuesta_a + '"]');
+  // La pregunta no está en pantalla (hilo recortado, o id de otra
+  // sesión): no se inventa un texto que no se tiene.
+  if (!citada) return '';
+
+  // Es la de justo arriba: se ve sola, citarla sobra.
+  const filas = hilo.querySelectorAll('[data-mensaje-id]');
+  if (filas.length && filas[filas.length - 1] === citada) return '';
+
+  const texto = citada.dataset.mensajeTexto || '';
+  if (!texto) return '';
+
+  const corto = texto.length > LARGO_DE_CITA_MEGABOT
+    ? texto.slice(0, LARGO_DE_CITA_MEGABOT).trimEnd() + '…'
+    : texto;
+
+  return '<div class="megabot-cita">En respuesta a: «' + seguro(corto) + '»</div>';
 }
 
 /**
  * El HTML de una burbuja, según quién habla.
  *
+ * ⚡ MEGABOT Y FAB NO SON LO MISMO (2026-09-04)
+ * Las respuestas que resuelve el teléfono (resolverMegaBotOffline y sus
+ * tres vías) se pintaban con `rol: 'megabot'`, idénticas a las del
+ * servicio en línea: misma burbuja, mismo estilo, ningún distintivo. Y
+ * eso se dispara solo —webhook que no acepta en 3 s, o MegaBot en
+ * reposo tras un fallo— así que era invisible desde afuera.
+ *
+ * No es un detalle de etiqueta: FAB contesta con lo que hay en el
+ * teléfono y no tiene detrás la cuota de GrokBot. Creer que una
+ * respuesta suya vino de MegaBot es confiar en algo que nunca miró los
+ * datos que uno supone.
+ *
  * @param {Object} m - Fila de chat_mensajes, con `propuestas` adjuntas.
+ *                     `origen: 'fab'` marca las que resolvió el teléfono.
+ * @param {Element} [hilo] - Para resolver la cita de `en_respuesta_a`.
  * @returns {string}
  */
-function htmlDeBurbujaMegaBot(m) {
+function htmlDeBurbujaMegaBot(m, hilo) {
   const esLucila = m.rol === 'lucila';
   const esSistema = m.rol === 'sistema';
+  const esFab = m.origen === 'fab';
+
+  /* El rótulo va solo en las respuestas: las de Lucila son suyas y no
+     hace falta decírselo, y las de sistema no las firma nadie. */
+  const autor = (!esLucila && !esSistema)
+    ? '<div class="megabot-autor' + (esFab ? ' megabot-autor--fab' : '') + '">' +
+        (esFab ? 'FAB · desde este teléfono' : 'MegaBot') +
+      '</div>'
+    : '';
 
   return '' +
     /* El texto viaja también en un atributo. Sirve para dos cosas:
@@ -606,10 +683,14 @@ function htmlDeBurbujaMegaBot(m) {
        `data-optimista` marca la que todavía espera su id de la base. Se
        borra al adoptarlo, así que una burbuja ya reconciliada nunca se
        vuelve a tomar por otra. */
-    '<div class="megabot-fila megabot-fila--' + m.rol + '" data-mensaje-id="' + seguro(m.id) + '"' +
+    '<div class="megabot-fila megabot-fila--' + m.rol + (esFab ? ' megabot-fila--fab' : '') +
+         '" data-mensaje-id="' + seguro(m.id) + '"' +
          ' data-mensaje-texto="' + seguro(m.texto) + '"' +
          (m.optimista ? ' data-optimista="1"' : '') + '>' +
-      '<div class="megabot-burbuja megabot-burbuja--' + m.rol + '">' +
+      htmlDeCitaDeMegaBot(m, hilo) +
+      autor +
+      '<div class="megabot-burbuja megabot-burbuja--' + m.rol +
+           (esFab ? ' megabot-burbuja--fab' : '') + '">' +
         seguro(m.texto) +
         (m.estado === 'error'
           ? '<div class="megabot-burbuja__error">No se pudo mandar. ' +
@@ -619,7 +700,62 @@ function htmlDeBurbujaMegaBot(m) {
       (!esLucila && !esSistema && m.propuestas && m.propuestas.length
         ? m.propuestas.map(p => htmlDePropuestaMegaBot(p)).join('')
         : '') +
+      htmlDeTiemposDeMegaBot(m) +
     '</div>';
+}
+
+/**
+ * El desglose de cuánto tardó cada salto, plegado.
+ *
+ * SOLO LO VE LA CUENTA OBSERVADORA, y no porque lo decida este archivo:
+ * el servidor manda `latencia` únicamente a esa cuenta (ver `case
+ * 'listar'` en chat.php). Acá no hay ninguna comprobación de permisos
+ * que se pueda saltar desde el navegador — si el campo no viene, no hay
+ * nada que pintar. Es el mismo criterio que el bloque técnico de pagos.
+ *
+ * ⚠️ Los tramos que llegan ya vienen filtrados por deltasDeLatencia():
+ * ahí se descartan los que cruzarían dos relojes distintos. Acá no se
+ * resta nada, solo se muestra lo que el servidor pudo afirmar.
+ *
+ * @param {Object} m
+ * @returns {string}
+ */
+function htmlDeTiemposDeMegaBot(m) {
+  const tramos = m.latencia && m.latencia.tramos;
+  if (!tramos) return '';
+
+  const NOMBRES = {
+    enviar_a_webhook:    'Salir hacia MegaBot',
+    webhook_a_responder: 'MegaBot piensa y contesta',
+    megabot_interno:     'Sus saltos internos',
+    total_servidor:      'Total',
+  };
+
+  const filas = Object.keys(NOMBRES)
+    .filter(clave => typeof tramos[clave] === 'number')
+    .map(clave =>
+      '<div class="megabot-tiempos__fila">' +
+        '<span>' + seguro(NOMBRES[clave]) + '</span>' +
+        '<span>' + seguro(msEnPalabras(tramos[clave])) + '</span>' +
+      '</div>');
+
+  if (!filas.length) return '';
+
+  return '<details class="megabot-tiempos">' +
+      '<summary>Tiempos</summary>' + filas.join('') +
+    '</details>';
+}
+
+/**
+ * Milisegundos en algo legible de un vistazo.
+ *
+ * @param {number} ms
+ * @returns {string}
+ */
+function msEnPalabras(ms) {
+  if (ms < 1000) return ms + ' ms';
+  if (ms < 60000) return (ms / 1000).toFixed(1).replace('.', ',') + ' s';
+  return Math.floor(ms / 60000) + ' min ' + Math.round((ms % 60000) / 1000) + ' s';
 }
 
 /** Texto de cada estado final de una propuesta, para no dejarla muda. */
@@ -755,7 +891,22 @@ function engancharHiloDeMegaBot(hilo) {
       botonConfirmar.disabled = true;
       try {
         const cuerpo = JSON.parse(filaPropuesta.cuerpo_json || '{}');
-        await mandar(filaPropuesta.accion, cuerpo);
+
+        /* ⚡ COBRAR PUEDE PEDIR LA CONTRASEÑA (2026-09-05)
+           Es la única acción de la whitelist que saca dinero, y este
+           botón es uno de sus dos caminos. Lo que autoriza la compra es
+           este Confirmar; la contraseña es la capa de abajo, y el
+           servidor decide si hace falta —vale un rato, así que cinco
+           compras seguidas no la piden cinco veces (ver compras.php)—.
+           Por eso se manda y solo si la exige se pregunta. */
+        if (filaPropuesta.accion.indexOf('compras.php') !== -1) {
+          const hecho = await mandarTocandoDinero(filaPropuesta.accion, cuerpo,
+            'Esta propuesta va a cobrar a la tarjeta del evento.');
+          // Si el cobro salió pero el aviso no, hay que decirlo.
+          contarComoSalioElAviso(hecho && hecho.aviso);
+        } else {
+          await mandar(filaPropuesta.accion, cuerpo);
+        }
         await mandar('chat.php?accion=propuesta_estado', { id: id, estado: 'aceptada' });
         ensuciarVistas.apply(null, vistasParaEnsuciarPorAccion(filaPropuesta.accion));
         if (tarjeta) {
@@ -765,7 +916,10 @@ function engancharHiloDeMegaBot(hilo) {
         }
       } catch (error) {
         botonConfirmar.disabled = false;
-        avisar(error.message, true);
+        /* codigo 0 = cerró la ventana de la contraseña. La propuesta
+           queda como estaba, lista para confirmarla cuando quiera: no es
+           un fallo del que haya que avisar. */
+        if (error && error.codigo !== 0) avisar(error.message, true);
       }
       return;
     }
@@ -837,34 +991,225 @@ async function confirmarAcomodoConVistaPrevia() {
  * @param {Element} hilo
  * @returns {void}
  */
+/* ⚡ EL TOPE ERA MÁS CORTO QUE LA ESPERA NORMAL (2026-09-04)
+ *
+ * Eran 90 s, y una respuesta tarda ~68 s con la cola vacía y bastante
+ * más cuando trae atraso. O sea que el aviso de "esto ya no viene"
+ * saltaba ANTES que la respuesta, casi siempre: no era un tope, era un
+ * falso negativo en cada mensaje. 210 s deja margen sobre la espera
+ * real medida sin volverse eterno. */
+const TOPE_DE_ESPERA_MEGABOT_MS = 210000;
+
+/** Qué decir mientras se espera, según qué pasó al entregar. */
+const NOTA_DE_ENTREGA_MEGABOT = {
+  /* El servidor contesta antes de hablar con MegaBot, así que hay un
+     instante en que todavía no se sabe si aceptó. Dura menos de un
+     segundo: el long-poll trae el estado real enseguida. Ver el bloque
+     del webhook en chat.php. */
+  enviando:  'Entregando…',
+  enviado:   'Entregado · esperando respuesta',
+  error:     'No se pudo entregar a MegaBot',
+  pendiente: 'MegaBot no responde desde hace un rato',
+};
+
+/**
+ * Cuánto lleva esperando, en palabras cortas.
+ *
+ * ⚡ POR QUÉ HAY UN CRONÓMETRO A LA VISTA (2026-09-06)
+ * La respuesta tarda decenas de segundos y no hay forma de acortarlas
+ * desde acá: los saltos entre agentes viven fuera de esta app. Pero una
+ * espera muda no se distingue de algo colgado, y esa duda es justo lo
+ * que lleva a volver a escribir —que suma otro turno a la cola y hace
+ * la espera MÁS larga—. Un número que avanza dice "esto sigue vivo" sin
+ * prometer nada que no se pueda cumplir.
+ *
+ * @param {number} desdeMs
+ * @returns {string}
+ */
+function esperaDeMegaBotEnPalabras(desdeMs) {
+  const s = Math.max(0, Math.round((Date.now() - desdeMs) / 1000));
+  if (s < 60) return s + ' s';
+
+  const m = Math.floor(s / 60);
+  const resto = s % 60;
+  return resto ? m + ' min ' + resto + ' s' : m + ' min';
+}
+
+/** Y qué decir cuando se agotó la espera, para cada caso. */
+const NOTA_DE_ESPERA_AGOTADA_MEGABOT = {
+  enviado:   'Tu mensaje sí llegó a MegaBot y todavía no hay respuesta. ' +
+             'Puede seguir tardando: mandarlo otra vez no lo apura.',
+  error:     'No se pudo entregar a MegaBot. El mensaje quedó guardado, ' +
+             'y puedes reintentarlo cuando quieras.',
+  pendiente: 'No se intentó entregar: MegaBot venía fallando. Se vuelve a ' +
+             'probar solo en un rato.',
+};
+
+/**
+ * Repinta la burbuja de espera con lo que se sabe en este momento:
+ * cuántas preguntas hay en cola, qué pasó al entregar, y si ya se agotó
+ * el tope de espera.
+ *
+ * @param {Element} fila - La fila `.megabot-escribiendo`.
+ * @returns {void}
+ */
+function repintarEsperaDeMegaBot(fila) {
+  if (!fila) return;
+
+  const enCola  = Number(fila.dataset.enCola || '1');
+  const entrega = fila.dataset.entrega || '';
+  const agotada = fila.dataset.agotado === '1';
+
+  const notas = [];
+
+  /* ⚡ EL DOBLE ENVÍO NO APURA: ALARGA (2026-09-04)
+     Sin nada que mirar durante un minuto, lo natural es volver a
+     mandar — y cada reenvío suma un turno entero a la cola de agentes.
+     Pasó: cuatro envíos del mismo pedido dieron UNA respuesta, más
+     tarde. No se bloquea nada; se dice lo que cuesta. */
+  if (enCola > 1) {
+    notas.push(enCola + ' preguntas en cola · cada una retrasa a la anterior');
+  }
+  if (!agotada && NOTA_DE_ENTREGA_MEGABOT[entrega]) {
+    notas.push(NOTA_DE_ENTREGA_MEGABOT[entrega]);
+  }
+
+  /* El tiempo va SIEMPRE, incluso con la espera agotada: ahí es cuando
+     más importa saber si lleva un minuto o quince. Solo se omite si la
+     fila no trae marca de cuándo empezó (una burbuja de antes de esta
+     versión, que sigue en pantalla tras recargar el código). */
+  const desde = Number(fila.dataset.desde || '0');
+  if (desde > 0) notas.push(esperaDeMegaBotEnPalabras(desde));
+
+  const cuerpo = agotada
+    ? '<div class="megabot-burbuja megabot-burbuja--megabot">' +
+        seguro(NOTA_DE_ESPERA_AGOTADA_MEGABOT[entrega] ||
+               'Todavía no llega respuesta. El mensaje quedó mandado.') +
+      '</div>'
+    : '<div class="megabot-burbuja megabot-burbuja--megabot megabot-puntitos" ' +
+           'role="status" aria-label="MegaBot está escribiendo">' +
+        '<span></span><span></span><span></span>' +
+      '</div>';
+
+  fila.innerHTML =
+    '<div class="megabot-autor">MegaBot</div>' +
+    cuerpo +
+    (notas.length
+      ? '<div class="megabot-espera__nota">' + seguro(notas.join(' · ')) + '</div>'
+      : '');
+}
+
+/**
+ * Pinta la burbuja de "está escribiendo" al final del hilo.
+ *
+ * Una sola a la vez: si se manda otro mensaje antes de que llegue la
+ * respuesta del anterior, se reusa la que ya está en vez de apilar dos.
+ *
+ * @param {Element} hilo
+ * @returns {void}
+ */
 function mostrarEscribiendoDeMegaBot(hilo) {
-  if (!hilo || hilo.querySelector('.megabot-escribiendo')) return;
+  if (!hilo) return;
+
+  /* Ya hay una espera en curso: este mensaje entra detrás. Antes esto
+     no se notaba porque el tope de abajo le quitaba la clase a la fila
+     vieja, así que dejaba de reconocerse y se apilaba otra burbuja —de
+     ahí las cuatro "está tardando" una debajo de la otra. */
+  const enCurso = hilo.querySelector('.megabot-escribiendo');
+  if (enCurso) {
+    enCurso.dataset.enCola = String(Number(enCurso.dataset.enCola || '1') + 1);
+    delete enCurso.dataset.agotado;   // hay algo nuevo en camino
+    repintarEsperaDeMegaBot(enCurso);
+    hilo.scrollTop = hilo.scrollHeight;
+    return;
+  }
 
   const fila = document.createElement('div');
   fila.className = 'megabot-fila megabot-fila--megabot megabot-escribiendo';
-  fila.innerHTML =
-    '<div class="megabot-burbuja megabot-burbuja--megabot megabot-puntitos" ' +
-         'role="status" aria-label="MegaBot está escribiendo">' +
-      '<span></span><span></span><span></span>' +
-    '</div>';
+  fila.dataset.enCola = '1';
+  fila.dataset.desde = String(Date.now());
+  repintarEsperaDeMegaBot(fila);
 
   hilo.appendChild(fila);
   hilo.scrollTop = hilo.scrollHeight;
 
-  /* Tope de seguridad. Si MegaBot no contesta nunca —el webhook se cayó
-     después de aceptar el mensaje, por ejemplo— los puntitos quedarían
-     latiendo para siempre, que es la misma mentira que el silencio pero
-     al revés: diría "está por llegar" cuando ya no viene nada. Al
-     minuto y medio se rinden y lo dicen. */
+  /* El cronómetro de la espera. Cada segundo sería ruido visual y
+     trabajo de más; cada cinco alcanza para que se vea avanzar.
+
+     Se apaga solo cuando la fila deja el DOM —la respuesta llegó y
+     quitarEscribiendoDeMegaBot() la retiró—, así que no hace falta
+     recordar el id en ningún lado ni limpiarlo desde afuera. Es la
+     misma forma en que se apaga el reloj del contador de uso. */
+  const reloj = setInterval(() => {
+    if (!document.body.contains(fila)) { clearInterval(reloj); return; }
+    repintarEsperaDeMegaBot(fila);
+  }, 5000);
+
+  /* ⚡ LA CLASE NO SE QUITA (2026-09-04)
+   *
+   * Acá se hacía `fila.classList.remove('megabot-escribiendo')`, y esa
+   * es exactamente la clase que quitarEscribiendoDeMegaBot() busca para
+   * retirar la fila. O sea que al rendirse, el aviso quedaba clavado en
+   * el hilo PARA SIEMPRE: la respuesta real aparecía debajo de un
+   * cartel que decía que algo había fallado, y no había forma de
+   * sacarlo. Ahora solo se marca `agotado` y se repinta: la fila sigue
+   * siendo retirable cuando la respuesta llegue, tarde lo que tarde. */
   setTimeout(() => {
     if (!document.body.contains(fila)) return;
-    fila.classList.remove('megabot-escribiendo');
-    fila.innerHTML =
-      '<div class="megabot-burbuja megabot-burbuja--megabot">' +
-        'Está tardando más de lo normal. Si no llega nada, vuelve a ' +
-        'preguntarme o revisa la conexión.' +
-      '</div>';
-  }, 90000);
+    fila.dataset.agotado = '1';
+    repintarEsperaDeMegaBot(fila);
+  }, TOPE_DE_ESPERA_MEGABOT_MS);
+}
+
+/**
+ * Pinta la línea de "quién está atendiendo" arriba del hilo.
+ *
+ * Solo dice algo cuando hay algo que decir: con MegaBot en pie, el
+ * rótulo de cada burbuja ya lo aclara y una línea fija repitiéndolo
+ * sería ruido. Cuando MegaBot está caído sí importa, porque explica de
+ * antemano por qué las respuestas van a venir de otro lado.
+ *
+ * @param {boolean|undefined} vivo - Lo que dice el servidor.
+ * @returns {void}
+ */
+function pintarQuienAtiendeMegaBot(vivo) {
+  const caja = document.getElementById('megabot-quien');
+  if (!caja) return;
+
+  // `undefined` es "el servidor no lo dijo": no se afirma nada.
+  if (vivo !== false) {
+    caja.textContent = '';
+    caja.hidden = true;
+    return;
+  }
+
+  caja.textContent = 'MegaBot no está respondiendo. Te contesta FAB, ' +
+                     'con lo que hay en este teléfono.';
+  caja.hidden = false;
+}
+
+/**
+ * Anota en la burbuja de espera qué pasó al intentar entregar el
+ * mensaje, para que la espera deje de ser muda.
+ *
+ * ⚡ POR QUÉ (2026-09-04)
+ * Los tres casos se veían idénticos desde acá: el webhook aceptó y
+ * MegaBot está pensando, el webhook no aceptó, o ni se intentó porque
+ * venía fallando. El dato ya viajaba en `estado` de la fila; solo que
+ * nadie lo miraba, y el panel contestaba siempre "revisa la conexión"
+ * —el mismo error de diagnóstico que se corrigió en confirmar.php.
+ *
+ * @param {Element} hilo
+ * @param {string} estado - 'enviado' | 'error' | 'pendiente'
+ * @returns {void}
+ */
+function anotarEntregaDeMegaBot(hilo, estado) {
+  if (!hilo || !estado) return;
+  const fila = hilo.querySelector('.megabot-escribiendo');
+  if (!fila) return;
+
+  fila.dataset.entrega = estado;
+  repintarEsperaDeMegaBot(fila);
 }
 
 /**
@@ -962,7 +1307,11 @@ function pintarMensajesNuevosDeMegaBot(hilo, mensajes) {
     }
 
     (m.propuestas || []).forEach(p => { ESTADO_PROPUESTAS_MEGABOT[p.id] = p; });
-    hilo.insertAdjacentHTML('beforeend', htmlDeBurbujaMegaBot(m));
+    /* El hilo va como segundo argumento para que la cita de
+       `en_respuesta_a` pueda buscar la pregunta. Se arma ANTES de
+       insertar: así la última fila del hilo sigue siendo el mensaje
+       anterior y no esta misma. */
+    hilo.insertAdjacentHTML('beforeend', htmlDeBurbujaMegaBot(m, hilo));
 
     /* Solo los ids de la base hacen avanzar la marca. Los optimistas y
        los de las respuestas offline son 'local-1725…', y
@@ -1228,9 +1577,12 @@ async function resolverMegaBotOffline(hilo, texto) {
   // nada de afuera.
   quitarEscribiendoDeMegaBot(hilo);
 
+  /* `origen: 'fab'` es lo que separa esta respuesta de una de MegaBot.
+     Sin eso las dos se pintan igual y no hay forma de saber cuál
+     contestó — ver la nota de htmlDeBurbujaMegaBot(). */
   const decir = mensaje => pintarMensajesNuevosDeMegaBot(hilo, [{
     id: 'local-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
-    rol: 'megabot', texto: mensaje, estado: 'enviado', propuestas: [],
+    rol: 'megabot', origen: 'fab', texto: mensaje, estado: 'enviado', propuestas: [],
   }]);
 
   /* ─── 1. Entidades: hacer la tarea ─────────────────────────────── */
@@ -1301,12 +1653,18 @@ async function resolverMegaBotOffline(hilo, texto) {
  */
 function crearBurbujaDeTrabajoDeMegaBot(hilo) {
   const fila = document.createElement('div');
-  fila.className = 'megabot-fila megabot-fila--megabot';
+  fila.className = 'megabot-fila megabot-fila--megabot megabot-fila--fab';
   fila.dataset.mensajeId = 'local-trabajo-' + Date.now();
 
-  const caja = document.createElement('div');
-  caja.className = 'megabot-burbuja megabot-burbuja--megabot';
+  // Esto lo hace el teléfono, no MegaBot: se firma como lo que es.
+  const autor = document.createElement('div');
+  autor.className = 'megabot-autor megabot-autor--fab';
+  autor.textContent = 'FAB · desde este teléfono';
 
+  const caja = document.createElement('div');
+  caja.className = 'megabot-burbuja megabot-burbuja--megabot megabot-burbuja--fab';
+
+  fila.appendChild(autor);
   fila.appendChild(caja);
   hilo.appendChild(fila);
   hilo.scrollTop = hilo.scrollHeight;
@@ -1329,9 +1687,11 @@ function pintarSugerenciasEnHiloDeMegaBot(hilo, sugerencias) {
   const idBurbuja = 'local-' + Date.now();
 
   const html =
-    '<div class="megabot-fila megabot-fila--megabot" data-mensaje-id="' + seguro(idBurbuja) + '">' +
-      '<div class="megabot-burbuja megabot-burbuja--megabot">' +
-        'No estoy conectado ahora mismo, pero esto es lo que veo:' +
+    '<div class="megabot-fila megabot-fila--megabot megabot-fila--fab" ' +
+         'data-mensaje-id="' + seguro(idBurbuja) + '">' +
+      '<div class="megabot-autor megabot-autor--fab">FAB · desde este teléfono</div>' +
+      '<div class="megabot-burbuja megabot-burbuja--megabot megabot-burbuja--fab">' +
+        'MegaBot no está contestando ahora mismo, así que esto es lo que veo yo:' +
       '</div>' +
       sugerencias.map((s, i) =>
         '<div class="megabot-propuesta" data-offline-sugerencia="' + i + '">' +
@@ -1395,16 +1755,38 @@ function pintarSugerenciasEnHiloDeMegaBot(hilo, sugerencias) {
  */
 function compactarTiempoDeUsoDeMegaBot(segundos) {
   const minutosTotales = Math.round(segundos / 60);
-  const horas = Math.floor(minutosTotales / 60);
-  const minutos = minutosTotales % 60;
+  const horasTotales   = Math.floor(minutosTotales / 60);
+  const dias           = Math.floor(horasTotales / 24);
+  const horas          = horasTotales % 24;
+  const minutos        = minutosTotales % 60;
 
   // Menos de un minuto: se dice en segundos, no "0 min", que se lee
   // como que ya pasó.
   if (minutosTotales <= 0) return Math.max(0, Math.round(segundos)) + ' s';
-  if (horas <= 0) return minutos + ' min';
-  if (minutos <= 0) return horas + ' h';
-  return horas + ' h ' + minutos + ' min';
+  if (horasTotales <= 0) return minutos + ' min';
+
+  /* ⚡ DÍAS (2026-09-04). La cuota de GrokBot es SEMANAL, así que el
+     reinicio puede estar a varios días — y esta función llegaba hasta
+     las horas: cuatro días y cinco horas se leían como "101 h 0 min".
+     No está mal, pero nadie lee "101 h" y entiende "el jueves".
+
+     Mismo criterio que ya usaba: dos unidades como mucho, y nunca un
+     cero que se lea como que ya pasó ("4 d" a secas, no "4 d 0 h"). */
+  if (dias > 0) return horas > 0 ? dias + ' d ' + horas + ' h' : dias + ' d';
+
+  if (minutos <= 0) return horasTotales + ' h';
+  return horasTotales + ' h ' + minutos + ' min';
 }
+
+/* Desde cuándo el número de uso deja de presentarse como si fuera de
+   ahora, y cuándo directamente se calla. La cuota es SEMANAL: a la hora
+   sigue orientando pero conviene decir de cuándo es, y a los dos días ya
+   no dice nada que valga la pena afirmar. */
+const EDAD_VISIBLE_DE_USO_S = 3600;      // 1 hora
+const EDAD_MAXIMA_DE_USO_S  = 172800;    // 2 días
+
+/** Si el servidor es el de pruebas. Lo dice `listar`, no el navegador. */
+let MEGABOT_EN_PRUEBAS = false;
 
 /** El último uso conocido y el reloj que lo hace bajar en pantalla. */
 let MEGABOT_USO = null;
@@ -1437,7 +1819,19 @@ function arrancarRelojDeUsoDeMegaBot() {
       return;
     }
 
-    if (!(MEGABOT_USO.reinicia_en > 0)) return;
+    /* El dato también envejece entre viaje y viaje. Sin esto, un uso sin
+       reloj se quedaría con la edad que traía al llegar y nunca cruzaría
+       los umbrales de "hace un rato" ni el de callarse. */
+    if (typeof MEGABOT_USO.hace_segundos === 'number') {
+      MEGABOT_USO.hace_segundos += 10;
+    }
+
+    if (!(MEGABOT_USO.reinicia_en > 0)) {
+      // Sin reloj no hay cuenta regresiva, pero sí hay que repintar: la
+      // antigüedad cambió, y pasado el tope el span se oculta solo.
+      pintarUsoDeMegaBot(MEGABOT_USO, true);
+      return;
+    }
 
     MEGABOT_USO.reinicia_en = Math.max(0, MEGABOT_USO.reinicia_en - 10);
 
@@ -1468,7 +1862,46 @@ function pintarUsoDeMegaBot(uso, esDelReloj) {
   if (!span) return;
 
   const tienePorcentaje = uso && typeof uso.porcentaje === 'number';
-  if (!uso || (!tienePorcentaje && !uso.agotado)) {
+
+  /* ⚡ UN DATO VIEJO NO ES UN DATO (2026-09-04)
+   *
+   * El uso solo se refresca cuando MegaBot contesta mandándolo, y casi
+   * nunca lo manda. Así que el número podía tener horas o días y se
+   * pintaba con la misma seguridad que uno recién llegado.
+   *
+   * Sobre una cuota SEMANAL, lo de hace dos días ya no dice nada: el
+   * porcentaje solo pudo haber subido, y cuánto es exactamente lo que no
+   * se sabe. Este archivo ya tiene la regla escrita —"nunca inventa un
+   * dato: sin nada que mostrar, el span queda oculto"— y esto es
+   * aplicarla también al paso del tiempo, que era el caso que faltaba.
+   *
+   * El reloj corriendo es la excepción: mientras `reinicia_en` baja, el
+   * dato se está manteniendo solo y no hace falta desconfiar de él. */
+  const edad = uso && typeof uso.hace_segundos === 'number' ? uso.hace_segundos : null;
+  const relojCorriendo = uso && uso.reinicia_en > 0;
+  const demasiadoViejo = edad !== null && edad > EDAD_MAXIMA_DE_USO_S && !relojCorriendo;
+
+  /* ⚡ EN PRUEBAS, «NO HAY DATO» TAMBIÉN SE DICE (2026-09-06)
+   *
+   * Cuando MegaBot no manda el campo, esto se ocultaba entero. Es lo
+   * correcto para Lucila —inventar un porcentaje sobre la cuota de un
+   * servicio ajeno sería peor que callar— pero hacía que "no lo manda"
+   * y "todo bien" se vieran igual: un hueco. Se perdieron días
+   * creyendo que el contador estaba roto cuando lo que faltaba era el
+   * dato del otro lado.
+   *
+   * En PBE se dice cuál de las dos cosas pasa. Sigue sin inventarse
+   * ningún número: se informa la AUSENCIA, que es un hecho
+   * comprobable, no una estimación. */
+  if (MEGABOT_EN_PRUEBAS && (!uso || (!tienePorcentaje && !uso.agotado))) {
+    span.className = 'hoja__uso';
+    span.innerHTML = '<span class="hoja__uso-cifra">Uso &mdash;</span>' +
+                     '<span class="hoja__uso-pie">MegaBot no informa la cuota</span>';
+    span.hidden = false;
+    return;
+  }
+
+  if (!uso || (!tienePorcentaje && !uso.agotado) || demasiadoViejo) {
     span.textContent = '';
     span.hidden = true;
     span.className = 'hoja__uso';
@@ -1480,24 +1913,41 @@ function pintarUsoDeMegaBot(uso, esDelReloj) {
   if (!esDelReloj) MEGABOT_USO = uso;
 
   const tiempo = uso.reinicia_en > 0 ? compactarTiempoDeUsoDeMegaBot(uso.reinicia_en) : '';
-  let texto = '';
 
-  if (uso.agotado) {
-    // Agotado: lo único que importa es cuándo vuelve.
-    texto = tiempo ? 'Sin cuota · vuelve en ' + tiempo : 'Sin cuota';
-  } else if (tienePorcentaje) {
-    texto = tiempo
-      ? uso.porcentaje + '% usado · se reinicia en ' + tiempo
-      : uso.porcentaje + '% usado';
-  }
+  /* Pasada la hora, el número deja de presentarse como si fuera de
+     ahora. No se esconde —sigue orientando— pero se dice de cuándo es.
+     Con el reloj corriendo no hace falta: ese ya se actualiza solo. */
+  const antiguedad = (!relojCorriendo && edad !== null && edad >= EDAD_VISIBLE_DE_USO_S)
+    ? ' · hace ' + compactarTiempoDeUsoDeMegaBot(edad)
+    : '';
 
-  /* El color dice de un vistazo si hay margen o no, sin tener que leer
-     el número: es lo que se mira de reojo mientras se escribe. */
+  /* ⚡ DOS RENGLONES, NO UNO (2026-09-06)
+   *
+   * Antes era una sola línea larga: "14% usado · se reinicia en 2 d 4 h".
+   * Cabía, pero había que LEERLA para enterarse, y esto es un dato que
+   * se mira de reojo mientras se escribe.
+   *
+   * Ahora la cifra va sola y grande —que es lo único que se mira el 90%
+   * de las veces— y el cuándo vuelve queda abajo en chico, para cuando
+   * de verdad importa. Es el dibujo que pidió Carlos.
+   *
+   * El color sigue diciendo de un vistazo si hay margen: normal hasta
+   * el 70%, ámbar hasta el 90, rojo por encima o sin cuota. */
+  const cifra = uso.agotado ? 'Sin cuota' : 'Uso ' + uso.porcentaje + '%';
+
+  const pie = tiempo
+    ? 'Se restablece en ' + tiempo
+    : (antiguedad ? antiguedad.replace(/^ · /, '') : '');
+
   span.className = 'hoja__uso' +
     (uso.agotado || uso.porcentaje >= 90 ? ' hoja__uso--alerta'
      : uso.porcentaje >= 70 ? ' hoja__uso--ojo' : '');
 
-  span.textContent = texto;
+  span.innerHTML =
+    '<span class="hoja__uso-cifra">' + seguro(cifra) + '</span>' +
+    (pie ? '<span class="hoja__uso-pie">' + seguro(pie) + '</span>' : '');
+
+  const texto = cifra + (pie ? ' · ' + pie : '');
   span.hidden = !texto;
 
   if (texto && !esDelReloj) arrancarRelojDeUsoDeMegaBot();
@@ -1523,6 +1973,11 @@ function abrirAsistente() {
   const chips = delContexto.concat(generales).slice(0, 5);
 
   const cuerpo = abrirHoja('MegaBot',
+    /* Quién atiende, siempre a la vista. Cuando MegaBot no contesta, el
+       que responde es el teléfono (FAB) y antes eso pasaba sin que nadie
+       se enterara: las respuestas salían con la misma cara. Ver la nota
+       de htmlDeBurbujaMegaBot. */
+    '<div id="megabot-quien" class="megabot-quien" hidden></div>' +
     '<div id="megabot-hilo" class="megabot-hilo"></div>' +
 
     '<div class="filtros" style="margin:var(--esp-2) 0">' +
@@ -1561,6 +2016,7 @@ function abrirAsistente() {
         'Escríbele a MegaBot lo que necesites.</p>';
     }
     pintarUsoDeMegaBot(r.uso);
+    pintarQuienAtiendeMegaBot(r.megabot_vivo);
     entrada.focus();
   }).catch(error => {
     hilo.innerHTML = '<p class="aviso-error">' + seguro(error.message) + '</p>';
@@ -1644,12 +2100,34 @@ function abrirAsistente() {
          encolarlo dejaba el hilo mudo esperando una señal que podía
          tardar horas, en vez de dejar que fallara y entraran los
          agentes que contestan desde el teléfono. */
+      /* ⚡ `_clave` FRENA LOS DUPLICADOS (2026-09-06)
+       *
+       * MegaBot señaló dos pares de mensajes repetidos (26/27, 53/54)
+       * que le alargaron la cola: cada duplicado le cuesta una vuelta
+       * entera de agentes, y esa vuelta es la espera que después se
+       * siente como que "el chat tarda".
+       *
+       * El freno ya existía y el chat era el único que no lo usaba: con
+       * `_clave`, cuerpoJson() (_lib/responder.php) reconoce un
+       * reintento del MISMO envío y devuelve la respuesta de la primera
+       * vez sin ejecutar una línea del endpoint — o sea sin insertar
+       * otro mensaje ni despertar a MegaBot de nuevo.
+       *
+       * Se inventa ACÁ y no dentro de mandarSinCola: tiene que ser la
+       * misma en todos los intentos de ESTE mensaje. Una clave nueva por
+       * intento los volvería envíos distintos, que es justo el duplicado
+       * que se quiere evitar (misma razón que encolarEscritura). */
       const r = await mandarSinCola('chat.php?accion=enviar',
-        { texto: texto, pantalla: VISTA_ACTUAL });
+        { texto: texto, pantalla: VISTA_ACTUAL, _clave: claveDeEnvio() });
 
       // La fila ya existe y tiene id: la burbuja que se pintó al toque
       // lo adopta, y así el poll no la pinta de nuevo al lado.
       if (r && r.id) adoptarIdRealDeBurbuja(hilo, idLocal, r.id);
+
+      // Qué pasó al entregar. La espera deja de ser muda: dice si el
+      // mensaje llegó a MegaBot o se quedó en el camino.
+      if (r && r.estado) anotarEntregaDeMegaBot(hilo, r.estado);
+
       if (r && (r.offline || r._offline)) await resolverMegaBotOffline(hilo, texto);
     } catch (error) {
       /* ⚡ UN 429 NO ES "SIN CONEXIÓN" (2026-09-03). El servidor tiene
@@ -1734,13 +2212,15 @@ function abrirAsistente() {
    * El chat podía tumbar el panel entero.
    *
    * LA IDEA
-   * Los 2 segundos hacen falta en un solo momento: mientras se espera
+   * Preguntar seguido hace falta en un solo momento: mientras se espera
    * una respuesta que está por llegar. El resto del tiempo el hilo no
    * cambia solo, y preguntar tan seguido es tirar cuota a la basura.
    *
-   *   · 2 s   mientras hay una respuesta pendiente.
-   *   · 15 s  en reposo.
-   *   · se apaga tras 5 minutos sin novedad, y vuelve al escribir.
+   *   · esperando → una petición abierta (long-poll), que contesta
+   *                 apenas hay algo. Ver la nota de abajo.
+   *   · 15 s      en reposo.
+   *   · se apaga tras 5 minutos sin novedad SI no hay nada pendiente,
+   *     y vuelve al escribir.
    *
    * Con eso, esos mismos diez minutos pasan de ~300 peticiones a ~40. */
   /* Cada apertura del chat se lleva un número. Es lo que permite que
@@ -1748,18 +2228,69 @@ function abrirAsistente() {
      retire sin tocar nada — ver la nota grande en `consultar`. */
   const miGeneracion = ++MEGABOT_GENERACION;
 
-  const POLL_RAPIDO_MS   = 2000;
+  /* ⚡ LONG-POLLING MIENTRAS SE ESPERA (2026-09-04)
+   *
+   * EL PROBLEMA
+   * El ritmo rápido se rendía al minuto (`esperaLarga`) y bajaba a 15 s
+   * aunque siguiera habiendo una respuesta pendiente. Con esperas de
+   * ~68 s eso es puro retraso agregado: la medición del propio MegaBot
+   * cayó a los 66,2 s, o sea SEIS segundos después de que el poll se
+   * hubiera puesto lento. Incluso en el mejor caso, el panel pintaba
+   * tarde.
+   *
+   * LA IDEA
+   * Mientras hay algo pendiente no se pregunta cada tantos segundos: se
+   * deja UNA petición abierta y el servidor contesta apenas aparece la
+   * fila. Entrega en ≤1 s en vez de 2-15 s, y encima gasta MENOS cuota
+   * (~8 peticiones en tres minutos de espera, contra ~38 de antes).
+   *
+   * POR QUÉ SE PUEDE
+   * El panel no usa session_start(): la sesión va por token en la base
+   * (_lib/sesion.php). Con sesiones de archivo, una petición abierta
+   * bloquearía el archivo y congelaría TODO lo demás del mismo usuario.
+   *
+   * EL FALLBACK NO ES OPCIONAL
+   * Este hosting es compartido y puede cortar una petición larga por
+   * límites que no se ven desde acá. Si `esperar=1` falla dos veces
+   * seguidas, se apaga solo y queda el ritmo escalonado de abajo. El
+   * chat nunca depende de que el long-poll funcione. */
   const POLL_REPOSO_MS   = 15000;
   const APAGAR_TRAS_MS   = 300000;   // 5 minutos sin nada nuevo
+  /* Reconexión tras un long-poll que volvió vacío: el servidor ya
+     esperó sus 25 s, no hay por qué esperar más de este lado. */
+  const RECONECTAR_MS    = 300;
+  const FALLOS_PARA_RENDIRSE = 2;
 
   let esperandoRespuesta = false;
   let ultimaNovedad = Date.now();
+  let inicioDeEspera = 0;
+  let longPollSirve = true;
+  let fallosDeLongPoll = 0;
+  /* El último estado de entrega ya avisado, para no repetirlo en cada
+     vuelta: el servidor lo manda siempre, cambie o no. */
+  let entregaAvisada = '';
+
+  /* El escalonado de reserva. Los 2 s hacen falta al principio, cuando
+     una respuesta rápida todavía es posible; después no tiene sentido
+     sostenerlos contra una cadena que tarda un minuto. */
+  const ritmoDeEspera = () => {
+    const esperando = Date.now() - inicioDeEspera;
+    if (esperando < 30000) return 2000;
+    if (esperando < 90000) return 5000;
+    return 10000;
+  };
 
   /** Lo llama `enviar` al mandar: hay respuesta en camino. */
   MEGABOT_ESPERAR_RESPUESTA = () => {
     esperandoRespuesta = true;
     ultimaNovedad = Date.now();
-    programarPoll(POLL_RAPIDO_MS);
+    inicioDeEspera = Date.now();
+    /* Hay un mensaje nuevo en camino: el estado de entrega del anterior
+       ya no dice nada de éste. Sin esto, mandar otro después de uno que
+       falló no volvería a avisar —el valor sería el mismo 'error'— y la
+       caída al modo local no se dispararía la segunda vez. */
+    entregaAvisada = '';
+    programarPoll(0);
   };
 
   const consultar = async () => {
@@ -1801,8 +2332,21 @@ function abrirAsistente() {
     if (document.hidden) { programarPoll(POLL_REPOSO_MS); return; }
 
     let huboNovedad = false;
+    /* Solo se deja la petición abierta cuando hay algo que esperar. En
+       reposo no hay nada que llegue solo, y tener un worker de PHP
+       ocupado para no recibir nada sería peor que preguntar cada 15 s. */
+    const conEspera = longPollSirve && esperandoRespuesta;
     try {
-      const r = await traer('chat.php?accion=listar&despues_de=' + MEGABOT_ULTIMO_ID);
+      /* El tope del cliente tiene que ser MAYOR que el del servidor (25 s),
+         o el navegador aborta la espera antes de que el servidor tenga
+         ocasión de contestar y el long-poll no sirve para nada. Los 8 s
+         generales de CONFIGURACION la cortarían siempre. */
+      const r = await traer(
+        'chat.php?accion=listar&despues_de=' + MEGABOT_ULTIMO_ID +
+        (conEspera ? '&esperar=1' : ''),
+        conEspera ? { segundosDeEspera: 30 } : undefined
+      );
+      if (conEspera) fallosDeLongPoll = 0;
 
       /* ⚡ LA MARCA SE VUELVE A MIRAR DESPUÉS DEL await (2026-09-03)
        *
@@ -1843,7 +2387,34 @@ function abrirAsistente() {
       if (huboNovedad) quitarEscribiendoDeMegaBot(hilo);
 
       pintarMensajesNuevosDeMegaBot(hilo, llegaron);
+      MEGABOT_EN_PRUEBAS = !!r.pruebas;
       pintarUsoDeMegaBot(r.uso);
+      pintarQuienAtiendeMegaBot(r.megabot_vivo);
+
+      /* ⚡ CÓMO TERMINÓ LA ENTREGA (2026-09-06)
+       *
+       * Desde que `enviar` contesta antes de hablar con el webhook, ya
+       * no puede decir si MegaBot lo aceptó: eso se sabe un instante
+       * después. El servidor lo manda acá en cada vuelta.
+       *
+       * Si falló, esta es la ÚNICA forma de enterarse —el mensaje ya
+       * está pintado, así que el poll no lo vuelve a traer—, y sin
+       * enterarse la pregunta se quedaba esperando a alguien que nunca
+       * la recibió en vez de pasársela a los agentes del teléfono.
+       *
+       * `entregaAvisada` evita repetirlo en cada vuelta del poll: el
+       * estado sigue siendo 'error' mientras no se mande otra cosa. */
+      if (esperandoRespuesta && r.entrega && r.entrega !== entregaAvisada) {
+        entregaAvisada = r.entrega;
+        anotarEntregaDeMegaBot(hilo, r.entrega);
+
+        if (r.entrega === 'error' || r.entrega === 'pendiente') {
+          esperandoRespuesta = false;
+          const ultimoSuyo = [...hilo.querySelectorAll('.megabot-fila--lucila')].pop();
+          const texto = ultimoSuyo ? ultimoSuyo.dataset.mensajeTexto : '';
+          if (texto) await resolverMegaBotOffline(hilo, texto);
+        }
+      }
 
       // Llegó lo que se esperaba: se vuelve al ritmo de reposo.
       if (huboNovedad) {
@@ -1857,8 +2428,17 @@ function abrirAsistente() {
         ultimaNovedad = Date.now();
       }
     } catch (error) {
-      // Sin red: se reintenta en el próximo tick, sin avisar cada vez
-      // que algo falló.
+      /* Sin red: se reintenta en el próximo tick, sin avisar cada vez
+         que algo falló.
+
+         Pero si lo que falló fue una petición CON espera, puede ser el
+         hosting cortando la conexión larga —cosa que desde acá no se
+         distingue de un problema de red—. A la segunda seguida se deja
+         de usar y queda el escalonado: vale más un chat un poco más
+         lento que uno que se queda mudo. */
+      if (conEspera && ++fallosDeLongPoll >= FALLOS_PARA_RENDIRSE) {
+        longPollSirve = false;
+      }
     }
 
     /* La petición también puede fallar DESPUÉS de que el chat se
@@ -1866,23 +2446,28 @@ function abrirAsistente() {
        hasta programarPoll() y le pisaba el temporizador al nuevo. */
     if (MEGABOT_GENERACION !== miGeneracion) return;
 
-    /* Cinco minutos sin una sola novedad: el chat está abierto pero
-       nadie lo está usando. Se apaga y vuelve solo al escribir. */
-    if (!huboNovedad && Date.now() - ultimaNovedad > APAGAR_TRAS_MS) {
+    /* ⚡ NO SE APAGA CON ALGO PENDIENTE (2026-09-04)
+     *
+     * Cinco minutos sin novedad apagaban el poll del todo. Para un chat
+     * que nadie está usando está bien; para uno que ESTÁ ESPERANDO una
+     * respuesta, no: la fila llegaba a la base y el hilo se quedaba
+     * mudo hasta reabrir la hoja. Ése era el "a veces no responde
+     * nunca", y con la cola atrasada pasaba seguido.
+     *
+     * El apagado por inactividad ahora solo aplica cuando no hay nada
+     * pendiente. */
+    if (!huboNovedad && !esperandoRespuesta &&
+        Date.now() - ultimaNovedad > APAGAR_TRAS_MS) {
       MEGABOT_INTERVALO = null;
       return;
     }
 
-    /* El ritmo rápido tiene tope. Preguntar cada 2 s está bien para los
-       segundos en que la respuesta está por llegar; sostenerlo cinco
-       minutos contra un MegaBot que no va a contestar son 150
-       peticiones tiradas, de una cuota que comparte con el resto del
-       panel. Pasado el minuto se baja a reposo sin dejar de escuchar. */
-    const esperaLarga = Date.now() - ultimaNovedad > 60000;
-
-    programarPoll(esperandoRespuesta && !esperaLarga
-      ? POLL_RAPIDO_MS
-      : POLL_REPOSO_MS);
+    /* Con espera pendiente: si el long-poll sirve, se reconecta casi al
+       toque (el servidor ya puso los 25 s de paciencia). Si no, queda
+       el escalonado. En reposo, 15 s como siempre. */
+    programarPoll(!esperandoRespuesta ? POLL_REPOSO_MS
+                : longPollSirve       ? RECONECTAR_MS
+                                      : ritmoDeEspera());
   };
 
   /* setTimeout encadenado y no setInterval: con setInterval, una

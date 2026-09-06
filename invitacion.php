@@ -297,7 +297,7 @@ echo json_encode([
     /* Solo en el entorno de pruebas: habilita el botón de reinicio. La
        decisión la toma el SERVIDOR, no el navegador, para que en el sitio
        real ese botón no pueda existir aunque alguien lo fuerce. */
-    'es_pruebas'        => (strpos((string) ($_SERVER['HTTP_HOST'] ?? ''), 'pbe.') === 0),
+    'es_pruebas'        => estamosEnPruebas(),
     'asiste'            => $inv['asiste'] !== null ? (int) $inv['asiste'] === 1 : true,
     'adultos'           => (int) ($inv['adultos'] ?? $inv['pases']),
     'ninos'             => (int) ($inv['ninos'] ?? 0),
