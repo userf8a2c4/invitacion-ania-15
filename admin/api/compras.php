@@ -125,6 +125,48 @@ function modoDeClaveStripe($clave) {
 }
 
 /**
+ * De qué cuenta de Stripe es una clave.
+ *
+ * ⚡ POR QUÉ HACE FALTA (2026-09-05)
+ *
+ * Las dos claves pueden ser las dos de prueba y aun así no servir: si
+ * salieron de CUENTAS distintas —o de dos sandboxes— nada funciona. Y
+ * falla tarde y feo: la pantalla de agregar tarjeta se abría sin campos
+ * donde escribirla, y Stripe solo lo explicaba dentro de su propio
+ * iframe, en inglés:
+ *
+ *     "The client_secret provided does not match any associated
+ *      SetupIntent on this account."
+ *
+ * Pasó de verdad al crear la clave restringida en un sandbox distinto
+ * del que tenía la publicable. Es un error facilísimo de cometer —las
+ * dos son de prueba, las dos parecen bien— y no se ve hasta que alguien
+ * intenta guardar una tarjeta.
+ *
+ * Stripe pone el identificador de la cuenta DENTRO de la clave, justo
+ * después de `_test_`/`_live_` y antes del secreto: en `pk_test_51ABC…`
+ * y `rk_test_51ABC…` ese `51ABC…` es el mismo si son de la misma
+ * cuenta. No es documentación oficial de Stripe, así que se compara solo
+ * cuando las dos claves tienen esa forma; si alguna no la tiene, se
+ * devuelve '' y quien pregunte se queda sin opinar, en vez de inventar
+ * una alarma falsa.
+ *
+ * @param string $clave
+ * @return string El identificador de cuenta, o '' si no se reconoce.
+ */
+function cuentaDeClaveStripe($clave) {
+    $clave = trim((string) $clave);
+    if ($clave === '') return '';
+
+    // pk_test_51ABC...  →  51ABC...  (los primeros caracteres alcanzan:
+    // es un prefijo estable, y comparar la clave entera no serviría
+    // porque el resto es el secreto de cada una).
+    if (!preg_match('/_(?:test|live)_([A-Za-z0-9]{10,})/', $clave, $m)) return '';
+
+    return substr($m[1], 0, 16);
+}
+
+/**
  * La clave publicable que se está usando: la del panel, o la del .env
  * si el panel no tiene ninguna.
  *
@@ -404,7 +446,20 @@ function losPagosEstanListos() {
     if ($pub === '' || $sec === '') return false;
 
     $modoPub = modoDeClaveStripe($pub);
-    return $modoPub !== '' && $modoPub === modoDeClaveStripe($sec);
+    if ($modoPub === '' || $modoPub !== modoDeClaveStripe($sec)) return false;
+
+    /* Y de la misma cuenta. Dos claves de prueba de cuentas distintas
+       pasan todo lo anterior y no sirven para nada: Stripe rechaza el
+       client_secret al abrir el formulario. Si no se puede saber —una
+       clave con forma rara— no se bloquea nada: se deja pasar y que
+       Stripe opine, en vez de impedir cobrar por una sospecha. */
+    $cuentaPub = cuentaDeClaveStripe($pub);
+    $cuentaSec = cuentaDeClaveStripe($sec);
+    if ($cuentaPub !== '' && $cuentaSec !== '' && $cuentaPub !== $cuentaSec) {
+        return false;
+    }
+
+    return true;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -744,9 +799,23 @@ case 'config':
 
         'nombre_en_env'    => STRIPE_CLAVE_SECRETA_EN_ENV,
         'modos_coinciden'  => ($modoPublicable !== '' && $modoPublicable === $modoSecreta),
+
+        /* Si además son de la MISMA cuenta de Stripe. Dos claves de
+           prueba de cuentas distintas pasan todas las demás
+           comprobaciones y no funcionan — ver cuentaDeClaveStripe().
+           `null` significa "no se pudo saber", que no es lo mismo que
+           "no coinciden" y el panel no debe tratarlo igual. */
+        'misma_cuenta'     => (function () use ($publicable, $secreta) {
+            $a = cuentaDeClaveStripe($publicable);
+            $b = cuentaDeClaveStripe($secreta);
+            if ($a === '' || $b === '') return null;
+            return $a === $b;
+        })(),
         'modo_esperado'    => $esPruebas ? 'prueba' : 'real',
-        'listo'            => ($publicable !== '' && $secreta !== ''
-                               && $modoPublicable !== '' && $modoPublicable === $modoSecreta),
+        // Una sola verdad sobre si se puede cobrar: la misma función que
+        // usan las acciones. Antes esto repetía la regla a mano y podía
+        // decir "listo" cuando el cobro iba a fallar.
+        'listo'            => losPagosEstanListos(),
     ]);
     break;
 
@@ -781,6 +850,24 @@ case 'guardar_config':
 
         if (modoDeClaveStripe($publicable) === '') {
             responderMal('No reconozco esa clave: tendría que decir _test_ o _live_ en el medio.', 400);
+        }
+
+        /* ⚠️ Y QUE SEA DE LA MISMA CUENTA QUE LA SECRETA.
+           Este es el momento de decirlo: cuando alguien la pega. Si se
+           deja pasar, todo parece bien —las dos de prueba, el estado en
+           verde— y el error aparece mucho después, al abrir el
+           formulario de tarjeta, dicho por Stripe en inglés y dentro de
+           su iframe. Pasó el 5 de septiembre y costó una tarde. */
+        $secretaPuesta = trim((string) env(STRIPE_CLAVE_SECRETA_EN_ENV, ''));
+        $cuentaNueva   = cuentaDeClaveStripe($publicable);
+        $cuentaSecreta = cuentaDeClaveStripe($secretaPuesta);
+
+        if ($cuentaNueva !== '' && $cuentaSecreta !== '' && $cuentaNueva !== $cuentaSecreta) {
+            responderMal(
+                'Esa clave publicable es de otra cuenta de Stripe: no coincide con la ' .
+                'que está en el servidor. Las dos tienen que salir de la MISMA pantalla ' .
+                'de claves — si creaste la restringida en otro sandbox, copia de ahí ' .
+                'también la publicable.', 400);
         }
     }
 

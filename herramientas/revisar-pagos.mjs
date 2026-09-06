@@ -206,6 +206,47 @@ comprobar('no se anota en la bitácora',
 comprobar('no se guarda en ninguna tabla',
   !/(insertar|actualizar)\([^;]*'contrasena'/.test(php));
 
+
+/* --- 6. Las dos claves, de la misma cuenta ------------------------- */
+
+console.log('\nLas dos claves tienen que ser de la misma cuenta\n');
+
+/* El caso real del 2026-09-05: publicable y restringida las dos de
+   prueba, pero de sandboxes distintos. Todo pasaba las comprobaciones y
+   el formulario de tarjeta salia vacio, con Stripe explicandolo en
+   ingles dentro de su iframe. Aca se replica cuentaDeClaveStripe() tal
+   como esta en el PHP para comprobar que distingue los casos. */
+const comoElPhp = (clave) => {
+  const m = /_(?:test|live)_([A-Za-z0-9]{10,})/.exec(String(clave || ''));
+  return m ? m[1].slice(0, 16) : '';
+};
+
+const PK_A = 'pk_test_51UC7NdAwSDHONOWRcyJtGMv2qEKYoddr3BV1vo0xdg7B1Kc2Yvq';
+const RK_A = 'rk_test_51UC7NdAwSDHONOWRotracosaqueesotrosecreto12345';
+const RK_B = 'rk_test_51UC7j6BbW5nITFIjotracuentadistinta9876543210';
+
+comprobar('dos claves de la misma cuenta se reconocen',
+  comoElPhp(PK_A) !== '' && comoElPhp(PK_A) === comoElPhp(RK_A));
+
+comprobar('dos claves de cuentas distintas NO se confunden',
+  comoElPhp(PK_A) !== comoElPhp(RK_B),
+  'ese era el caso que dejaba el formulario vacio');
+
+comprobar('una clave con forma rara no opina',
+  comoElPhp('esto-no-es-una-clave') === '',
+  'sin poder saberlo, no se bloquea el cobro por una sospecha');
+
+comprobar('el servidor comprueba la cuenta al guardar la publicable',
+  cuerpoDelCaso('guardar_config').includes('cuentaDeClaveStripe('),
+  'hay que decirlo cuando se pega, no cuando falle el formulario');
+
+comprobar('y losPagosEstanListos la tiene en cuenta',
+  cuerpoDeFuncion('losPagosEstanListos').includes('cuentaDeClaveStripe('));
+
+comprobar('config no repite la regla a mano',
+  /'listo'\s*=>\s*losPagosEstanListos\(\)/.test(php),
+  'dos definiciones de "se puede cobrar" acaban contradiciendose');
+
 console.log('');
 if (fallos) {
   console.log('✗ ' + fallos + ' guarda(s) del dinero fallaron.\n');
