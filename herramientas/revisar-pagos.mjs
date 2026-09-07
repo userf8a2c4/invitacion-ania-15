@@ -372,6 +372,54 @@ comprobar('el panel solo ofrece Cancelar en propuestas',
 comprobar('el panel solo ofrece Devolver en cobradas',
   /estado === 'cobrada'[\s\S]{0,200}data-devolver/.test(panel));
 
+/* ─── El interruptor del cobro (2026-09-06) ──────────────────────────
+ *
+ * Desde hoy la app NO cobra por defecto: quien compra es GrokBot, en la
+ * tienda. El cobro queda apagado y detras de un interruptor. Lo que hay
+ * que garantizar es que apagado signifique apagado de verdad. */
+
+console.log('\nEl interruptor del cobro\n');
+
+const lib = readFileSync(join(AQUI, '..', 'admin', 'api', '_lib', 'pagos.php'), 'utf8');
+
+comprobar('el interruptor vive en _lib (chat.php tambien lo necesita)',
+  /function elCobroEstaActivo/.test(lib) && !/function elCobroEstaActivo/.test(php),
+  'dos copias de esta regla terminarian diciendo cosas distintas');
+
+comprobar('apagado por defecto',
+  /valor'\] === '1'/.test(lib),
+  'sin ajuste guardado tiene que ser NO cobrar: un sistema que mueve dinero por omision esta al reves');
+
+for (const accion of ['cobrar', 'reembolsar']) {
+  comprobar(accion + ' exige el interruptor encendido',
+    cuerpoDelCaso(accion).includes('exigirCobroActivo('),
+    'con el cobro apagado no puede haber ningun camino que mueva dinero');
+}
+
+comprobar('confirmar solo cobra con el interruptor encendido',
+  /if \(!elCobroEstaActivo\(\)\)[\s\S]{0,900}'confirmada'/.test(cuerpoDelCaso('confirmar')),
+  'apagado tiene que registrar, no cobrar');
+
+comprobar('confirmar solo pide contrasena si va a cobrar',
+  /if \(elCobroEstaActivo\(\)\)[\s\S]{0,200}exigirContrasenaDeNuevo/.test(cuerpoDelCaso('confirmar')),
+  'una friccion que no protege nada ensena a teclear en piloto automatico');
+
+/* Se busca la LLAMADA, no la mencion: el comentario que explica por que
+   ya no esta dice «Sin exigirPagosListos()», y un includes() a secas lo
+   contaba como si la funcion siguiera ahi. La llamada empieza renglon
+   con su indentacion; la mencion vive dentro de un comentario. */
+comprobar('proponer ya NO exige Stripe',
+  !/^\s*exigirPagosListos\(\);/m.test(cuerpoDelCaso('proponer')),
+  'era lo que impedia que MegaBot propusiera unos manteles');
+
+comprobar('no se puede encender sin con que cobrar',
+  /\$encender && !losPagosEstanListos\(\)/.test(cuerpoDelCaso('activar_cobro')),
+  'el interruptor prometeria algo que falla al primer cobro');
+
+comprobar('el panel esconde las tarjetas con el cobro apagado',
+  /cfg\.cobro_activo && cfg\.listo/.test(panel),
+  'un formulario de tarjeta que no puede hacer nada es peor que no mostrarlo');
+
 console.log('');
 if (fallos) {
   console.log('✗ ' + fallos + ' guarda(s) del dinero fallaron.\n');

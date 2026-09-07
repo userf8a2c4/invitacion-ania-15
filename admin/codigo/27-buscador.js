@@ -70,7 +70,7 @@ const DONDE_BUSCAR = [
        abrir nada, y la alergia va al lado porque es lo segundo que se
        pregunta cuando alguien se sienta. */
     pie: r => [
-      r.mesa ? 'Mesa ' + r.mesa : 'Sin mesa',
+      r.mesa ? comoSeLlamaLaMesa(r.mesa) : 'Sin mesa',
       r.alergias ? '⚠ ' + r.alergias : '',
       r.codigo,
     ].filter(Boolean).join(' · '),

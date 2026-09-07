@@ -389,8 +389,25 @@ function construirContexto($pantalla, $usuario) {
          * Ahora las dos preguntan a la misma funcion (_lib/pagos.php).
          * Se le suma que haya con que pagar, que es cosa del contexto y
          * no de las claves. */
-        $contexto['compras']['pagos_listos'] =
-            losPagosEstanListos() && count($contexto['compras']['metodos']) > 0;
+        /* ⚡ CON EL COBRO APAGADO, PROPONER SIEMPRE SE PUEDE (2026-09-06)
+         *
+         * `pagos_listos` decía si había Stripe conectado y una tarjeta
+         * guardada. Mientras la app cobraba, eso era exactamente la
+         * pregunta correcta. Ya no: quien compra es GrokBot, en la
+         * tienda, y la app solo propone, registra y dice a dónde
+         * entregar.
+         *
+         * Si esto siguiera mirando Stripe, MegaBot vería `false` y se
+         * negaría a proponer unos manteles porque no hay una tarjeta que
+         * ya no hace falta.
+         *
+         * Lo único que de verdad hace falta para proponer es tener a
+         * dónde entregar. */
+        $contexto['compras']['cobro_activo'] = elCobroEstaActivo();
+
+        $contexto['compras']['pagos_listos'] = elCobroEstaActivo()
+            ? (losPagosEstanListos() && count($contexto['compras']['metodos']) > 0)
+            : count($contexto['compras']['direcciones']) > 0;
 
         /* ⚡ LAS COMPRAS QUE YA EXISTEN (2026-09-06)
          *
