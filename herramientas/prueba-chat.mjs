@@ -188,8 +188,8 @@ const espera = new ElementoFalso();
 espera.dataset.enCola = '1';
 espera.dataset.entrega = 'enviado';
 M.repintarEsperaDeMegaBot(espera);
-comprobar('mientras espera, muestra los puntitos',
-  espera.innerHTML.includes('megabot-puntitos'));
+comprobar('mientras espera, muestra las etapas',
+  espera.innerHTML.includes('megabot-etapas'));
 comprobar('y dice que se entregó',
   espera.innerHTML.includes('Entregado'), espera.innerHTML);
 
@@ -326,6 +326,56 @@ filaVieja.dataset.entrega = 'enviado';
 M.repintarEsperaDeMegaBot(filaVieja);
 comprobar('sin marca de inicio, no inventa un tiempo',
   !/\d+ s/.test(filaVieja.innerHTML), filaVieja.innerHTML);
+
+/* ---- Las etapas no pueden mostrar un avance que no ocurrió ---- */
+
+const etapa = (entrega, extra) => {
+  const f = new ElementoFalso();
+  f.dataset.enCola = '1';
+  f.dataset.entrega = entrega;
+  f.dataset.desde = String(Date.now() - 20000);
+  if (extra) Object.assign(f.dataset, extra);
+  M.repintarEsperaDeMegaBot(f);
+  return f.innerHTML;
+};
+
+comprobar('recién mandado: NO dice que MegaBot lo recibió',
+  !etapa('enviando').includes('MegaBot lo recibió'),
+  'sería dibujar un avance que todavía no pasó');
+
+comprobar('recién mandado: tampoco dice que está pensando',
+  !etapa('enviando').includes('pensando'));
+
+comprobar('entregado: ahí sí lo recibió y está pensando',
+  etapa('enviado').includes('MegaBot lo recibió') &&
+  etapa('enviado').includes('pensando'));
+
+comprobar('si no llegó, lo dice y NO finge que piensa',
+  etapa('error').includes('No llegó a MegaBot') &&
+  !etapa('error').includes('pensando'));
+
+comprobar('nunca hay una etapa «despertó»',
+  !etapa('enviado').includes('despert'),
+  'esa marca llega con la respuesta, cuando ya no sirve para esperar');
+
+/* ---- «Suele tardar»: medido, y honesto cuando se pasa ---- */
+
+comprobar('sin medición, no dice cuánto suele tardar',
+  !etapa('enviado').includes('suele tardar'));
+
+comprobar('con medición y aún dentro, lo dice',
+  etapa('enviado', {sueleTardar: '60'}).includes('suele tardar'));
+
+comprobar('pasado ese tiempo, se calla',
+  !(() => {
+    const f = new ElementoFalso();
+    f.dataset.enCola = '1'; f.dataset.entrega = 'enviado';
+    f.dataset.desde = String(Date.now() - 90000);   // van 90 s
+    f.dataset.sueleTardar = '60';                   // solía tardar 60
+    M.repintarEsperaDeMegaBot(f);
+    return f.innerHTML;
+  })().includes('suele tardar'),
+  'insistir en «suele tardar 1 min» cuando ya van dos es discutirle a quien mira');
 
 comprobar('«enviando» tiene texto propio, no queda muda',
   (() => {
