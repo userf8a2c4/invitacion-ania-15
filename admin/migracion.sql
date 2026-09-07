@@ -1265,6 +1265,14 @@ CREATE TABLE IF NOT EXISTS chat_mensajes (
   -- FK a propósito: si algún día se borra el mensaje citado, la
   -- respuesta tiene que seguir existiendo — se deja de citar y ya.
   en_respuesta_a  INT DEFAULT NULL,
+  -- El pase de un solo uso con el que se puede contestar ESTE mensaje
+  -- (2026-09-07). Viaja en el webhook y evita que MegaBot tenga que
+  -- guardar una clave permanente en su memoria. Se guarda el HASH y
+  -- nunca el pase, igual que los tokens de sesión. NULL en la enorme
+  -- mayoría de las filas: las respuestas de MegaBot no llevan pase, y
+  -- el de un mensaje contestado ya se quemó.
+  respuesta_token_hash   VARCHAR(64) DEFAULT NULL,
+  respuesta_token_caduca DATETIME DEFAULT NULL,
   creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY por_hilo (hilo_id, id),
   CONSTRAINT chat_msg_hilo FOREIGN KEY (hilo_id)
