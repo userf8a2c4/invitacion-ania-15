@@ -291,45 +291,115 @@ async function abrirFormasDePago() {
       (esPbe ? 'Estás en PRUEBAS (pbe)' : 'Estás en el sitio REAL (producción)') +
     '</div>' +
 
-    '<div style="margin-top:var(--esp-3)">' + estadoDeLaConexionDePagos(cfg) + '</div>' +
+    /* ⚡ EL INTERRUPTOR, ANTES QUE NADA (2026-09-06)
+     *
+     * Es lo primero porque decide qué significa todo lo de abajo. Con el
+     * cobro apagado —el estado normal— las claves y las tarjetas no
+     * hacen nada, y mostrarlas como si importaran haría que alguien las
+     * configurara creyendo que hacen falta.
+     *
+     * Quien compra es GrokBot, en la tienda. La app propone, Lucila
+     * aprueba, y queda anotado qué, cuánto y a dónde. */
+    '<div class="campo" style="margin-top:var(--esp-3)">' +
+      // campoCasilla() de 06-piezas.js: el mismo interruptor que el
+      // resto del panel, con su estilo ya hecho.
+      campoCasilla({ id: 'pagos-cobro-activo',
+                     rotulo: 'Cobrar las compras desde la app',
+                     marcado: !!cfg.cobro_activo }) +
+      '<span class="vacio__texto" style="display:block;margin-top:6px">' +
+        (cfg.cobro_activo
+          ? 'Encendido: al confirmar una compra se cobra a la tarjeta guardada.'
+          : 'Apagado: las compras quedan anotadas con su dirección, y el pago ' +
+            'se hace por fuera. Es lo normal — quien compra es el asistente.') +
+      '</span>' +
+    '</div>' +
 
-    /* Las tarjetas solo tienen sentido cuando la conexión está lista:
-       sin claves no hay con qué hablarle a Stripe, y un formulario de
-       tarjeta que no puede funcionar es peor que no mostrarlo. */
-    (cfg.listo
+    /* El estado de la conexión y las tarjetas solo tienen sentido si se
+       va a cobrar. Con el interruptor apagado son ruido: lo dijo UX/QA
+       con todas las letras —«si Lu ve tarjeta o método de pago en el
+       admin, es ruido»— y tiene razón, porque no puede hacer nada útil
+       con eso. */
+    (cfg.cobro_activo
+      ? '<div style="margin-top:var(--esp-3)">' + estadoDeLaConexionDePagos(cfg) + '</div>'
+      : '') +
+
+    /* Las tarjetas piden DOS condiciones: que se vaya a cobrar y que la
+       conexión esté lista. Sin claves no hay con qué hablarle a Stripe,
+       y con el cobro apagado no hay a qué cobrarle — un formulario de
+       tarjeta que no puede hacer nada es peor que no mostrarlo. */
+    (cfg.cobro_activo && cfg.listo
       ? '<div class="campo">' +
           '<span class="campo__rotulo">Tarjetas guardadas</span>' +
           '<div id="pagos-tarjetas"><p class="vacio__texto">Buscando…</p></div>' +
           '<button type="button" class="boton" id="pagos-agregar" ' +
                   'style="margin-top:var(--esp-2)">Agregar una tarjeta</button>' +
-        '</div>' +
-
-        /* ⚡ LAS COMPRAS NO SE VEÍAN EN NINGÚN LADO (2026-09-06)
-         *
-         * `compras.php?accion=listar_pedidos` existía desde el primer
-         * día y NO lo llamaba nadie: se podía cobrar y después no había
-         * pantalla donde ver qué se había comprado, por cuánto, ni si
-         * había salido bien. Para saberlo había que entrar al panel de
-         * Stripe, que es exactamente lo que esta app viene a evitar.
-         *
-         * Y sin lista tampoco había dónde poner el botón de deshacer,
-         * que es lo que se vino a arreglar hoy. */
-        '<div class="campo">' +
-          '<span class="campo__rotulo">Compras</span>' +
-          '<div id="pagos-pedidos"><p class="vacio__texto">Buscando…</p></div>' +
         '</div>'
       : '') +
 
-    tecnico);
+    /* ⚡ LAS COMPRAS SE VEN SIEMPRE (2026-09-06)
+     *
+     * `listar_pedidos` existía desde el primer día y NO lo llamaba
+     * nadie: se podía cobrar y después no había pantalla donde ver qué
+     * se compró, por cuánto ni si salió bien.
+     *
+     * Y va FUERA del `if` del cobro: con el interruptor apagado es
+     * cuando MÁS importa: es el único sitio donde se ve qué pidió
+     * Lucila, a dónde va y en qué estado está. Antes esta lista colgaba
+     * de que Stripe estuviera conectado, que no tiene nada que ver. */
+    '<div class="campo">' +
+      '<span class="campo__rotulo">Compras</span>' +
+      '<div id="pagos-pedidos"><p class="vacio__texto">Buscando…</p></div>' +
+    '</div>' +
 
-  if (cfg.listo) {
+    /* Lo técnico —las claves— también sobra con el cobro apagado. */
+    (cfg.cobro_activo ? tecnico : ''));
+
+  cargarPedidos(cuerpo);
+
+  if (cfg.cobro_activo && cfg.listo) {
     cargarTarjetas(cuerpo);
-    cargarPedidos(cuerpo);
     buscar('#pagos-agregar', cuerpo).addEventListener('click', () =>
       abrirAgregarTarjeta(cfg, cuerpo));
   }
 
-  buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
+  /* El interruptor. Se manda al momento de tocarlo, sin esperar a
+     Guardar: es un sí/no, y un interruptor que hay que confirmar aparte
+     se queda a medias con toda facilidad — se toca, se cierra la hoja, y
+     queda como estaba sin que nada lo diga. */
+  buscar('#pagos-cobro-activo', cuerpo).addEventListener('change', async (evento) => {
+    const encender = evento.target.checked;
+
+    if (encender && !await confirmarAccion(
+      '¿Cobrar las compras desde la app?\n\n' +
+      'Al confirmar una compra se le va a cobrar a la tarjeta guardada. ' +
+      'Hoy quien compra es el asistente, por fuera de la app: enciende ' +
+      'esto solo si eso cambió.',
+      { confirmar: 'Encender el cobro', cancelar: 'Dejarlo apagado' })) {
+      evento.target.checked = false;
+      return;
+    }
+
+    try {
+      const r = await mandar('compras.php?accion=activar_cobro', { activo: encender });
+      avisar((r && r.mensaje) || 'Guardado.');
+      cerrarHoja(true);
+      abrirFormasDePago();        // se reabre: cambia media pantalla
+    } catch (error) {
+      evento.target.checked = !encender;   // no se pudo: vuelve a como estaba
+      avisar(error.message, true);
+    }
+  });
+
+  /* ⚠️ El botón de Guardar vive DENTRO del bloque técnico, que con el
+     cobro apagado no se pinta. Sin esta comprobación, abrir la pantalla
+     con el interruptor en «no» reventaba con
+     «addEventListener of null» y la hoja se quedaba a medio dibujar —el
+     error salía en la consola, que nadie mira, así que se habría visto
+     como «Formas de pago no abre». */
+  const guardarClave = buscar('#pie-guardar', cuerpo);
+  if (!guardarClave) return;
+
+  guardarClave.addEventListener('click', async () => {
     const publicable = valorDe('pagos-publicable', cuerpo).trim();
 
     try {
@@ -586,6 +656,11 @@ async function cargarPedidos(cuerpo) {
 /** Cómo se llama cada estado en pantalla, y de qué color va. */
 const ESTADO_DE_COMPRA = {
   propuesta:   { texto: 'Esperando tu confirmación', clase: 'etiqueta--ojo' },
+  /* Con el cobro apagado, confirmar no cobra: anota que Lucila dijo que
+     sí y ahí termina lo que hace la app. El que compra es el asistente,
+     y este estado es el que le dice que ya puede ir. */
+  confirmada:  { texto: 'Confirmada · la compra el asistente',
+                 clase: 'etiqueta--bien' },
   cobrada:     { texto: 'Cobrada',                   clase: 'etiqueta--bien' },
   fallida:     { texto: 'No se pudo cobrar',         clase: 'etiqueta--alerta' },
   cancelada:   { texto: 'Cancelada',                 clase: '' },

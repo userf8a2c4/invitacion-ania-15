@@ -132,16 +132,63 @@ const MINUTOS_DE_FRENO = 15;
 const MARCA_DE_PETICION_API = '__api__';
 
 /**
- * Techo de peticiones por IP a TODA la API del panel, no solo el login.
+ * Techo de peticiones a TODA la API del panel, no solo el login.
  *
  * Es generoso a propósito: nadie usando el panel a mano llega ni cerca.
  * Está para frenar un script que martillara la API en bucle, no para
  * molestar a Lucila un día muy activo.
+ *
+ * ⚡ SE CUENTA POR DISPOSITIVO, NO POR IP (2026-09-07)
+ *
+ * QUÉ ESTABA MAL
+ * Se contaba por IP. En una casa eso da igual —un teléfono, una IP—
+ * pero el día de la fiesta TODOS los teléfonos de la puerta salen por
+ * el WiFi del salón, y para el servidor son UNA SOLA IP. Los 300 se
+ * repartían entre todos: cinco teléfonos abriendo el panel gastan de
+ * entrada ~100 sin que nadie haya escaneado todavía, y el chat en
+ * long-poll suma 12 por teléfono cada cinco minutos solo por estar
+ * abierto. Con la cola en la puerta, el escáner podía empezar a
+ * contestar 429 justo en el peor momento posible.
+ *
+ * Y la red de datos del teléfono es peor todavía: el CGNAT del
+ * operador mete a miles de clientes detrás de la misma IP.
+ *
+ * POR QUÉ POR SESIÓN SÍ SIRVE
+ * El techo existe para frenar un bucle, y un bucle es de QUIEN lo
+ * corre, no de la red por donde sale. Cada ingreso crea su propia fila
+ * en `sesiones` con su propio token —incluso si dos teléfonos entran
+ * con la MISMA cuenta— así que la sesión es exactamente "un
+ * dispositivo". Un script con un token robado sigue frenado igual,
+ * porque es una sesión sola martillando.
+ *
+ * Quien llega SIN sesión válida se sigue contando por IP, que es lo
+ * único que se sabe de él. Ver excedioLimiteDeApi().
  */
 const PETICIONES_API_MAXIMAS = 300;
 
 /** En cuántos minutos se cuentan esas peticiones. */
 const MINUTOS_DE_VENTANA_API = 5;
+
+/**
+ * Si `intentos_login` ya tiene la columna que separa por sesión.
+ *
+ * Se pregunta UNA vez por petición y se recuerda: esto corre en
+ * exigirSesion(), o sea en cada llamada de cada pantalla, y
+ * information_schema no es gratis.
+ *
+ * Sin la columna —una base a la que no se le corrió instalar.php— se
+ * vuelve solo al conteo por IP, que es exactamente como funcionaba
+ * antes. No se rompe nada; se pierde la mejora hasta instalar.
+ *
+ * @return bool
+ */
+function haySeparacionPorSesion() {
+    static $hay = null;
+    if ($hay === null) {
+        $hay = in_array('sesion_id', columnasDe('intentos_login'), true);
+    }
+    return $hay;
+}
 
 
 /* ─── 1. CREAR Y CERRAR SESIONES ──────────────────────────────────────── */
@@ -296,8 +343,29 @@ function usuarioActual() {
         ]
     );
 
+    /* Se guarda ANTES de borrarlo del arreglo: el techo de peticiones lo
+       necesita para contar por dispositivo. Ver idDeLaSesionActual(). */
+    idDeLaSesionActual((int) $fila['sesion_id']);
+
     unset($fila['token_hash'], $fila['sesion_id'], $fila['caduca_en'], $fila['creado_en']);
     return $usuario = $fila;
+}
+
+/**
+ * El id de la FILA de sesión que se está usando, o 0 si no hay ninguna.
+ *
+ * Lo anota usuarioActual() al resolver el token; todos los demás solo
+ * preguntan. Vive aparte y NO dentro del arreglo del usuario a
+ * propósito: ese arreglo viaja al navegador, y nada de la sesión tiene
+ * por qué ir ahí.
+ *
+ * @param int|null $anotar Solo lo usa usuarioActual().
+ * @return int
+ */
+function idDeLaSesionActual($anotar = null) {
+    static $id = 0;
+    if ($anotar !== null) $id = (int) $anotar;
+    return $id;
 }
 
 /**
@@ -309,12 +377,25 @@ function usuarioActual() {
  * @return array El usuario que está usando el panel.
  */
 function exigirSesion() {
-    if (excedioLimiteDeApi()) {
+    /* ⚡ PRIMERO SE AVERIGUA QUIÉN ES, DESPUÉS SE CUENTA (2026-09-07)
+     *
+     * El orden importa: sin saber la sesión, el techo solo se puede
+     * contar por IP, y por IP es lo que rompe la puerta el día de la
+     * fiesta (ver PETICIONES_API_MAXIMAS).
+     *
+     * No le sale caro a nadie. Quien viene SIN token —el bucle que este
+     * techo existe para frenar— ni siquiera toca la base:
+     * usuarioActual() devuelve null en el acto porque no hay nada que
+     * buscar. Y quien viene con token válido iba a hacer esa consulta
+     * igual tres líneas más abajo; es la misma, memorizada. */
+    $usuario  = usuarioActual();
+    $sesionId = idDeLaSesionActual();
+
+    if (excedioLimiteDeApi($sesionId)) {
         responderMal('Demasiadas peticiones seguidas. Espera un momento.', 429);
     }
-    anotarPeticionDeApi();
+    anotarPeticionDeApi($sesionId);
 
-    $usuario = usuarioActual();
     if (!$usuario) {
         responderMal('Tu sesión expiró. Vuelve a entrar.', 401);
     }
@@ -322,15 +403,20 @@ function exigirSesion() {
 }
 
 /**
- * Dice si esta IP ya pasó el techo de peticiones a la API del panel.
+ * Dice si este dispositivo ya pasó el techo de peticiones a la API.
  *
  * Reutiliza la tabla `intentos_login` con una marca propia en la columna
  * `correo` (que en este uso no es un correo, es solo una etiqueta) para
  * no tener que crear una tabla nueva solo para esto.
  *
+ * @param int $sesionId La sesión que hace la petición, o 0 si no hay
+ *                      ninguna válida. Con 0 se cuenta por IP —es lo
+ *                      único que se sabe de quien no se identificó— y
+ *                      todos los anónimos de una misma red comparten
+ *                      ese balde, que para ese caso es lo correcto.
  * @return bool
  */
-function excedioLimiteDeApi() {
+function excedioLimiteDeApi($sesionId = 0) {
     /* ⚡ LA VENTANA SE CIERRA POR LOS DOS LADOS (2026-09-06)
      *
      * QUÉ PASÓ
@@ -351,15 +437,26 @@ function excedioLimiteDeApi() {
      * problema, y esto lo cubre de una vez.
      *
      * La limpieza de las filas que ya quedaron mal la hace instalar.php. */
-    $fila = consultarUno(
-        'SELECT COUNT(*) AS n FROM intentos_login
-         WHERE ip = :ip AND correo = :marca
-           AND cuando <= NOW()
-           AND cuando <= NOW()
-           AND cuando > DATE_SUB(NOW(), INTERVAL :min MINUTE)',
-        [':ip' => ipDeLaPeticion(), ':marca' => MARCA_DE_PETICION_API,
-         ':min' => MINUTOS_DE_VENTANA_API]
-    );
+    $sql = 'SELECT COUNT(*) AS n FROM intentos_login
+            WHERE ip = :ip AND correo = :marca
+              AND cuando <= NOW()
+              AND cuando > DATE_SUB(NOW(), INTERVAL :min MINUTE)';
+
+    $parametros = [':ip' => ipDeLaPeticion(), ':marca' => MARCA_DE_PETICION_API,
+                   ':min' => MINUTOS_DE_VENTANA_API];
+
+    /* La IP se deja en el WHERE aunque ya se separe por sesión: es la
+       que tiene índice (por_ip_y_fecha), así que el conteo sigue
+       mirando pocas filas. El sesion_id afina sobre ese resultado.
+       Un teléfono que se pasa del WiFi a los datos cambia de IP y
+       empieza balde nuevo — no molesta a nadie y no lo esquiva nadie,
+       porque cambiar de red de verdad no es gratis. */
+    if (haySeparacionPorSesion()) {
+        $sql .= ' AND sesion_id = :s';
+        $parametros[':s'] = (int) $sesionId;
+    }
+
+    $fila = consultarUno($sql, $parametros);
     return $fila && (int) $fila['n'] >= PETICIONES_API_MAXIMAS;
 }
 
@@ -369,10 +466,25 @@ function excedioLimiteDeApi() {
  * La limpieza de lo viejo se hace de vez en cuando y no en cada llamada,
  * para no sumarle una consulta extra a cada petición del panel.
  *
+ * @param int $sesionId La sesión que la hizo, o 0 si no hay ninguna.
  * @return void
  */
-function anotarPeticionDeApi() {
-    insertar('intentos_login', ['ip' => ipDeLaPeticion(), 'correo' => MARCA_DE_PETICION_API]);
+function anotarPeticionDeApi($sesionId = 0) {
+    $fila = ['ip' => ipDeLaPeticion(), 'correo' => MARCA_DE_PETICION_API];
+
+    /* Nombrar una columna que no está corta la petición con un 500, así
+       que se pregunta antes — pero con haySeparacionPorSesion() y NO con
+       el soloColumnasQueExisten() de siempre.
+
+       El motivo es el mismo que el de todo este cambio: los dos miran
+       information_schema, cada uno recuerda lo suyo por su lado, y usar
+       los dos serían DOS consultas de esquema en cada llamada de cada
+       pantalla del panel. Agregarle una consulta fija a la ruta más
+       caliente de la app, en una ronda que existe para que no se acabe
+       el cupo de peticiones, sería trabajar en contra de uno mismo. */
+    if (haySeparacionPorSesion()) $fila['sesion_id'] = (int) $sesionId;
+
+    insertar('intentos_login', $fila);
 
     /* Cada petición autenticada anota una fila acá — con el techo de 300
        cada 5 minutos, son muchas filas por hora. Dos horas de margen

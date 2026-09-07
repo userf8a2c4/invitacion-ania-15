@@ -78,11 +78,17 @@ CREATE TABLE IF NOT EXISTS recuperaciones_clave (
 
 
 -- Intentos fallidos de login, para frenar a quien prueba contraseñas.
+-- `sesion_id` separa el techo de peticiones POR DISPOSITIVO: en el salón
+-- todos los teléfonos salen por la misma IP, y contarlos juntos dejaba
+-- al escáner sin cupo en plena puerta. 0 = petición sin sesión válida,
+-- que se cuenta por IP. Las instalaciones viejas la reciben desde
+-- instalar.php.
 CREATE TABLE IF NOT EXISTS intentos_login (
-  id      INT AUTO_INCREMENT PRIMARY KEY,
-  ip      VARCHAR(45) NOT NULL,
-  correo  VARCHAR(190) NOT NULL DEFAULT '',
-  cuando  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id        INT AUTO_INCREMENT PRIMARY KEY,
+  ip        VARCHAR(45) NOT NULL,
+  correo    VARCHAR(190) NOT NULL DEFAULT '',
+  sesion_id INT NOT NULL DEFAULT 0,
+  cuando    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY por_ip_y_fecha (ip, cuando)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

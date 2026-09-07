@@ -141,3 +141,55 @@ function losPagosEstanListos() {
 
     return true;
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   EL INTERRUPTOR DEL COBRO (2026-09-06)
+
+   POR QUÉ EXISTE
+   Este proyecto construyó las compras creyendo que la app COBRABA a una
+   tarjeta. No es el caso: quien compra es GrokBot, en la tienda, con su
+   medio de pago. Lucila pide manteles, GrokBot los compra, los manteles
+   llegan. La app propone, ella aprueba, y de ahí en adelante lo único
+   que hace es seguir el pedido.
+
+   Con el cobro exigido, MegaBot no podía ni PROPONER unos manteles sin
+   Stripe conectado y una tarjeta guardada: el circuito entero estaba
+   bloqueado por una función que sobra.
+
+   POR QUÉ UN INTERRUPTOR Y NO BORRARLO
+   El camino de cobro está probado de punta a punta —cobra, cancela,
+   devuelve, con contraseña, idempotencia y bitácora—. Tirarlo sería
+   perder eso para siempre por un cambio de modelo que puede volver a
+   cambiar. Apagado no estorba: no aparece en pantalla, no se exige, y
+   el día que haga falta se enciende sin reescribir nada.
+
+   POR QUÉ VIVE ACÁ Y NO EN compras.php
+   Mismo motivo que losPagosEstanListos(): chat.php necesita la
+   respuesta —para decirle a MegaBot si puede proponer— y NO puede
+   incluir compras.php, que es un endpoint y llama a
+   exigirAdministrador() al cargarse. Dos copias de esta regla
+   terminarían diciendo cosas distintas.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** El nombre del ajuste. Una sola vez, para no escribirlo mal en otro lado. */
+const AJUSTE_DEL_COBRO = 'compras_cobro_activo';
+
+/**
+ * Si la app tiene que cobrar las compras, o solo registrarlas.
+ *
+ * ⚠️ APAGADO POR DEFECTO. Si el ajuste no existe —una base que nunca lo
+ * configuró—, la respuesta es NO cobrar. Un sistema que empieza a mover
+ * dinero por omisión sería exactamente al revés de como hay que decidir
+ * esto.
+ *
+ * @return bool
+ */
+function elCobroEstaActivo() {
+    if (!function_exists('existeTabla') || !existeTabla('ajustes')) return false;
+
+    $fila = consultarUno('SELECT valor FROM ajustes WHERE clave = :c',
+                         [':c' => AJUSTE_DEL_COBRO]);
+
+    return $fila && (string) $fila['valor'] === '1';
+}
