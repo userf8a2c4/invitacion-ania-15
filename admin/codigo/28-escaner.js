@@ -121,7 +121,7 @@ function abrirEscaner() {
         '<span class="lista__cuerpo">' +
           '<span class="lista__titulo">' + seguro(f.nombre) + '</span>' +
           '<span class="lista__pie">' +
-            (f.mesa ? 'Mesa ' + seguro(f.mesa) : 'Sin mesa') +
+            (f.mesa ? seguro(comoSeLlamaLaMesa(f.mesa)) : 'Sin mesa') +
             (f.alergias && !/^(ninguna|ninguno|no|-)$/i.test(f.alergias)
               ? ' · ⚠ ' + seguro(f.alergias)
               : '') +
@@ -314,22 +314,42 @@ function quienVaAQueMesa(datos) {
 
   if (!porMesa.size) return '';
 
-  // Todos en la misma mesa, y es la que ya dice la etiqueta de arriba.
-  if (porMesa.size === 1 && porMesa.has(String(datos.mesa || '').trim())) return '';
-
+  /* ⚡ SE MUESTRA SIEMPRE, AUNQUE VAYAN TODOS A LA MISMA MESA
+   *   (2026-09-06)
+   *
+   * Antes esto se ocultaba cuando la mesa coincidía con la de arriba, y
+   * la idea era no repetir. Pero lo que el portero necesita no es el
+   * número de mesa: es A QUIÉN mandar a cuál. Con el nombre delante
+   * puede decir «Ana y Luis, mesa 14» en vez de señalar un número y
+   * esperar que se entiendan.
+   *
+   * Y no siempre van juntos: los amigos de un mismo grupo se sientan
+   * entre ellos aunque hayan llegado en la misma invitación, así que la
+   * lista por mesa es el caso NORMAL, no la excepción.
+   *
+   * Va en grande y legible a propósito: se lee de pie, con gente
+   * esperando y poca luz. */
   const lineas = [];
   porMesa.forEach((grupo, mesa) => {
     const quienes = grupo.nombres.slice();
-    if (grupo.sinNombre) quienes.push('y ' + grupo.sinNombre + ' más');
+    if (grupo.sinNombre) {
+      quienes.push(grupo.sinNombre === 1 ? 'y 1 más'
+                                         : 'y ' + grupo.sinNombre + ' más');
+    }
 
     lineas.push(
-      '<div style="margin-top:var(--gota)">' +
-        '<b>Mesa ' + seguro(mesa) + '</b> · ' + seguro(quienes.join(', ')) +
+      '<div style="display:flex;gap:8px;align-items:baseline;' +
+           'margin-top:var(--esp-2)">' +
+        '<b style="color:var(--bien);white-space:nowrap;font-size:17px">' +
+          seguro(comoSeLlamaLaMesa(mesa)) +
+        '</b>' +
+        '<span style="font-size:16px">' + seguro(quienes.join(', ')) + '</span>' +
       '</div>');
   });
 
-  return '<div class="vacio__texto" style="margin-top:var(--esp-2);font-size:14px;' +
-              'text-align:left">' + lineas.join('') + '</div>';
+  return '<div style="margin-top:var(--esp-2);text-align:left">' +
+           lineas.join('') +
+         '</div>';
 }
 
 function pintarTarjetaDeLaPuerta(datos, donde) {
@@ -342,7 +362,24 @@ function pintarTarjetaDeLaPuerta(datos, donde) {
          (!datos.asiste ? 'var(--alerta)' : (datos.ya_llego ? 'var(--ojo)' : 'var(--bien)')) +
          ';padding:var(--esp-3)">' +
 
+      /* ⚡ EL TITULAR Y SU CÓDIGO, JUNTOS (2026-09-06)
+       *
+       * El código estaba abajo del todo, en 13 px y al 70% de opacidad
+       * —tratado como un detalle técnico—. Pero es la mitad de la
+       * respuesta a «¿qué invitación es esta?»: es lo único con lo que
+       * cotejar el pase impreso que la persona trae en la mano, y en la
+       * puerta se leen los dos de un vistazo o no se leen.
+       *
+       * Va debajo del nombre, legible, con el mismo espaciado ancho que
+       * en el pase para poder compararlos letra a letra. */
       '<div style="font-size:22px;font-weight:700">' + seguro(datos.nombre) + '</div>' +
+
+      (datos.codigo
+        ? '<div class="codigo-pase" style="font-size:15px;letter-spacing:.06em;' +
+               'color:var(--texto-suave);margin-top:2px">' +
+            seguro(datos.codigo) +
+          '</div>'
+        : '') +
 
       (!datos.asiste
         ? '<div style="font-size:20px;color:var(--alerta);font-weight:700;' +
@@ -361,15 +398,26 @@ function pintarTarjetaDeLaPuerta(datos, donde) {
 
          Solo se muestra si viene: quien avisó que no venía no necesita
          mesa, y ocuparía el lugar del cartel que sí importa. */
-      (datos.asiste
+      /* ⚡ LA MESA SUELTA SOLO SI NO HAY DESGLOSE (2026-09-06)
+       *
+       * Cuando se sabe quién va a cada mesa, esta etiqueta repite un
+       * dato que abajo está mejor dicho —con los nombres al lado— y
+       * encima puede MENTIR: muestra la mesa de la invitación aunque la
+       * mitad del grupo esté sentada en otra.
+       *
+       * Queda para los dos casos en que sigue siendo lo único que hay:
+       * cuando no hay acompañantes cargados con su lugar, y cuando no
+       * hay mesa asignada —que ahí es justamente la advertencia que el
+       * portero necesita ver. */
+      (datos.asiste && !quienVaAQueMesa(datos)
         ? '<div class="etiqueta ' +
               (datos.mesa ? 'etiqueta--bien' : 'etiqueta--alerta') +
               '" style="margin-top:var(--esp-2);font-size:18px;padding:8px 12px">' +
-              (datos.mesa ? 'Mesa ' + seguro(datos.mesa) : 'Sin mesa asignada') +
+              (datos.mesa ? seguro(comoSeLlamaLaMesa(datos.mesa)) : 'Sin mesa asignada') +
           '</div>'
         : '') +
 
-      // Quién va a qué mesa, si no todos van a la misma.
+      // Quién va a qué mesa. Es lo que el portero de verdad necesita.
       (datos.asiste ? quienVaAQueMesa(datos) : '') +
 
       (tieneAlergia
@@ -377,19 +425,20 @@ function pintarTarjetaDeLaPuerta(datos, donde) {
                'font-size:16px;padding:8px 12px">⚠ ' + seguro(datos.alergias) + '</div>'
         : '') +
 
-      /* En chico, debajo: lo que se mira solo si hace falta. Los menús
-         para avisarle a la cocina al pasar, y el código para poder
-         cotejarlo con el pase impreso que trae la persona en la mano. */
-      (datos.asiste && datos.resumen_menus
-        ? '<div class="vacio__texto" style="margin-top:var(--esp-2);font-size:14px">' +
-            seguro(datos.resumen_menus) +
-          '</div>'
-        : '') +
-
-      (datos.codigo
-        ? '<div class="codigo-pase" style="margin-top:var(--gota);font-size:13px;' +
-               'opacity:.7">' + seguro(datos.codigo) + '</div>'
-        : '') +
+      /* ⚡ LOS MENÚS SE FUERON DE ACÁ (2026-09-06)
+       *
+       * Decían «2 estándar · 2 infantil» y estaban puestos para avisarle
+       * a la cocina al pasar. Pero en la puerta nadie avisa a la cocina:
+       * se deja pasar gente y se le dice dónde sentarse. Un dato que no
+       * se usa en esa pantalla compite por la mirada con los que sí —
+       * quién es, cuántos son y a qué mesa van— y la puerta es donde
+       * menos tiempo hay para leer.
+       *
+       * Los menús no se pierden: están en la ficha del invitado y en las
+       * listas de cocina, que es donde se consultan de verdad.
+       *
+       * El código tampoco se pierde: subió arriba, junto al nombre del
+       * titular, que es donde se lee al cotejar el pase impreso. */
 
       (datos.ya_llego
         ? '<div class="aviso-error" style="margin-top:var(--esp-3);font-size:16px">' +

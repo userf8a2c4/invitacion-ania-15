@@ -398,7 +398,7 @@ function verPasesReleidos() {
             '<span class="lista__titulo">' + seguro(u.nombre) + '</span>' +
             '<span class="lista__pie">' +
               'Entró a las ' + seguro(String(u.llegada_en || '').slice(11, 16)) +
-              (u.mesa ? ' · Mesa ' + seguro(u.mesa) : '') +
+              (u.mesa ? ' · ' + seguro(comoSeLlamaLaMesa(u.mesa)) : '') +
             '</span>' +
           '</span>' +
         '</div>'

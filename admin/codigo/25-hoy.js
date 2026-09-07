@@ -301,7 +301,7 @@ async function pintarBuscadorDePases(donde) {
           ? '<div class="etiqueta ' +
               (f.mesa ? 'etiqueta--bien' : 'etiqueta--alerta') +
               '" style="margin-top:6px;font-size:16px">' +
-              (f.mesa ? 'Mesa ' + seguro(f.mesa) : 'Sin mesa asignada') +
+              (f.mesa ? seguro(comoSeLlamaLaMesa(f.mesa)) : 'Sin mesa asignada') +
             '</div>'
           : '') +
         (f.alergias && !/^(ninguna|ninguno|no|-)$/i.test(f.alergias)
