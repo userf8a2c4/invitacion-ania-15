@@ -290,8 +290,19 @@ async function abrirHojaDeAvisos() {
 
   const permiso = hayApi ? Notification.permission : 'unsupported';
 
+  /* ⚡ «granted» NO SIGNIFICA «ACTIVADOS» (2026-09-07)
+   *
+   * Acá decía ['bien', 'Activados'] en cuanto el navegador tenía el
+   * permiso. Pero el permiso no manda ningún aviso: el aviso lo manda
+   * el servidor, a una suscripción guardada en `suscripciones_push`. El
+   * permiso puede seguir en «granted» con el servidor sin nadie a quien
+   * escribirle, y eso ya pasó — un envío real dio `correos: 2, push: 0`
+   * mientras esta etiqueta decía que todo estaba bien.
+   *
+   * Ahora arranca en «Comprobando…» y lo resuelve
+   * confirmarRegistroDeEsteTelefono(), que pregunta las dos cosas. */
   const estados = {
-    granted: ['bien',   'Activados'],
+    granted: ['tenue',  'Comprobando…'],
     denied:  ['alerta', 'Bloqueados'],
     default: ['tenue',  'Sin activar'],
     unsupported: ['alerta', 'No disponibles'],
@@ -302,8 +313,10 @@ async function abrirHojaDeAvisos() {
     '<div class="tarjeta">' +
       '<div style="display:flex;justify-content:space-between;align-items:center">' +
         '<span>Este teléfono</span>' +
-        '<span class="etiqueta etiqueta--' + estado[0] + '">' + estado[1] + '</span>' +
+        '<span class="etiqueta etiqueta--' + estado[0] + '" id="av-estado">' +
+          estado[1] + '</span>' +
       '</div>' +
+      '<p class="vacio__texto" id="av-cuantos" style="margin:var(--esp-1) 0 0"></p>' +
     '</div>' +
 
     '<p class="vacio__texto" style="margin:var(--esp-2) 0">' +
@@ -376,6 +389,89 @@ async function abrirHojaDeAvisos() {
 
   const donde = buscar('#av-agentes', cuerpo);
   if (donde) pintarAvisosDeAgentes(donde);
+
+  if (permiso === 'granted') confirmarRegistroDeEsteTelefono(cuerpo);
+}
+
+/**
+ * Comprueba —y de paso arregla— si este teléfono está REALMENTE
+ * registrado en el servidor.
+ *
+ * ⚡ POR QUÉ EXISTE (2026-09-07)
+ *
+ * El permiso del navegador y la suscripción del servidor se separan
+ * solas, y de tres maneras que pasan de verdad:
+ *
+ *   · se dio el permiso pero nunca se terminó de registrar el teléfono;
+ *   · el servicio de push caducó la suscripción (Chrome las rota, y
+ *     Brave trae el push desactivado de fábrica);
+ *   · la fila del servidor se perdió.
+ *
+ * En los tres, `Notification.permission` sigue diciendo «granted». Por
+ * eso la etiqueta decía «Activados» mientras el servidor no tenía a
+ * nadie a quien avisar, y el problema solo se vio al mirar el resultado
+ * de un envío: `correos: 2, push: 0`.
+ *
+ * NO PREGUNTA, REGISTRA. `suscribir` es idempotente —ON DUPLICATE KEY
+ * UPDATE sobre el endpoint, que es único— así que volver a mandarlo
+ * cuesta una escritura y CURA el tercer caso, en vez de limitarse a
+ * denunciarlo. Preguntar primero costaría lo mismo y arreglaría menos.
+ *
+ * @param {Element} cuerpo
+ * @returns {Promise<void>}
+ */
+async function confirmarRegistroDeEsteTelefono(cuerpo) {
+  const etiqueta = buscar('#av-estado', cuerpo);
+  if (!etiqueta) return;
+
+  const poner = (clase, texto) => {
+    etiqueta.className = 'etiqueta etiqueta--' + clase;
+    etiqueta.textContent = texto;
+  };
+
+  try {
+    const registro = await navigator.serviceWorker.ready;
+    const suscripcion = await registro.pushManager.getSubscription();
+
+    /* Permiso dado y ninguna suscripción: el caso que más engañaba.
+       Crear una acá, sin que nadie haya tocado nada, no corresponde
+       —es el botón el que lo hace— así que se dice la verdad y se
+       manda ahí. */
+    if (!suscripcion) {
+      poner('alerta', 'Falta registrar');
+      const nota = buscar('#av-cuantos', cuerpo);
+      if (nota) {
+        nota.textContent = 'Diste el permiso, pero este teléfono no está ' +
+                           'registrado en el servidor. Tocá «Volver a ' +
+                           'registrar este teléfono».';
+      }
+      return;
+    }
+
+    const crudo = suscripcion.toJSON();
+    const r = await mandar('recordatorios.php?accion=suscribir', {
+      endpoint: crudo.endpoint,
+      p256dh: crudo.keys ? crudo.keys.p256dh : '',
+      auth:   crudo.keys ? crudo.keys.auth   : '',
+    });
+
+    poner('bien', 'Activados');
+
+    /* Cuántos aparatos hay en total. Un «1 teléfono» cuando deberían ser
+       tres se ve de un vistazo; el estado de este solo, no. */
+    const nota = buscar('#av-cuantos', cuerpo);
+    const n = r && typeof r.telefonos === 'number' ? r.telefonos : null;
+    if (nota && n !== null) {
+      nota.textContent = n === 1
+        ? 'Es el único teléfono registrado.'
+        : n + ' teléfonos registrados en total.';
+    }
+
+  } catch (error) {
+    /* Sin conexión, o el servidor caído. No se sabe — y decir
+       «Activados» sin saber es volver exactamente al defecto de antes. */
+    poner('tenue', 'Sin confirmar');
+  }
 }
 
 /**
@@ -445,15 +541,35 @@ async function suscribirAAvisos() {
     const datos = await traer('recordatorios.php?accion=llave');
     const registro = await navigator.serviceWorker.ready;
 
+    const llave = llaveABytes(datos.llave);
+
     /* Si ya había una suscripción vieja se reutiliza; si no, se crea.
        userVisibleOnly es obligatorio: promete que cada aviso va a
        mostrar una notificación visible y no se va a usar para espiar. */
     let suscripcion = await registro.pushManager.getSubscription();
 
+    /* ⚡ …SALVO QUE SEA DE OTRA LLAVE (2026-09-07)
+     *
+     * Una suscripción queda atada a la llave VAPID con la que se creó.
+     * Si las llaves del servidor cambiaron —se generan solas la primera
+     * vez y viven en `ajustes`, así que perder esa fila alcanza— la
+     * suscripción vieja sigue existiendo y pareciendo sana, pero el
+     * servicio de push RECHAZA todo lo que se le mande con la llave
+     * nueva. Falla en silencio y para siempre: el navegador no avisa,
+     * y de este lado solo se ve un contador de fallidos que nadie mira.
+     *
+     * Reusarla sin comparar era apostar a que las llaves nunca
+     * cambiaron. Si no coinciden se da de baja y se crea de nuevo, que
+     * es lo único que lo arregla. */
+    if (suscripcion && !laLlaveCoincide(suscripcion, llave)) {
+      await suscripcion.unsubscribe();
+      suscripcion = null;
+    }
+
     if (!suscripcion) {
       suscripcion = await registro.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: llaveABytes(datos.llave),
+        applicationServerKey: llave,
       });
     }
 
@@ -471,6 +587,32 @@ async function suscribirAAvisos() {
   } catch (error) {
     avisar(error.message || 'No se pudieron activar los avisos.', true);
   }
+}
+
+/**
+ * Si una suscripción ya hecha corresponde a esta llave del servidor.
+ *
+ * ANTE LA DUDA, DICE QUE SÍ. Algunos navegadores no exponen
+ * `options.applicationServerKey`. Si no se puede comparar, se deja la
+ * suscripción como está: dar de baja una que a lo mejor servía, por una
+ * sospecha que no se puede confirmar, hace más daño que el caso que se
+ * intenta cubrir.
+ *
+ * @param {PushSubscription} suscripcion
+ * @param {Uint8Array} llave  La llave pública actual, en bytes.
+ * @returns {boolean}
+ */
+function laLlaveCoincide(suscripcion, llave) {
+  const guardada = suscripcion.options && suscripcion.options.applicationServerKey;
+  if (!guardada) return true;
+
+  const bytes = new Uint8Array(guardada);
+  if (bytes.length !== llave.length) return false;
+
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] !== llave[i]) return false;
+  }
+  return true;
 }
 
 /**
