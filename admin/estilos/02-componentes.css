@@ -1347,6 +1347,60 @@ select.campo__control {
   30%           { opacity: 1;   transform: translateY(-3px); }
 }
 
+/* ─── LAS ETAPAS DE LA ESPERA (2026-09-06) ─────────────────────────────
+ *
+ * Medido: una respuesta tarda ~73 s y solo 0,4 son de este servidor. El
+ * minuto largo es la cola de Grok y desde acá no se acorta. Lo que sí
+ * cambia es que se vea AVANZAR: tres puntitos quietos durante un minuto
+ * se leen como «se colgó», y ahí es cuando se vuelve a escribir — que
+ * suma otra vuelta a la cola y alarga la espera todavía más.
+ *
+ * Deliberadamente pequeño y gris: es para mirar de reojo, no para leer.
+ * Si esto pesara más que la conversación, estaría compitiendo con lo
+ * único que de verdad importa de la pantalla. */
+.megabot-etapas {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 20px;
+}
+
+.megabot-etapa {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--letra-minima);
+  color: var(--texto-tenue);
+  line-height: 1.3;
+}
+
+/* Ancho fijo para que las tres líneas queden alineadas aunque la marca
+   cambie de ✓ a · o a ⟳. */
+.megabot-etapa__marca {
+  width: 12px;
+  text-align: center;
+  flex: none;
+}
+
+.megabot-etapa--hecha { color: var(--texto-suave); }
+.megabot-etapa--hecha .megabot-etapa__marca { color: var(--bien); }
+
+/* La etapa en curso es la única que se mueve: es donde está la atención. */
+.megabot-etapa--activa { color: var(--texto); }
+.megabot-etapa--activa .megabot-etapa__marca {
+  color: var(--oro-claro);
+  display: inline-block;
+  animation: megabot-girando 1.6s linear infinite;
+}
+
+@keyframes megabot-girando { to { transform: rotate(360deg); } }
+
+/* Mismo criterio que los puntitos: quien pidió menos movimiento en su
+   teléfono no recibe una rueda girando sin parar. */
+@media (prefers-reduced-motion: reduce) {
+  .megabot-etapa--activa .megabot-etapa__marca { animation: none; }
+}
+
 /* Quien pidió menos movimiento en su teléfono no debería recibir tres
    puntos saltando. Se quedan quietos y a media opacidad: se sigue
    entendiendo que algo está en curso. */
