@@ -475,6 +475,7 @@ function exigirContrasenaDeNuevo($yo, $datos) {
         $fila = consultarUno(
             'SELECT COUNT(*) AS n FROM intentos_login
              WHERE ip = :ip AND correo = :marca
+               AND cuando <= NOW()
                AND cuando > DATE_SUB(NOW(), INTERVAL ' . MINUTOS_DE_FRENO_DE_DINERO . ' MINUTE)',
             [':ip' => $ip, ':marca' => MARCA_DE_CLAVE_PARA_DINERO]
         );

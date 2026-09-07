@@ -200,6 +200,7 @@ function llaveDeArranqueCorrecta($recibida) {
         $fila   = consultarUno(
             'SELECT COUNT(*) AS n FROM intentos_login
              WHERE ip = :ip AND correo = :marca
+               AND cuando <= NOW()
                AND cuando > DATE_SUB(NOW(), INTERVAL 15 MINUTE)',
             [':ip' => $ip, ':marca' => '__llave__']
         );
