@@ -1383,6 +1383,31 @@ async function compartirArchivoPorWhatsApp(archivoId, nombreArchivo, telefonoPro
 }
 
 /**
+ * Cómo se nombra una mesa en pantalla.
+ *
+ * ⚡ «MESA MESA 14» (2026-09-06)
+ *
+ * El nombre de la mesa lo escribe quien arma el salón, y lo natural es
+ * ponerle «Mesa 14». Pero SEIS lugares del panel le anteponían «Mesa »
+ * por su cuenta —el escáner, el buscador, Hoy, el plano— y el resultado
+ * era «Mesa Mesa 14». Se veía en la puerta, que es donde peor queda: es
+ * la pantalla que se mira con gente esperando.
+ *
+ * Poner el prefijo sigue haciendo falta, porque una mesa se puede llamar
+ * «14» a secas o «Los primos». Lo que no puede es ponerse dos veces.
+ *
+ * @param {string} nombre - Como se llama la mesa en la base.
+ * @returns {string} 'Mesa 14' tanto si viene '14' como 'Mesa 14'.
+ */
+function comoSeLlamaLaMesa(nombre) {
+  const limpio = String(nombre == null ? '' : nombre).trim();
+  if (!limpio) return '';
+
+  // Ya se nombra sola: no se le agrega nada.
+  return /^mesa\b/i.test(limpio) ? limpio : 'Mesa ' + limpio;
+}
+
+/**
  * Devuelve el HTML de una casilla de verificación.
  *
  * @param {Object} opciones - id, rotulo, marcado.
