@@ -326,6 +326,82 @@ $agregarColumna('chat_mensajes', 'en_respuesta_a', 'INT DEFAULT NULL');
    tiene ninguna marca, y no hay nada honesto que inventarles. */
 $agregarColumna('chat_mensajes', 'latencia_json', 'TEXT NULL');
 
+/* ⚡ LIMPIAR LAS MARCAS QUE QUEDARON EN EL FUTURO (2026-09-06)
+ *
+ * Al alinear la zona horaria de MySQL con la de PHP (_lib/bd.php), las
+ * filas de `intentos_login` escritas ANTES de ese cambio quedaron con su
+ * marca en UTC: seis horas por delante de la hora local.
+ *
+ * Y los frenos de la app cuentan «filas más nuevas que hace X minutos»,
+ * sin techo — así que una fila del futuro cumplía SIEMPRE. El contador
+ * de peticiones se quedó clavado por encima del tope y el panel entero
+ * devolvía 429 a todo, sin forma de distinguirlo de un uso excesivo de
+ * verdad. Duraba hasta que esas filas quedaran seis horas atrás.
+ *
+ * El techo ya está puesto en las cinco consultas que cuentan (ver
+ * excedioLimiteDeApi y compañía), así que esto no volverá a pasar. Acá
+ * se limpia lo que ya quedó mal, para no esperar esas horas.
+ *
+ * Una fila con fecha futura es basura por definición: registra algo que
+ * todavía no pasó. Se borra sin más, y solo esas. */
+if (existeTabla('intentos_login')) {
+    try {
+        $fila = consultarUno(
+            'SELECT COUNT(*) AS n FROM intentos_login WHERE cuando > NOW()');
+        $cuantas = (int) ($fila['n'] ?? 0);
+
+        if ($cuantas > 0) {
+            ejecutar('DELETE FROM intentos_login WHERE cuando > NOW()');
+            $columnasQueFaltaban[] = 'intentos_login: ' . $cuantas
+                                   . ' marca(s) con fecha futura, borradas';
+        }
+    } catch (PDOException $e) {
+        error_log('[Ania XV · instalar] No se pudo limpiar intentos_login: '
+            . $e->getMessage());
+    }
+}
+
+/* ⚡ EL ESTADO «reembolsada» (2026-09-06)
+ *
+ * La tabla nació con cuatro estados —propuesta, cobrada, fallida,
+ * cancelada— y ninguno sirve para una compra que SÍ se cobró y después
+ * se devolvió. Usar «cancelada» para eso mentiría en dos sitios: el
+ * total gastado dejaría de cuadrar con lo que Stripe movió de verdad, y
+ * el historial no distinguiría «esto nunca se cobró» de «esto se cobró
+ * y se devolvió», que ante una discusión con el banco es justo lo que
+ * hay que poder demostrar.
+ *
+ * No usa $agregarColumna() porque no agrega nada: MODIFICA el ENUM de
+ * una columna que ya existe. Se comprueba antes para no tocar nada dos
+ * veces —mismo criterio que el aflojado de recibos.proveedor_id, acá
+ * abajo. */
+if (existeTabla('compras_pedidos')) {
+    $columna = consultarUno(
+        "SELECT COLUMN_TYPE FROM information_schema.columns
+         WHERE table_schema = DATABASE() AND table_name = 'compras_pedidos'
+           AND column_name = 'estado'"
+    );
+    $tipo = (string) ($columna['COLUMN_TYPE'] ?? $columna['column_type'] ?? '');
+
+    if ($tipo !== '' && strpos($tipo, 'reembolsada') === false) {
+        try {
+            bd()->exec(
+                "ALTER TABLE `compras_pedidos` MODIFY `estado`
+                 ENUM('propuesta','cobrada','fallida','cancelada','reembolsada')
+                 NOT NULL DEFAULT 'propuesta'"
+            );
+            $columnasQueFaltaban[] = 'compras_pedidos.estado (+reembolsada)';
+        } catch (PDOException $e) {
+            $columnasQueFallaron[] = [
+                'columna' => 'compras_pedidos.estado',
+                'porque'  => $e->getMessage(),
+            ];
+            error_log('[Ania XV · instalar] No se pudo ampliar compras_pedidos.estado: '
+                . $e->getMessage());
+        }
+    }
+}
+
 /* Esto no es agregar una columna, es AFLOJAR una que ya exigía
    NOT NULL — por eso no usa $agregarColumna(). Se comprueba antes de
    tocar nada, tanto para no fallar si ya se corrió como para no
