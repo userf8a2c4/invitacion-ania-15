@@ -383,14 +383,19 @@ if (existeTabla('compras_pedidos')) {
     );
     $tipo = (string) ($columna['COLUMN_TYPE'] ?? $columna['column_type'] ?? '');
 
-    if ($tipo !== '' && strpos($tipo, 'reembolsada') === false) {
+    /* `confirmada` es de la misma tanda (2026-09-06): con el cobro
+       apagado —el camino normal— Lucila confirma y la compra NO se
+       cobra; queda esperando a que GrokBot vaya a comprarla. Ninguno de
+       los estados viejos dice eso: «cobrada» sería mentira y
+       «propuesta» borraría el hecho de que ella ya dijo que sí. */
+    if ($tipo !== '' && strpos($tipo, 'confirmada') === false) {
         try {
             bd()->exec(
                 "ALTER TABLE `compras_pedidos` MODIFY `estado`
-                 ENUM('propuesta','cobrada','fallida','cancelada','reembolsada')
+                 ENUM('propuesta','confirmada','cobrada','fallida','cancelada','reembolsada')
                  NOT NULL DEFAULT 'propuesta'"
             );
-            $columnasQueFaltaban[] = 'compras_pedidos.estado (+reembolsada)';
+            $columnasQueFaltaban[] = 'compras_pedidos.estado (+confirmada, +reembolsada)';
         } catch (PDOException $e) {
             $columnasQueFallaron[] = [
                 'columna' => 'compras_pedidos.estado',

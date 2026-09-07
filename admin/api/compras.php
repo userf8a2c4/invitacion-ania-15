@@ -660,6 +660,28 @@ function exigirPagosListos() {
 }
 
 
+/* El interruptor del cobro —`elCobroEstaActivo()` y `AJUSTE_DEL_COBRO`—
+   vive en _lib/pagos.php, junto a losPagosEstanListos(). Mismo motivo:
+   chat.php también necesita la respuesta y no puede incluir este
+   archivo. La explicación completa está allá. */
+
+/**
+ * Corta la petición si el cobro está apagado.
+ *
+ * Se usa en las acciones que SOLO tienen sentido cobrando (cobrar,
+ * reembolsar, guardar una tarjeta). Proponer y confirmar NO la usan:
+ * esas funcionan igual con el cobro apagado, que es el camino normal.
+ *
+ * @return void
+ */
+function exigirCobroActivo() {
+    if (elCobroEstaActivo()) return;
+    responderMal('El cobro por la app está apagado: las compras se registran, '
+               . 'pero el pago se hace por fuera. Se puede encender en Ajustes, '
+               . '"Formas de pago".', 409);
+}
+
+
 
 /* ══════════════════════════════════════════════════════════════════════
    UNA COMPRA: PROPONERLA, Y DESPUES COBRARLA
@@ -743,7 +765,12 @@ function armarLaCompra($datos) {
         ? consultarUno('SELECT * FROM metodos_pago WHERE id = :i AND activo = 1',
                        [':i' => $metodoId])
         : null;
-    if (!$metodo) {
+    /* La tarjeta solo hace falta si la app va a cobrar. Con el cobro
+       apagado —el camino normal, ver EL INTERRUPTOR DEL COBRO— quien
+       paga es GrokBot en la tienda, y exigir una tarjeta guardada
+       bloqueaba TODO el circuito: sin Stripe conectado, MegaBot no podía
+       ni proponer unos manteles. */
+    if (!$metodo && elCobroEstaActivo()) {
         responderMal('No hay ninguna tarjeta guardada. Agrega una en Ajustes, '
                    . '"Conectar la cuenta con la que se paga".', 400);
     }
@@ -908,11 +935,60 @@ case 'config':
         // usan las acciones. Antes esto repetía la regla a mano y podía
         // decir "listo" cuando el cobro iba a fallar.
         'listo'            => losPagosEstanListos(),
+
+        /* El interruptor. `listo` dice si SE PODRÍA cobrar (hay claves
+           válidas); esto dice si se QUIERE. Son cosas distintas y el
+           panel las muestra por separado: con el cobro apagado, tener
+           las claves puestas no cambia nada. */
+        'cobro_activo'     => elCobroEstaActivo(),
     ]);
     break;
 
 
 /* ─── GUARDAR LA CLAVE PUBLICABLE ─────────────────────────────────────── */
+
+/* ─── EL INTERRUPTOR DEL COBRO ────────────────────────────────────────
+ *
+ * Va aparte de `guardar_config` a propósito: esa acción guarda la clave
+ * publicable y su validación es larga y estricta. Encender o apagar el
+ * cobro es un sí/no que no tiene nada que ver con las claves, y
+ * mezclarlos obligaría a mandar la clave cada vez que se toca el
+ * interruptor — o a inventar excepciones dentro de esa validación. */
+case 'activar_cobro':
+    exigirMetodo('POST');
+    $datos = cuerpoJson();
+
+    $encender = !empty($datos['activo']);
+
+    /* No se deja encender sin con qué: el interruptor prometería algo
+       que después falla al primer cobro. Apagar, en cambio, siempre se
+       puede — es el estado seguro. */
+    if ($encender && !losPagosEstanListos()) {
+        responderMal('Antes de encender el cobro hay que conectar la cuenta de '
+                   . 'pagos: falta la clave publicable o la secreta del servidor.', 409);
+    }
+
+    ejecutar(
+        "INSERT INTO ajustes (clave, valor) VALUES (:c, :v)
+         ON DUPLICATE KEY UPDATE valor = VALUES(valor)",
+        [':c' => AJUSTE_DEL_COBRO, ':v' => $encender ? '1' : '0']
+    );
+
+    anotarEnBitacora($yo,
+        $encender ? 'encendió el cobro por la app' : 'apagó el cobro por la app',
+        'ajustes', 0,
+        $encender
+            ? 'las compras que confirme Lucila se van a cobrar a la tarjeta'
+            : 'las compras se registran; el pago va por fuera');
+
+    responderBien([
+        'cobro_activo' => $encender,
+        'mensaje'      => $encender
+            ? 'Cobro encendido. Confirmar una compra va a cobrarla a la tarjeta.'
+            : 'Cobro apagado. Las compras se registran y el pago va por fuera.',
+    ]);
+    break;
+
 
 case 'guardar_config':
     exigirMetodo('POST');
@@ -1218,6 +1294,7 @@ case 'desactivar_metodo':
 
 case 'cobrar':
     exigirMetodo('POST');
+    exigirCobroActivo();
     exigirPagosListos();
     $datos = cuerpoJson();
     // El único sitio del proyecto que saca dinero de verdad.
@@ -1237,7 +1314,9 @@ case 'cobrar':
 
 case 'proponer':
     exigirMetodo('POST');
-    exigirPagosListos();
+    /* Sin exigirPagosListos(): proponer nunca movio dinero, y con el
+       cobro apagado tampoco lo mueve confirmar. Exigir Stripe aca era
+       justo lo que impedia que MegaBot propusiera unos manteles. */
     $datos = cuerpoJson();
 
     list($concepto, $monto, $direccion, $metodo) = armarLaCompra($datos);
@@ -1265,9 +1344,20 @@ case 'proponer':
 
 case 'confirmar':
     exigirMetodo('POST');
-    exigirPagosListos();
     $datos = cuerpoJson();
-    exigirContrasenaDeNuevo($yo, $datos);
+
+    /* ⚡ LA CONTRASEÑA SOLO SI HAY DINERO DE POR MEDIO (2026-09-06)
+     *
+     * Con el cobro encendido, confirmar saca plata de una tarjeta y la
+     * contraseña es la guarda que lo autoriza. Con el cobro apagado
+     * —el camino normal— confirmar solo anota que Lucila dijo que sí:
+     * pedirle la contraseña para eso sería cobrarle una fricción que no
+     * protege nada, y la fricción que no protege es la que enseña a
+     * teclear en piloto automático. */
+    if (elCobroEstaActivo()) {
+        exigirPagosListos();
+        exigirContrasenaDeNuevo($yo, $datos);
+    }
 
     $pedidoId = campoEntero($datos, 'id', 0);
     if ($pedidoId <= 0) responderMal('Falta decir qué compra confirmar.', 400);
@@ -1285,12 +1375,50 @@ case 'confirmar':
 
     $direccion = consultarUno('SELECT * FROM direcciones_entrega WHERE id = :i',
                               [':i' => (int) $pedido['direccion_id']]);
+    /* Entre proponer y confirmar puede haber pasado un rato, y en ese
+       rato la dirección pudo desactivarse. Sin dónde entregar, la compra
+       no tiene sentido — la pague quien la pague. */
+    if (!$direccion) responderMal('La dirección de esa compra ya no está.', 409);
+
+    /* ─── EL CAMINO NORMAL: CONFIRMAR NO COBRA ────────────────────────
+     *
+     * Lucila aprueba, y ahí termina la responsabilidad de esta app:
+     * queda anotado qué, cuánto y a dónde. Quien compra es GrokBot, en
+     * la tienda, con su medio de pago. El panel no mueve un peso.
+     *
+     * `confirmada` es el estado que le dice a GrokBot que ya puede ir a
+     * comprar: antes de eso hay una propuesta esperando, no una orden. */
+    if (!elCobroEstaActivo()) {
+        actualizar('compras_pedidos', $pedidoId, ['estado' => 'confirmada']);
+
+        anotarEnBitacora($yo, 'confirmó una compra', 'compras_pedidos', $pedidoId,
+            '$' . number_format((float) $pedido['monto'], 2) . ' · '
+            . mb_substr((string) $pedido['concepto'], 0, 80)
+            . ' · a ' . (string) $direccion['alias']);
+
+        $aviso = avisarDeMovimientoDeDinero(
+            'Compra confirmada · Ania XV',
+            'Lucila confirmó una compra. Todavía no se pagó nada: el pago '
+            . 'va por fuera de la app.',
+            [
+                'Concepto'      => mb_substr((string) $pedido['concepto'], 0, 120),
+                'Monto'         => '$' . number_format((float) $pedido['monto'], 2) . ' MXN',
+                'Se entrega en' => (string) $direccion['alias'],
+            ],
+            $yo
+        );
+
+        responderBien([
+            'id'      => $pedidoId,
+            'estado'  => 'confirmada',
+            'mensaje' => 'Confirmada. Va a ' . $direccion['alias'] . '.',
+            'aviso'   => $aviso,
+        ]);
+    }
+
+    /* ─── CON EL COBRO ENCENDIDO: como siempre ───────────────────────── */
     $metodo = consultarUno('SELECT * FROM metodos_pago WHERE id = :i AND activo = 1',
                            [':i' => (int) $pedido['metodo_pago_id']]);
-
-    /* Entre proponer y confirmar puede haber pasado un rato, y en ese
-       rato la tarjeta pudo darse de baja o la dirección desactivarse. */
-    if (!$direccion) responderMal('La dirección de esa compra ya no está.', 409);
     if (!$metodo) {
         responderMal('La tarjeta de esa compra ya no está activa. '
                    . 'Agrega una y vuelve a proponer la compra.', 409);
@@ -1360,6 +1488,7 @@ case 'cancelar':
 
 case 'reembolsar':
     exigirMetodo('POST');
+    exigirCobroActivo();
     exigirPagosListos();
     $datos = cuerpoJson();
     // Devolver dinero es mover dinero: mismas guardas que cobrarlo.
