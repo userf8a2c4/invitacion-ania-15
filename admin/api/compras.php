@@ -45,8 +45,16 @@
                            token, y desactivar_metodo lo despega con
                            .../detach, que es un POST)
        PaymentIntents .... escritura   (accion=cobrar)
+       Refunds ........... escritura   (accion=reembolsar)
 
    Todo lo demás se deja en "ninguno".
+
+   ⚠️ Refunds SE AGREGÓ EL 2026-09-06, con la acción de devolver. Una
+   clave creada antes de esa fecha NO lo tiene, y entonces devolver
+   falla con un error de permisos de Stripe —solo al intentarlo, que es
+   el peor momento para enterarse—. Si la devolución da un error de
+   permiso, es esto: hay que editar la clave restringida en Stripe y
+   agregarle Refunds en escritura.
 
    PaymentMethods va en ESCRITURA y no en solo lectura a propósito.
    Tentaba dejarlo en lectura —la tarjeta la crea el navegador, no este
