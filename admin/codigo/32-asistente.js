@@ -1081,15 +1081,71 @@ function repintarEsperaDeMegaBot(fila) {
   const desde = Number(fila.dataset.desde || '0');
   if (desde > 0) notas.push(esperaDeMegaBotEnPalabras(desde));
 
+  /* ⚡ CUÁNTO SUELE TARDAR, MEDIDO (2026-09-06)
+   *
+   * Es la diferencia entre «esto se colgó» y «falta poco». Sale de
+   * mediciones reales de este hilo (cuantoSueleTardarMegabot en
+   * chat.php, mediana de las últimas diez), NO de un número puesto a
+   * ojo: si dijera «un minuto» y siempre tardara tres, en dos días nadie
+   * volvería a creerle a este cartel.
+   *
+   * Se calla en dos casos, y los dos importan:
+   *   · sin mediciones suficientes, el servidor manda null;
+   *   · pasado ese tiempo, deja de decirse — insistir en «suele tardar
+   *     1 min» cuando ya van dos es discutirle a quien está mirando. */
+  const suele = Number(fila.dataset.sueleTardar || '0');
+  if (suele > 0 && desde > 0 && !agotada) {
+    const van = (Date.now() - desde) / 1000;
+    if (van < suele) {
+      notas.push('suele tardar ' + esperaDeMegaBotEnPalabras(Date.now() - suele * 1000));
+    }
+  }
+
+  /* ⚡ LAS ETAPAS, EN VEZ DE TRES PUNTITOS Y NADA MÁS (2026-09-06)
+   *
+   * MEDIDO HOY: una respuesta tarda ~73 s, de los cuales 0,4 son de
+   * este servidor. El resto es la cola de Grok despertando su rutina, y
+   * desde acá NO HAY FORMA de acortarlo —lo confirmó el propio
+   * Orquestador: «cola de Grok Bot, fuera del repo»—.
+   *
+   * Lo que sí se puede es que ese minuto deje de parecer un cuelgue.
+   * Tres puntitos quietos durante 73 s se leen como «esto se colgó», y
+   * la reacción natural es volver a escribir — que suma OTRA vuelta a
+   * la cola y hace la espera más larga todavía. La impaciencia se cobra
+   * sola, y una espera legible es lo único que la corta.
+   *
+   * SOLO SE MUESTRA LO QUE SE SABE. «Recibido» aparece cuando el
+   * servidor confirma que el webhook aceptó (entrega === 'enviado'), no
+   * antes. No hay una etapa «despertó» porque esa marca llega junto con
+   * la respuesta, cuando ya no sirve para esperar: inventarla sería
+   * dibujar un progreso falso, que es peor que no dibujar ninguno. */
+  const etapas = agotada ? '' :
+    '<div class="megabot-etapas">' +
+      '<div class="megabot-etapa megabot-etapa--hecha">' +
+        '<span class="megabot-etapa__marca">✓</span> Lo mandé' +
+      '</div>' +
+      '<div class="megabot-etapa' +
+           (entrega === 'enviado' ? ' megabot-etapa--hecha' : '') + '">' +
+        '<span class="megabot-etapa__marca">' +
+          (entrega === 'enviado' ? '✓' : '·') + '</span> ' +
+        (entrega === 'error' ? 'No llegó a MegaBot'
+         : entrega === 'enviado' ? 'MegaBot lo recibió'
+         : 'Llegándole…') +
+      '</div>' +
+      (entrega === 'enviado'
+        ? '<div class="megabot-etapa megabot-etapa--activa">' +
+            '<span class="megabot-etapa__marca">⟳</span> Está pensando…' +
+          '</div>'
+        : '') +
+    '</div>';
+
   const cuerpo = agotada
     ? '<div class="megabot-burbuja megabot-burbuja--megabot">' +
         seguro(NOTA_DE_ESPERA_AGOTADA_MEGABOT[entrega] ||
                'Todavía no llega respuesta. El mensaje quedó mandado.') +
       '</div>'
-    : '<div class="megabot-burbuja megabot-burbuja--megabot megabot-puntitos" ' +
-           'role="status" aria-label="MegaBot está escribiendo">' +
-        '<span></span><span></span><span></span>' +
-      '</div>';
+    : '<div class="megabot-burbuja megabot-burbuja--megabot" role="status" ' +
+           'aria-label="MegaBot está contestando">' + etapas + '</div>';
 
   fila.innerHTML =
     '<div class="megabot-autor">MegaBot</div>' +
@@ -1128,6 +1184,9 @@ function mostrarEscribiendoDeMegaBot(hilo) {
   fila.className = 'megabot-fila megabot-fila--megabot megabot-escribiendo';
   fila.dataset.enCola = '1';
   fila.dataset.desde = String(Date.now());
+  if (MEGABOT_SUELE_TARDAR > 0) {
+    fila.dataset.sueleTardar = String(MEGABOT_SUELE_TARDAR);
+  }
   repintarEsperaDeMegaBot(fila);
 
   hilo.appendChild(fila);
@@ -1788,6 +1847,9 @@ const EDAD_MAXIMA_DE_USO_S  = 172800;    // 2 días
 /** Si el servidor es el de pruebas. Lo dice `listar`, no el navegador. */
 let MEGABOT_EN_PRUEBAS = false;
 
+/** Segundos que suele tardar una respuesta, medidos por el servidor. */
+let MEGABOT_SUELE_TARDAR = 0;
+
 /** El último uso conocido y el reloj que lo hace bajar en pantalla. */
 let MEGABOT_USO = null;
 let MEGABOT_RELOJ_DE_USO = null;
@@ -2388,6 +2450,9 @@ function abrirAsistente() {
 
       pintarMensajesNuevosDeMegaBot(hilo, llegaron);
       MEGABOT_EN_PRUEBAS = !!r.pruebas;
+      /* Cuanto suele tardar, medido por el servidor. Se guarda para que
+         la burbuja de espera lo diga mientras se espera. */
+      if (typeof r.suele_tardar === 'number') MEGABOT_SUELE_TARDAR = r.suele_tardar;
       pintarUsoDeMegaBot(r.uso);
       pintarQuienAtiendeMegaBot(r.megabot_vivo);
 

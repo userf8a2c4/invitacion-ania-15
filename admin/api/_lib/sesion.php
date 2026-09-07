@@ -331,9 +331,31 @@ function exigirSesion() {
  * @return bool
  */
 function excedioLimiteDeApi() {
+    /* ⚡ LA VENTANA SE CIERRA POR LOS DOS LADOS (2026-09-06)
+     *
+     * QUÉ PASÓ
+     * Al alinear la zona horaria de MySQL con la de PHP (_lib/bd.php),
+     * las filas escritas ANTES de ese cambio quedaron con su marca en
+     * UTC: seis horas por delante de la hora local. Y esta consulta solo
+     * preguntaba "más nueva que hace cinco minutos", sin techo — así que
+     * una fila del futuro cumple SIEMPRE.
+     *
+     * Resultado: el contador se quedó clavado por encima del tope y el
+     * panel entero devolvía 429 a todo, indistinguible de "estás usando
+     * demasiado". Duraba hasta que esas filas quedaran seis horas atrás.
+     *
+     * `AND cuando <= NOW()` lo arregla y además es correcto por sí solo:
+     * una petición registrada en el futuro no existe, y contarla como
+     * reciente no tiene defensa posible. Cualquier reloj desajustado
+     * —el del servidor de base, el de PHP— vuelve a dar el mismo
+     * problema, y esto lo cubre de una vez.
+     *
+     * La limpieza de las filas que ya quedaron mal la hace instalar.php. */
     $fila = consultarUno(
         'SELECT COUNT(*) AS n FROM intentos_login
          WHERE ip = :ip AND correo = :marca
+           AND cuando <= NOW()
+           AND cuando <= NOW()
            AND cuando > DATE_SUB(NOW(), INTERVAL :min MINUTE)',
         [':ip' => ipDeLaPeticion(), ':marca' => MARCA_DE_PETICION_API,
          ':min' => MINUTOS_DE_VENTANA_API]
@@ -590,6 +612,7 @@ function estaFrenadoDelTodo() {
     $fila = consultarUno(
         'SELECT COUNT(*) AS n FROM intentos_login
          WHERE ip = :ip AND correo <> :marca
+           AND cuando <= NOW()
            AND cuando > DATE_SUB(NOW(), INTERVAL :min MINUTE)',
         [':ip' => ipDeLaPeticion(), ':marca' => MARCA_DE_PETICION_API,
          ':min' => MINUTOS_DE_FRENO]
@@ -612,6 +635,7 @@ function estaFrenadoPorFallos() {
     $fila = consultarUno(
         'SELECT COUNT(*) AS n FROM intentos_login
          WHERE ip = :ip AND correo <> :marca
+           AND cuando <= NOW()
            AND cuando > DATE_SUB(NOW(), INTERVAL :min MINUTE)',
         [':ip' => ipDeLaPeticion(), ':marca' => MARCA_DE_PETICION_API,
          ':min' => MINUTOS_DE_FRENO]

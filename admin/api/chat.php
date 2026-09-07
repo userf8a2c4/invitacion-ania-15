@@ -636,6 +636,68 @@ const SEGUNDOS_DE_ESPERA_DE_LISTAR = 25;
  * @param int $hiloId
  * @return string  'enviado' | 'error' | 'pendiente' | ''
  */
+/**
+ * Cuánto suele tardar MegaBot en contestar, en segundos, según lo que
+ * DE VERDAD tardó las últimas veces. Null si todavía no hay con qué.
+ *
+ * ⚡ PARA QUÉ SIRVE (2026-09-06)
+ *
+ * Medido hoy: de los 73 s que tarda una respuesta, 0,4 son de este
+ * servidor. El resto es la cola de Grok despertando su rutina, y desde
+ * acá no hay forma de acortarlo.
+ *
+ * Lo que sí se puede es dejar de convertir esa espera en un agujero
+ * negro. «Suele tardar cerca de un minuto» cambia por completo lo que
+ * se siente al esperar: sin eso, a los treinta segundos lo natural es
+ * pensar que se colgó y volver a escribir — y cada mensaje repetido
+ * suma OTRA vuelta a la cola, así que la impaciencia se cobra sola.
+ *
+ * SE MIDE, NO SE ESTIMA. Sale de `latencia_json`, de mensajes reales de
+ * este hilo. Si no hay mediciones, se devuelve null y el panel no dice
+ * nada: inventar un número sería exactamente el tipo de dato que después
+ * nadie se cree.
+ *
+ * LA MEDIANA Y NO EL PROMEDIO: una respuesta que tardó diez minutos
+ * porque la rutina estaba pausada arrastraría el promedio y haría que
+ * todas las esperas parecieran larguísimas. La mediana la ignora.
+ *
+ * @param int $hiloId
+ * @return int|null Segundos.
+ */
+function cuantoSueleTardarMegabot($hiloId) {
+    if (!hayColumnaDeLatencia()) return null;
+
+    $filas = consultarTodo(
+        "SELECT latencia_json FROM chat_mensajes
+          WHERE hilo_id = :h AND rol = 'megabot' AND latencia_json IS NOT NULL
+          ORDER BY id DESC LIMIT 10",
+        [':h' => $hiloId]
+    );
+
+    $totales = [];
+    foreach ($filas as $f) {
+        $marcas = json_decode((string) $f['latencia_json'], true);
+        if (!is_array($marcas)) continue;
+
+        $tramos = deltasDeLatencia($marcas);
+        // `total_servidor` es t_enviar → t_responder: las dos marcas son
+        // nuestras, así que el número es de fiar (ver el contrato).
+        if (isset($tramos['total_servidor'])) $totales[] = (int) $tramos['total_servidor'];
+    }
+
+    /* Con una o dos muestras no hay «suele»: sería contar una anécdota
+       como si fuera una costumbre. */
+    if (count($totales) < 3) return null;
+
+    sort($totales);
+    $medio = (int) floor(count($totales) / 2);
+    $medianaMs = count($totales) % 2
+        ? $totales[$medio]
+        : (int) round(($totales[$medio - 1] + $totales[$medio]) / 2);
+
+    return (int) round($medianaMs / 1000);
+}
+
 function entregaDelUltimoMensajeSuyo($hiloId) {
     $fila = consultarUno(
         "SELECT estado FROM chat_mensajes
@@ -1149,6 +1211,11 @@ case 'listar':
            lo necesita porque `enviar` ya no lo puede saber a tiempo —ver
            entregaDelUltimoMensajeSuyo(). */
         'entrega'  => entregaDelUltimoMensajeSuyo($hiloId),
+        /* Cuánto tardó de verdad las últimas veces. El panel lo usa para
+           que la espera no parezca un cuelgue — ver
+           cuantoSueleTardarMegabot(). Null mientras no haya mediciones:
+           es preferible no decir nada a inventar un número. */
+        'suele_tardar' => cuantoSueleTardarMegabot($hiloId),
         /* Si MegaBot va a contestar esta vez, o si va a contestar el
            teléfono. El panel lo dice arriba del hilo: conviene saberlo
            ANTES de preguntar, y no al leer una respuesta que parecía
