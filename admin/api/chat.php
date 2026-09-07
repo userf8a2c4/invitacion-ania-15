@@ -30,6 +30,12 @@
        autenticación que no es el Bearer de sesión — no había nada
        parecido para reusar, se escribió de cero.
 
+     - responder acepta ADEMÁS un `reply_token` en el cuerpo: el pase de
+       un solo uso que viajó en el webhook de ese mismo mensaje. Con él
+       no hace falta ninguna clave permanente guardada en la memoria de
+       un agente, y `hilo_id` sale sobrando. Ver EL PASE DE UN SOLO USO
+       más abajo. Se acepta cualquiera de los dos.
+
    QUÉ SE LE PUEDE PEDIR
      GET  ?accion=listar&despues_de=0        mensajes del hilo, nuevos primero
                         &esperar=1           deja la petición abierta hasta
@@ -39,7 +45,9 @@
      POST ?accion=reenviar      {mensaje_id}
      POST ?accion=rotar_clave   (solo admin)
      POST ?accion=responder     {hilo_id, en_respuesta_a?, texto, propuestas?[],
-                                 uso?, latencia?}                (X-MegaBot-Clave)
+                                 uso?, latencia?}   (X-MegaBot-Clave
+                                                     o reply_token en el cuerpo;
+                                                     con pase, hilo_id sobra)
      GET  ?accion=contexto&hilo_id=          (X-MegaBot-Clave)
 
    ══════════════════════════════════════════════════════════════════════
@@ -162,6 +170,142 @@ function exigirClaveDeServicio() {
     if ($esperada === '' || $recibida === '' || !hash_equals($esperada, $recibida)) {
         responderMal('Clave de servicio inválida.', 401);
     }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   EL PASE DE UN SOLO USO (2026-09-07)
+
+   QUÉ PROBLEMA RESUELVE
+   Para contestar, MegaBot manda `X-MegaBot-Clave`: una clave permanente
+   que abre TODO lo que este archivo expone y que, para poder usarla,
+   tiene que estar guardada dentro de la memoria de un agente. Una clave
+   que vive ahí no se puede rotar sin coordinar a mano, no caduca, y
+   quien la lea puede escribir en el chat de Lucila cuando quiera.
+
+   CÓMO FUNCIONA
+   Cada mensaje que sale hacia MegaBot lleva su propio `reply_token`,
+   fabricado en ese momento y válido para contestar ESE mensaje:
+
+     · de un solo uso — se quema apenas se acepta;
+     · caduca (ver HORAS_DEL_PASE_DE_RESPUESTA);
+     · queda atado a su hilo, así que ni siquiera sirve para escribir en
+       la conversación de otra persona.
+
+   En la base se guarda el HASH, nunca el pase. Mismo criterio que las
+   sesiones del panel: si alguien lee la tabla, no se lleva nada usable.
+
+   ⚠️ LA CLAVE VIEJA SIGUE VALIENDO, Y TIENE QUE SEGUIR VALIENDO.
+   La rutina de MegaBot manda hoy `X-MegaBot-Clave`. Si el pase fuera
+   obligatorio desde este commit, el chat se quedaría mudo en el momento
+   de subirlo. Se acepta cualquiera de los dos y se prefiere el pase; la
+   clave permanente se saca de su rutina —y recién ahí de acá— cuando él
+   ya esté usando el pase.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Cuánto vale un pase. Generoso a propósito: la cola de MegaBot llegó a
+    tardar 150 s y a veces se atrasa más. Una respuesta que tardó seis
+    horas ya no le sirve a nadie, así que más allá de eso no hay nada que
+    proteger. */
+const HORAS_DEL_PASE_DE_RESPUESTA = 6;
+
+/**
+ * Si la base tiene las columnas del pase.
+ *
+ * Se pregunta una vez por petición y se recuerda. Sin ellas —una base a
+ * la que no se le corrió instalar.php— no se fabrica ningún pase y todo
+ * sigue funcionando con la clave de servicio, como hasta ahora.
+ *
+ * @return bool
+ */
+function hayColumnasDelPase() {
+    static $hay = null;
+    if ($hay === null) {
+        $columnas = columnasDelChat();
+        $hay = in_array('respuesta_token_hash', $columnas, true)
+            && in_array('respuesta_token_caduca', $columnas, true);
+    }
+    return $hay;
+}
+
+/**
+ * Las columnas que tiene HOY `chat_mensajes`, preguntadas una sola vez
+ * por petición.
+ *
+ * ⚡ POR QUÉ EN UN SOLO SITIO (2026-09-07)
+ * columnasDe() consulta information_schema, que no es gratis, y éste es
+ * el archivo más caliente del panel: el long-poll vuelve a entrar acá
+ * cada 25 s por cada teléfono que tenga el chat abierto. Que la
+ * latencia y el pase preguntaran cada uno por su lado, con su propia
+ * memoria, eran dos consultas de esquema por petición para averiguar lo
+ * mismo. El que venga tercero usa ésta.
+ *
+ * @return array
+ */
+function columnasDelChat() {
+    static $columnas = null;
+    if ($columnas === null) $columnas = columnasDe('chat_mensajes');
+    return $columnas;
+}
+
+/**
+ * Fabrica el pase de un mensaje y devuelve el pase EN CLARO.
+ *
+ * En claro se devuelve una sola vez, acá, para meterlo en el webhook.
+ * Después ya no se puede recuperar: en la base solo queda su huella.
+ *
+ * @param int $mensajeId
+ * @return string El pase, o '' si esta base todavía no lo admite.
+ */
+function crearPaseDeRespuesta($mensajeId) {
+    if (!hayColumnasDelPase()) return '';
+
+    $pase = bin2hex(random_bytes(32));
+
+    ejecutar(
+        'UPDATE chat_mensajes
+            SET respuesta_token_hash = :h, respuesta_token_caduca = :c
+          WHERE id = :i',
+        [
+            ':h' => hash('sha256', $pase),
+            ':c' => date('Y-m-d H:i:s',
+                         strtotime('+' . HORAS_DEL_PASE_DE_RESPUESTA . ' hours')),
+            ':i' => (int) $mensajeId,
+        ]
+    );
+
+    return $pase;
+}
+
+/**
+ * Comprueba el pase que vino en el cuerpo y lo quema.
+ *
+ * @param array $datos El cuerpo ya parseado.
+ * @return array|null La fila del mensaje que este pase autoriza a
+ *                    contestar, o null si no vino pase o no sirve.
+ */
+function paseDeRespuestaValido($datos) {
+    $pase = trim((string) ($datos['reply_token'] ?? ''));
+    if ($pase === '' || !hayColumnasDelPase()) return null;
+
+    /* La ventana se cierra por los dos lados. Un reloj desajustado deja
+       filas con fecha futura, y "caduca > NOW()" solo, sin techo, las da
+       por buenas para siempre — ya pasó con el techo de peticiones. */
+    $fila = consultarUno(
+        'SELECT id, hilo_id FROM chat_mensajes
+          WHERE respuesta_token_hash = :h
+            AND respuesta_token_caduca > NOW()
+            AND respuesta_token_caduca <= DATE_ADD(NOW(), INTERVAL :max HOUR)
+          LIMIT 1',
+        [':h' => hash('sha256', $pase), ':max' => HORAS_DEL_PASE_DE_RESPUESTA]
+    );
+    if (!$fila) return null;
+
+    // De un solo uso: se quema apenas se acepta, pase lo que pase después.
+    ejecutar('UPDATE chat_mensajes SET respuesta_token_hash = NULL WHERE id = :i',
+             [':i' => (int) $fila['id']]);
+
+    return $fila;
 }
 
 /**
@@ -971,7 +1115,7 @@ function ahoraEnMs() {
 function hayColumnaDeLatencia() {
     static $tiene = null;
     if ($tiene === null) {
-        $tiene = in_array('latencia_json', columnasDe('chat_mensajes'), true);
+        $tiene = in_array('latencia_json', columnasDelChat(), true);
     }
     return $tiene;
 }
@@ -1331,6 +1475,10 @@ case 'enviar':
                 'v' => 1,
                 'hilo_id' => $hiloId,
                 'mensaje_id' => $mensajeId,
+                /* El pase para contestar ESTE mensaje. Vacío en una base
+                   sin instalar, y entonces MegaBot usa la clave de
+                   servicio como siempre. Ver EL PASE DE UN SOLO USO. */
+                'reply_token' => crearPaseDeRespuesta($mensajeId),
                 'texto' => $texto,
                 'pantalla' => $pantalla,
                 'usuario' => ['id' => (int) $yo['id'], 'nombre' => $yo['nombre'], 'rol' => $yo['rol']],
@@ -1480,8 +1628,17 @@ case 'responder':
     // Antes de parsear nada: es el final del cronómetro de ida y vuelta.
     $tResponder = ahoraEnMs();
 
-    exigirClaveDeServicio();
+    /* El cuerpo se parsea ANTES de autorizar porque el pase viene
+       adentro. Parsear no es confiar: hasta la línea de abajo, nada de
+       lo que trae se usó para nada. */
     $datos = cuerpoJson();
+
+    /* Cualquiera de las dos puertas. Se prueba primero el pase —que es
+       de un solo uso y solo sirve para su mensaje— y se cae a la clave
+       permanente, que es lo que MegaBot manda hoy. Ver EL PASE DE UN
+       SOLO USO. */
+    $pase = paseDeRespuestaValido($datos);
+    if (!$pase) exigirClaveDeServicio();
 
     /* Que MegaBot conteste es la mejor prueba de que está vivo — mejor
        que el POST de ida, porque significa que además pudo pensar. Si
@@ -1489,7 +1646,13 @@ case 'responder':
        cumpla el reposo. */
     anotarSaludDeMegabot(true);
 
-    $hiloId = campoEntero($datos, 'hilo_id', 0);
+    /* Con pase, el hilo NO se pregunta: se sabe. El pase se fabricó para
+       un mensaje concreto, y ese mensaje tiene su hilo. Además de
+       ahorrarle el dato a MegaBot, cierra la puerta a que un pase sirva
+       para escribir en la conversación de otra persona: aunque el cuerpo
+       diga otro `hilo_id`, manda el del pase. */
+    $hiloId = $pase ? (int) $pase['hilo_id'] : campoEntero($datos, 'hilo_id', 0);
+
     if ($hiloId <= 0) responderMal('Falta decir de qué hilo.', 400);
     if (!consultarUno('SELECT id FROM chat_hilos WHERE id = :h', [':h' => $hiloId])) {
         responderMal('Ese hilo no existe.', 404);
@@ -1516,6 +1679,12 @@ case 'responder':
      * criterio que `propuesta_estado`: sin eso, bastaría un número para
      * hacer que una respuesta cite la conversación de otra persona. */
     $enRespuestaA = campoEntero($datos, 'en_respuesta_a', 0);
+
+    /* Con pase no hace falta que lo diga: el pase ES la cita. Se usa
+       como valor por defecto y no como imposición, por si algún día una
+       respuesta contesta a otra cosa a propósito. */
+    if ($enRespuestaA <= 0 && $pase) $enRespuestaA = (int) $pase['id'];
+
     if ($enRespuestaA > 0) {
         $citado = consultarUno(
             'SELECT id FROM chat_mensajes WHERE id = :m AND hilo_id = :h',
