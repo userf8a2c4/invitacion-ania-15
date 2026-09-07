@@ -79,7 +79,20 @@ case 'suscribir':
         ]
     );
 
-    responderBien(['mensaje' => 'Este teléfono va a recibir los avisos.']);
+    /* Cuántos teléfonos quedan registrados EN TOTAL.
+     *
+     * ⚡ POR QUÉ SE DEVUELVE (2026-09-07)
+     * Un envío real dio `correos: 2, push: 0` y nadie se enteró de que
+     * los avisos al teléfono no llegaban a nadie: la pantalla mostraba
+     * «Activados» porque miraba el permiso del navegador, que es otra
+     * cosa. Con este número, la pantalla puede decir cuántos aparatos
+     * hay del otro lado — y «0» o «1» se lee de un vistazo. */
+    $cuantos = consultarUno('SELECT COUNT(*) AS n FROM suscripciones_push');
+
+    responderBien([
+        'mensaje'   => 'Este teléfono va a recibir los avisos.',
+        'telefonos' => $cuantos ? (int) $cuantos['n'] : 0,
+    ]);
     break;
 
 
