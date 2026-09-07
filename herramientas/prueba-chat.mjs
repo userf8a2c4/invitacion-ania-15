@@ -409,6 +409,63 @@ comprobar('y los grandes en segundos con coma decimal',
 comprobar('un minuto largo se dice en minutos',
   M.msEnPalabras(149800) === '2 min 30 s', M.msEnPalabras(149800));
 
+/* ─── A10 · el pase de un solo uso ───────────────────────────────────
+ *
+ * Para contestar, MegaBot manda hoy una clave PERMANENTE que abre todo
+ * el chat y que tiene que vivir dentro de la memoria de un agente. El
+ * pase la reemplaza: uno por mensaje, de un solo uso y con vencimiento.
+ *
+ * Se comprueba sobre el PHP, que es donde vive: sin PHP local no hay
+ * forma de ejecutarlo, pero sí de exigir que diga lo que tiene que
+ * decir. Lo que se vigila acá son las cuatro cosas que, si se caen, lo
+ * convierten en un adorno. */
+
+console.log('\nA10 · el pase de un solo uso\n');
+
+const chatPhp = readFileSync(new URL('../admin/api/chat.php', import.meta.url), 'utf8');
+const instalarPhp = readFileSync(new URL('../admin/api/instalar.php', import.meta.url), 'utf8');
+
+comprobar('el pase viaja en el webhook',
+  /'reply_token' => crearPaseDeRespuesta\(\$mensajeId\)/.test(chatPhp));
+
+comprobar('en la base se guarda el HASH, nunca el pase',
+  /respuesta_token_hash = :h/.test(chatPhp) &&
+  /hash\('sha256', \$pase\)/.test(chatPhp),
+  'guardarlo en claro haría que leer la tabla alcanzara para escribirle a Lucila');
+
+comprobar('se quema apenas se acepta',
+  /UPDATE chat_mensajes SET respuesta_token_hash = NULL/.test(chatPhp),
+  'sin esto no es de un solo uso, es una clave más');
+
+comprobar('caduca, y la ventana se cierra por los dos lados',
+  /respuesta_token_caduca > NOW\(\)/.test(chatPhp) &&
+  /respuesta_token_caduca <= DATE_ADD/.test(chatPhp),
+  'un reloj desajustado deja filas futuras que valdrían para siempre');
+
+comprobar('el hilo lo manda el pase, no el cuerpo',
+  /\$hiloId = \$pase \? \(int\) \$pase\['hilo_id'\]/.test(chatPhp),
+  'si no, un pase serviría para escribir en la conversación de otra persona');
+
+/* Lo que rompería el chat el día que se suba: la rutina de MegaBot
+   todavía manda X-MegaBot-Clave. */
+comprobar('la clave de servicio SIGUE valiendo',
+  /if \(!\$pase\) exigirClaveDeServicio\(\);/.test(chatPhp),
+  'hacerlo obligatorio de golpe deja el chat mudo al subirlo');
+
+comprobar('sin las columnas no se fabrica ningún pase',
+  /if \(!hayColumnasDelPase\(\)\) return '';/.test(chatPhp),
+  'una base sin instalar tiene que seguir andando con la clave de siempre');
+
+comprobar('instalar.php agrega las dos columnas',
+  /\$agregarColumna\('chat_mensajes', 'respuesta_token_hash'/.test(instalarPhp) &&
+  /\$agregarColumna\('chat_mensajes', 'respuesta_token_caduca'/.test(instalarPhp));
+
+/* information_schema se paga en CADA petición, y el long-poll vuelve a
+   entrar cada 25 s por cada teléfono con el chat abierto. */
+comprobar('las columnas de chat_mensajes se preguntan una sola vez',
+  (chatPhp.match(/columnasDe\('chat_mensajes'\)/g) || []).length === 1,
+  'dos memorias distintas = dos consultas de esquema por petición');
+
 console.log('');
 if (fallos) {
   console.log('✗ ' + fallos + ' comprobacion(es) fallaron.\n');

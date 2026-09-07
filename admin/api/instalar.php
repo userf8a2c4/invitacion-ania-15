@@ -343,6 +343,26 @@ $agregarColumna('chat_mensajes', 'latencia_json', 'TEXT NULL');
    haySeparacionPorSesion() y, si no está, cuenta por IP como antes. */
 $agregarColumna('intentos_login', 'sesion_id', 'INT NOT NULL DEFAULT 0');
 
+/* El pase de un solo uso para contestar un mensaje (2026-09-07).
+
+   POR QUÉ EXISTE
+   Para contestar, MegaBot manda una clave permanente que abre todo el
+   chat y que, para poder usarla, tiene que vivir dentro de la memoria
+   de un agente: no caduca, no se rota sin coordinar a mano, y quien la
+   lea puede escribirle a Lucila cuando quiera. Con esto, cada mensaje
+   que sale lleva su propio pase, que sirve para contestar ESE mensaje,
+   una sola vez y por unas horas.
+
+   Se guarda el HASH y nunca el pase, igual que los tokens de sesión:
+   si alguien lee la tabla, no se lleva nada usable.
+
+   Las dos columnas son NULL: la enorme mayoría de las filas —todas las
+   respuestas de MegaBot, y todo lo anterior a hoy— no tienen pase, y no
+   hay nada honesto que inventarles. Sin ellas, chat.php no fabrica
+   ningún pase y todo sigue andando con la clave de servicio. */
+$agregarColumna('chat_mensajes', 'respuesta_token_hash',   'VARCHAR(64) DEFAULT NULL');
+$agregarColumna('chat_mensajes', 'respuesta_token_caduca', 'DATETIME DEFAULT NULL');
+
 /* ⚡ LIMPIAR LAS MARCAS QUE QUEDARON EN EL FUTURO (2026-09-06)
  *
  * Al alinear la zona horaria de MySQL con la de PHP (_lib/bd.php), las
