@@ -95,6 +95,82 @@ comprobar('la mesa suelta no se repite cuando hay desglose',
   /!quienVaAQueMesa\(datos\)/.test(escaner),
   'repetiría el dato, y encima puede mentir si el grupo va separado');
 
+/* ─── 4. Los nombres, como se dicen en voz alta ──────────────────── */
+
+console.log('\nQuién va a cada mesa\n');
+
+const juntarNombres = new Function(
+  escaner.slice(escaner.indexOf('function juntarNombres')) +
+  '\n return juntarNombres;')();
+
+/* Esta lista se LEE EN VOZ ALTA en la puerta —«Carlos y Lucila, mesa
+   14»— así que tiene que sonar a como se habla. */
+const CASOS = [
+  [['Carlos', 'Lucila'], 0, 'Carlos y Lucila'],
+  [['Ania'], 0, 'Ania'],
+  [['Carlos', 'Lucila', 'Ania'], 0, 'Carlos, Lucila y Ania'],
+  [['Pedro'], 1, 'Pedro y 1 más'],
+  [[], 2, '2 más'],
+  [['Ana', 'Luis'], 3, 'Ana, Luis y 3 más'],
+];
+
+for (const [nombres, sinNombre, esperado] of CASOS) {
+  const real = juntarNombres(nombres, sinNombre);
+  comprobar(JSON.stringify(nombres) + ' + ' + sinNombre + ' → «' + esperado + '»',
+    real === esperado, 'dio «' + real + '»');
+}
+
+comprobar('nunca queda una coma antes del último',
+  !/, [^,]+$/.test(juntarNombres(['A', 'B'], 0)),
+  'una coma final se lee como si faltara alguien');
+
+/* ─── 5. Nadie puede desaparecer de la pantalla ──────────────────────
+ *
+ * `lugares` sale de la tabla de acompañantes —solo quien fue cargado con
+ * nombre—, mientras que la cuenta de personas sale de lo que dijo el
+ * invitado al confirmar. Los dos números NO tienen por qué coincidir:
+ * comprobado con datos reales, hay una invitación de cuatro personas con
+ * UN solo acompañante cargado.
+ *
+ * Si el desglose sustituyera a la mesa general en ese caso, tres
+ * personas desaparecerían de la vista del portero. */
+
+console.log('\nEl desglose no puede esconder a nadie\n');
+
+const armar = new Function('seguro', 'comoSeLlamaLaMesa',
+  escaner.slice(escaner.indexOf('function elDesgloseCubreATodos')) +
+  '\n return elDesgloseCubreATodos;');
+
+const cubre = armar(
+  (v) => String(v == null ? '' : v),
+  (n) => (/^mesa\b/i.test(String(n).trim()) ? String(n).trim() : 'Mesa ' + n));
+
+const CASOS_DESGLOSE = [
+  ['4 personas y 1 cargado (el caso real de PBE)',
+   { adultos: 2, ninos: 2, mesa: 'Mesa 14', lugares: [{ nombre: 'Ana', mesa: 'Mesa 14' }] },
+   false],
+  ['todos cargados, en mesas distintas',
+   { adultos: 2, ninos: 0, mesa: 'Mesa 14',
+     lugares: [{ nombre: 'Ana', mesa: 'Mesa 14' }, { nombre: 'Luis', mesa: 'Mesa 7' }] },
+   true],
+  ['sin acompañantes cargados',
+   { adultos: 1, ninos: 0, mesa: 'Mesa 3', lugares: [] },
+   false],
+  ['cargado pero sin mesa',
+   { adultos: 2, ninos: 0, mesa: '', lugares: [{ nombre: 'Ana', mesa: '' }] },
+   false],
+];
+
+for (const [que, datos, esperado] of CASOS_DESGLOSE) {
+  comprobar(que + ' → ' + (esperado ? 'basta el desglose' : 'se muestra la mesa general'),
+    cubre(datos) === esperado,
+    'si tapa la mesa general sin cubrir a todos, esas personas no salen en pantalla');
+}
+
+comprobar('la mesa lleva dos puntos antes de los nombres',
+  /comoSeLlamaLaMesa\(mesa\)\) \+ ':'/.test(escaner),
+  'se lee «Mesa 14: Carlos y Lucila»');
+
 console.log('');
 if (fallos) {
   console.log('✗ ' + fallos + ' comprobación(es) fallaron.\n');

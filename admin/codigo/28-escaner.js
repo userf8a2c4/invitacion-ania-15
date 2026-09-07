@@ -294,6 +294,37 @@ async function consultarPase(codigo, donde) {
  * @param {Object} datos - Lo que devuelve llegadas.php.
  * @returns {string} HTML, o cadena vacía si no hay nada que agregar.
  */
+/**
+ * Si el desglose por mesa alcanza para TODO el grupo.
+ *
+ * ⚡ POR QUÉ HACE FALTA PREGUNTARLO (2026-09-07)
+ *
+ * `lugares` sale de la tabla de acompañantes, y ahí solo está quien fue
+ * cargado con nombre. La cuenta de personas, en cambio, sale de lo que
+ * dijo el invitado al confirmar. Los dos números NO tienen por qué
+ * coincidir: comprobado con datos reales, hay una invitación de cuatro
+ * personas con un solo acompañante cargado.
+ *
+ * Si el desglose se mostrara solo, esas tres personas desaparecerían de
+ * la pantalla — el portero vería «Mesa 14: Ana» y no sabría qué hacer
+ * con los otros tres que tiene delante. Peor que antes, porque antes al
+ * menos veía «Mesa 14» para todo el grupo.
+ *
+ * Con esto, la mesa general se sigue mostrando mientras el desglose no
+ * cubra a todos: se ve dónde va el grupo Y lo que se sepa de cada uno.
+ *
+ * @param {Object} datos
+ * @returns {boolean}
+ */
+function elDesgloseCubreATodos(datos) {
+  if (!quienVaAQueMesa(datos)) return false;
+
+  const gente = (datos.adultos || 0) + (datos.ninos || 0);
+  const conLugar = (datos.lugares || []).filter(l => String(l.mesa || '').trim()).length;
+
+  return conLugar >= gente;
+}
+
 function quienVaAQueMesa(datos) {
   const lugares = datos.lugares || [];
   if (!lugares.length) return '';
@@ -331,25 +362,46 @@ function quienVaAQueMesa(datos) {
    * esperando y poca luz. */
   const lineas = [];
   porMesa.forEach((grupo, mesa) => {
-    const quienes = grupo.nombres.slice();
-    if (grupo.sinNombre) {
-      quienes.push(grupo.sinNombre === 1 ? 'y 1 más'
-                                         : 'y ' + grupo.sinNombre + ' más');
-    }
+    const quienes = juntarNombres(grupo.nombres, grupo.sinNombre);
 
     lineas.push(
       '<div style="display:flex;gap:8px;align-items:baseline;' +
            'margin-top:var(--esp-2)">' +
         '<b style="color:var(--bien);white-space:nowrap;font-size:17px">' +
-          seguro(comoSeLlamaLaMesa(mesa)) +
+          seguro(comoSeLlamaLaMesa(mesa)) + ':' +
         '</b>' +
-        '<span style="font-size:16px">' + seguro(quienes.join(', ')) + '</span>' +
+        '<span style="font-size:16px">' + seguro(quienes) + '</span>' +
       '</div>');
   });
 
   return '<div style="margin-top:var(--esp-2);text-align:left">' +
            lineas.join('') +
          '</div>';
+}
+
+/**
+ * Une nombres como se dicen en voz alta: «Carlos y Lucila», no
+ * «Carlos, Lucila».
+ *
+ * Esta lista se LEE EN VOZ ALTA en la puerta —«Carlos y Lucila, mesa
+ * 14»— así que tiene que sonar a como se habla. Una coma final se lee
+ * como si faltara alguien.
+ *
+ * @param {string[]} nombres
+ * @param {number} sinNombre - Cuántos van a esa mesa sin nombre cargado.
+ * @returns {string}
+ */
+function juntarNombres(nombres, sinNombre) {
+  const partes = nombres.slice();
+
+  if (sinNombre > 0) {
+    partes.push(sinNombre === 1 ? '1 más' : sinNombre + ' más');
+  }
+
+  if (partes.length <= 1) return partes[0] || '';
+  if (partes.length === 2) return partes[0] + ' y ' + partes[1];
+
+  return partes.slice(0, -1).join(', ') + ' y ' + partes[partes.length - 1];
 }
 
 function pintarTarjetaDeLaPuerta(datos, donde) {
@@ -409,7 +461,7 @@ function pintarTarjetaDeLaPuerta(datos, donde) {
        * cuando no hay acompañantes cargados con su lugar, y cuando no
        * hay mesa asignada —que ahí es justamente la advertencia que el
        * portero necesita ver. */
-      (datos.asiste && !quienVaAQueMesa(datos)
+      (datos.asiste && !elDesgloseCubreATodos(datos)
         ? '<div class="etiqueta ' +
               (datos.mesa ? 'etiqueta--bien' : 'etiqueta--alerta') +
               '" style="margin-top:var(--esp-2);font-size:18px;padding:8px 12px">' +
