@@ -789,7 +789,25 @@ function guardarLaPropuesta($concepto, $monto, $direccion, $metodo, $datos) {
         'monto'          => $monto,
         'moneda'         => 'mxn',
         'direccion_id'   => (int) $direccion['id'],
-        'metodo_pago_id' => (int) $metodo['id'],
+        /* ⚡ NULO, NO CERO (2026-09-07)
+         *
+         * armarLaCompra() deja $metodo en nulo A PROPÓSITO cuando el
+         * cobro está apagado: no hace falta tarjeta porque paga GrokBot
+         * en la tienda. Pero acá se lo leía como arreglo igual.
+         *
+         * En PHP 8 eso no es un error fatal, es un aviso —«Trying to
+         * access array offset on value of type null»— y `(int) null` da
+         * 0. O sea que la compra se guardaba apuntando a un método de
+         * pago con id 0, que no existe: un dato inventado, silencioso,
+         * en la tabla donde después se mira quién pagó qué. Y si el
+         * servidor tuviera display_errors encendido, el aviso se
+         * imprime ANTES del JSON y la respuesta deja de ser JSON
+         * válido, con lo que el panel muestra un error de lectura en
+         * vez de la propuesta.
+         *
+         * La columna es `INT DEFAULT NULL`: nulo es exactamente «esta
+         * compra no se pagó con una tarjeta de acá», que es la verdad. */
+        'metodo_pago_id' => $metodo ? (int) $metodo['id'] : null,
         'estado'         => 'propuesta',
         'detalle_json'   => isset($datos['detalle']) && is_array($datos['detalle'])
             ? json_encode($datos['detalle'], JSON_UNESCAPED_UNICODE) : null,
@@ -1333,7 +1351,14 @@ case 'proponer':
             'concepto'      => $concepto,
             'monto'         => $monto,
             'moneda'        => 'mxn',
-            'tarjeta'       => trim((string) $metodo['brand'] . ' ···' . (string) $metodo['last4']),
+            /* Nulo cuando no hay tarjeta, y no la hay porque no hace
+               falta: con el cobro apagado paga GrokBot. Leyendo el nulo
+               como arreglo salía la cadena '···' —una tarjeta fantasma,
+               sin marca ni últimos cuatro— que es peor que no decir
+               nada, porque parece que hubiera uno. */
+            'tarjeta'       => $metodo
+                ? trim((string) $metodo['brand'] . ' ···' . (string) $metodo['last4'])
+                : null,
             'se_entrega_en' => (string) $direccion['alias'],
         ],
     ]);
