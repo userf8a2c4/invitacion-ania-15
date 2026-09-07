@@ -326,6 +326,23 @@ $agregarColumna('chat_mensajes', 'en_respuesta_a', 'INT DEFAULT NULL');
    tiene ninguna marca, y no hay nada honesto que inventarles. */
 $agregarColumna('chat_mensajes', 'latencia_json', 'TEXT NULL');
 
+/* Con qué sesión se hizo cada petición contada (2026-09-07).
+
+   POR QUÉ EXISTE
+   El techo de peticiones a la API se contaba por IP. El día de la
+   fiesta, TODOS los teléfonos de la puerta salen por el WiFi del salón
+   y para el servidor son una sola IP: los 300 de cinco minutos se
+   repartían entre todos, y el escáner podía empezar a contestar 429 con
+   la cola esperando. Con esta columna, cada dispositivo cuenta el suyo.
+
+   0 = petición sin sesión válida, que se sigue contando por IP porque
+   no hay otra cosa que saber de ella. Por eso NOT NULL DEFAULT 0 y no
+   NULL: '0' es un valor con significado acá, no un dato ausente.
+
+   Sin esta columna todo sigue funcionando: sesion.php la busca con
+   haySeparacionPorSesion() y, si no está, cuenta por IP como antes. */
+$agregarColumna('intentos_login', 'sesion_id', 'INT NOT NULL DEFAULT 0');
+
 /* ⚡ LIMPIAR LAS MARCAS QUE QUEDARON EN EL FUTURO (2026-09-06)
  *
  * Al alinear la zona horaria de MySQL con la de PHP (_lib/bd.php), las
