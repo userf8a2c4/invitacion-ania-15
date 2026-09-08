@@ -753,6 +753,25 @@
     var t = ahora - arranque;
     if (t >= DURACION) { terminar(); return; }
 
+    /* ⚠️ SI ALGO REVIENTA, SE TERMINA EL ECLIPSE — NO LA INVITACIÓN.
+     *
+     * Sin esto, una excepción a mitad del bucle corta el
+     * requestAnimationFrame y terminar() no llega a correr nunca: las
+     * capas de oscuridad y sangre quedan encima de la página PARA
+     * SIEMPRE, y el invitado se queda con la invitación tapada de rojo
+     * hasta que se le ocurra recargar.
+     *
+     * Un homenaje que puede romper la invitación no vale la pena. Ante
+     * cualquier error, se limpia todo y no pasó nada. */
+    try {
+      unCuadro(ahora, t);
+    } catch (error) {
+      terminar();
+    }
+    return;
+  }
+
+  function unCuadro(ahora, t) {
     gobernar(ahora);
     medirElAltar();          // la página puede haberse movido
     acomodarLaCopia();       // y el nombre con ella
@@ -793,6 +812,20 @@
        eclipse no espera a nadie ni se reinicia para nadie. */
     arranque = performance.now() - (desfase > 0 ? desfase : 0);
     pedidoDeCuadro = requestAnimationFrame(cuadro);
+
+    /* ⚠️ EL SEGURO DE ÚLTIMA INSTANCIA.
+     *
+     * El bucle se apoya en requestAnimationFrame, y hay una forma de que
+     * deje de llamarse sin que nadie se entere: si el navegador manda la
+     * pestaña al fondo a mitad del minuto, los cuadros se congelan. Al
+     * volver, `t` ya pasó los 60 s y terminar() corre — pero si la
+     * persona no vuelve nunca a esa pestaña, las capas se quedan puestas
+     * encima de la invitación.
+     *
+     * Este reloj no depende de los cuadros: a los 61 s se acabó, se haya
+     * dibujado o no. Es la diferencia entre un homenaje y una invitación
+     * arruinada. */
+    setTimeout(function () { if (vivo) terminar(); }, DURACION + 1000);
   }
 
   /* ⚠️ EL FINAL ES UN FRENAZO Y NO SE PUEDE SUAVIZAR.
