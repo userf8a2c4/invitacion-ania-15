@@ -60,6 +60,7 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 /* La comprobación del CSS la hace el propio empaquetador: así no hay
    una copia del minificador ni del orden de los archivos acá. */
 import { comprobarElCssInline } from './empaquetar.mjs';
@@ -338,5 +339,33 @@ if (swAdmin !== null) {
 if (desalineados) {
   console.log(`  (se encontraron versiones mezcladas: ${[...new Set(versionesEncontradas)].sort((a, b) => a - b).join(', ')} — quedaron todas alineadas)`);
 }
+/* ─── 5. Y los hashes de la CSP, que acaban de quedar viejos ─────────────
+ *
+ * ⚠️ ESTO NO ES UN EXTRA: ES PARTE DE SUBIR LA VERSIÓN.
+ *
+ * La CSP del sitio público cubre los <script> en línea con el hash de
+ * sus bytes exactos, y el paso 1 de este mismo archivo acaba de
+ * reescribir 24 referencias `?v=` DENTRO de uno de esos scripts. O sea
+ * que en la línea de arriba los hashes ya dejaron de valer.
+ *
+ * Si esto se corriera aparte, el día que alguien se olvide la
+ * invitación no ejecuta un solo script — para todos los invitados, sin
+ * un error a la vista de quien la subió. Por eso va acá pegado y no en
+ * una instrucción del README que hay que acordarse de leer. */
+const csp = spawnSync(process.execPath, [join(raiz, 'herramientas', 'csp-publica.mjs')],
+                      { encoding: 'utf8' });
+
+if (csp.status !== 0) {
+  console.log('');
+  console.log('✗ No se pudieron regenerar los hashes de la CSP.');
+  console.log((csp.stderr || csp.stdout || '').trim());
+  console.log('');
+  console.log('  NO subas así: la invitación se quedaría sin ejecutar');
+  console.log('  ningún script. Corré: node herramientas/csp-publica.mjs');
+  process.exit(1);
+}
+
+console.log('  .htaccess:  hashes de la CSP regenerados');
+
 console.log('');
 console.log('Ahora sí, ya se pueden subir los archivos al hosting.');
