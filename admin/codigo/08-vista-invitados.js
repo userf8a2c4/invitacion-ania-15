@@ -914,10 +914,21 @@ function abrirDetalleDeInvitado(id) {
 
   const comoSeLee = COMO_SE_LEE_EL_ESTADO[comoEsta] || {};
 
+  /* ⚡ LA ETIQUETA DE COLOR DICE TODO LO QUE HAY QUE SABER (2026-09-08)
+     Antes las veces que se mandó vivían en un renglón aparte, abajo, en
+     texto gris: dos etiquetas de envío en la misma ficha, una arriba con
+     color y otra abajo sin él. Se lee mejor una sola.
+
+     El ×N solo aparece cuando dice algo: si se mandó más de una vez y
+     todavía no contestaron, eso es «ya la perseguiste tres veces». Una
+     vez sola no agrega nada, y después de que contestaron tampoco. */
+  const veces = Number(fila.invitacion_veces_enviado) || 0;
+  const insistencia = (comoEsta === 'enviada' && veces > 1) ? ' ×' + veces : '';
+
   const renglones = [
     ['Estado',
       '<span class="etiqueta' + comoSeLee.etiqueta + '">' +
-        seguro(comoSeLee.texto) + '</span>', true],
+        seguro(comoSeLee.texto + insistencia) + '</span>', true],
   ];
 
   if (asiste) {
@@ -941,20 +952,16 @@ function abrirDetalleDeInvitado(id) {
     ['Correo',   seguro(fila.correo || '—')]
   );
 
+  /* ⚡ ACÁ HABÍA UNA SEGUNDA ETIQUETA DE ENVÍO, Y SE FUE (2026-09-08)
+     Primero repetía el estado con otras palabras («Confirmó» arriba y
+     «Sin enviar» abajo, en la misma ficha). Después quedó como «Mandada:
+     todavía no», que seguía siendo una segunda etiqueta de envío, solo
+     que en gris. Ahora hay UNA sola, arriba y con color, y lleva el ×N
+     adentro cuando hace falta. Ver el renglón «Estado». */
   if (tieneInvitacion) {
-    const vecesEnviado = Number(fila.invitacion_veces_enviado) || 0;
     renglones.push(
       ['Teléfono', seguro(fila.invitacion_telefono || '—')],
-      ['Grupo',    seguro(fila.invitacion_grupo_nombre || '—')],
-      /* ⚡ ACÁ DECÍA EL ESTADO OTRA VEZ (2026-09-08)
-         Este renglón repetía, con otras palabras, lo mismo que ya dice
-         «Estado» arriba: por eso se leían juntos «Confirmó» y «Sin
-         enviar» y parecía que la app se contradecía. Queda solo el dato
-         que NO está en ningún otro lado — cuántas veces se tocó Mandar,
-         que es distinto de en qué estado está. */
-      ['Mandada', vecesEnviado > 0
-        ? seguro(pluralizar(vecesEnviado, 'vez', 'veces'))
-        : 'todavía no', true]
+      ['Grupo',    seguro(fila.invitacion_grupo_nombre || '—')]
     );
   }
 
