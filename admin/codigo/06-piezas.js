@@ -2335,11 +2335,34 @@ function comoEstaLaAsistencia(fila) {
   return 'sin_enviar';
 }
 
-/** Cómo se lee cada estado, y de qué color va el punto. Un solo sitio:
-    si mañana cambia una palabra, cambia en la lista y en la ficha. */
+/**
+ * Cómo se lee cada estado, de qué color va el punto y de qué color la
+ * etiqueta. Un solo sitio: si mañana cambia una palabra o un color,
+ * cambia a la vez en la lista y en la ficha.
+ *
+ * ⚡ CADA ESTADO CON SU COLOR, Y QUE SE VEA (2026-09-08)
+ *
+ * La primera versión de esta tabla dejaba «Sin enviar» y «Sin
+ * responder» los dos con la etiqueta neutra: dos estados distintos que
+ * en pantalla se veían idénticos, que es justo lo contrario de para qué
+ * sirve una etiqueta de color.
+ *
+ * Los cuatro colores no son decorativos, dicen qué hacer:
+ *
+ *   gris  · Sin enviar     → falta mandarla. La pelota está de este lado.
+ *   ámbar · Sin responder  → está en la calle y no contestan. Hay que
+ *                            insistir; es el único estado que pide algo.
+ *   verde · Confirmó       → listo, cuenta para la comida y las sillas.
+ *   rojo  · No viene       → listo, NO cuenta.
+ *
+ * El ámbar (--ojo) y no el azul: azul se lee como «informativo, todo en
+ * orden», y una invitación sin responder a tres semanas de la fiesta no
+ * está en orden. Es el mismo tono que ya usan las alergias, y significa
+ * lo mismo — mirá esto.
+ */
 const COMO_SE_LEE_EL_ESTADO = {
-  sin_enviar: { texto: 'Sin enviar',    punto: '',              etiqueta: '' },
-  enviada:    { texto: 'Sin responder', punto: ' punto--enviada', etiqueta: '' },
-  confirmo:   { texto: 'Confirmó',      punto: ' punto--si',    etiqueta: ' etiqueta--bien' },
-  no_viene:   { texto: 'No viene',      punto: ' punto--no',    etiqueta: ' etiqueta--alerta' },
+  sin_enviar: { texto: 'Sin enviar',    punto: '',                etiqueta: ' etiqueta--tenue' },
+  enviada:    { texto: 'Sin responder', punto: ' punto--enviada', etiqueta: ' etiqueta--ojo' },
+  confirmo:   { texto: 'Confirmó',      punto: ' punto--si',      etiqueta: ' etiqueta--bien' },
+  no_viene:   { texto: 'No viene',      punto: ' punto--no',      etiqueta: ' etiqueta--alerta' },
 };
