@@ -742,16 +742,13 @@ function invitadoPasaElFiltro(fila) {
  * @param {Object} fila
  * @returns {string}
  */
-/* Nombres CORTOS de estado para la lista de Gente. El largo
-   (TEXTO_DE_ESTADO_INV, en 48-invitaciones.js) se sigue usando en la ficha
-   y en el `title`; acá hace falta algo que entre al lado del punto de
-   color sin romper la fila en un teléfono. */
-const TEXTO_CORTO_DE_ESTADO_INV = {
-  sin_enviar: 'Sin enviar',
-  enviada:    'Sin responder',
-  confirmada: 'Confirmada',
-  declinada:  'No viene',
-};
+/* ⚡ ACÁ VIVÍA TEXTO_CORTO_DE_ESTADO_INV, Y SE FUE (2026-09-08)
+   Era una tercera tabla de palabras para los mismos cuatro estados,
+   además de la de 48-invitaciones.js y de la etiqueta de asistencia.
+   Tres listas de nombres para una sola cosa es exactamente cómo se
+   llega a que la pantalla diga «Confirmó» y «Sin enviar» a la vez.
+   Ahora las palabras salen de COMO_SE_LEE_EL_ESTADO (06-piezas.js),
+   que es el único sitio. */
 
 function filaDeInvitado(fila) {
   const asiste = Number(fila.asiste) === 1;
@@ -779,15 +776,24 @@ function filaDeInvitado(fila) {
      es "veces que se tocó Mandar", no "veces que llegó de verdad" —
      WhatsApp no avisa si el mensaje se mandó de verdad (mismo límite
      que ya tiene envios_proveedor, documentado en migracion.sql). */
+  /* ⚡ UN SOLO INDICADOR, NO DOS (2026-09-08)
+   *
+   * Acá había un segundo punto de color, además del de la izquierda. La
+   * idea era que uno dijera «asistencia» y el otro «envío», pero NO SON
+   * DOS COSAS: no se puede haber confirmado si no se mandó nada. Es un
+   * solo recorrido —sin enviar → enviada → confirmó / no viene— y eso es
+   * literalmente lo que guarda `invitaciones.estado`.
+   *
+   * Mostrarlo dos veces no era redundante nada más: producía
+   * combinaciones imposibles en pantalla, como «Confirmó» al lado de
+   * «Sin enviar», que es lo que hacía dudar de si el dato estaba bien.
+   *
+   * Ahora el punto está solo a la izquierda y acá queda la palabra. El
+   * ×N sigue: es «veces que se tocó Mandar», y ese sí es otro dato. */
   const puntoEnvio = fila.invitacion_id
     ? '<span class="punto-envio" title="' +
         seguro((TEXTO_DE_ESTADO_INV[fila.invitacion_estado] || fila.invitacion_estado) +
                ' · mandado ' + pluralizar(Number(fila.invitacion_veces_enviado) || 0, 'vez', 'veces')) + '">' +
-        '<span class="punto ' +
-          (fila.invitacion_estado === 'confirmada' ? 'punto--si'
-            : fila.invitacion_estado === 'declinada' ? 'punto--no'
-            : fila.invitacion_estado === 'enviada' ? 'punto--enviada' : '') +
-        '"></span>' +
         /* ⚡ EL ESTADO TAMBÉN SE ESCRIBE, no solo se pinta (2026-09-02).
            El color estaba solo en el punto y su significado únicamente en
            el `title`, que en un teléfono no se ve nunca: no hay dónde
@@ -796,8 +802,7 @@ function filaDeInvitado(fila) {
            corto al lado, para no tener que acordarse de qué quiere decir
            cada color. */
         '<span class="vacio__texto" style="margin:0">' +
-          seguro(TEXTO_CORTO_DE_ESTADO_INV[fila.invitacion_estado] ||
-                 fila.invitacion_estado || '') +
+          seguro((COMO_SE_LEE_EL_ESTADO[comoEstaLaAsistencia(fila)] || {}).texto || '') +
         '</span>' +
         (Number(fila.invitacion_veces_enviado) > 0
           ? '<span class="vacio__texto" style="margin:0">×' +
@@ -810,12 +815,11 @@ function filaDeInvitado(fila) {
     '<button class="lista__fila" data-invitado="' + seguro(fila.id) + '">' +
       (SELECCION_ACTIVA
         ? '<span class="lista__casilla' + (marcado ? ' lista__casilla--marcada' : '') + '"></span>'
-        /* El punto dice lo mismo que la ficha: verde solo si contestó de
-           verdad. Antes era verde para todos, porque miraba `asiste`.
-           Sin responder va con `.punto` a secas, que ya es gris — misma
-           convención que el punto de envío (ver 03-vistas.css:1201). */
+        /* EL único punto de color de la fila. Sale del mismo estado que
+           la palabra de la derecha y que la ficha — ver
+           comoEstaLaAsistencia() en 06-piezas.js. */
         : '<span class="punto' +
-            ({ confirmo: ' punto--si', no_viene: ' punto--no' }[comoEstaLaAsistencia(fila)] || '') +
+            (COMO_SE_LEE_EL_ESTADO[comoEstaLaAsistencia(fila)] || {}).punto +
           '"></span>') +
       '<span class="lista__cuerpo">' +
         '<span class="lista__titulo">' + seguro(fila.nombre || 'Sin nombre') + '</span>' +
@@ -908,13 +912,12 @@ function abrirDetalleDeInvitado(id) {
      comoEstaLaAsistencia() en 06-piezas.js. */
   const comoEsta = comoEstaLaAsistencia(fila);
 
+  const comoSeLee = COMO_SE_LEE_EL_ESTADO[comoEsta] || {};
+
   const renglones = [
-    ['Asistencia',
-      comoEsta === 'confirmo'
-        ? '<span class="etiqueta etiqueta--bien">Confirmó</span>'
-      : comoEsta === 'no_viene'
-        ? '<span class="etiqueta etiqueta--alerta">No viene</span>'
-        : '<span class="etiqueta">Sin responder</span>', true],
+    ['Estado',
+      '<span class="etiqueta' + comoSeLee.etiqueta + '">' +
+        seguro(comoSeLee.texto) + '</span>', true],
   ];
 
   if (asiste) {
@@ -943,12 +946,15 @@ function abrirDetalleDeInvitado(id) {
     renglones.push(
       ['Teléfono', seguro(fila.invitacion_telefono || '—')],
       ['Grupo',    seguro(fila.invitacion_grupo_nombre || '—')],
-      ['Envío',    (ETIQUETA_DE_ESTADO_INV[fila.invitacion_estado] ||
-                    seguro(fila.invitacion_estado || '—')) +
-                   (vecesEnviado > 0
-                     ? ' <span class="vacio__texto" style="margin:0">· mandado ' +
-                       seguro(pluralizar(vecesEnviado, 'vez', 'veces')) + '</span>'
-                     : ''), true]
+      /* ⚡ ACÁ DECÍA EL ESTADO OTRA VEZ (2026-09-08)
+         Este renglón repetía, con otras palabras, lo mismo que ya dice
+         «Estado» arriba: por eso se leían juntos «Confirmó» y «Sin
+         enviar» y parecía que la app se contradecía. Queda solo el dato
+         que NO está en ningún otro lado — cuántas veces se tocó Mandar,
+         que es distinto de en qué estado está. */
+      ['Mandada', vecesEnviado > 0
+        ? seguro(pluralizar(vecesEnviado, 'vez', 'veces'))
+        : 'todavía no', true]
     );
   }
 

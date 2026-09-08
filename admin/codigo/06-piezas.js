@@ -2300,23 +2300,46 @@ function loQueEscribio(texto) {
  * sin_enviar → enviada → confirmada | declinada. Eso lo mueve el
  * invitado al contestar, nadie más.
  *
+ * ⚡ Y ES UN SOLO INDICADOR, NO DOS (2026-09-08)
+ *
+ * La lista mostraba DOS puntos de color: uno de «asistencia» y otro de
+ * «envío». No son dos cosas. No se puede haber confirmado si no se
+ * mandó nada: es un solo recorrido, y `invitaciones.estado` ya lo
+ * guarda entero.
+ *
+ *     sin enviar  →  enviada  →  confirmó  /  no viene
+ *
+ * Mostrarlo dos veces producía combinaciones imposibles en pantalla
+ * —«Confirmó» al lado de «Sin enviar»— que es justo lo que hacía dudar
+ * de si el dato estaba bien. Por eso esta función devuelve los CUATRO
+ * estados y no solo tres: el punto, la palabra y la ficha salen todos
+ * de acá.
+ *
  * @param {Object} fila - Una fila de confirmaciones.php?accion=listar.
- * @returns {'confirmo'|'no_viene'|'sin_responder'}
+ * @returns {'sin_enviar'|'enviada'|'confirmo'|'no_viene'}
  */
 function comoEstaLaAsistencia(fila) {
   const asiste = Number(fila.asiste) === 1;
 
-  /* Sin invitación no hay a quién preguntarle: es alguien cargado a mano
-     o que confirmó por su cuenta desde la web pública, y ahí `asiste` SÍ
-     es lo que esa persona dijo. */
+  /* Sin invitación no hay envío del que hablar: es alguien cargado a
+     mano o que confirmó por su cuenta desde la web pública, y ahí
+     `asiste` SÍ es lo que esa persona dijo. */
   if (!fila.invitacion_id) return asiste ? 'confirmo' : 'no_viene';
 
   const estado = String(fila.invitacion_estado || '');
 
   if (estado === 'confirmada') return asiste ? 'confirmo' : 'no_viene';
   if (estado === 'declinada')  return 'no_viene';
+  if (estado === 'enviada')    return 'enviada';
 
-  // sin_enviar o enviada: la invitación está en la calle o ni eso, pero
-  // esta persona todavía no contestó nada.
-  return 'sin_responder';
+  return 'sin_enviar';
 }
+
+/** Cómo se lee cada estado, y de qué color va el punto. Un solo sitio:
+    si mañana cambia una palabra, cambia en la lista y en la ficha. */
+const COMO_SE_LEE_EL_ESTADO = {
+  sin_enviar: { texto: 'Sin enviar',    punto: '',              etiqueta: '' },
+  enviada:    { texto: 'Sin responder', punto: ' punto--enviada', etiqueta: '' },
+  confirmo:   { texto: 'Confirmó',      punto: ' punto--si',    etiqueta: ' etiqueta--bien' },
+  no_viene:   { texto: 'No viene',      punto: ' punto--no',    etiqueta: ' etiqueta--alerta' },
+};
