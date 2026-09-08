@@ -338,6 +338,12 @@ const CONFIGURACION = {
         // todas juntas ni para borrar las que ya no sirven.
         ['etiquetas_acomodo', 'Ver y borrar las etiquetas de personas y mesas'],
         ['bitacora', 'Quién cambió qué y cuándo', true],
+        /* Va con `true` (solo admin) y además el endpoint exige el
+           permiso de borrar. Vive en Herramientas y no en un rincón
+           escondido a propósito: se prometió en el formulario de
+           confirmación, así que tiene que poder encontrarse — la
+           fricción está adentro de la pantalla, no en esconderla. */
+        ['borrado-final', 'Cuando pase la fiesta: borrar los datos de los invitados', true],
       ],
     },
     {

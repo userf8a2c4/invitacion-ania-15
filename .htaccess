@@ -221,13 +221,35 @@ Options -Indexes
   # aún no existen y que llevan meses deshacer.
   Header always set Strict-Transport-Security "max-age=31536000"
 
-  # ⚠️ ACÁ NO HAY CSP TODAVÍA, Y NO ES UN OLVIDO.
-  # La invitación tiene 5 <script> en línea y 5 bloques <style> dentro de
-  # index.html, así que una CSP exigiría `script-src 'unsafe-inline'` —
-  # que es justo el permiso que hace inútil la mitad de una CSP. Hacerla
-  # bien pide hashes o nonces, y eso es una ronda propia.
+  # ── CSP · generada por herramientas/csp-publica.mjs ──
   #
-  # El panel (admin/.htaccess) sí la tiene, en modo Report-Only: ahí
-  # están los datos de las 115 personas y el cobro, y ahí no hay ni un
-  # script en línea.
+  # NO SE EDITA A MANO. El hash de un <script> en línea es de sus bytes
+  # exactos, y el cuarto de index.html lleva 24 referencias `?v=`: cambia
+  # en cada subida de versión. Se regenera con:
+  #     node herramientas/csp-publica.mjs
+  # y la tanda de pruebas falla si quedó viejo.
+  #
+  # Para pasar de mirar a bloquear (o al revés) se cambia el NOMBRE de
+  # la cabecera de acá abajo: quitarle o ponerle «-Report-Only». El
+  # generador respeta el que encuentre y nunca lo cambia solo.
+  Header always set Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com 'sha256-KIyA+EscNp4ORlXAFMq9ZZZyhfCvuyassOHEb/H3R9g=' 'sha256-jna+631sWo6kva7goUGfz5U/HwHpL3HslpCqAbCEkoY=' 'sha256-dM5hRlh2SXVXyd/nrkY96ukBU5VqKEq9mFFk0aTjy1U=' 'sha256-NxGVBZXMSJBFFJ9H8cUXs/nkImimn6pl0yHV/CWQBAc=' 'sha256-doIlGjA9TuqedERrXSI7YkqEEuiW8zlJkaHKlan+sQU=' 'sha256-LuOEpOaO/JrqYfDsjyhFlpAK/ULYnlqB9RdpKxiyIrs=' 'sha256-nhnNKTaBL+EkKZa88esUTNWLgisnF36+gn9P7uxdBGY='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; font-src 'self' data:; connect-src 'self'; frame-src https://www.google.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+  # ── fin de la CSP generada ──
+
+  # ─── La CSP del sitio público (2026-09-07) ───────────────────────────
+  #
+  # Acá decía que no había CSP porque los <script> en línea obligarían a
+  # poner `unsafe-inline`, el permiso que hace inútil media CSP. Era
+  # cierto mientras se escribiera a mano: los siete scripts en línea se
+  # cubren con hashes, y el hash es de los bytes exactos, así que el
+  # cuarto de index.html —que lleva 24 referencias `?v=`— cambia en cada
+  # subida de versión.
+  #
+  # Por eso el bloque de ARRIBA lo genera una herramienta y no una
+  # persona, y subir-version.mjs la corre solo al final de cada ronda —
+  # así los hashes no pueden quedar viejos ni olvidándose.
+  # Ver herramientas/csp-publica.mjs.
+  #
+  # Lo que quedó: sin `unsafe-inline` en script-src, sin `unsafe-eval`
+  # (no hay un solo eval() en el sitio) y sin `unsafe-hashes` (no hay ni
+  # un onclick; todo se engancha con addEventListener).
 </IfModule>

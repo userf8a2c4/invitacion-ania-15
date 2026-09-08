@@ -87,9 +87,17 @@ for (const accion of DE_DINERO) {
    al login (03-servidor.js:420), así que equivocarse de tecla echaba a
    la persona del panel entero. Tiene que ser 403 — la sesión es válida,
    lo que falta es autorización para esa acción. */
-const guarda = php.slice(
-  php.indexOf('function exigirContrasenaDeNuevo'),
-  php.indexOf('function exigirRitmoDeCobro'));
+/* La guarda ya no vive en compras.php: bajó a _lib/reconfirmar.php el
+   2026-09-07, porque borrado_final.php también la necesita y compras.php
+   es un endpoint que no se puede incluir. Se busca en los dos, así esta
+   comprobación sobrevive a que vuelva a mudarse. */
+const reconfirmar = readFileSync(
+  join(AQUI, '..', 'admin', 'api', '_lib', 'reconfirmar.php'), 'utf8');
+
+const dondeVive = reconfirmar.includes('function exigirContrasenaDeNuevo')
+  ? reconfirmar : php;
+
+const guarda = dondeVive.slice(dondeVive.indexOf('function exigirContrasenaDeNuevo'));
 
 comprobar('ningún rechazo de contraseña devuelve 401',
   guarda !== '' && !/responderMal\([^;]*,\s*401\s*\)/.test(guarda),
