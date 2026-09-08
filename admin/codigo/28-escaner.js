@@ -62,7 +62,19 @@ function abrirEscaner() {
              'autocomplete="off" spellcheck="false">' +
     '</div>' +
 
-    '<div id="escaner-resultado"></div>'
+    '<div id="escaner-resultado"></div>' +
+
+    /* ⚠️ ANTES DE REPARTIR, NO DESPUÉS.
+       Una vez que las invitaciones salieron, un código que no funciona
+       deja de ser un bug y pasa a ser una persona parada en la puerta
+       con su pase en la mano. Este botón le pregunta a la puerta por
+       TODOS los códigos, uno por uno, mientras todavía se puede
+       arreglar. Va abajo y en gris: se usa antes del evento, no durante. */
+    '<button type="button" class="boton boton--ancho" id="escaner-revisar" ' +
+            'style="margin-top:var(--esp-3)">' +
+      'Revisar que todos los códigos funcionen' +
+    '</button>' +
+    '<div id="escaner-revision"></div>'
   );
 
   // Se apaga la cámara pase lo que pase: la X, el fondo, Escape, el
@@ -71,6 +83,12 @@ function abrirEscaner() {
   alSoltarLaHoja(apagarCamaraDelEscaner);
 
   const caja = buscar('#escaner-resultado', cuerpo);
+
+  const botonRevisar = buscar('#escaner-revisar', cuerpo);
+  if (botonRevisar) {
+    botonRevisar.addEventListener('click',
+      () => revisarTodosLosCodigos(botonRevisar, buscar('#escaner-revision', cuerpo)));
+  }
 
   if (tieneCamara) {
     iniciarCamaraDelEscaner(buscar('#escaner-video', cuerpo), codigo =>
@@ -606,4 +624,125 @@ function pintarTarjetaDeLaPuerta(datos, donde) {
       boton.textContent = 'Dejar pasar';
     }
   });
+}
+
+/**
+ * Le pregunta a la puerta por TODOS los códigos, uno por uno.
+ *
+ * ⚡ POR QUÉ ESTO NO ES «MIRAR LA LISTA» (2026-09-08)
+ *
+ * Ver los códigos en pantalla no dice si funcionan. Los dos fallos que
+ * de verdad pasan son invisibles a simple vista:
+ *
+ *   · UN CÓDIGO REPETIDO. La columna `codigo` no tiene UNIQUE —es a
+ *     propósito, porque las altas a mano crean filas sin código y varias
+ *     cadenas vacías chocarían contra el índice—. Si dos filas comparten
+ *     código, la búsqueda encuentra UNA, y la segunda persona entraría
+ *     con el nombre de la primera. En la lista se ven dos códigos
+ *     idénticos y nadie lo nota entre ciento y pico.
+ *
+ *   · UN CARÁCTER INVISIBLE. Un espacio raro pegado adentro se ve igual
+ *     y no calza nunca.
+ *
+ * El servidor corre para cada código las MISMAS dos funciones que corre
+ * el escáner de verdad. No es una consulta parecida: es el camino que
+ * va a recorrer el teléfono del portero.
+ *
+ * @param {Element} boton
+ * @param {Element} donde
+ * @returns {Promise<void>}
+ */
+async function revisarTodosLosCodigos(boton, donde) {
+  boton.disabled = true;
+  boton.textContent = 'Revisando…';
+  donde.innerHTML = '';
+
+  let r;
+  try {
+    r = await traer('llegadas.php?accion=revisar_codigos');
+  } catch (error) {
+    donde.innerHTML = '<p class="aviso-error">' + seguro(error.message) + '</p>';
+    boton.disabled = false;
+    boton.textContent = 'Revisar que todos los códigos funcionen';
+    return;
+  }
+
+  boton.disabled = false;
+  boton.textContent = 'Revisar de nuevo';
+
+  const lista = (titulo, filas, comoSeLee) => {
+    if (!filas || !filas.length) return '';
+    return '<div class="tarjeta" style="margin-top:var(--esp-2)">' +
+             '<div class="tarjeta__titulo">' + seguro(titulo) +
+               ' (' + filas.length + ')</div>' +
+             '<ul style="margin:0;padding-left:1.1rem;line-height:1.7">' +
+               filas.map(f => '<li>' + seguro(comoSeLee(f)) + '</li>').join('') +
+             '</ul>' +
+           '</div>';
+  };
+
+  if (r.todo_bien) {
+    donde.innerHTML =
+      '<div class="tarjeta" style="margin-top:var(--esp-2)">' +
+        '<p><strong>Los ' + r.funcionan + ' pases funcionan.</strong></p>' +
+        '<p class="vacio__texto" style="margin-top:var(--esp-1)">' +
+          'Cada código se buscó con la misma consulta que usa el escáner, y ' +
+          'los ' + r.revisados + ' devuelven a la persona correcta.' +
+        '</p>' +
+      '</div>' +
+      /* Los códigos raros no impiden entrar, pero conviene mirarlos. */
+      lista('Códigos con caracteres fuera de lo normal', r.codigos_raros,
+            f => f.nombre + ' · ' + f.codigo);
+    return;
+  }
+
+  donde.innerHTML =
+    '<p class="aviso-error" style="margin-top:var(--esp-2)">' +
+      '<strong>' + r.problemas + ' pase(s) no van a funcionar en la puerta.</strong> ' +
+      'De ' + r.revisados + ' revisados, ' + r.funcionan + ' están bien.' +
+    '</p>' +
+
+    lista('Sin código: no se pueden escanear', r.sin_codigo,
+          f => f.nombre) +
+
+    /* El único de los cuatro problemas que se arregla solo, y con un
+       botón: darle un código a quien no tiene. Los otros tres piden
+       mirar los datos a mano. */
+    (r.sin_codigo && r.sin_codigo.length
+      ? '<button type="button" class="boton boton--principal boton--ancho" ' +
+                'id="escaner-generar" style="margin-top:var(--esp-2)">' +
+          'Darles un código a esos ' + r.sin_codigo.length +
+        '</button>'
+      : '') +
+
+    lista('Código repetido: el segundo entraría como el primero', r.repetidos,
+          f => f.codigo + ' — ' + (f.de || []).join(' y ')) +
+
+    lista('El código no encuentra a su persona', r.no_se_encuentra,
+          f => f.nombre + ' · ' + f.codigo +
+               (f.devuelve_a ? ' (devuelve a ' + f.devuelve_a + ')' : '')) +
+
+    lista('La tarjeta de la puerta falla al armarse', r.rompen,
+          f => f.nombre + ' · ' + f.codigo) +
+
+    lista('Códigos con caracteres fuera de lo normal', r.codigos_raros,
+          f => f.nombre + ' · ' + f.codigo);
+
+  const generar = buscar('#escaner-generar', donde);
+  if (generar) {
+    generar.addEventListener('click', async () => {
+      generar.disabled = true;
+      generar.textContent = 'Generando…';
+      try {
+        const hecho = await mandarSinCola('llegadas.php?accion=generar_codigos_faltantes', {});
+        avisar('Listos ' + (hecho.generados || []).length + ' códigos nuevos.');
+        // Se vuelve a revisar sola: el número que importa es el de después.
+        revisarTodosLosCodigos(boton, donde);
+      } catch (error) {
+        avisar(error.message, true);
+        generar.disabled = false;
+        generar.textContent = 'Darles un código a esos ' + r.sin_codigo.length;
+      }
+    });
+  }
 }

@@ -30,7 +30,8 @@ $accion = (string) ($_GET['accion'] ?? 'consultar');
 
 // El resumen lo puede ver cualquiera con sesión (es solo un número para
 // Hoy); leer un pase y dejar pasar es del permiso especial 'escanear'.
-if (in_array($accion, ['consultar', 'marcar'], true) && !tieneEspecial($yo, 'escanear')) {
+if (in_array($accion, ['consultar', 'marcar', 'revisar_codigos'], true) &&
+    !tieneEspecial($yo, 'escanear')) {
     responderMal('No tienes permiso para escanear pases.', 403);
 }
 
@@ -204,6 +205,193 @@ case 'ultimas':
     }, $filas);
 
     responderBien(['ultimas' => $resultado]);
+    break;
+
+
+/* ─── REVISAR: QUE NINGÚN PASE FALLE EN LA PUERTA ──────────────────────
+ *
+ * ⚠️ POR QUÉ EXISTE (2026-09-08)
+ *
+ * Las invitaciones se reparten hoy. A partir de ese momento, un código
+ * que no funcione ya no es un bug: es una persona parada en la puerta,
+ * con su pase en la mano, a la que hay que decirle que no aparece.
+ *
+ * Esto recorre TODAS las confirmaciones y le pregunta a la puerta por
+ * cada código, una por una.
+ *
+ * LO IMPORTANTE: usa buscarConfirmacionPorCodigo() y datosParaLaPuerta(),
+ * que son EXACTAMENTE las dos funciones que corre el escáner. No es una
+ * consulta parecida escrita al lado —eso probaría la copia— es el mismo
+ * camino que va a recorrer el teléfono del portero.
+ *
+ * QUÉ PUEDE SALIR MAL, Y QUE NO SE VE MIRANDO LA LISTA
+ *   · Un código repetido: `codigo` NO tiene UNIQUE (a propósito, ver
+ *     migracion.sql), así que dos filas pueden compartirlo. La consulta
+ *     devuelve UNA, y la segunda persona entraría como la primera.
+ *   · Un código vacío: esa persona no se puede escanear, y punto.
+ *   · Un código con un carácter invisible: se ve idéntico en pantalla y
+ *     no calza nunca.
+ */
+case 'revisar_codigos':
+    exigirMetodo(['GET']);
+
+    if (!in_array('codigo', columnasDe('confirmaciones'), true)) {
+        responderMal('Esta base no tiene la columna del código.', 500);
+    }
+
+    $todas = consultarTodo('SELECT id, nombre, codigo FROM confirmaciones ORDER BY id');
+
+    $sinCodigo   = [];
+    $repetidos   = [];
+    $noSeEncuentra = [];
+    $rompen      = [];
+    $raros       = [];
+    $bien        = 0;
+
+    // Para detectar repetidos sin distinguir mayúsculas, igual que la
+    // colación de la base (utf8mb4_unicode_ci).
+    $vistos = [];
+
+    foreach ($todas as $fila) {
+        $codigo = (string) $fila['codigo'];
+        $quien  = ['id' => (int) $fila['id'], 'nombre' => (string) $fila['nombre'],
+                   'codigo' => $codigo];
+
+        if (trim($codigo) === '') { $sinCodigo[] = $quien; continue; }
+
+        /* Un código con espacios adentro, o con caracteres que no son
+           letras, números o guion, se ve bien en pantalla y no calza
+           nunca. Se avisa aunque la búsqueda funcione. */
+        if (!preg_match('/^[A-Za-z0-9\-]+$/', $codigo)) $raros[] = $quien;
+
+        $clave = mb_strtolower(trim($codigo));
+        if (isset($vistos[$clave])) {
+            $repetidos[] = ['codigo' => $codigo,
+                            'de' => [$vistos[$clave], $quien['nombre']]];
+        } else {
+            $vistos[$clave] = $quien['nombre'];
+        }
+
+        /* El camino real del escáner, con el código tal como lo recibiría
+           por la URL (campoTexto recorta, así que se recorta igual). */
+        $encontrada = buscarConfirmacionPorCodigo(trim($codigo));
+
+        if (!$encontrada) { $noSeEncuentra[] = $quien; continue; }
+
+        /* Que además devuelva A ESTA persona y no a otra: con un código
+           repetido, la búsqueda encuentra algo — pero a quien no es. */
+        if ((int) $encontrada['id'] !== (int) $fila['id']) {
+            $noSeEncuentra[] = $quien + ['devuelve_a' => (string) $encontrada['nombre']];
+            continue;
+        }
+
+        /* Y que la tarjeta de la puerta se pueda armar. Si esto revienta,
+           el escáner encuentra el pase y muestra un error igual. */
+        try {
+            datosParaLaPuerta($encontrada);
+            $bien++;
+        } catch (Throwable $e) {
+            $rompen[] = $quien;
+            error_log('[Ania XV · llegadas] La tarjeta de la puerta falla para '
+                    . $codigo . ': ' . $e->getMessage());
+        }
+    }
+
+    $problemas = count($sinCodigo) + count($repetidos)
+               + count($noSeEncuentra) + count($rompen);
+
+    responderBien([
+        'revisados'       => count($todas),
+        'funcionan'       => $bien,
+        'problemas'       => $problemas,
+        'todo_bien'       => $problemas === 0,
+        'sin_codigo'      => $sinCodigo,
+        'repetidos'       => $repetidos,
+        'no_se_encuentra' => $noSeEncuentra,
+        'rompen'          => $rompen,
+        'codigos_raros'   => $raros,
+    ]);
+    break;
+
+
+/* ─── REPARAR: DARLE CÓDIGO A QUIEN NO TIENE ───────────────────────────
+ *
+ * ⚠️ EL FALLO QUE ESTO ARREGLA, Y POR QUÉ ESTABA AHÍ (2026-09-08)
+ *
+ * `invitaciones.php` genera un código al crear una invitación desde el
+ * panel. Pero el IMPORTADOR y el alta a mano NO: crean la fila con el
+ * código vacío. Está dicho en migracion.sql, junto a la columna, y por
+ * eso mismo `codigo` no tiene UNIQUE — varias cadenas vacías chocarían
+ * contra el índice.
+ *
+ * O sea que quien se cargó importando una hoja de cálculo no tiene pase.
+ * No es que el escáner falle con ellos: no hay nada que leer. Y no se
+ * nota hasta que alguien está parado en la puerta.
+ *
+ * Esto le da un código a cada uno que no lo tenga, con el MISMO
+ * generador que usa invitaciones.php.
+ *
+ * LO QUE NO HACE, Y ES LO IMPORTANTE:
+ * no toca ni un código existente. Si alguien ya recibió su invitación,
+ * el código que tiene en la mano es el que se queda. Reasignar códigos
+ * ya repartidos sería convertir un problema de treinta personas en uno
+ * de ciento cinco.
+ */
+case 'generar_codigos_faltantes':
+    exigirMetodo('POST');
+    exigirAdministrador();
+
+    if (!in_array('codigo', columnasDe('confirmaciones'), true)) {
+        responderMal('Esta base no tiene la columna del código.', 500);
+    }
+
+    /* Solo las que están vacías. El TRIM cubre la fila que quedó con un
+       espacio, que a la vista es idéntica a una vacía. */
+    $sinCodigo = consultarTodo(
+        "SELECT id, nombre FROM confirmaciones
+          WHERE codigo IS NULL OR TRIM(codigo) = ''
+          ORDER BY id"
+    );
+
+    $hechos  = [];
+    $fallaron = [];
+
+    foreach ($sinCodigo as $fila) {
+        /* Mismo generador que invitaciones.php: 'XV-' y tres bytes al
+           azar en hexadecimal. Se reintenta hasta que no choque con uno
+           que ya exista — con 16,7 millones de combinaciones y ciento y
+           pico de filas, la primera vuelta alcanza casi siempre. */
+        try {
+            $intentos = 0;
+            do {
+                $codigo = 'XV-' . strtoupper(bin2hex(random_bytes(3)));
+                $yaExiste = consultarUno(
+                    'SELECT id FROM confirmaciones WHERE codigo = :c', [':c' => $codigo]);
+                $intentos++;
+            } while ($yaExiste && $intentos < 20);
+
+            if ($yaExiste) { $fallaron[] = (string) $fila['nombre']; continue; }
+
+            actualizar('confirmaciones', (int) $fila['id'], ['codigo' => $codigo]);
+            $hechos[] = ['nombre' => (string) $fila['nombre'], 'codigo' => $codigo];
+
+        } catch (Throwable $e) {
+            $fallaron[] = (string) $fila['nombre'];
+            error_log('[Ania XV · llegadas] No se pudo dar código a '
+                    . $fila['nombre'] . ': ' . $e->getMessage());
+        }
+    }
+
+    if ($hechos) {
+        anotarEnBitacora($yo, 'generó códigos de pase faltantes', 'confirmaciones', 0,
+            count($hechos) . ' invitaciones que no tenían');
+    }
+
+    responderBien([
+        'sin_codigo_habia' => count($sinCodigo),
+        'generados'        => $hechos,
+        'fallaron'         => $fallaron,
+    ]);
     break;
 
 
