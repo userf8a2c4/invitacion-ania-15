@@ -317,32 +317,88 @@ async function consultarPase(codigo, donde) {
  * @returns {boolean}
  */
 function elDesgloseCubreATodos(datos) {
-  if (!quienVaAQueMesa(datos)) return false;
+  const reparto = repartoPorMesa(datos);
+  return reparto.porMesa.size > 0 && reparto.ubicadas >= reparto.personas;
+}
 
-  const gente = (datos.adultos || 0) + (datos.ninos || 0);
-  const conLugar = (datos.lugares || []).filter(l => String(l.mesa || '').trim()).length;
+/**
+ * Reparte a TODAS las personas de la invitación entre las mesas.
+ *
+ * ⚡ POR QUÉ NO ALCANZA CON MIRAR `lugares` (2026-09-07)
+ *
+ * `lugares` tiene una fila por acompañante CARGADO. La cuenta de
+ * personas sale de lo que dijo el invitado al confirmar. Andy, en
+ * producción, son 2 personas con 1 sola fila — y esa fila puede además
+ * venir sin mesa propia.
+ *
+ * Antes, quien no tenía fila con mesa simplemente no salía en el
+ * desglose, y para que no desapareciera se mostraba la mesa general
+ * suelta al lado. El resultado, leído en la puerta, era:
+ *
+ *     Mesa 5
+ *     Mesa 5: Andrea Tellez
+ *
+ * Dos líneas que dicen casi lo mismo, y la segunda persona sin figurar
+ * en ninguna. El portero tiene dos personas delante y una sola en
+ * pantalla.
+ *
+ * Ahora se reparte a todos, con dos reglas:
+ *
+ *   · una fila sin mesa propia va a la mesa del grupo — que es lo que
+ *     significa no haberle puesto una aparte;
+ *   · las personas que ni siquiera tienen fila van a la mesa del grupo
+ *     como «y N más».
+ *
+ * Con eso, lo de arriba queda en una línea: «Mesa 5: Andrea Tellez y 1
+ * más». Están las dos, y se lee de un vistazo.
+ *
+ * Si el grupo no tiene mesa general, no hay dónde ponerlas y quedan sin
+ * ubicar: ahí el escáner tiene que seguir avisando que falta asignar
+ * mesa, que es la verdad.
+ *
+ * @param {Object} datos
+ * @returns {{porMesa: Map, ubicadas: number, personas: number}}
+ */
+function repartoPorMesa(datos) {
+  const personas = (datos.adultos || 0) + (datos.ninos || 0);
+  const general  = String(datos.mesa || '').trim();
+  const lugares  = datos.lugares || [];
 
-  return conLugar >= gente;
+  const porMesa = new Map();
+  const tomar = (mesa) => {
+    if (!porMesa.has(mesa)) porMesa.set(mesa, { nombres: [], sinNombre: 0 });
+    return porMesa.get(mesa);
+  };
+
+  let ubicadas = 0;
+
+  lugares.forEach(lugar => {
+    const mesa = String(lugar.mesa || '').trim() || general;
+    if (!mesa) return;                     // sin mesa propia ni de grupo
+
+    const nombre = String(lugar.nombre || '').trim();
+    if (nombre) tomar(mesa).nombres.push(nombre);
+    else        tomar(mesa).sinNombre++;
+    ubicadas++;
+  });
+
+  /* Los que no tienen ni fila de acompañante. Van con el grupo, que es
+     donde van a sentarse mientras nadie diga otra cosa. */
+  const faltan = personas - ubicadas;
+  if (faltan > 0 && general) {
+    tomar(general).sinNombre += faltan;
+    ubicadas += faltan;
+  }
+
+  return { porMesa: porMesa, ubicadas: ubicadas, personas: personas };
 }
 
 function quienVaAQueMesa(datos) {
-  const lugares = datos.lugares || [];
-  if (!lugares.length) return '';
-
-  const porMesa = new Map();
-
-  lugares.forEach(lugar => {
-    const mesa = String(lugar.mesa || '').trim();
-    if (!mesa) return;                     // sin mesa: no hay nada que decir
-
-    if (!porMesa.has(mesa)) porMesa.set(mesa, { nombres: [], sinNombre: 0 });
-
-    const grupo = porMesa.get(mesa);
-    const nombre = String(lugar.nombre || '').trim();
-    if (nombre) grupo.nombres.push(nombre);
-    else grupo.sinNombre++;
-  });
-
+  /* El reparto lo arma repartoPorMesa() y NO esta función: las dos
+     preguntas —«¿quién va a qué mesa?» y «¿esto cubre a todos?»— tienen
+     que salir del mismo cálculo. Cuando cada una hacía el suyo, podían
+     contestar cosas incompatibles. */
+  const porMesa = repartoPorMesa(datos).porMesa;
   if (!porMesa.size) return '';
 
   /* ⚡ SE MUESTRA SIEMPRE, AUNQUE VAYAN TODOS A LA MISMA MESA
