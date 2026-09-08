@@ -2274,3 +2274,49 @@ function loQueEscribio(texto) {
 
   return limpio;
 }
+
+/**
+ * Si esta persona CONFIRMÓ de verdad, dijo que no, o todavía no contestó.
+ *
+ * ⚡ POR QUÉ EXISTE, Y POR QUÉ IMPORTA TANTO (2026-09-08)
+ *
+ * La app decía «Confirmó» mirando solo la columna `asiste`. Pero esa
+ * columna NO es la respuesta del invitado: se pone en 1 automáticamente
+ * al crear la invitación, para que el bot de mesas pueda acomodar a la
+ * gente antes de que nadie conteste. Está dicho en migracion.sql, junto
+ * a la columna: «el supuesto para sentar».
+ *
+ * O sea que la ficha decía «Confirmó» de 47 personas de las que NINGUNA
+ * había contestado, y de 46 a las que ni siquiera se les había mandado
+ * la invitación. La app se contradecía sola: Gente decía «47
+ * confirmaciones» y Hoy, en la misma pantalla de al lado, «0 de 105
+ * confirmaron».
+ *
+ * El riesgo no es que se vea raro: es encargar comida y sillas para 105
+ * personas que nunca dijeron que venían.
+ *
+ * QUIÉN TIENE LA VERDAD
+ * `invitaciones.estado`, que sí es una máquina de estados real:
+ * sin_enviar → enviada → confirmada | declinada. Eso lo mueve el
+ * invitado al contestar, nadie más.
+ *
+ * @param {Object} fila - Una fila de confirmaciones.php?accion=listar.
+ * @returns {'confirmo'|'no_viene'|'sin_responder'}
+ */
+function comoEstaLaAsistencia(fila) {
+  const asiste = Number(fila.asiste) === 1;
+
+  /* Sin invitación no hay a quién preguntarle: es alguien cargado a mano
+     o que confirmó por su cuenta desde la web pública, y ahí `asiste` SÍ
+     es lo que esa persona dijo. */
+  if (!fila.invitacion_id) return asiste ? 'confirmo' : 'no_viene';
+
+  const estado = String(fila.invitacion_estado || '');
+
+  if (estado === 'confirmada') return asiste ? 'confirmo' : 'no_viene';
+  if (estado === 'declinada')  return 'no_viene';
+
+  // sin_enviar o enviada: la invitación está en la calle o ni eso, pero
+  // esta persona todavía no contestó nada.
+  return 'sin_responder';
+}
