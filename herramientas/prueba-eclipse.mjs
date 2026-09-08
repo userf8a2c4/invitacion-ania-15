@@ -265,6 +265,22 @@ comprobar('el bucle se corta',
 comprobar('el listener de resize se quita',
   /removeEventListener\('resize'/.test(elFinal));
 
+/* ⚠️ LAS DOS REDES DE SEGURIDAD.
+   Sin ellas, un error a mitad del minuto —o una pestaña que se va al
+   fondo y no vuelve— deja las capas de oscuridad y sangre encima de la
+   invitación PARA SIEMPRE. El invitado se queda con la página tapada de
+   rojo hasta que se le ocurra recargar. Un homenaje que puede romper la
+   invitación no vale la pena. */
+comprobar('si el bucle revienta, se limpia todo',
+  /try \{[\s\S]{0,120}unCuadro\(ahora, t\);[\s\S]{0,120}catch[\s\S]{0,60}terminar\(\);/
+    .test(eclipseCodigo),
+  'sin el try, la excepción corta el rAF y terminar() no corre nunca');
+
+comprobar('hay un reloj que termina aunque no se dibuje ni un cuadro',
+  /setTimeout\(function \(\) \{ if \(vivo\) terminar\(\); \}, DURACION \+ 1000\)/
+    .test(eclipseCodigo),
+  'requestAnimationFrame se congela en una pestaña de fondo; esto no');
+
 /* ─── 8. La música tiene que sobrevivir ────────────────────────────── */
 
 console.log('\nLa música, después\n');
