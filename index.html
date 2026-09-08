@@ -2474,10 +2474,10 @@
      que pesa un 80% menos. Acá abajo se pide la copia liviana; el
      original comentado sigue intacto en codigo/, es el que se edita.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/produccion/01-configuracion.js?v=246"></script>
-<script defer src="codigo/produccion/02-utilidades.js?v=246"></script>
-<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=246"></script>
-<script defer src="codigo/produccion/04-invitado-personalizado.js?v=246"></script>
+<script defer src="codigo/produccion/01-configuracion.js?v=247"></script>
+<script defer src="codigo/produccion/02-utilidades.js?v=247"></script>
+<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=247"></script>
+<script defer src="codigo/produccion/04-invitado-personalizado.js?v=247"></script>
 
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda) — es MARCADO, no script.
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
@@ -2535,7 +2535,121 @@
      para EXISTIR, solo para reaccionar al clic — y ese clic no puede
      llegar antes de que la lista termine de bajar el archivo 20. -->
 <script type="application/json" id="scripts-de-la-escena">
-["codigo/produccion/10-reproductor-de-musica.js?v=246", "codigo/produccion/05-cursor-personalizado.js?v=246", "codigo/produccion/24-lienzo-de-petalos.js?v=246", "codigo/produccion/06-petalos-con-fisica.js?v=246", "codigo/produccion/07-marco-y-enredaderas.js?v=246", "codigo/produccion/08-efectos-de-scroll.js?v=246", "codigo/produccion/09-cuenta-regresiva.js?v=246", "codigo/produccion/11-formulario-confirmacion.js?v=246", "codigo/produccion/12-pase-de-acceso.js?v=246", "codigo/produccion/13-agregar-al-calendario.js?v=246", "codigo/produccion/23-lienzo-de-luz.js?v=246", "codigo/produccion/27-fauna-nocturna.js?v=246", "codigo/produccion/14-haces-de-luz.js?v=246", "codigo/produccion/15-registro-de-confirmaciones.js?v=246", "codigo/produccion/16-volver-arriba.js?v=246", "codigo/produccion/17-joyas-colgantes.js?v=246", "codigo/produccion/18-motas-de-polvo.js?v=246", "codigo/produccion/19-velas.js?v=246", "codigo/produccion/20-boton-de-animaciones.js?v=246", "codigo/produccion/21-monitor-de-rendimiento.js?v=246", "codigo/produccion/22-luz-de-la-hora.js?v=246", "codigo/produccion/25-preguntas-frecuentes.js?v=246", "codigo/produccion/26-mapa-a-pedido.js?v=246"]
+["codigo/produccion/10-reproductor-de-musica.js?v=247", "codigo/produccion/05-cursor-personalizado.js?v=247", "codigo/produccion/24-lienzo-de-petalos.js?v=247", "codigo/produccion/06-petalos-con-fisica.js?v=247", "codigo/produccion/07-marco-y-enredaderas.js?v=247", "codigo/produccion/08-efectos-de-scroll.js?v=247", "codigo/produccion/09-cuenta-regresiva.js?v=247", "codigo/produccion/11-formulario-confirmacion.js?v=247", "codigo/produccion/12-pase-de-acceso.js?v=247", "codigo/produccion/13-agregar-al-calendario.js?v=247", "codigo/produccion/23-lienzo-de-luz.js?v=247", "codigo/produccion/27-fauna-nocturna.js?v=247", "codigo/produccion/14-haces-de-luz.js?v=247", "codigo/produccion/15-registro-de-confirmaciones.js?v=247", "codigo/produccion/16-volver-arriba.js?v=247", "codigo/produccion/17-joyas-colgantes.js?v=247", "codigo/produccion/18-motas-de-polvo.js?v=247", "codigo/produccion/19-velas.js?v=247", "codigo/produccion/20-boton-de-animaciones.js?v=247", "codigo/produccion/21-monitor-de-rendimiento.js?v=247", "codigo/produccion/22-luz-de-la-hora.js?v=247", "codigo/produccion/25-preguntas-frecuentes.js?v=247", "codigo/produccion/26-mapa-a-pedido.js?v=247"]
+</script>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EL VIGÍA DEL ECLIPSE
+
+     A las 12:30:00.000 UTC —el minuto exacto en que nació Ania— la
+     invitación deja de ser una invitación durante 60 segundos. Está
+     anclado a UTC y no a la hora local de cada uno: es el MISMO instante
+     absoluto en todo el planeta.
+
+     ⚠️ POR QUÉ ESTO ES TAN CHICO, Y TIENE QUE SEGUIR SIÉNDOLO
+
+     El eclipse ocurre para todos, así que este vigía corre en TODAS las
+     visitas. La regla que lo gobierna es que la invitación no puede
+     ponerse ni un gramo más pesada por su culpa.
+
+     Por eso acá no hay nada del eclipse: solo una resta y un
+     setTimeout. El archivo pesado (28-eclipse.js) NO está en la lista de
+     la escena de arriba y NO se pide hasta diez segundos antes. Quien no
+     esté en la página en ese momento no lo baja, no lo parsea y no lo
+     ejecuta — para él, el eclipse no existe.
+
+     Se re-arma cada minuto como mucho, y no con un setTimeout de horas,
+     porque el navegador congela los temporizadores de las pestañas de
+     fondo y uno largo llegaría tarde o no llegaría.
+     ══════════════════════════════════════════════════════════════════ -->
+<script>
+  (function vigiaDelEclipse() {
+    var HORA_UTC = 12, MINUTO_UTC = 30;   // 06:30 en Toluca
+    var DURA     = 60000;
+    var AVISO    = 10000;                 // cuánto antes se pide el archivo
+    var ARCHIVO  = 'codigo/produccion/28-eclipse.js?v=247';
+
+    /** Milisegundos hasta el próximo arranque. Negativo = ya empezó. */
+    function faltaPara() {
+      var ahora = Date.now();
+      var hoy = new Date(ahora);
+      var cuando = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate(),
+                            HORA_UTC, MINUTO_UTC, 0, 0);
+      // Si el de hoy ya terminó, el próximo es el de mañana.
+      if (ahora >= cuando + DURA) cuando += 86400000;
+      return cuando - ahora;
+    }
+
+    /* Las guardas. Se preguntan al DISPARAR y no al cargar, porque
+       cualquiera de ellas puede cambiar entre una cosa y la otra. */
+    function sePuede() {
+      var raiz = document.documentElement;
+
+      // Movimiento apagado: por elección, o porque el <head> detectó un
+      // equipo lento. En los dos casos, acá no pasa nada.
+      if (raiz.classList.contains('animaciones-off')) return false;
+
+      // Pestaña de fondo: el navegador congela requestAnimationFrame, así
+      // que se vería roto y además gastaría la descarga para nada.
+      if (document.hidden) return false;
+
+      try {
+        if (window.matchMedia &&
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+      } catch (e) { /* navegador viejo: se sigue */ }
+
+      /* Si hay alguien ESCRIBIENDO en el formulario, hoy no se dispara
+         para esa persona. Son 60 segundos que no se pueden cortar, y
+         pisarle una confirmación a medio llenar es la única forma en que
+         este homenaje puede hacerle daño real a alguien. */
+      var foco = document.activeElement;
+      if (foco && (foco.tagName === 'INPUT' || foco.tagName === 'TEXTAREA' ||
+                   foco.tagName === 'SELECT')) return false;
+
+      // Sin escena montada no hay nada que eclipsar (el sobre sigue cerrado).
+      return !!document.querySelector('.portada__nombre');
+    }
+
+    var yaSePidio = false;
+
+    function pedirElArchivo(desfase) {
+      window.ECLIPSE_EMPIEZA_EN = desfase;   // lo lee 28-eclipse.js
+      var s = document.createElement('script');
+      s.src = ARCHIVO;
+      s.onerror = function () { /* sin eclipse, la invitación anda igual */ };
+      document.body.appendChild(s);
+    }
+
+    /* ── ENSAYO, Y SOLO EN PBE ──────────────────────────────────────
+       Para poder mirarlo sin esperar a mañana. Se comprueba el host, así
+       que en aniaxv.com esto no existe: un invitado que se entere del
+       parámetro y lo pruebe en el sitio real no ve nada.
+       El eclipse es un homenaje anclado a una hora, no un botón. */
+    try {
+      var esPbe = /(^|\.)pbe\./.test(location.hostname) ||
+                  location.pathname.indexOf('/pbe/') === 0;
+      if (esPbe && /[?&]eclipse=ensayo/.test(location.search)) {
+        setTimeout(function () { if (sePuede()) pedirElArchivo(1500); }, 2500);
+        return;
+      }
+    } catch (e) { /* nada */ }
+
+    function mirar() {
+      var falta = faltaPara();
+
+      if (!yaSePidio && falta <= AVISO) {
+        yaSePidio = true;
+        if (sePuede()) pedirElArchivo(falta);
+        // Se vuelve a mirar pasado el minuto, para el de mañana.
+        setTimeout(function () { yaSePidio = false; mirar(); }, DURA + 2000);
+        return;
+      }
+
+      setTimeout(mirar, Math.max(1000, Math.min(falta - AVISO, 60000)));
+    }
+
+    mirar();
+  })();
 </script>
 
 <!-- Registro del service worker: hace que la invitación funcione sin
