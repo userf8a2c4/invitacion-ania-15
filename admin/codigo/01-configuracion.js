@@ -337,6 +337,11 @@ const CONFIGURACION = {
         // o de una mesa — no había ningún lugar central para verlas
         // todas juntas ni para borrar las que ya no sirven.
         ['etiquetas_acomodo', 'Ver y borrar las etiquetas de personas y mesas'],
+        /* No lleva `true`: no es un ajuste ni una acción delicada, es lo
+           que le escribieron a Ania. Cualquiera del equipo con sesión lo
+           puede leer y guardar — y cuanta más gente sepa que hay que
+           guardarlo antes del borrado, mejor. */
+        ['mensajes', 'Lo que le escribieron a Ania al confirmar'],
         ['bitacora', 'Quién cambió qué y cuándo', true],
         /* Va con `true` (solo admin) y además el endpoint exige el
            permiso de borrar. Vive en Herramientas y no en un rincón

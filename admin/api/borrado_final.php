@@ -159,6 +159,25 @@ function loQueHayQueSaber() {
               . 'siguen teniendo los datos: hay que borrarlos a mano de la '
               . 'bandeja de entrada, o la promesa no está cumplida.';
 
+    /* ⚠️ LO QUE LE ESCRIBIERON A ANIA SE VA CON ESTO.
+     *
+     * El campo «¿Algo más que quieras decirnos?» vive en
+     * `confirmaciones.notas`, y esta herramienta vacía `confirmaciones`.
+     * O sea que lo único de todo el sistema que la familia va a querer
+     * conservar para siempre es exactamente lo que se está por
+     * destruir, y no hay forma de recuperarlo después.
+     *
+     * No se puede impedir el borrado por esto —la promesa de borrar
+     * también es real, y esos mensajes llevan el nombre de quien los
+     * escribió— pero sí se puede no dejar que pase sin avisar. */
+    $mensajes = cuantosMensajesParaAnia();
+    if ($mensajes > 0) {
+        $avisos[] = 'Hay ' . $mensajes . ' mensaje' . ($mensajes === 1 ? '' : 's')
+                  . ' que los invitados le escribieron a Ania al confirmar, y '
+                  . 'esto los borra. Andá a Ajustes → «Mensajes para Ania» y '
+                  . 'guardá la página ANTES: después no hay de dónde sacarlos.';
+    }
+
     /* Nadie llegó = probablemente la fiesta no pasó. No se prohíbe
        —puede que el escáner no se haya usado— pero se dice y se pide un
        permiso aparte. */
@@ -170,6 +189,43 @@ function loQueHayQueSaber() {
     }
 
     return $avisos;
+}
+
+/**
+ * Cuántos invitados escribieron algo de verdad.
+ *
+ * ⚠️ EL VACÍO NO ES VACÍO. El formulario público manda la cadena «, »
+ * cuando la caja se deja sin llenar (ver `notas: notas || ', '` en
+ * codigo/11-formulario-confirmacion.js), así que contar filas con
+ * `notas <> ''` daría el total de confirmaciones y no el de mensajes.
+ * Mismo criterio que loQueEscribio() en api/mensajes.php y en
+ * codigo/06-piezas.js.
+ *
+ * @return int
+ */
+function cuantosMensajesParaAnia() {
+    if (!existeTabla('confirmaciones')) return 0;
+
+    /* Se filtra en PHP y no con SQL a propósito.
+     *
+     * La condición en SQL era posible, pero no daba EXACTAMENTE lo mismo
+     * que api/mensajes.php: el TRIM de MySQL no se lleva los saltos de
+     * línea, así que una nota con solo un enter contaba acá y no allá.
+     * Que el aviso dijera «23 mensajes» y la pantalla mostrara 22 es
+     * peor que no avisar — deja a alguien buscando el que falta.
+     *
+     * Son ciento y pico de filas de una columna: leerlas cuesta nada, y
+     * así las dos cuentas salen del mismo criterio. */
+    $filas = consultarTodo('SELECT notas FROM confirmaciones');
+
+    $cuantos = 0;
+    foreach ($filas as $fila) {
+        $limpio = trim((string) ($fila['notas'] ?? ''));
+        if ($limpio === '' || preg_match('/^[,\s]+$/u', $limpio)) continue;
+        $cuantos++;
+    }
+
+    return $cuantos;
 }
 
 /* ─── VISTA PREVIA ────────────────────────────────────────────────────── */
