@@ -439,6 +439,7 @@ function nombreDeOpcionDeMenu(clave) {
     'instalar':    'Instalar en la pantalla de inicio',
     'metricas':    'Métricas de uso',
     'borrado-final': 'Borrar los datos de los invitados',
+    'mensajes':    'Mensajes para Ania',
   };
   return nombres[clave] || clave;
 }
@@ -534,6 +535,10 @@ function atenderMenu(opcion) {
 
     case 'borrado-final':
       abrirHojaDeBorradoFinal();
+      break;
+
+    case 'mensajes':
+      abrirHojaDeMensajes();
       break;
 
     case 'bitacora':
