@@ -398,6 +398,78 @@ if (existeTabla('intentos_login')) {
     }
 }
 
+/* ⚡ EL CÓDIGO DE PASE QUE NUNCA SE GENERÓ (2026-09-08)
+ *
+ * QUÉ PASÓ, Y CUÁNTO COSTÓ NO VERLO
+ * Hay tres formas de meter gente y solo UNA genera código de pase:
+ *
+ *   · crear una invitación desde el panel  → sí (invitaciones.php)
+ *   · importar una hoja de cálculo         → NO
+ *   · «Agregar invitado» a mano            → NO
+ *
+ * Está dicho en migracion.sql, junto a la columna, y es la razón de que
+ * `codigo` no lleve UNIQUE: varias filas vacías chocarían contra el
+ * índice. Pero nadie ata ese comentario con lo que significa el día del
+ * evento — que 30 de 47 invitaciones no se pueden escanear, porque no
+ * hay nada que leer.
+ *
+ * Y hay una segunda mitad: al confirmar, confirmar.php busca el código
+ * real en la base y, si está vacío, se queda con el que inventa el
+ * NAVEGADOR del invitado, que es adivinable y sin garantía de unicidad.
+ * Dos personas podrían terminar con el mismo código.
+ *
+ * POR QUÉ ACÁ Y NO SOLO EN UN BOTÓN DEL PANEL
+ * Porque esto es exactamente lo que hace este archivo: dejar la base en
+ * el estado en que tiene que estar, corriendo una URL, sin depender de
+ * encontrar una pantalla ni de que el panel esté al día en el teléfono.
+ * Es idempotente: la segunda corrida no genera nada porque ya no falta
+ * ninguno.
+ *
+ * ⚠️ NO TOCA NI UN CÓDIGO EXISTENTE. Solo rellena los vacíos. Si alguna
+ * invitación ya se repartió, el código que esa persona tiene en la mano
+ * es el que se queda: reasignar códigos ya entregados convertiría un
+ * problema de treinta personas en uno de ciento cinco. */
+if (existeTabla('confirmaciones') &&
+    in_array('codigo', columnasDe('confirmaciones'), true)) {
+    try {
+        $sinCodigo = consultarTodo(
+            "SELECT id FROM confirmaciones
+              WHERE codigo IS NULL OR TRIM(codigo) = ''"
+        );
+
+        $puestos = 0;
+        foreach ($sinCodigo as $fila) {
+            // Mismo generador que invitaciones.php, con la misma
+            // comprobación de que no choque con uno que ya exista.
+            $intentos = 0;
+            do {
+                $codigo = 'XV-' . strtoupper(bin2hex(random_bytes(3)));
+                $choca = consultarUno(
+                    'SELECT id FROM confirmaciones WHERE codigo = :c', [':c' => $codigo]);
+                $intentos++;
+            } while ($choca && $intentos < 20);
+
+            if ($choca) continue;
+
+            ejecutar('UPDATE confirmaciones SET codigo = :c WHERE id = :id',
+                     [':c' => $codigo, ':id' => (int) $fila['id']]);
+            $puestos++;
+        }
+
+        if ($puestos > 0) {
+            $columnasQueFaltaban[] = 'confirmaciones: ' . $puestos
+                                   . ' código(s) de pase generados';
+        }
+    } catch (PDOException $e) {
+        $columnasQueFallaron[] = [
+            'columna' => 'confirmaciones.codigo',
+            'porque'  => 'No se pudieron generar los códigos que faltaban.',
+        ];
+        error_log('[Ania XV · instalar] No se pudieron generar códigos: '
+            . $e->getMessage());
+    }
+}
+
 /* ⚡ EL ESTADO «reembolsada» (2026-09-06)
  *
  * La tabla nació con cuatro estados —propuesta, cobrada, fallida,

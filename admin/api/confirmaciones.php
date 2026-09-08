@@ -312,6 +312,31 @@ case 'crear':
         $cambios[$COL_FECHA] = date('Y-m-d H:i:s');
     }
 
+    /* ⚡ EL CÓDIGO DE PASE, TAMBIÉN EN EL ALTA A MANO (2026-09-08)
+     *
+     * Hasta hoy esta rama dejaba el código vacío, y solo lo generaba
+     * `invitaciones.php` al crear una invitación. Resultado: 30 de 47
+     * invitaciones no se podían escanear en la puerta — no es que el
+     * escáner fallara con ellas, es que no había nada que leer. Y no se
+     * nota hasta que alguien está parado en la entrada con su pase.
+     *
+     * Peor todavía: al confirmar, confirmar.php busca el código real y,
+     * si está vacío, se queda con el que inventa el navegador del
+     * invitado, que es adivinable y sin garantía de unicidad.
+     *
+     * Mismo generador y misma comprobación que invitaciones.php. */
+    if (hay('codigo') && trim((string) ($cambios['codigo'] ?? '')) === '') {
+        $intentos = 0;
+        do {
+            $codigoNuevo = 'XV-' . strtoupper(bin2hex(random_bytes(3)));
+            $choca = consultarUno('SELECT id FROM confirmaciones WHERE codigo = :c',
+                                  [':c' => $codigoNuevo]);
+            $intentos++;
+        } while ($choca && $intentos < 20);
+
+        if (!$choca) $cambios['codigo'] = $codigoNuevo;
+    }
+
     $id = insertar('confirmaciones', $cambios);
     anotarEnBitacora($yo, 'dio de alta a un invitado', 'confirmaciones', $id,
                      (string) ($cambios['nombre'] ?? ''));
