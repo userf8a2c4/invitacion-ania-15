@@ -438,6 +438,7 @@ function nombreDeOpcionDeMenu(clave) {
     'respaldo':    'Estado del respaldo',
     'instalar':    'Instalar en la pantalla de inicio',
     'metricas':    'Métricas de uso',
+    'borrado-final': 'Borrar los datos de los invitados',
   };
   return nombres[clave] || clave;
 }
@@ -529,6 +530,10 @@ function atenderMenu(opcion) {
 
     case 'avisos':
       abrirHojaDeAvisos();
+      break;
+
+    case 'borrado-final':
+      abrirHojaDeBorradoFinal();
       break;
 
     case 'bitacora':
