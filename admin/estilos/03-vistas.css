@@ -230,6 +230,30 @@
   margin-bottom: var(--esp-2);
 }
 
+/* ⚡ UNA SOLA LÍNEA QUE SE DESLIZA (2026-09-08)
+
+   Los ocho filtros de Gente se partían en dos filas, y la segunda
+   quedaba desalineada y a medio llenar. Con `nowrap` y desplazamiento
+   se ve igual de prolijo con ocho que con quince, y agregar un filtro
+   más no obliga a reacomodar nada.
+
+   La barra de desplazamiento se esconde a propósito: en el teléfono
+   —que es donde se usa esto— se desliza con el dedo y una barra gris
+   debajo de los chips solo ensucia. El corte del último chip a la
+   derecha ya avisa que hay más.
+
+   `flex: 0 0 auto` en los hijos es imprescindible: sin eso, con
+   `nowrap` los chips se comprimen hasta partir las palabras en vez de
+   salirse del ancho. */
+.filtros--una-linea {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.filtros--una-linea::-webkit-scrollbar { display: none; }
+.filtros--una-linea > .filtro { flex: 0 0 auto; }
+
 /* ⚡ 44 PX, COMO MANDA LA REGLA DE LA CASA (2026-09-03). Esto medía 34 y era
    el peor caso de todo el panel por pura frecuencia: con estos chips se
    cambia de sección dentro de Gente y se filtra la lista de invitados, o
