@@ -91,9 +91,20 @@ comprobar('el desglose por mesa se muestra aunque todos vayan juntos',
   !/porMesa\.size === 1 && porMesa\.has/.test(escaner),
   'el portero necesita A QUIÉN mandar a cuál, no solo el número');
 
-comprobar('la mesa suelta no se repite cuando hay desglose',
-  /!quienVaAQueMesa\(datos\)/.test(escaner),
-  'repetiría el dato, y encima puede mentir si el grupo va separado');
+comprobar('la mesa suelta solo sale si el desglose NO cubre a todos',
+  /!elDesgloseCubreATodos\(datos\)/.test(escaner),
+  'sin la guarda se repite el dato, y encima puede mentir si el grupo va separado');
+
+/* Las dos preguntas tienen que salir del mismo cálculo. Cuando cada una
+   armaba el suyo podían contestar cosas incompatibles: una decía que el
+   desglose cubría a todos y la otra dibujaba a menos gente. */
+/* Las llamadas, sin contar la declaración —«function repartoPorMesa(datos)»
+   calza con el mismo patrón—. Tienen que ser las dos: una por pregunta. */
+const llamadas = (escaner.match(/(?<!function )repartoPorMesa\(datos\)/g) || []).length;
+
+comprobar('«quién va a qué mesa» y «cubre a todos» comparten el reparto',
+  llamadas === 2, 'encontré ' + llamadas + ' llamada(s); dos cálculos separados ' +
+  'vuelven a poder contradecirse');
 
 /* ─── 4. Los nombres, como se dicen en voz alta ──────────────────── */
 
@@ -146,18 +157,36 @@ const cubre = armar(
   (n) => (/^mesa\b/i.test(String(n).trim()) ? String(n).trim() : 'Mesa ' + n));
 
 const CASOS_DESGLOSE = [
+  /* ⚡ CAMBIÓ DE RESPUESTA A PROPÓSITO (2026-09-07)
+   *
+   * Antes daba `false`: los tres sin cargar no entraban en el desglose,
+   * así que se mostraba la mesa general suelta al lado para que no
+   * desaparecieran. En la puerta eso se leía «Mesa 14» y debajo «Mesa
+   * 14: Ana» — dos líneas casi iguales, con tres personas sin figurar
+   * en ninguna.
+   *
+   * Ahora los que no tienen fila se reparten a la mesa del grupo y sale
+   * una sola línea, «Mesa 14: Ana y 3 más», que sí los nombra. El
+   * desglose cubre a todos, y por eso esto es `true`. */
   ['4 personas y 1 cargado (el caso real de PBE)',
    { adultos: 2, ninos: 2, mesa: 'Mesa 14', lugares: [{ nombre: 'Ana', mesa: 'Mesa 14' }] },
-   false],
+   true],
   ['todos cargados, en mesas distintas',
    { adultos: 2, ninos: 0, mesa: 'Mesa 14',
      lugares: [{ nombre: 'Ana', mesa: 'Mesa 14' }, { nombre: 'Luis', mesa: 'Mesa 7' }] },
    true],
-  ['sin acompañantes cargados',
+  /* Sin ninguna fila de acompañante, pero CON mesa de grupo: la persona
+     va con el grupo. Es el caso de casi toda la lista hoy. */
+  ['sin acompañantes cargados, pero con mesa',
    { adultos: 1, ninos: 0, mesa: 'Mesa 3', lugares: [] },
-   false],
-  ['cargado pero sin mesa',
+   true],
+  /* Sin mesa de grupo no hay dónde poner a nadie: el escáner tiene que
+     seguir avisando que falta asignarla. Es el estado de Andy hoy. */
+  ['cargado pero sin mesa en ningún lado',
    { adultos: 2, ninos: 0, mesa: '', lugares: [{ nombre: 'Ana', mesa: '' }] },
+   false],
+  ['sin fila y sin mesa: no se inventa un lugar',
+   { adultos: 2, ninos: 0, mesa: '', lugares: [] },
    false],
 ];
 
@@ -170,6 +199,78 @@ for (const [que, datos, esperado] of CASOS_DESGLOSE) {
 comprobar('la mesa lleva dos puntos antes de los nombres',
   /comoSeLlamaLaMesa\(mesa\)\) \+ ':'/.test(escaner),
   'se lee «Mesa 14: Carlos y Lucila»');
+
+/* ─── 6. Nadie se queda fuera del reparto ────────────────────────────
+ *
+ * Lo de arriba dice si el desglose cubre a todos. Esto comprueba QUÉ SE
+ * LEE, que es lo que de verdad usa el portero. Se ejecuta la función y
+ * se le sacan las etiquetas, igual que se ve en pantalla. */
+
+console.log('\nLo que se lee en la puerta\n');
+
+const armarDesglose = new Function('seguro', 'comoSeLlamaLaMesa',
+  escaner.slice(escaner.indexOf('function elDesgloseCubreATodos')) +
+  '\n return quienVaAQueMesa;');
+
+const desglosar = armarDesglose(
+  (v) => String(v == null ? '' : v),
+  (n) => (/^mesa\b/i.test(String(n).trim()) ? String(n).trim() : 'Mesa ' + n));
+
+const enPalabras = (html) =>
+  html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+const LECTURAS = [
+  ['los dos juntos, con nombre',
+   { adultos: 2, ninos: 0, mesa: 'Mesa 5',
+     lugares: [{ nombre: 'Andrea Tellez', mesa: 'Mesa 5' },
+               { nombre: 'Andy Rojas', mesa: 'Mesa 5' }] },
+   'Mesa 5: Andrea Tellez y Andy Rojas'],
+
+  ['en mesas distintas — el caso que preguntó Carlos',
+   { adultos: 2, ninos: 0, mesa: 'Mesa 5',
+     lugares: [{ nombre: 'Andrea Tellez', mesa: 'Mesa 5' },
+               { nombre: 'Andy Rojas', mesa: 'Mesa 12' }] },
+   'Mesa 5: Andrea Tellez Mesa 12: Andy Rojas'],
+
+  /* Andy en producción, en cuanto se le asigne mesa: 2 personas y una
+     sola cargada. Tiene que nombrar a las DOS. */
+  ['con un solo nombre cargado, la otra persona igual figura',
+   { adultos: 2, ninos: 0, mesa: 'Mesa 5',
+     lugares: [{ nombre: 'Andrea Tellez', mesa: 'Mesa 5' }] },
+   'Mesa 5: Andrea Tellez y 1 más'],
+
+  ['una fila sin mesa propia va con el grupo, y por su nombre',
+   { adultos: 2, ninos: 0, mesa: 'Mesa 5',
+     lugares: [{ nombre: 'Andrea Tellez', mesa: '' }] },
+   'Mesa 5: Andrea Tellez y 1 más'],
+
+  ['sin ninguna fila, el grupo entero a su mesa',
+   { adultos: 2, ninos: 1, mesa: 'Mesa 5', lugares: [] },
+   'Mesa 5: 3 más'],
+];
+
+for (const [que, datos, esperado] of LECTURAS) {
+  const real = enPalabras(desglosar(datos));
+  comprobar(que + ' → «' + esperado + '»', real === esperado, 'dio «' + real + '»');
+}
+
+/* La suma tiene que cerrar SIEMPRE: si el desglose nombra a menos gente
+   de la que hay, alguien se quedó sin lugar en la pantalla del portero
+   y va a discutirlo en la puerta. */
+const armarReparto = new Function('seguro', 'comoSeLlamaLaMesa',
+  escaner.slice(escaner.indexOf('function elDesgloseCubreATodos')) +
+  '\n return repartoPorMesa;');
+
+const repartir = armarReparto(
+  (v) => String(v == null ? '' : v),
+  (n) => String(n));
+
+for (const [que, datos] of LECTURAS) {
+  const r = repartir(datos);
+  comprobar('en «' + que + '» el reparto cierra',
+    r.ubicadas === r.personas,
+    r.ubicadas + ' ubicadas de ' + r.personas + ' personas');
+}
 
 console.log('');
 if (fallos) {

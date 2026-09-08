@@ -908,7 +908,11 @@ function abrirDetalleDeInvitado(id) {
   }
 
   renglones.push(
-    ['Notas',    seguro(fila.notas || '—')],
+    /* loQueEscribio() y no `fila.notas || '—'`: el formulario público
+       manda «, » cuando la caja está vacía, y esa coma es un valor con
+       contenido — así que acá salía una coma suelta donde tenía que
+       decir «—». Ver 06-piezas.js. */
+    ['Notas',    seguro(loQueEscribio(fila.notas) || '—')],
     ['Código',   fila.codigo
                  ? '<span class="codigo-pase">' + seguro(fila.codigo) + '</span>'
                  : '—', true]

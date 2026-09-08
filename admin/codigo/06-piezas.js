@@ -2242,3 +2242,35 @@ async function pintarEtiquetasDe(tipo, id, contenedor) {
     if (evento.key === 'Enter') { evento.preventDefault(); crear(); }
   });
 }
+
+/**
+ * Lo que el invitado escribió de verdad en «¿Algo más que quieras
+ * decirnos?», o cadena vacía si no escribió nada.
+ *
+ * ⚡ POR QUÉ HACE FALTA (2026-09-08)
+ *
+ * El formulario público NO manda vacío cuando la caja está vacía: manda
+ * la cadena «, » (11-formulario-confirmacion.js, `notas: notas || ', '`).
+ * Es un centinela, el mismo que usa para los menús de quien no asiste.
+ *
+ * Eso rompe el `valor || '—'` de toda la vida, porque «, » es un valor
+ * con contenido: la ficha del invitado mostraba una coma suelta donde
+ * tenía que decir «—». Y en la pantalla de mensajes para Ania, sin esto,
+ * el libro entero saldría lleno de comas.
+ *
+ * Se filtra acá y no en el servidor a propósito: el dato crudo es lo que
+ * el invitado mandó, y cambiarlo al guardarlo sería perder la
+ * posibilidad de darse cuenta de esto más adelante.
+ *
+ * @param {string} texto - El campo `notas` tal como viene de la base.
+ * @returns {string} El mensaje, o '' si no hay ninguno.
+ */
+function loQueEscribio(texto) {
+  const limpio = String(texto == null ? '' : texto).trim();
+
+  /* «,» sola, «, », o cualquier cosa que sean solo comas y espacios: es
+     el centinela, no un mensaje. */
+  if (limpio === '' || /^[,\s]+$/.test(limpio)) return '';
+
+  return limpio;
+}
