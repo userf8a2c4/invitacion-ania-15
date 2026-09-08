@@ -246,9 +246,10 @@ function tituloDeGente(clave) {
  * @param {number} [personas]
  * @returns {void}
  */
-function ponerTituloDeInvitados(confirmaciones, personas) {
+function ponerTituloDeInvitados(confirmaciones, personas, confirmados) {
+  const visibles = INVITADOS.filter(invitadoPasaElFiltro);
+
   if (confirmaciones === undefined) {
-    const visibles = INVITADOS.filter(invitadoPasaElFiltro);
     confirmaciones = visibles.length;
     personas = visibles.reduce((suma, fila) => {
       if (Number(fila.asiste) !== 1) return suma;
@@ -256,9 +257,28 @@ function ponerTituloDeInvitados(confirmaciones, personas) {
     }, 0);
   }
 
+  /* ⚡ ACÁ DECÍA «47 CONFIRMACIONES» Y ERA MENTIRA (2026-09-08)
+   *
+   * Contaba filas y las llamaba confirmaciones. Pero una fila existe
+   * desde que se crea la invitación, mucho antes de que nadie conteste
+   * — así que decía «47 confirmaciones» de gente a la que ni siquiera
+   * se le había mandado el enlace.
+   *
+   * Y la app se contradecía sola: acá «47 confirmaciones», en Hoy «0 de
+   * 105 confirmaron», y el filtro de dos líneas más abajo «Sin
+   * responder · 47». Los tres números salían de la misma base.
+   *
+   * Ahora dice lo que son —invitaciones— y agrega el número que de
+   * verdad se usa para decidir: cuántas contestaron que vienen. Sobre
+   * ESE se encarga la comida. */
+  if (confirmados === undefined) {
+    confirmados = visibles.filter(f => comoEstaLaAsistencia(f) === 'confirmo').length;
+  }
+
   ponerTitulo('Gente',
-    pluralizar(confirmaciones, 'confirmación', 'confirmaciones') +
-    (personas ? ' · ' + pluralizar(personas, 'persona', 'personas') : ''));
+    pluralizar(confirmaciones, 'invitación', 'invitaciones') +
+    (personas ? ' · ' + pluralizar(personas, 'persona', 'personas') : '') +
+    ' · ' + confirmados + ' confirmaron');
 }
 
 /**
@@ -312,7 +332,12 @@ async function dibujarInvitados() {
        que la lista saliera filtrada por alergias con el chip de "Todos"
        encendido: la pantalla decía una cosa y mostraba otra, y no había forma
        de darse cuenta salvo contando las filas. */
-    '<div class="filtros" style="flex-wrap:wrap">' +
+    /* ⚡ UNA SOLA LÍNEA, DESLIZABLE (2026-09-08)
+       Con `wrap` los ocho chips se partían en dos filas y la segunda
+       quedaba desalineada y a medio llenar. En una línea que se desliza,
+       se ve igual de prolijo con ocho que con quince — y si mañana se
+       agrega un filtro más, no hay nada que reacomodar. */
+    '<div class="filtros filtros--una-linea">' +
       FILTROS_DE_GENTE.map(f =>
         '<button class="filtro' + (FILTRO_INVITADOS === f[0] ? ' activo' : '') + '" ' +
                 'data-filtro="' + f[0] + '">' + f[1] + '</button>'
@@ -330,18 +355,22 @@ async function dibujarInvitados() {
        Arriba, junto al buscador, está siempre a la vista y no se mueve
        nunca. "Seleccionar" y "Descargar" se quedan abajo: son de usar
        después de mirar la lista, no antes. */
+    /* ⚡ «FECHA LÍMITE» SUBIÓ ACÁ (2026-09-08)
+       Estaba DEBAJO de la lista entera. Con 47 invitaciones había que
+       recorrerlas todas para llegar, y es un ajuste que se toca justo
+       cuando se están mandando las invitaciones — o sea, cuando la lista
+       está más larga. Mismo motivo por el que «Agregar invitado» subió
+       el 3 de septiembre.
+       (abrirConfiguracionDeInvitaciones() sigue en 48-invitaciones.js,
+       sin tocar: solo cambia desde dónde se la llama.) */
     '<div style="display:flex;gap:var(--esp-2);margin-bottom:var(--esp-2)">' +
-      '<button class="boton boton--principal" style="flex:1" id="inv-nuevo">' +
+      '<button class="boton boton--principal" style="flex:2" id="inv-nuevo">' +
         'Agregar invitado</button>' +
+      '<button class="boton" style="flex:1" id="inv-fecha-limite">' +
+        '⚙️ Fecha límite</button>' +
     '</div>' +
 
     '<div id="lista-invitados"></div>' +
-
-    // ⚡ (2026-08-28) "Fecha límite" vivía en el encabezado de la extinta
-    // pestaña Envíos (abrirConfiguracionDeInvitaciones() sigue en
-    // 48-invitaciones.js, sin tocar — solo cambia desde dónde se llama).
-    '<button type="button" class="lista__fila" id="inv-fecha-limite" ' +
-      'style="margin-bottom:var(--esp-2)">⚙️ Fecha límite para confirmar</button>' +
 
     '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-1)">' +
       '<button class="boton" style="flex:1" id="inv-seleccionar">Seleccionar</button>' +
@@ -781,7 +810,13 @@ function filaDeInvitado(fila) {
     '<button class="lista__fila" data-invitado="' + seguro(fila.id) + '">' +
       (SELECCION_ACTIVA
         ? '<span class="lista__casilla' + (marcado ? ' lista__casilla--marcada' : '') + '"></span>'
-        : '<span class="punto punto--' + (asiste ? 'si' : 'no') + '"></span>') +
+        /* El punto dice lo mismo que la ficha: verde solo si contestó de
+           verdad. Antes era verde para todos, porque miraba `asiste`.
+           Sin responder va con `.punto` a secas, que ya es gris — misma
+           convención que el punto de envío (ver 03-vistas.css:1201). */
+        : '<span class="punto' +
+            ({ confirmo: ' punto--si', no_viene: ' punto--no' }[comoEstaLaAsistencia(fila)] || '') +
+          '"></span>') +
       '<span class="lista__cuerpo">' +
         '<span class="lista__titulo">' + seguro(fila.nombre || 'Sin nombre') + '</span>' +
         '<span class="lista__pie">' + seguro(pie.join(' · ')) + '</span>' +
@@ -866,10 +901,20 @@ function abrirDetalleDeInvitado(id) {
          puede comer, cuántos son.
        · Abajo, lo de la gestión: correo, teléfono, grupo, envío, notas,
          código. Eso se mira sentada en casa, con tiempo. */
+  /* ⚡ «Confirmó» SOLO SI CONTESTÓ DE VERDAD (2026-09-08)
+     Antes esto miraba `asiste`, que el sistema pone en 1 solo al crear
+     la invitación para poder sentar a la gente. Decía «Confirmó» de
+     personas a las que ni se les había mandado nada. Ver
+     comoEstaLaAsistencia() en 06-piezas.js. */
+  const comoEsta = comoEstaLaAsistencia(fila);
+
   const renglones = [
-    ['Asistencia', asiste
-      ? '<span class="etiqueta etiqueta--bien">Confirmó</span>'
-      : '<span class="etiqueta etiqueta--alerta">No viene</span>', true],
+    ['Asistencia',
+      comoEsta === 'confirmo'
+        ? '<span class="etiqueta etiqueta--bien">Confirmó</span>'
+      : comoEsta === 'no_viene'
+        ? '<span class="etiqueta etiqueta--alerta">No viene</span>'
+        : '<span class="etiqueta">Sin responder</span>', true],
   ];
 
   if (asiste) {
