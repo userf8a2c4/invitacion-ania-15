@@ -10,7 +10,7 @@
  * que pasa cuando una regla de presentación se copia en cada pantalla
  * en vez de vivir en un sitio.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -322,13 +322,40 @@ comprobar('un toque largo selecciona el código entero',
   /user-select: all;/.test(estilos),
   'es el respaldo del respaldo: si el copiado falla, el dedo alcanza');
 
-/* Si una pantalla deja de usar la clase, ahí el código deja de poder
-   tocarse y no falla nada a la vista. */
-for (const archivo of ['08-vista-invitados.js', '25-hoy.js', '28-escaner.js']) {
-  comprobar(archivo + ' sigue marcando el código con .codigo-pase',
-    /codigo-pase/.test(readFileSync(raiz('admin', 'codigo', archivo), 'utf8')),
-    'sin la clase, ese código deja de copiarse al tocarlo');
+/* ⚡ ESTO ERA UNA LISTA FIJA DE TRES ARCHIVOS (arreglado 2026-09-09)
+ *
+ * Decía: 08-vista-invitados.js, 25-hoy.js y 28-escaner.js tienen que
+ * nombrar la clase. Se quedó vieja en cuanto 25-hoy.js dejó de pintar
+ * códigos —se le retiró el buscador de pases duplicado— y la prueba
+ * empezó a fallar por un archivo que ya no tenía nada que marcar.
+ *
+ * Y fallaba por el lado que no importa. El riesgo de verdad es el
+ * contrario: que una pantalla NUEVA pinte un código y se olvide la
+ * clase. Una lista fija no ve eso nunca.
+ *
+ * Ahora se descubre solo: se busca cada sitio donde se escupe un código
+ * a la pantalla y se comprueba que ESE sitio lleve la clase. */
+const RENDER_DE_CODIGO = /<(?:span|div)([^>]*)>'\s*\+\s*\n?\s*seguro\((?:[A-Za-z_$][A-Za-z0-9_$]*)\.codigo\)/g;
+
+let sitiosDeCodigo = 0;
+for (const archivo of readdirSync(raiz('admin', 'codigo'))) {
+  if (!archivo.endsWith('.js')) continue;
+  const codigo = readFileSync(raiz('admin', 'codigo', archivo), 'utf8');
+
+  for (const sitio of codigo.matchAll(RENDER_DE_CODIGO)) {
+    sitiosDeCodigo++;
+    const atributos = sitio[1] || '';
+    comprobar(archivo + ' marca con .codigo-pase el código que pinta',
+      /codigo-pase/.test(atributos),
+      'sin la clase, ESE código deja de copiarse al tocarlo y no falla ' +
+      'nada a la vista: se ve igual, y no hace nada. Etiqueta: <' +
+      atributos.trim().slice(0, 80) + '>');
+  }
 }
+
+comprobar('se encontró dónde se pintan los códigos', sitiosDeCodigo >= 3,
+  'encontré ' + sitiosDeCodigo + ' sitio(s): si la forma de pintarlos cambió, ' +
+  'esta prueba se quedó ciega y hay que ajustar la expresión');
 
 console.log('');
 if (fallos) {

@@ -81,6 +81,8 @@ const A_PROPOSITO = {
   'ajustes.php': 'se piden de a una clave, según la pantalla',
   'metricas.php': 'telemetría, no contenido del evento',
   'llegadas.php?accion=revisar_codigos': 'diagnóstico caro, se pide a mano',
+  'invitaciones.php?accion=revisar_links': 'diagnóstico caro, se pide a mano',
+  'invitaciones.php?accion=reparar_links': 'escribe: nunca se guarda una copia',
   'llegadas.php?accion=consultar': 'se guarda desde todas_las_tarjetas',
   'llegadas.php?accion=todas_las_tarjetas': 'ES el mecanismo del precalentado',
 };

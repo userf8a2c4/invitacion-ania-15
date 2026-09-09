@@ -79,6 +79,29 @@ function linkDeInvitacion($token) {
 }
 
 /**
+ * ¿Son el mismo nombre de invitado? Sin distinguir mayúsculas ni
+ * espacios de más, igual que la colación de la base.
+ *
+ * ⚠️ VA AL NIVEL SUPERIOR DEL ARCHIVO, NO ADENTRO DEL switch. La escribí
+ * primero entre dos `case` y ahí NO EXISTE: PHP solo define una función
+ * declarada dentro de una estructura de control cuando la ejecución pasa
+ * por encima, y un switch salta directo al case que toca. Habría sido un
+ * «Call to undefined function» en la primera llamada, en producción.
+ * Es el mismo cuidado que ya se documenta para el panel, que tampoco se
+ * empaqueta.
+ *
+ * @param string $a
+ * @param string $b
+ * @return bool
+ */
+function mismoNombreDeInvitado($a, $b) {
+    $normalizar = function ($x) {
+        return mb_strtolower(trim(preg_replace('/\s+/u', ' ', (string) $x)));
+    };
+    return $normalizar($a) === $normalizar($b);
+}
+
+/**
  * La fecha límite para confirmar, en formato ISO (AAAA-MM-DD).
  *
  * ⚠️ NO se puede leer del `CONFIGURACION.fiesta.fechaLimiteParaConfirmar`
@@ -867,6 +890,260 @@ case 'generar_link':
         'token' => $token,
         'link'  => linkDeInvitacion($token),
     ], 201);
+    break;
+
+
+/* ─── QUE CADA LINK ABRA LA INVITACIÓN DE SU DUEÑO ────────────────────────
+ *
+ * ⚠️ ANTES DE REPARTIR, NO DESPUÉS. Igual que llegadas.php?accion=
+ * revisar_codigos, pero para el otro extremo: el link personal.
+ *
+ * QUÉ SE ROMPIÓ, Y CÓMO
+ * Cada invitación es PERSONALIZADA: el link de Andy tiene que saludar a
+ * Andy. Hay dos formas distintas de que deje de hacerlo, y las dos
+ * estaban vivas:
+ *
+ *   A. NOMBRE VIEJO. confirmaciones.php nunca escribe en `invitaciones`.
+ *      Renombrar a alguien en Gente —la pantalla que se usa todos los
+ *      días— no toca `invitaciones.nombre`, así que su link sigue
+ *      saludando con el nombre con el que se cargó, para siempre.
+ *
+ *   B. INVITACIÓN HEREDADA, que es la grave. `invitaciones.confirmacion_id`
+ *      no tiene UNIQUE ni clave foránea (ver migracion.sql), y
+ *      confirmaciones.php?accion=borrar —el «Borrar» de la ficha de
+ *      Gente— limpiaba `asignacion_mesas` pero NO la invitación. Al
+ *      borrar a alguien, su fila de `invitaciones` sobrevivía apuntando
+ *      a un id que quedaba libre; cuando la base reutiliza ese id para
+ *      un invitado nuevo, la invitación vieja se le engancha. El link
+ *      del invitado nuevo abre entonces con el NOMBRE y el ESTADO DE
+ *      RESPUESTA del que ya no está.
+ *
+ * Las dos se ven igual desde afuera —«el link dice otro nombre»— pero
+ * B además filtra a un tercero si ya contestó lo que contestó, así que
+ * se separan en el informe.
+ *
+ * ⚠️ LO QUE ESTE INFORME NO PUEDE SABER. Si el invitado nuevo no tenía
+ * link propio, una invitación heredada (B) es indistinguible de un
+ * nombre viejo (A): las dos son una sola fila con el nombre que no
+ * corresponde. El único caso que delata a B con certeza es cuando la
+ * misma confirmación termina con DOS invitaciones. Por eso el arreglo
+ * de nombres se ofrece aparte del de identidades: no se rota un token
+ * que quizás ya se mandó bien, sin decirlo.
+ */
+
+case 'revisar_links':
+    exigirMetodo(['GET']);
+    exigirAdministrador();
+
+    $invitaciones   = consultarTodo(
+        'SELECT id, token, nombre, confirmacion_id, estado, respondida_en
+         FROM invitaciones ORDER BY id'
+    );
+    $confirmaciones = consultarTodo('SELECT id, nombre FROM confirmaciones ORDER BY id');
+
+    $nombreDeLaConfirmacion = [];
+    foreach ($confirmaciones as $c) {
+        $nombreDeLaConfirmacion[(int) $c['id']] = (string) $c['nombre'];
+    }
+
+    // Cuántas invitaciones apuntan a cada confirmación: dos es la huella
+    // inconfundible de una invitación heredada (caso B).
+    $cuantasApuntanA = [];
+    foreach ($invitaciones as $i) {
+        $c = (int) $i['confirmacion_id'];
+        if ($c) $cuantasApuntanA[$c] = ($cuantasApuntanA[$c] ?? 0) + 1;
+    }
+
+    $sinToken        = [];   // el link no lo aceptaría ni invitacion.php
+    $tokenRepetido   = [];   // no debería poder pasar (hay UNIQUE), se mira igual
+    $sinConfirmacion = [];   // link sin lugares: abre y no puede confirmar
+    $huerfanas       = [];   // apunta a alguien que ya no existe
+    $duplicadas      = [];   // dos links para el mismo invitado (caso B seguro)
+    $nombreDistinto  = [];   // el link saluda a otro
+    $bien            = 0;
+
+    $tokensVistos = [];
+
+    foreach ($invitaciones as $inv) {
+        $token  = (string) $inv['token'];
+        $confId = (int) $inv['confirmacion_id'];
+
+        $quien = [
+            'id'                => (int) $inv['id'],
+            'token'             => $token,
+            'nombre_en_el_link' => (string) $inv['nombre'],
+            'confirmacion_id'   => $confId ?: null,
+            'estado'            => (string) $inv['estado'],
+            'link'              => linkDeInvitacion($token),
+        ];
+
+        /* EL MISMO FILTRO QUE APLICA invitacion.php, letra por letra. Si
+           acá se aceptara un token que allá se limpia distinto, la
+           revisión diría que todo está bien y el invitado vería un 404. */
+        $limpio = preg_replace('/[^a-f0-9]/', '', strtolower($token));
+        if ($limpio === '' || strlen($limpio) < 8 || $limpio !== strtolower(trim($token))) {
+            $sinToken[] = $quien;
+            continue;
+        }
+
+        if (isset($tokensVistos[$limpio])) {
+            $tokenRepetido[] = $quien + ['tambien_de' => $tokensVistos[$limpio]];
+            continue;
+        }
+        $tokensVistos[$limpio] = (string) $inv['nombre'];
+
+        if (!$confId) { $sinConfirmacion[] = $quien; continue; }
+
+        if (!array_key_exists($confId, $nombreDeLaConfirmacion)) {
+            $huerfanas[] = $quien;
+            continue;
+        }
+
+        $nombreReal = $nombreDeLaConfirmacion[$confId];
+        $quien['nombre_del_invitado'] = $nombreReal;
+
+        if (($cuantasApuntanA[$confId] ?? 0) > 1) { $duplicadas[] = $quien; continue; }
+
+        if (!mismoNombreDeInvitado($quien['nombre_en_el_link'], $nombreReal)) {
+            $nombreDistinto[] = $quien;
+            continue;
+        }
+
+        $bien++;
+    }
+
+    /* Y al revés: quién se quedó sin ningún link. No es un link roto,
+       pero es una persona a la que no se le puede mandar nada. */
+    $sinLink = [];
+    foreach ($confirmaciones as $c) {
+        if (!isset($cuantasApuntanA[(int) $c['id']])) {
+            $sinLink[] = ['id' => (int) $c['id'], 'nombre' => (string) $c['nombre']];
+        }
+    }
+
+    $rotos = count($sinToken) + count($tokenRepetido) + count($sinConfirmacion) +
+             count($huerfanas) + count($duplicadas) + count($nombreDistinto);
+
+    responderBien([
+        'invitaciones'    => count($invitaciones),
+        'confirmaciones'  => count($confirmaciones),
+        'bien'            => $bien,
+        'rotos'           => $rotos,
+        'sin_token'       => $sinToken,
+        'token_repetido'  => $tokenRepetido,
+        'sin_confirmacion'=> $sinConfirmacion,
+        'huerfanas'       => $huerfanas,
+        'duplicadas'      => $duplicadas,
+        'nombre_distinto' => $nombreDistinto,
+        'sin_link'        => $sinLink,
+    ]);
+    break;
+
+
+/* ─── ARREGLARLO, DICIENDO QUÉ SE TOCA ────────────────────────────────────
+ *
+ * Dos modos, a propósito separados, porque uno rompe links y el otro no:
+ *
+ *   'nombres'    → pone en cada invitación el nombre de SU invitado.
+ *                  No toca ningún token: un link ya mandado sigue
+ *                  funcionando, solo que ahora saluda bien.
+ *
+ *   'identidades'→ borra las invitaciones huérfanas y las duplicadas.
+ *                  ⚠️ ESO MATA ESOS LINKS. Es lo correcto —apuntan a
+ *                  alguien que no existe, o son el link de un tercero
+ *                  colado en la ficha de otro— pero si alguno se mandó,
+ *                  hay que volver a mandar el nuevo. NUNCA borra una
+ *                  confirmación: la persona se queda, lo que se va es el
+ *                  link mal atado, y después se le genera uno con
+ *                  accion=generar_link.
+ */
+case 'reparar_links':
+    exigirMetodo('POST');
+    exigirAdministrador();
+
+    $datos = cuerpoJson();
+    $modo  = (string) ($datos['modo'] ?? '');
+    if (!in_array($modo, ['nombres', 'identidades'], true)) {
+        responderMal('Hay que decir qué reparar: «nombres» o «identidades».', 400);
+    }
+
+    $invitaciones = consultarTodo(
+        'SELECT id, token, nombre, confirmacion_id FROM invitaciones ORDER BY id'
+    );
+    $nombreDeLaConfirmacion = [];
+    foreach (consultarTodo('SELECT id, nombre FROM confirmaciones') as $c) {
+        $nombreDeLaConfirmacion[(int) $c['id']] = (string) $c['nombre'];
+    }
+
+    $cuantasApuntanA = [];
+    foreach ($invitaciones as $i) {
+        $c = (int) $i['confirmacion_id'];
+        if ($c) $cuantasApuntanA[$c] = ($cuantasApuntanA[$c] ?? 0) + 1;
+    }
+
+    $hechos = [];
+
+    if ($modo === 'nombres') {
+        foreach ($invitaciones as $inv) {
+            $confId = (int) $inv['confirmacion_id'];
+            if (!$confId || !array_key_exists($confId, $nombreDeLaConfirmacion)) continue;
+            // Las duplicadas no se renombran acá: primero hay que decidir
+            // cuál sobrevive, y de eso se encarga el otro modo.
+            if (($cuantasApuntanA[$confId] ?? 0) > 1) continue;
+
+            $nombreReal = $nombreDeLaConfirmacion[$confId];
+            if (mismoNombreDeInvitado($inv['nombre'], $nombreReal)) continue;
+
+            actualizar('invitaciones', (int) $inv['id'], ['nombre' => $nombreReal]);
+            $hechos[] = [
+                'que'    => 'nombre corregido',
+                'id'     => (int) $inv['id'],
+                'antes'  => (string) $inv['nombre'],
+                'ahora'  => $nombreReal,
+                'link'   => linkDeInvitacion((string) $inv['token']),
+            ];
+        }
+    } else {
+        foreach ($invitaciones as $inv) {
+            $confId  = (int) $inv['confirmacion_id'];
+            $esHuerfana = $confId && !array_key_exists($confId, $nombreDeLaConfirmacion);
+
+            /* De un grupo de duplicadas sobrevive la que SÍ se llama como
+               su invitado; si ninguna coincide, la más nueva (id mayor),
+               que es la que se creó para esta persona. */
+            $esDuplicadaQueSobra = false;
+            if ($confId && ($cuantasApuntanA[$confId] ?? 0) > 1) {
+                $delGrupo = array_values(array_filter($invitaciones,
+                    function ($x) use ($confId) { return (int) $x['confirmacion_id'] === $confId; }));
+                $nombreReal = $nombreDeLaConfirmacion[$confId] ?? '';
+                $buena = null;
+                foreach ($delGrupo as $candidata) {
+                    if (mismoNombreDeInvitado($candidata['nombre'], $nombreReal)) { $buena = $candidata; break; }
+                }
+                if (!$buena) $buena = $delGrupo[count($delGrupo) - 1];
+                $esDuplicadaQueSobra = (int) $buena['id'] !== (int) $inv['id'];
+            }
+
+            if (!$esHuerfana && !$esDuplicadaQueSobra) continue;
+
+            // Qué se borró queda entero en la bitácora, por si hubo un error.
+            anotarEnBitacora($yo,
+                $esHuerfana ? 'borró una invitación huérfana' : 'borró una invitación duplicada',
+                'invitaciones', (int) $inv['id'],
+                json_encode($inv, JSON_UNESCAPED_UNICODE));
+
+            borrar('invitaciones', (int) $inv['id']);
+
+            $hechos[] = [
+                'que'   => $esHuerfana ? 'invitación huérfana borrada' : 'invitación duplicada borrada',
+                'id'    => (int) $inv['id'],
+                'antes' => (string) $inv['nombre'],
+                'link'  => linkDeInvitacion((string) $inv['token']),
+            ];
+        }
+    }
+
+    responderBien(['modo' => $modo, 'cuantos' => count($hechos), 'hechos' => $hechos]);
     break;
 
 
