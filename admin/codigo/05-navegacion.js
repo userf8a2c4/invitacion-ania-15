@@ -440,6 +440,7 @@ function nombreDeOpcionDeMenu(clave) {
     'metricas':    'Métricas de uso',
     'borrado-final': 'Borrar los datos de los invitados',
     'mensajes':    'Mensajes para Ania',
+    'al-dia':      'Mantener los datos al día',
   };
   return nombres[clave] || clave;
 }
@@ -539,6 +540,10 @@ function atenderMenu(opcion) {
 
     case 'mensajes':
       abrirHojaDeMensajes();
+      break;
+
+    case 'al-dia':
+      abrirHojaDePuestaAlDia();
       break;
 
     case 'bitacora':
