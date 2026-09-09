@@ -30,7 +30,8 @@ $accion = (string) ($_GET['accion'] ?? 'consultar');
 
 // El resumen lo puede ver cualquiera con sesión (es solo un número para
 // Hoy); leer un pase y dejar pasar es del permiso especial 'escanear'.
-if (in_array($accion, ['consultar', 'marcar', 'revisar_codigos'], true) &&
+if (in_array($accion, ['consultar', 'marcar', 'revisar_codigos',
+                       'todas_las_tarjetas'], true) &&
     !tieneEspecial($yo, 'escanear')) {
     responderMal('No tienes permiso para escanear pases.', 403);
 }
@@ -392,6 +393,68 @@ case 'generar_codigos_faltantes':
         'generados'        => $hechos,
         'fallaron'         => $fallaron,
     ]);
+    break;
+
+
+/* ─── TODAS LAS TARJETAS DE LA PUERTA, DE UNA ──────────────────────────
+ *
+ * ⚡ PARA QUE EL ESCÁNER FUNCIONE SIN SEÑAL (2026-09-08)
+ *
+ * El escáner pide `?accion=consultar&codigo=XV-…`, de a un código. El
+ * panel guarda copia offline de cada dirección que pidió alguna vez —
+ * así que un pase que NUNCA se escaneó no tiene copia, y con el WiFi del
+ * salón caído no se puede leer. El día del evento eso es una persona
+ * parada en la entrada con su invitación en la mano.
+ *
+ * Esto devuelve las tarjetas de todos los pases juntas, para que el
+ * teléfono las guarde de antemano bajo la dirección que el escáner va a
+ * pedir después. Una petición en vez de cuarenta y siete.
+ *
+ * POR QUÉ ACÁ Y NO EN UN ARCHIVO «PAQUETE» APARTE
+ * Se intentó: un endpoint que incluyera a los demás para juntarlo todo.
+ * No se puede — `linkDeInvitacion()` está declarada en confirmaciones.php
+ * Y en invitaciones.php, así que incluir los dos es un error fatal de
+ * PHP. Y aunque hoy se esquivara, cualquiera que mañana repita un nombre
+ * de función tumbaría la sincronización entera sin enterarse.
+ *
+ * Acá, en cambio, las funciones ya están en este archivo y son las
+ * mismas que corre el escáner: sin copias, sin includes, sin sorpresas.
+ *
+ * ⚠️ ES DE SOLO LECTURA. El que marca la llegada es `marcar`. Pedir esto
+ * no deja pasar a nadie.
+ */
+case 'todas_las_tarjetas':
+    exigirMetodo(['GET']);
+
+    if (!in_array('codigo', columnasDe('confirmaciones'), true)) {
+        responderBien(['tarjetas' => []]);
+    }
+
+    $conCodigo = consultarTodo(
+        "SELECT codigo FROM confirmaciones
+          WHERE codigo IS NOT NULL AND TRIM(codigo) <> ''
+          ORDER BY id"
+    );
+
+    $tarjetas = [];
+    foreach ($conCodigo as $fila) {
+        $codigo = trim((string) $fila['codigo']);
+
+        // Las MISMAS dos funciones que corre el escáner de verdad.
+        $encontrada = buscarConfirmacionPorCodigo($codigo);
+        if (!$encontrada) continue;
+
+        try {
+            $tarjetas[$codigo] = datosParaLaPuerta($encontrada);
+        } catch (Throwable $e) {
+            /* Una tarjeta que no se puede armar no frena a las demás: se
+               omite y ese pase se pedirá online como siempre. */
+            error_log('[Ania XV · llegadas] No se pudo armar la tarjeta de '
+                    . $codigo . ': ' . $e->getMessage());
+        }
+    }
+
+    responderBien(['tarjetas' => $tarjetas]);
     break;
 
 
