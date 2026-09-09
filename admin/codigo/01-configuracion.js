@@ -224,10 +224,26 @@ const CONFIGURACION = {
      (que ya funcionó bien): grupos con título y una línea que dice qué
      hace cada opción.
 
-     `soloAdmin: true` esconde la fila para una cuenta que no sea admin.
-     Es un filtro grueso por ahora (admin/entrada); cuando el organigrama
-     del Bloque 1 llegue al menú, esto se puede afinar por permiso real
-     de cada sección en vez de por rol. */
+     CADA FILA ES: [clave, nombre visible, qué hace, soloAdmin].
+
+     ⚡ EL NOMBRE VISIBLE VIVE ACÁ DESDE 2026-09-09.
+     Antes estaba en una segunda tabla, nombreDeOpcionDeMenu(), en
+     05-navegacion.js — la clave en un archivo y su nombre en otro, sin
+     nada que obligara a las dos listas a estar de acuerdo. Y no lo
+     estaban: 'correo' se agregó acá el 6 de septiembre y nadie lo agregó
+     allá, así que el menú mostraba una fila que decía literalmente
+     «correo», en minúscula, entre veintiséis nombres bien escritos.
+     Nadie lo vio en tres días.
+
+     Con el nombre en la misma fila que la clave, agregar una opción es
+     escribir un renglón y no se puede olvidar la mitad. Lo cuida además
+     herramientas/prueba-menu.mjs, que ahora falla si una fila no tiene
+     nombre.
+
+     `soloAdmin: true` (el CUARTO valor) esconde la fila para una cuenta
+     que no sea admin. Es un filtro grueso por ahora (admin/entrada);
+     cuando el organigrama del Bloque 1 llegue al menú, esto se puede
+     afinar por permiso real de cada sección en vez de por rol. */
   indiceDelMenu: [
     /* ⚡ ESTE GRUPO ES NUEVO (2026-09-03). Cuando la barra de abajo pasó a
        ser Hoy · Gente · Dinero · Más, "Resumen" y "Planificar" se quedaron
@@ -242,15 +258,15 @@ const CONFIGURACION = {
     {
       titulo: 'Ver todo',
       filas: [
-        ['resumen',    'La foto completa: invitados, dinero y lo que viene'],
-        ['planificar', 'El índice de todas las herramientas del panel'],
+        ['resumen', 'Resumen',    'La foto completa: invitados, dinero y lo que viene'],
+        ['planificar', 'Todas las herramientas', 'El índice de todas las herramientas del panel'],
       ],
     },
     {
       titulo: 'Del día',
       filas: [
-        ['el-dia',    'Cronograma grande y buscador de pases, para el salón'],
-        ['escanear',  'Leer el QR del pase en la puerta y marcar quién llegó'],
+        ['el-dia', 'Modo día del evento',    'Cronograma grande y buscador de pases, para el salón'],
+        ['escanear', 'Escanear pases',  'Leer el QR del pase en la puerta y marcar quién llegó'],
       ],
     },
     /* ⚡ REORDENADO (2026-09-06)
@@ -283,11 +299,11 @@ const CONFIGURACION = {
     {
       titulo: 'Correo y proveedores',
       filas: [
-        ['correo', 'La bandeja de info@aniaxv.com'],
+        ['correo', 'Correo', 'La bandeja de info@aniaxv.com'],
         /* Solo admin: compartir.php exige rol admin y una cuenta de
            entrada recibía un 403 al abrirlo, después de haberlo visto
            en su menú como cualquier otra herramienta. */
-        ['compartir', 'Mandar los datos del evento a un proveedor por WhatsApp', true],
+        ['compartir', 'Compartir con proveedores', 'Mandar los datos del evento a un proveedor por WhatsApp', true],
       ],
     },
     {
@@ -299,11 +315,11 @@ const CONFIGURACION = {
            puesta. Nunca se muestra su valor —vive en el .env del
            servidor— pero saber que existe ya es información que una
            cuenta de entrada no necesita. */
-        ['pagos', 'Conectar la cuenta con la que se paga', true],
+        ['pagos', 'Formas de pago', 'Conectar la cuenta con la que se paga', true],
         /* Solo admin, igual que el resto del dinero: direcciones.php
            usa exigirAdministrador() y una cuenta de entrada recibiría un
            403 después de haberlo visto en su menú. */
-        ['direcciones', 'Dónde recibes las compras que le pides al equipo', true],
+        ['direcciones', 'Dónde recibes las compras', 'Dónde recibes las compras que le pides al equipo', true],
       ],
     },
     {
@@ -313,8 +329,8 @@ const CONFIGURACION = {
         // dos claves de MegaBot — la de servicio nunca se muestra
         // (solo al rotarla), así que no tiene sentido que una cuenta
         // no-admin ni siquiera vea si hay una configurada.
-        ['megabot', 'URL y claves para conectar el chat con MegaBot', true],
-        ['comandos-asistente', 'Ver y agregar frases del asistente'],
+        ['megabot', 'MegaBot', 'URL y claves para conectar el chat con MegaBot', true],
+        ['comandos-asistente', 'Comandos del asistente', 'Ver y agregar frases del asistente'],
       ],
     },
     {
@@ -324,39 +340,39 @@ const CONFIGURACION = {
          cuál. */
       titulo: 'Avisos',
       filas: [
-        ['avisos',  'Notificaciones de pagos y fechas en este teléfono'],
-        ['alarmas', 'Ver y probar los recordatorios activos'],
+        ['avisos', 'Avisos y recordatorios',  'Notificaciones de pagos y fechas en este teléfono'],
+        ['alarmas', 'Alarmas', 'Ver y probar los recordatorios activos'],
       ],
     },
     {
       titulo: 'Herramientas',
       filas: [
-        ['importar', 'Cargar invitados o gastos desde una hoja de cálculo'],
+        ['importar', 'Importar desde una hoja de cálculo', 'Cargar invitados o gastos desde una hoja de cálculo'],
         // ⚡ (2026-08-28) Antes las etiquetas de acomodo (Entrega 2) solo
         // se podían crear o ver desde adentro de la ficha de una persona
         // o de una mesa — no había ningún lugar central para verlas
         // todas juntas ni para borrar las que ya no sirven.
-        ['etiquetas_acomodo', 'Ver y borrar las etiquetas de personas y mesas'],
+        ['etiquetas_acomodo', 'Etiquetas', 'Ver y borrar las etiquetas de personas y mesas'],
         /* No lleva `true`: no es un ajuste ni una acción delicada, es lo
            que le escribieron a Ania. Cualquiera del equipo con sesión lo
            puede leer y guardar — y cuanta más gente sepa que hay que
            guardarlo antes del borrado, mejor. */
-        ['mensajes', 'Lo que le escribieron a Ania al confirmar'],
-        ['bitacora', 'Quién cambió qué y cuándo', true],
+        ['mensajes', 'Mensajes para Ania', 'Lo que le escribieron a Ania al confirmar'],
+        ['bitacora', 'Historial de cambios', 'Quién cambió qué y cuándo', true],
         /* Va con `true` (solo admin) y además el endpoint exige el
            permiso de borrar. Vive en Herramientas y no en un rincón
            escondido a propósito: se prometió en el formulario de
            confirmación, así que tiene que poder encontrarse — la
            fricción está adentro de la pantalla, no en esconderla. */
-        ['borrado-final', 'Cuando pase la fiesta: borrar los datos de los invitados', true],
+        ['borrado-final', 'Borrar los datos de los invitados', 'Cuando pase la fiesta: borrar los datos de los invitados', true],
       ],
     },
     {
       titulo: 'Tu cuenta',
       filas: [
-        ['cuenta',      'Tu nombre, tu correo y tu contraseña'],
-        ['usuarios',    'Quién más tiene acceso al panel', true],
-        ['nuevo-admin', 'Agregar a alguien más', true],
+        ['cuenta', 'Mi cuenta',      'Tu nombre, tu correo y tu contraseña'],
+        ['usuarios', 'Personas con acceso',    'Quién más tiene acceso al panel', true],
+        ['nuevo-admin', 'Agregar administrador', 'Agregar a alguien más', true],
       ],
     },
     {
@@ -364,14 +380,14 @@ const CONFIGURACION = {
          datos de la fiesta y distinto de la cuenta de quien la usa. */
       titulo: 'La app',
       filas: [
-        ['colores',    'Elegir la paleta de colores del panel', true],
-        ['etiquetas',  'Cambiar cómo se llaman las cosas en la app', true],
-        ['fab-config', 'Elegir qué hace el botón redondo de abajo'],
-        ['instalar',   'Poner el acceso directo en la pantalla de inicio'],
-        ['respaldo',   'Cuándo se guardó por última vez la copia de todo', true],
+        ['colores', 'Colores del panel',    'Elegir la paleta de colores del panel', true],
+        ['etiquetas', 'Cambiar los nombres',  'Cambiar cómo se llaman las cosas en la app', true],
+        ['fab-config', 'Mis herramientas rápidas', 'Elegir qué hace el botón redondo de abajo'],
+        ['instalar', 'Instalar en la pantalla de inicio',   'Poner el acceso directo en la pantalla de inicio'],
+        ['respaldo', 'Estado del respaldo',   'Cuándo se guardó por última vez la copia de todo', true],
         /* Sin `true`: cualquiera que use el panel en su teléfono puede
            querer que gaste menos datos, no solo la administradora. */
-        ['al-dia',     'Cada cuánto se ponen al día los datos en este dispositivo'],
+        ['al-dia', 'Mantener los datos al día',     'Cada cuánto se ponen al día los datos en este dispositivo'],
       ],
     },
     {
@@ -382,7 +398,7 @@ const CONFIGURACION = {
          evento: esto es sobre CÓMO SE USA el panel, no sobre la fiesta. */
       titulo: 'Solo para ti',
       filas: [
-        ['metricas', 'Qué pantallas se usan, qué cuesta más pasos, y qué tanto le entiende el asistente a Lucila'],
+        ['metricas', 'Métricas de uso', 'Qué pantallas se usan, qué cuesta más pasos, y qué tanto le entiende el asistente a Lucila'],
       ],
     },
   ],

@@ -381,16 +381,19 @@ function dibujarMas() {
   const grupos = CONFIGURACION.indiceDelMenu
     .map(grupo => ({
       titulo: grupo.titulo,
+      // Cada fila es [clave, nombre visible, qué hace, soloAdmin].
+      // Ver la nota en CONFIGURACION.indiceDelMenu: el nombre viajaba en
+      // una tabla aparte de este archivo y las dos se desincronizaron.
       filas: grupo.filas
-        .filter(fila => !fila[2] || esAdmin)                    // soloAdmin
+        .filter(fila => !fila[3] || esAdmin)                    // soloAdmin
         .filter(fila => fila[0] !== 'instalar' || puedeInstalar)
         // Panel de métricas: solo la cuenta observadora, ni siquiera
         // otra cuenta admin (ver esObservador(), api/_lib/sesion.php).
         .filter(fila => fila[0] !== 'metricas' || USUARIO.es_observador)
         .map(fila => ({
           clave: fila[0],
-          nombre: nombreDeOpcionDeMenu(fila[0]),
-          descripcion: fila[1],
+          nombre: fila[1],
+          descripcion: fila[2],
         })),
     }))
     .filter(grupo => grupo.filas.length);
@@ -404,46 +407,15 @@ function dibujarMas() {
   buscar('#mas-salir', vista).addEventListener('click', () => salir());
 }
 
-/**
- * El nombre visible de cada opción del menú. Vive separado de
- * indiceDelMenu porque esa tabla ya usa la primera posición para la
- * clave y la segunda para la descripción — un tercer texto ahí
- * hubiera hecho ilegible cada renglón.
- *
- * @param {string} clave
- * @returns {string}
- */
-function nombreDeOpcionDeMenu(clave) {
-  const nombres = {
-    'resumen':     'Resumen',
-    'planificar':  'Todas las herramientas',
-    'el-dia':      'Modo día del evento',
-    'escanear':    'Escanear pases',
-    'compartir':   'Compartir con proveedores',
-    'importar':    'Importar desde una hoja de cálculo',
-    'direcciones': 'Dónde recibes las compras',
-    'pagos':       'Formas de pago',
-    'etiquetas_acomodo': 'Etiquetas',
-    'alarmas':     'Alarmas',
-    'bitacora':    'Historial de cambios',
-    'cuenta':      'Mi cuenta',
-    'usuarios':    'Personas con acceso',
-    'nuevo-admin': 'Agregar administrador',
-    'avisos':      'Avisos y recordatorios',
-    'etiquetas':   'Cambiar los nombres',
-    'colores':     'Colores del panel',
-    'fab-config':  'Mis herramientas rápidas',
-    'megabot':     'MegaBot',
-    'comandos-asistente': 'Comandos del asistente',
-    'respaldo':    'Estado del respaldo',
-    'instalar':    'Instalar en la pantalla de inicio',
-    'metricas':    'Métricas de uso',
-    'borrado-final': 'Borrar los datos de los invitados',
-    'mensajes':    'Mensajes para Ania',
-    'al-dia':      'Mantener los datos al día',
-  };
-  return nombres[clave] || clave;
-}
+/* ⚡ ACÁ VIVÍA nombreDeOpcionDeMenu() (retirada el 2026-09-09).
+   Era una segunda tabla clave → nombre, en este archivo, mientras las
+   claves y sus descripciones vivían en 01-configuracion.js. Nada
+   obligaba a las dos a estar de acuerdo, y no lo estaban: la fila
+   'correo' se agregó a la configuración y no acá, así que el menú
+   mostraba «correo» en minúscula —el slug crudo, por el `|| clave` del
+   final— entre veintiséis nombres bien escritos.
+
+   Ahora el nombre es el segundo valor de cada fila de indiceDelMenu. */
 
 /**
  * Qué hace cada opción del menú.

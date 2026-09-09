@@ -73,11 +73,35 @@ const NOVEDADES = [
     texto: 'Nuevo: acá abajo puedes enseñarle al asistente tu propia jerga cariñosa (como "abacho") y las frases que te gusta que te digan — las va a usar cuando se las escribas en el chat.',
   },
   {
-    id: 'v59-reglas-de-acomodo',
-    pantalla: 'mesas',
-    selector: '#mesa-reglas',
-    texto: 'Este botón cambió de nombre: ahora se llama "Reglas de acomodo" y junta todo lo que le puedes enseñar al acomodo automático — quién va junto, quién no, y ahora también quién se sienta aparte de su familia.',
+    /* El botón cambió lo que hace con un toque, y eso es justo lo que
+       este sistema existe para decir: antes abría el chat, ahora abre
+       tus herramientas. Sin este aviso, quien lo usaba para escribirle a
+       MegaBot toca y aparece otra cosa. */
+    id: 'v60-boton-redondo-herramientas',
+    pantalla: 'hoy',
+    selector: '#boton-accion',
+    texto: 'Este botón cambió: ahora un toque abre tus tres herramientas rápidas — antes había que mantenerlo apretado y nadie lo sabía. MegaBot sigue ahí, abajo de las tres.',
   },
+  /* ⚡ ACÁ ESTABA 'v59-reglas-de-acomodo' (retirada el 2026-09-09).
+     Declaraba `pantalla: 'mesas'`, y 'mesas' NO es una clave de VISTAS:
+     Mesas es una sección DENTRO de la vista 'invitados'. Como
+     mostrarNovedadesDePantalla() solo se llama con 'login' o con una
+     clave de VISTAS (dos llamadas en todo el panel), esa novedad no se
+     mostró nunca, ni una vez, desde que se escribió.
+
+     No se reapuntó a 'invitados': ahí el selector #mesa-reglas tampoco
+     existe salvo que se esté justo en la sección Mesas, y en ese caso
+     intentarPintar() se rinde y la marca como vista EN SILENCIO —o sea,
+     la quema igual—. Y de fondo: explicaba el cambio de nombre de un
+     botón de hace tres versiones, que a esta altura Lucila ya vio.
+
+     ⚠️ LÍMITE QUE HAY QUE CONOCER ANTES DE ESCRIBIR OTRA:
+     una novedad solo puede apuntar a algo que esté visible cuando su
+     VISTA se abre. Para algo que vive dentro de una sección (Mesas,
+     Regalos, Foráneos, Contactos, o una sub-pestaña de Dinero) no hay
+     forma de dispararla, y el sistema no avisa: se marca como vista y
+     desaparece. Lo comprueba herramientas/prueba-navegacion.mjs, que
+     falla si una `pantalla` no es 'login' ni una clave de VISTAS. */
 ];
 
 
