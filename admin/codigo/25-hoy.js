@@ -122,29 +122,72 @@ function bloqueListaFinal(lista, dias) {
  * @returns {Promise<void>}
  */
 async function abrirModoDelDia() {
-  /* filtro--grande y no .filtro a secas: estas dos pestañas se tocan de
-     pie, con prisa y con una sola mano. 34 px es chico para eso. */
+  /* ⚡ ACÁ HABÍA DOS PESTAÑAS Y AHORA HAY UNA (2026-09-09)
+   *
+   * La segunda, «Buscar pase», pintaba una tarjeta con el nombre, la
+   * mesa y la alergia… Y NADA MÁS. No tenía «Dejar pasar». O sea que en
+   * la puerta había dos buscadores de pase distintos —este y el del
+   * escáner— y quien entrara por acá podía identificar a la persona
+   * pero no marcar que entró. Dos porteros con dos pantallas haciendo
+   * cosas distintas, la noche en que eso menos se puede permitir.
+   *
+   * Ahora este botón abre el escáner, que hace lo mismo, mejor, y
+   * además marca. Una sola puerta y una sola tarjeta de resultado.
+   * (pintarBuscadorDePases() sigue abajo, sin usar desde acá — ver la
+   * nota en su cabecera.)
+   *
+   * Y el cronograma dejó de ser el único motivo para abrir esta
+   * pantalla: el momento que está corriendo ahora se ve en Hoy, sin
+   * tocar nada. Esto queda para verlo entero, que es lo que se hace la
+   * noche anterior. */
   const cuerpo = abrirHoja('El día',
-    '<div class="filtros">' +
-      '<button class="filtro filtro--grande activo" data-dia-modo="cronograma">' +
-        'Cronograma</button>' +
-      '<button class="filtro filtro--grande" data-dia-modo="pases">Buscar pase</button>' +
-    '</div>' +
-    '<div id="dia-cuerpo"><div class="esqueleto"></div></div>');
+    '<div id="dia-cuerpo"><div class="esqueleto"></div></div>' +
+    /* Grande y abajo: se toca de pie, con prisa y con una sola mano. */
+    '<button class="boton boton--principal boton--ancho" id="dia-escanear" ' +
+            'style="min-height:56px;margin-top:var(--esp-3)">' +
+      'Escanear o buscar un pase' +
+    '</button>');
 
   const caja = buscar('#dia-cuerpo', cuerpo);
 
-  buscarTodos('[data-dia-modo]', cuerpo).forEach(boton => {
-    boton.addEventListener('click', () => {
-      buscarTodos('[data-dia-modo]', cuerpo).forEach(o =>
-        o.classList.toggle('activo', o === boton));
-
-      if (boton.dataset.diaModo === 'pases') pintarBuscadorDePases(caja);
-      else pintarCronogramaGrande(caja);
-    });
-  });
+  buscar('#dia-escanear', cuerpo).addEventListener('click', () => abrirEscaner());
 
   pintarCronogramaGrande(caja);
+}
+
+/**
+ * Cuál de los momentos del cronograma está corriendo AHORA: el último
+ * cuya hora ya llegó.
+ *
+ * ⚡ VIVE SUELTA DESDE 2026-09-09. Estaba escrita adentro de
+ * pintarCronogramaGrande(), y la tira «AHORA» de la pestaña Hoy
+ * (30-vista-hoy.js) necesita exactamente el mismo cálculo. Dos copias de
+ * esto serían dos pantallas que, en el mismo teléfono y en el mismo
+ * segundo, podrían marcar momentos distintos — justo el día en que las
+ * dos se miran una detrás de la otra.
+ *
+ * ⚠️ SE CALCULA EN EL TELÉFONO, A PROPÓSITO, Y NO EN EL SERVIDOR.
+ * El reloj que importa es el del salón, no el del hosting. Y si el
+ * servidor mandara «el momento de ahora», ese dato envejecería: Hoy no
+ * se vuelve a pedir cada minuto, así que la tira diría lo que era cierto
+ * cuando se cargó la pantalla.
+ *
+ * ⚠️ Da por hecho que `momentos` viene ordenado por hora, que es como lo
+ * devuelve evento.php ('orden' => 'hora').
+ *
+ * @param {Array} momentos - EVENTO.cronograma.
+ * @returns {number} El índice, o -1 si todavía no empezó ninguno.
+ */
+function cualMomentoEsAhora(momentos) {
+  const ahora = new Date();
+  const horaAhora = String(ahora.getHours()).padStart(2, '0') + ':' +
+                    String(ahora.getMinutes()).padStart(2, '0');
+
+  let cual = -1;
+  (momentos || []).forEach((m, i) => {
+    if (String(m.hora).slice(0, 5) <= horaAhora) cual = i;
+  });
+  return cual;
 }
 
 /**
@@ -173,17 +216,7 @@ async function pintarCronogramaGrande(donde) {
     return;
   }
 
-  const ahora = new Date();
-  const horaAhora = String(ahora.getHours()).padStart(2, '0') + ':' +
-                    String(ahora.getMinutes()).padStart(2, '0');
-
-  /* Se marca lo que está pasando ahora: el último momento cuya hora ya
-     llegó. Es lo que uno busca al mirar el teléfono en medio de la
-     fiesta. */
-  let elDeAhora = -1;
-  momentos.forEach((m, i) => {
-    if (String(m.hora).slice(0, 5) <= horaAhora) elDeAhora = i;
-  });
+  const elDeAhora = cualMomentoEsAhora(momentos);
 
   donde.innerHTML = momentos.map((m, i) => {
     const pasado = i < elDeAhora;
@@ -209,111 +242,22 @@ async function pintarCronogramaGrande(donde) {
   if (actual) actual.scrollIntoView({ block: 'center' });
 }
 
-/**
- * Buscar un pase por código o por nombre, para la entrada.
- *
- * @param {Element} donde
- * @returns {Promise<void>}
- */
-async function pintarBuscadorDePases(donde) {
-  donde.innerHTML =
-    '<div class="buscador">' +
-      '<input type="search" id="buscar-pase" class="buscador__control" ' +
-             'style="padding-left:var(--esp-3);font-size:18px;min-height:52px" ' +
-             'placeholder="Código o nombre" autocapitalize="characters" ' +
-             'autocomplete="off" spellcheck="false">' +
-    '</div>' +
-    '<div id="resultado-pase"></div>';
+/* ⚡ ACÁ VIVÍA pintarBuscadorDePases() (retirada el 2026-09-09).
 
-  const campo = buscar('#buscar-pase', donde);
-  const caja  = buscar('#resultado-pase', donde);
-  campo.focus();
+   Era el SEGUNDO buscador de pase de la puerta, además del del
+   escáner (28-escaner.js). Pintaba el nombre, la mesa y la alergia
+   —bien— pero no tenía «Dejar pasar»: era una tarjeta de solo
+   lectura. Quien entrara a la puerta por acá podía identificar a la
+   persona y no podía marcar que entró.
 
-  /* SE RECARGA SIEMPRE, aunque ya hubiera invitados en memoria.
-   *
-   * Antes solo se pedía la lista si estaba vacía, y eso fallaba
-   * justo el día que importa: si alguien abrió la pestaña Invitados a
-   * la mañana, en la puerta se buscaba contra la lista de la mañana, y
-   * quien hubiera confirmado durante el día no aparecía. Buscar un pase
-   * que existe y que la app diga que no está es peor que no tener
-   * buscador.
-   *
-   * La espera no se nota: se puede empezar a escribir enseguida, y con
-   * la copia del teléfono esto contesta aunque no haya señal. */
-  let listaAlDia = false;
-  try {
-    const r = await traer('confirmaciones.php?accion=listar');
-    INVITADOS = r.filas || [];
-    INVITADOS_EDITABLES = !!r.editable;
-    listaAlDia = true;
-  } catch (error) {
-    /* Ni servidor ni copia guardada. Se sigue con lo que haya quedado
-       en memoria porque es mejor que nada, pero NO cuenta como lista al
-       día: justamente lo que puede faltarle es quien confirmó hoy. Que
-       haya algo cargado no lo vuelve confiable. */
-    listaAlDia = false;
-  }
+   Dos pantallas para la misma tarea, con capacidades distintas, es
+   peor que una sola imperfecta: la noche del evento se reparten los
+   teléfonos sin explicar cuál de las dos abrir.
 
-  if (!INVITADOS.length) {
-    caja.innerHTML =
-      '<p class="aviso-error">No pude cargar la lista de invitados. ' +
-      'Revisa la conexión y vuelve a abrir esta pantalla.</p>';
-  }
-
-  campo.addEventListener('input', () => {
-    const aguja = paraBuscar(campo.value);
-
-    if (aguja.length < 2) { caja.innerHTML = ''; return; }
-
-    const encontrados = INVITADOS.filter(f =>
-      paraBuscar([f.nombre, f.codigo].join(' ')).includes(aguja)
-    ).slice(0, 8);
-
-    if (!encontrados.length) {
-      /* Se distingue "no está en la lista" de "no tengo la lista". Antes
-         las dos decían lo mismo, y en la puerta eso significa mandar a
-         alguien de vuelta por un error de red. */
-      caja.innerHTML = listaAlDia
-        ? '<p class="aviso-error">No encontré a nadie con eso.</p>'
-        : '<p class="aviso-error">No pude cargar la lista completa, así que ' +
-          'esto puede estar incompleto. No busques por aquí para dejar a ' +
-          'alguien afuera.</p>';
-      return;
-    }
-
-    caja.innerHTML = encontrados.map(f => {
-      const asiste = Number(f.asiste) === 1;
-      const gente = (Number(f.adultos) || 0) + (Number(f.ninos) || 0);
-
-      return '<div class="tarjeta" style="border-color:' +
-             (asiste ? 'var(--bien)' : 'var(--alerta)') + '">' +
-        '<div style="font-size:19px;font-weight:600">' + seguro(f.nombre) + '</div>' +
-        '<div style="font-size:28px;color:' +
-          (asiste ? 'var(--bien)' : 'var(--alerta)') + ';font-weight:700">' +
-          (asiste ? gente + (gente === 1 ? ' persona' : ' personas') : 'NO ASISTE') +
-        '</div>' +
-        /* ⚡ LA MESA, EN GRANDE Y ANTES QUE EL CÓDIGO (2026-09-03). Esta
-           tarjeta se mira de pie, en la puerta, mientras alguien espera que
-           le digan dónde sentarse — y mostraba el código del pase pero no la
-           mesa. Había que salir de acá, ir a Gente, buscar de nuevo, abrir la
-           ficha y bajar hasta el final. El dato ya venía en la respuesta. */
-        (asiste
-          ? '<div class="etiqueta ' +
-              (f.mesa ? 'etiqueta--bien' : 'etiqueta--alerta') +
-              '" style="margin-top:6px;font-size:16px">' +
-              (f.mesa ? seguro(comoSeLlamaLaMesa(f.mesa)) : 'Sin mesa asignada') +
-            '</div>'
-          : '') +
-        (f.alergias && !/^(ninguna|ninguno|no|-)$/i.test(f.alergias)
-          ? '<div class="etiqueta etiqueta--ojo" style="margin-top:6px">⚠ ' +
-            seguro(f.alergias) + '</div>' : '') +
-        (f.codigo
-          ? '<div class="codigo-pase" style="font-size:14px;margin-top:6px">' +
-            seguro(f.codigo) + '</div>' : '') +
-      '</div>';
-    }).join('');
-  });
-}
+   Se borró en vez de dejarla sin usar, para que nadie la vuelva a
+   enganchar creyendo que es un atajo. La puerta es abrirEscaner(),
+   que busca por nombre y por código, funciona sin cámara (iPhone),
+   avisa si el pase ya entró, y marca la llegada. */
 
 
 /* ─── 3. COMPARTIR ─────────────────────────────────────────────────── */

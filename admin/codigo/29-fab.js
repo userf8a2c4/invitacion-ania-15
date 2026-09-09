@@ -6,10 +6,14 @@
    mínimo esfuerzo del panel: hasta tres herramientas que cada persona
    elige, a un toque de distancia desde cualquier pantalla.
 
-   TOQUE SIMPLE CONTRA TOQUE LARGO
-   El toque simple abre el asistente (32-asistente.js): escribís qué
-   necesitás y lo hace. El toque largo abre este sandwich: hasta tres
-   herramientas fijas, un toque y listo, sin escribir nada.
+   UN TOQUE. NO HAY GESTO OCULTO.
+   El toque abre el sandwich: hasta tres herramientas fijas, un toque y
+   listo, sin escribir nada. Abajo de las tres va MegaBot, siempre, para
+   lo que no entra en un botón.
+
+   Hasta el 2026-09-09 era al revés —toque simple = chat de MegaBot,
+   toque largo = las herramientas— y el toque largo no se anunciaba en
+   ninguna parte de la app. Ver la nota en prepararFab().
 
    ES POR PERSONA, NO DEL EVENTO
    Lo que Carlos elige no tiene por qué ser lo que elige Lucila. Se
@@ -247,8 +251,18 @@ async function abrirMarcarPagoRapido() {
 
 /* ─── 2. GUARDAR, CARGAR Y SINCRONIZAR LA ELECCIÓN ─────────────────── */
 
-/** Lo que trae la app de fábrica, antes de que nadie elija nada. */
-const SANDWICH_DE_FABRICA = ['escanear', 'buscar', 'nota'];
+/* Lo que trae la app de fábrica, antes de que nadie elija nada.
+ *
+ * ⚡ SALE 'buscar', ENTRA 'tarea' (2026-09-09). Buscar ya vive en la
+ * lupa del encabezado, visible desde CUALQUIER pantalla del panel:
+ * repetirlo acá era gastar uno de los tres únicos lugares en un camino
+ * que ya estaba a un toque.
+ *
+ * Los tres de ahora son las tres cosas que Lucila hace de verdad todos
+ * los días: dejar entrar a alguien, anotar algo que se acaba de acordar,
+ * y apuntar un pendiente. El plano de mesas no entra porque ya es un
+ * botón entero en Hoy. */
+const SANDWICH_DE_FABRICA = ['escanear', 'nota', 'tarea'];
 
 /** Las claves elegidas, en orden. Se llenan al arrancar. */
 let SANDWICH_FAB = SANDWICH_DE_FABRICA.slice();
@@ -321,13 +335,34 @@ async function guardarSandwich(claves) {
 
 /* ─── 3. EL TOQUE: ABRIR EL SANDWICH ───────────────────────────────── */
 
-/** Cuánto hay que sostener para que cuente como toque largo. */
-const MILISEGUNDOS_TOQUE_LARGO = 480;
-
 /**
- * Engancha el FAB: toque simple abre el asistente (32-asistente.js),
- * toque largo abre el sandwich de herramientas — tal como pide el
- * documento del rediseño.
+ * Engancha el FAB. Un toque abre las herramientas elegidas. Nada más.
+ *
+ * ⚡ SE RETIRÓ EL TOQUE LARGO (2026-09-09)
+ *
+ * QUÉ PASABA
+ * El botón decía `aria-label="Acción rápida"`, mostraba un rayo, y un
+ * toque abría el CHAT de MegaBot. Las tres herramientas —lo que de
+ * verdad es una acción rápida, y lo único que se puede configurar de
+ * este botón— estaban detrás de sostener el dedo 480 ms, sin que nada
+ * en toda la app lo dijera nunca.
+ *
+ * Un gesto que no se anuncia no es una función escondida: es una
+ * función que para quien usa la app no existe. Lucila puede haber
+ * elegido sus tres herramientas en Ajustes y no haberlas visto jamás.
+ *
+ * Y encima el toque largo tenía un costo real que se notaba: sostener
+ * el dedo sobre un botón es, para el teléfono, el gesto de SELECCIONAR
+ * TEXTO. Al soltar quedaba el texto de algún botón resaltado, con la
+ * lupa y el menú de «Copiar» tapando la pantalla. (Eso se arregló
+ * aparte, con `user-select: none` en 02-componentes.css, porque pasaba
+ * en todos los controles y no solo acá.)
+ *
+ * DÓNDE QUEDÓ MEGABOT
+ * Abajo del sandwich, como fila fija: sigue estando a un toque más,
+ * pero no gasta ninguno de los tres lugares elegibles. Ver
+ * abrirSandwich(). La campana (37-campana.js) también lo sigue
+ * abriendo directo.
  *
  * @returns {void}
  */
@@ -335,30 +370,7 @@ function prepararFab() {
   const boton = buscar('#boton-accion');
   if (!boton) return;
 
-  let cuando = 0;
-  let disparadoPorLargo = false;
-  let reloj = null;
-
-  boton.addEventListener('pointerdown', () => {
-    disparadoPorLargo = false;
-    cuando = Date.now();
-    reloj = setTimeout(() => {
-      disparadoPorLargo = true;
-      if (navigator.vibrate) navigator.vibrate(30);
-      abrirSandwich();
-    }, MILISEGUNDOS_TOQUE_LARGO);
-  });
-
-  const soltar = () => { if (reloj) clearTimeout(reloj); };
-  boton.addEventListener('pointerup', soltar);
-  boton.addEventListener('pointerleave', soltar);
-
-  boton.addEventListener('click', () => {
-    // El toque largo ya disparó su propia acción; el click que el
-    // navegador manda igual al soltar no debe abrir nada dos veces.
-    if (disparadoPorLargo) { disparadoPorLargo = false; return; }
-    abrirAsistente();
-  });
+  boton.addEventListener('click', () => abrirSandwich());
 }
 
 /**
@@ -374,6 +386,29 @@ function abrirSandwich() {
     .filter(Boolean)
     .filter(h => !h.soloAdmin || esAdmin);
 
+  /* MegaBot va SIEMPRE, y va último. Antes era lo que abría el toque
+     simple de este botón; al pasar el toque simple a las herramientas,
+     habría desaparecido de acá sin más. No gasta uno de los tres
+     lugares elegibles porque no es una herramienta que se elige: es la
+     otra forma de pedirle algo al panel, la de escribirlo. */
+  const filaDeMegaBot =
+    '<button class="boton boton--ancho" id="fab-megabot" ' +
+            'style="min-height:52px;justify-content:flex-start;text-align:left;' +
+                   'margin-top:var(--esp-2)">' +
+      '<span>' +
+        '<span style="display:block;font-weight:600">Preguntarle a MegaBot</span>' +
+        '<span style="display:block;font-size:12px;color:var(--texto-tenue);' +
+                     'font-weight:400">Escribile qué necesitás y lo hace</span>' +
+      '</span>' +
+    '</button>';
+
+  const engancharMegaBot = (cuerpo) => {
+    buscar('#fab-megabot', cuerpo).addEventListener('click', () => {
+      cerrarHoja(true);
+      abrirAsistente();
+    });
+  };
+
   if (!elegidas.length) {
     const cuerpo = abrirHoja('Acción rápida',
       '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
@@ -381,12 +416,14 @@ function abrirSandwich() {
       '</p>' +
       '<button class="boton boton--principal boton--ancho" id="fab-configurar-ahora">' +
         'Elegir herramientas' +
-      '</button>'
+      '</button>' +
+      filaDeMegaBot
     );
     buscar('#fab-configurar-ahora', cuerpo).addEventListener('click', () => {
       cerrarHoja(true);
       abrirConfiguracionDelFab();
     });
+    engancharMegaBot(cuerpo);
     return;
   }
 
@@ -401,7 +438,14 @@ function abrirSandwich() {
                        'font-weight:400">' + seguro(h.descripcion) + '</span>' +
         '</span>' +
       '</button>'
-    ).join('')
+    ).join('') +
+    filaDeMegaBot +
+
+    /* Que se pueda cambiar desde donde se usa, y no solo desde el fondo
+       de Más → La app. Si estas tres no son las que hacen falta, el
+       lugar donde uno se da cuenta es justo acá. */
+    '<button class="boton boton--fantasma boton--ancho" id="fab-cambiar" ' +
+            'style="margin-top:var(--esp-1)">Cambiar estas herramientas</button>'
   );
 
   buscarTodos('[data-fab-herramienta]', cuerpo).forEach(boton => {
@@ -410,6 +454,13 @@ function abrirSandwich() {
       cerrarHoja(true);
       if (herramienta) herramienta.ejecutar();
     });
+  });
+
+  engancharMegaBot(cuerpo);
+
+  buscar('#fab-cambiar', cuerpo).addEventListener('click', () => {
+    cerrarHoja(true);
+    abrirConfiguracionDelFab();
   });
 }
 
@@ -433,8 +484,9 @@ function abrirConfiguracionDelFab() {
 
   const cuerpo = abrirHoja('Mis herramientas rápidas',
     '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
-      'Elige hasta tres. Van a aparecer en el botón redondo de abajo, en ' +
-      'el orden en que las toques acá.' +
+      'Elige hasta tres. Aparecen al tocar el botón redondo de abajo, en ' +
+      'el orden en que las toques acá. MegaBot está siempre ahí, no ' +
+      'ocupa ninguno de los tres lugares.' +
     '</p>' +
     '<div id="fab-lista"></div>' +
     '<button class="boton boton--principal boton--ancho" id="fab-guardar" ' +

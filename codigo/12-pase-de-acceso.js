@@ -314,7 +314,7 @@ function imprimirPaseDeAcceso() {
 
   if (botonVerPase) {
     botonVerPase.addEventListener('click', () => {
-      const paseGuardado = leerDeMemoria('pase');
+      const paseGuardado = leerElPase();
       if (paseGuardado) mostrarPaseDeAcceso(paseGuardado);
     });
   }
@@ -388,14 +388,19 @@ function imprimirPaseDeAcceso() {
    * de cualquier salida. */
   if (botonRehacer) {
     botonRehacer.addEventListener('click', () => {
-      borrarDeMemoria('pase');
+      olvidarElPase();
       window.location.reload();
     });
   }
 
   /* Lo de abajo SÍ depende de que haya una confirmación anterior: es
-     mostrar el cartel en vez del formulario al entrar. */
-  const paseGuardado = leerDeMemoria('pase');
+     mostrar el cartel en vez del formulario al entrar.
+
+     ⚠️ leerElPase() y no leerDeMemoria('pase'): la memoria va por TOKEN.
+     Con una sola ranura por navegador, quien abría el link de otro veía
+     escondido su formulario y el nombre del anterior. Ver la nota larga
+     en 02-utilidades.js. */
+  const paseGuardado = leerElPase();
   if (!paseGuardado) return;
 
   formulario.style.display = 'none';
@@ -406,4 +411,30 @@ function imprimirPaseDeAcceso() {
       'Ya tenemos tu confirmación, <strong>' + limpiarTexto(paseGuardado.nombre) + '</strong>.<br>' +
       'Puedes volver a ver tu pase cuando quieras.';
   }
+
+  /* ⚠️ Y SI EL SERVIDOR DICE QUE NO, MANDA EL SERVIDOR.
+   *
+   * Esta memoria vive en el teléfono; la verdad vive en la base. Si
+   * Lucila deshizo la respuesta desde el panel y le pidió a alguien que
+   * confirme de nuevo, esa persona abría su link y seguía viendo
+   * «ya tenemos tu confirmación», con el formulario escondido, sin forma
+   * de contestar.
+   *
+   * invitacion.php ya manda `ya_respondio` para ESTE token. Si dice que
+   * no, se deshace lo de arriba y se olvida la copia local: no puede
+   * haber dos fuentes para el mismo dato y que gane la del teléfono.
+   *
+   * ⚠️ escucharEventoQueQuizasYaPaso() y NO addEventListener. Este
+   * archivo se inyecta recién al abrir el sobre, y el fetch de la
+   * invitación sale al cargar la página: para cuando esto corre, el
+   * evento ya pasó hace rato y un listener normal se lo pierde entero.
+   * Es el mismo bug que documenta 04-invitado-personalizado.js. */
+  escucharEventoQueQuizasYaPaso('invitacion-lista', evento => {
+    const datos = (evento && evento.detail) || {};
+    if (datos.ya_respondio !== false) return;
+
+    olvidarElPase();
+    mensajeDeExito.classList.remove('visible');
+    formulario.style.display = '';
+  });
 })();

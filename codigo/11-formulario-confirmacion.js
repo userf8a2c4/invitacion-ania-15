@@ -268,9 +268,9 @@
           if (!resultado || resultado.ok !== true) {
             throw new Error((resultado && resultado.error) || 'No se pudo reiniciar.');
           }
-          try {
-            localStorage.removeItem('invitacion-ania:pase');
-          } catch (error) { /* modo incógnito: no importa */ }
+          // La memoria de ESTA invitación, no la de todo el navegador
+          // (ver la nota de la ranura sin dueño en 02-utilidades.js).
+          olvidarElPase();
           location.reload();
         } catch (error) {
           boton.disabled = false;
@@ -1009,7 +1009,7 @@
           'info@aniaxv.com y te confirmamos a mano.');
     }
 
-    guardarEnMemoria('pase', datosDeLaConfirmacion);
+    guardarElPase(datosDeLaConfirmacion);
 
     formulario.style.display = 'none';
     if (mensajeDeExito) mensajeDeExito.classList.add('visible');
