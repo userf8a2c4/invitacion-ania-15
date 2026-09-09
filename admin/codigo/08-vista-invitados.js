@@ -271,14 +271,41 @@ function ponerTituloDeInvitados(confirmaciones, personas, confirmados) {
    * Ahora dice lo que son —invitaciones— y agrega el número que de
    * verdad se usa para decidir: cuántas contestaron que vienen. Sobre
    * ESE se encarga la comida. */
+  /* ⚡ Y «CONFIRMARON» TODAVÍA CONTABA OTRA COSA QUE HOY (2026-09-09)
+   *
+   * El arreglo del 8 dejó de llamar «confirmaciones» a las filas, pero
+   * el número que agregó al lado seguía siendo un CONTEO DE FILAS:
+   * cuántas invitaciones contestaron que vienen. Y la tarjeta de Hoy,
+   * con la misma palabra —«Confirmaron»— muestra PERSONAS
+   * (hoy.php: SUM(adultos + ninos)).
+   *
+   * O sea: Gente decía «5 confirmaron» y Hoy «12 confirmaron», las dos
+   * en lo alto de la pantalla, las dos ciertas, contando cosas
+   * distintas. Es exactamente la familia de bug que ya mordió dos
+   * veces, y la que termina en un número mal dado al banquete.
+   *
+   * Se elige PERSONAS, que es la unidad con la que se encarga la
+   * comida y se le habla al salón, y se muestra el mismo par que Hoy
+   * —confirmadas de apartadas— para que las dos pantallas se puedan
+   * leer una al lado de la otra sin traducir nada.
+   *
+   * ⚠️ Este título describe LA LISTA QUE SE ESTÁ VIENDO, así que
+   * respeta el filtro puesto: con «Con alergias» los números son los de
+   * ese subconjunto y no van a coincidir con Hoy, que siempre es global.
+   * Es correcto —un encabezado de lista habla de su lista— y por eso
+   * dice «de N personas apartadas» y no «de todas». */
   if (confirmados === undefined) {
-    confirmados = visibles.filter(f => comoEstaLaAsistencia(f) === 'confirmo').length;
+    confirmados = visibles.reduce((suma, fila) => {
+      if (comoEstaLaAsistencia(fila) !== 'confirmo') return suma;
+      return suma + (Number(fila.adultos) || 0) + (Number(fila.ninos) || 0);
+    }, 0);
   }
 
   ponerTitulo('Gente',
     pluralizar(confirmaciones, 'invitación', 'invitaciones') +
-    (personas ? ' · ' + pluralizar(personas, 'persona', 'personas') : '') +
-    ' · ' + confirmados + ' confirmaron');
+    (personas
+      ? ' · ' + confirmados + ' de ' + personas + ' personas confirmadas'
+      : ' · ' + pluralizar(confirmados, 'persona confirmada', 'personas confirmadas')));
 }
 
 /**
@@ -377,6 +404,19 @@ async function dibujarInvitados() {
       '<button class="boton" style="flex:1" id="inv-descargar">Descargar</button>' +
     '</div>' +
 
+    /* ⚠️ ANTES DE REPARTIR, NO DESPUÉS (2026-09-09)
+       Igual que «Revisar que todos los códigos funcionen» en el escáner,
+       pero para el otro extremo: el link personal. Una invitación cuyo
+       link abre la de otra persona no es un bug, es un invitado que no
+       puede confirmar — y del lado del panel no se ve nada raro, hay que
+       abrir el link para enterarse. Va abajo y en gris: se usa antes del
+       evento, no todos los días. */
+    '<button type="button" class="boton boton--ancho" id="inv-revisar-links" ' +
+            'style="margin-top:var(--esp-2)">' +
+      'Revisar que todos los links abran la invitación correcta' +
+    '</button>' +
+    '<div id="inv-revision-links"></div>' +
+
     /* La barra flotante de acciones en lote. Vive siempre en el DOM,
        oculta hasta que haya algo seleccionado — más simple que armarla
        y desarmarla cada vez que cambia la selección. */
@@ -468,6 +508,12 @@ function engancharInvitados(vista) {
   buscar('#inv-fecha-limite', vista).addEventListener('click', () => {
     abrirConfiguracionDeInvitaciones();
   });
+
+  const botonRevisarLinks = buscar('#inv-revisar-links', vista);
+  if (botonRevisarLinks) {
+    botonRevisarLinks.addEventListener('click', () =>
+      revisarTodosLosLinks(botonRevisarLinks, buscar('#inv-revision-links', vista)));
+  }
 
   buscar('#inv-nuevo', vista).addEventListener('click', () => {
     if (!INVITADOS_EDITABLES) {

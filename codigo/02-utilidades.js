@@ -241,6 +241,95 @@ function borrarDeMemoria(clave) {
 }
 
 
+/* ─── 3b. LA CONFIRMACIÓN SE RECUERDA POR INVITACIÓN ───────────────────
+ *
+ * ⚠️ EL PEOR BUG QUE TUVO ESTA WEB (2026-09-09)
+ *
+ * La confirmación enviada se guardaba bajo UNA sola clave —
+ * `invitacion-ania:pase`— sin nada que dijera de quién era. Una ranura
+ * por NAVEGADOR, no una por invitación.
+ *
+ * Consecuencia: en cuanto alguien confirmaba en ese navegador, CUALQUIER
+ * otro link que se abriera ahí escondía el formulario y mostraba «Ya
+ * tenemos tu confirmación, <el nombre del anterior>». El sobre saludaba
+ * bien —eso viene del servidor, por token— y el formulario de adentro
+ * decía otra persona.
+ *
+ * Y no era un problema de una computadora de pruebas. Es el caso normal:
+ * una mamá confirma, le reenvía el link a su hermana, se lo abre en el
+ * mismo teléfono para mostrárselo — y la hermana no puede confirmar
+ * nunca, sin ningún aviso, porque la página cree que ya lo hizo.
+ * Con 292 invitaciones y familias que comparten teléfono, eso se come
+ * confirmaciones en silencio.
+ *
+ * Ahora la clave lleva el token adentro: `pase:<token>`. Una invitación,
+ * una memoria. Sin token en la dirección no hay invitación personal que
+ * recordar, así que no se guarda ni se lee nada.
+ *
+ * ⚠️ QUIÉN MANDA DE VERDAD ES EL SERVIDOR. invitacion.php devuelve
+ * `ya_respondio` para ESE token, y 11-formulario-confirmacion.js ya lo
+ * usa bien. Esta memoria local es solo para volver a ver el pase sin
+ * pedirle nada a la red; nunca puede contradecir al servidor.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * El token del enlace personal (?i=…), o '' si no hay uno válido.
+ *
+ * Mismo filtro que aplica invitacion.php en el servidor, para que no
+ * pueda pasar que acá se acepte un token que allá se rechaza.
+ *
+ * @returns {string}
+ */
+function tokenDelEnlace() {
+  try {
+    const crudo = new URLSearchParams(window.location.search).get('i') || '';
+    return /^[a-f0-9]{8,}$/i.test(crudo) ? crudo.toLowerCase() : '';
+  } catch (error) {
+    return '';
+  }
+}
+
+/**
+ * Guarda la confirmación de ESTA invitación.
+ *
+ * @param {Object} datos
+ * @returns {boolean}
+ */
+function guardarElPase(datos) {
+  const token = tokenDelEnlace();
+  if (!token) return false;
+  return guardarEnMemoria('pase:' + token, datos);
+}
+
+/**
+ * La confirmación guardada de ESTA invitación, o null.
+ *
+ * @returns {Object|null}
+ */
+function leerElPase() {
+  const token = tokenDelEnlace();
+  return token ? leerDeMemoria('pase:' + token) : null;
+}
+
+/**
+ * Olvida la confirmación de ESTA invitación (el "confirmar de nuevo").
+ *
+ * @returns {void}
+ */
+function olvidarElPase() {
+  const token = tokenDelEnlace();
+  if (token) borrarDeMemoria('pase:' + token);
+}
+
+/* La ranura vieja y sin dueño se borra apenas carga la página, en todos
+   los navegadores que la tengan. No se puede saber de quién era, así
+   que no hay forma de migrarla: dejarla es dejar el bug puesto. Quien
+   ya había confirmado no pierde nada —el servidor sigue sabiéndolo y se
+   lo dice al abrir su propio link—, solo deja de ver el pase sin red
+   hasta que vuelva a entrar con señal. */
+try { localStorage.removeItem('invitacion-ania:pase'); } catch (error) { /* incógnito */ }
+
+
 /* ─── 4. ACCESIBILIDAD Y AYUDAS VARIAS ─────────────────────────────── */
 
 /**
@@ -1154,12 +1243,53 @@ function iniciarInyeccionDeLaEscena() {
      Si uno falla, el navegador sigue con los demás, igual que con una
      lista de defer. */
   for (const url of urls) {
-    const etiquetaScript = document.createElement('script');
-    etiquetaScript.src = url;
-    etiquetaScript.async = false;   // ⚠️ NO SACAR: es lo que garantiza el orden
-    etiquetaScript.onerror = () => {
-      console.error('No se pudo cargar un script de la escena:', url);
-    };
-    document.body.appendChild(etiquetaScript);
+    ponerElScript(url, 0);
   }
+}
+
+/**
+ * Inserta un script de la escena, y lo reintenta UNA vez si no llegó.
+ *
+ * ⚡ EL REINTENTO ES NUEVO (2026-09-09)
+ *
+ * Antes, un script que no llegaba solo escribía en la consola. El
+ * navegador seguía con los demás —que es lo correcto— pero la escena
+ * quedaba con un pedazo menos PARA SIEMPRE: sin las flores, sin las
+ * velas, sin el formulario. Y sin nada que se lo dijera al invitado, que
+ * no tiene ninguna razón para pensar en recargar una página que se ve
+ * bonita y le falta la mitad.
+ *
+ * En un teléfono con datos móviles, un archivo que no llega es lo más
+ * común del mundo: el ascensor, el túnel, la esquina mala. No es un
+ * error del que haya que avisar, es uno que hay que volver a intentar.
+ *
+ * ⚠️ EL SEGUNDO INTENTO CORRE FUERA DE ORDEN. `async = false` garantiza
+ * el orden de los que se insertan de una; el que se reinserta después va
+ * a ejecutarse cuando llegue, o sea al final. Se acepta a propósito: en
+ * esta lista solo hay capas de la escena (pétalos, marco, velas, luces),
+ * y lo que de verdad tiene que existir antes —02, 04, la configuración—
+ * son <script> normales de la página, no de esta lista. Una capa que se
+ * construye tarde se ve; una capa que no se construye nunca, no.
+ *
+ * @param {string} url
+ * @param {number} intento - 0 el primero.
+ * @returns {void}
+ */
+function ponerElScript(url, intento) {
+  const etiquetaScript = document.createElement('script');
+  etiquetaScript.src = url;
+  etiquetaScript.async = false;   // ⚠️ NO SACAR: es lo que garantiza el orden
+
+  etiquetaScript.onerror = () => {
+    if (intento === 0) {
+      console.warn('No llegó un script de la escena, reintentando:', url);
+      /* Un segundo y medio: lo justo para que un parpadeo de señal se
+         resuelva, sin que se note como una pausa. */
+      setTimeout(() => ponerElScript(url, 1), 1500);
+      return;
+    }
+    console.error('No se pudo cargar un script de la escena:', url);
+  };
+
+  document.body.appendChild(etiquetaScript);
 }

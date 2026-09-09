@@ -283,6 +283,60 @@ case 'editar':
     if (!$cambios) responderMal('No mandaste ningún cambio.', 400);
 
     actualizar('confirmaciones', $id, $cambios);
+
+    /* ⚠️ EL LINK TAMBIÉN SE LLAMA COMO ESTA PERSONA (2026-09-09)
+     *
+     * Cada invitación es PERSONALIZADA: el sobre de Andy tiene que decir
+     * «Para Andy y familia». Ese texto sale de `invitaciones.nombre`
+     * (invitacion.php lo devuelve tal cual), y este archivo NUNCA
+     * escribía en esa tabla.
+     *
+     * O sea que renombrar a alguien acá —en la ficha de Gente, que es
+     * donde se renombra— dejaba su link saludando con el nombre viejo
+     * para siempre. Nadie se enteraba desde el panel: hay que abrir el
+     * link para verlo.
+     *
+     * Se sincroniza solo el NOMBRE, y solo cuando cambió. El correo y el
+     * teléfono de la invitación son campos aparte a propósito (es a
+     * dónde se manda el link, que puede no ser el del invitado — ver la
+     * nota de `invitacion_correo` en 'listar'), así que no se tocan. */
+    if (array_key_exists('nombre', $cambios) && existeTabla('invitaciones')) {
+        ejecutar('UPDATE invitaciones SET nombre = :n WHERE confirmacion_id = :id',
+                 [':n' => (string) $cambios['nombre'], ':id' => $id]);
+    }
+
+    /* ⚠️ Y EL CUPO, MIENTRAS TODAVÍA SEA UN CUPO (2026-09-09)
+     *
+     * `invitaciones.pases` es cuántos lugares ofrece el link: es el tope
+     * que el invitado puede marcar en su formulario. Si Lucila corrige
+     * en la ficha que esa familia son seis y no cuatro, el link tiene
+     * que ofrecer seis — si no, la app de administración administra una
+     * cosa y el invitado ve otra.
+     *
+     * ⚠️ PERO SOLO SI TODAVÍA NO CONTESTARON. Una vez que la familia
+     * respondió, `pases` deja de ser una decisión y pasa a ser un hecho:
+     * cuántos lugares se le habían dado. invitacion.php se apoya en eso
+     * a propósito (ver su nota: una familia con 4 pases que confirma 2
+     * sigue teniendo 4, para poder agregar a los otros dos después). Si
+     * acá se pisara el cupo con lo confirmado, esa familia perdería para
+     * siempre los lugares que no usó todavía. */
+    $tocaLaGente = array_key_exists('adultos', $cambios) || array_key_exists('ninos', $cambios);
+
+    if ($tocaLaGente && existeTabla('invitaciones')) {
+        $adultos = (int) ($cambios['adultos'] ?? $antes['adultos'] ?? 0);
+        $ninos   = (int) ($cambios['ninos']   ?? $antes['ninos']   ?? 0);
+        $cupo    = max(1, $adultos + $ninos);
+
+        ejecutar(
+            "UPDATE invitaciones
+                SET pases = :p
+              WHERE confirmacion_id = :id
+                AND respondida_en IS NULL
+                AND estado IN ('sin_enviar', 'enviada')",
+            [':p' => $cupo, ':id' => $id]
+        );
+    }
+
     anotarEnBitacora($yo, 'editó una confirmación', 'confirmaciones', $id,
                      (string) ($antes['nombre'] ?? ''));
 
@@ -374,6 +428,41 @@ case 'borrar':
     // Si tenía mesa asignada, esa asignación queda huérfana: se limpia.
     if (existeTabla('asignacion_mesas')) {
         ejecutar('DELETE FROM asignacion_mesas WHERE confirmacion_id = :id', [':id' => $id]);
+    }
+
+    /* ⚠️ Y SU INVITACIÓN, QUE ES LO QUE FALTABA (2026-09-09)
+     *
+     * Acá se limpiaba la mesa y nada más. La fila de `invitaciones`
+     * sobrevivía apuntando a un `confirmacion_id` que quedaba libre —no
+     * hay clave foránea ni UNIQUE que lo impida, ver migracion.sql— y en
+     * cuanto la base reutilizaba ese id para un invitado nuevo, esa
+     * invitación vieja se le enganchaba encima: el link del invitado
+     * nuevo abría con el nombre y el estado de respuesta del que ya no
+     * está.
+     *
+     * Este es el «borrar» que usa la ficha de Gente (08-vista-invitados.js),
+     * o sea el que se usa todos los días. El de invitaciones.php ya
+     * limpiaba las dos puntas; este no.
+     *
+     * Se borran también los acompañantes y las preferencias, por el
+     * mismo motivo y con el mismo criterio que invitaciones.php?accion=
+     * borrar: ninguna de esas tablas tiene ON DELETE CASCADE. */
+    if (existeTabla('preferencias_invitado')) {
+        ejecutar('DELETE FROM preferencias_invitado WHERE confirmacion_id = :id', [':id' => $id]);
+    }
+    if (existeTabla('acompanantes')) {
+        ejecutar('DELETE FROM acompanantes WHERE confirmacion_id = :id', [':id' => $id]);
+    }
+    if (existeTabla('invitaciones')) {
+        // Qué link se va queda anotado: si esto se borró por error, el
+        // token perdido está en la bitácora y no hay que adivinarlo.
+        foreach (consultarTodo('SELECT * FROM invitaciones WHERE confirmacion_id = :id',
+                               [':id' => $id]) as $inv) {
+            anotarEnBitacora($yo, 'borró la invitación de una confirmación eliminada',
+                             'invitaciones', (int) $inv['id'],
+                             json_encode($inv, JSON_UNESCAPED_UNICODE));
+        }
+        ejecutar('DELETE FROM invitaciones WHERE confirmacion_id = :id', [':id' => $id]);
     }
 
     borrar('confirmaciones', $id);

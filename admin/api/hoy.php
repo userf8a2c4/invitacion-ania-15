@@ -218,10 +218,10 @@ if ($diasQueFaltan >= 0 && $diasQueFaltan <= 14) {
     };
 
     if (existeTabla('confirmaciones')) {
-        $sinResponder = consultarUno(
-            "SELECT COUNT(*) AS n FROM confirmaciones
-             WHERE asiste = 0 AND (codigo IS NULL OR codigo = '')"
-        );
+        /* ⚡ (2026-09-09) Acá se consultaba también un $sinResponder que
+           no usaba nadie: una consulta a la tabla más grande, en cada
+           carga de Hoy de los últimos catorce días, para tirar el
+           resultado. */
         $gente = consultarUno(
             'SELECT COALESCE(SUM(adultos + ninos), 0) AS n
              FROM confirmaciones WHERE asiste = 1'

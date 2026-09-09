@@ -254,7 +254,7 @@ function actualizarBurbujasDeLaBarra(datosDeHoy) {
   const pagosUrgentes = (datosDeHoy.pendientes || [])
     .filter(p => p.tipo === 'pago' && Number(p.urgencia) <= 1)
     .length;
-  ponerBurbuja('#burbuja-resumen', pagosUrgentes);
+  ponerBurbuja('#burbuja-dinero', pagosUrgentes);
 }
 
 /**

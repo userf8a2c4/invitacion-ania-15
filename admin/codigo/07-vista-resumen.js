@@ -660,7 +660,7 @@ function actualizarBurbujas(datos) {
   // abajo — se llega desde Planificar. El aviso de "algo de dinero
   // necesita atención" se muda a la pestaña Resumen, que es quien
   // ahora contesta esa pregunta.
-  ponerBurbuja('#burbuja-resumen', pagos + sobregiros);
+  ponerBurbuja('#burbuja-dinero', pagos + sobregiros);
 }
 
 /**

@@ -108,6 +108,41 @@ const suma = porGrupo.reduce((n, g) => n + g.cuantas, 0);
 comprobar('el desglose por grupo cuadra con el total',
   suma === filas.length, suma + ' contra ' + filas.length);
 
+/* 6. Cada fila tiene NOMBRE VISIBLE y descripción.
+ *
+ * POR QUÉ SE COMPRUEBA
+ * El nombre visible vivía en una segunda tabla, en 05-navegacion.js, y
+ * terminaba en `nombres[clave] || clave`: una fila sin nombre no fallaba
+ * ni avisaba, se pintaba con el slug crudo. Así el menú mostró «correo»
+ * en minúscula durante tres días sin que nadie lo notara.
+ *
+ * Ahora el nombre es el segundo valor de cada fila. Que esté vacío
+ * seguiría siendo silencioso en pantalla, así que lo grita esta prueba. */
+const conNombre = [...bloque.matchAll(
+  /\[\s*'([a-z0-9\-_]+)',\s*'([^']*)',\s*'([^']*)'/g
+)].map(m => ({ clave: m[1], nombre: m[2], descripcion: m[3] }));
+
+comprobar('todas las filas tienen nombre y descripción',
+  conNombre.length === filas.length,
+  'con las tres partes: ' + conNombre.length + ' de ' + filas.length + ' — a ' +
+  filas.filter(f => !conNombre.some(c => c.clave === f)).join(', ') +
+  ' le falta alguna');
+
+/* Un nombre que empieza en minúscula es casi siempre el slug que se
+   coló: 'el-dia' contra 'Modo día del evento'. */
+const enMinuscula = conNombre.filter(c =>
+  c.nombre && c.nombre[0] === c.nombre[0].toLowerCase() &&
+  c.nombre[0] !== c.nombre[0].toUpperCase());
+comprobar('ningún nombre visible es el slug en minúscula',
+  enMinuscula.length === 0,
+  enMinuscula.map(c => c.clave + ' → «' + c.nombre + '»').join(', '));
+
+/* Un nombre igual a su clave es el mismo error escrito a mano. */
+const nombreIgualAClave = conNombre.filter(c => c.nombre === c.clave);
+comprobar('ningún nombre repite la clave',
+  nombreIgualAClave.length === 0,
+  nombreIgualAClave.map(c => c.clave).join(', '));
+
 console.log('');
 if (fallos) {
   console.log('✗ ' + fallos + ' comprobación(es) fallaron.\n');
