@@ -200,11 +200,41 @@
 #codigo-qr img,
 #codigo-qr canvas { margin: 0 auto; }
 
+/* ⚡ EL CÓDIGO SE TOCA Y SE COPIA (2026-09-09)
+
+   El invitado tiene que pasarle estos siete caracteres a quien lo lleva,
+   o guardarlos para la puerta. Antes había que transcribirlos mirando la
+   pantalla —con la O y el 0, la 1 y la I— o pelearse con la selección
+   del dedo en un móvil.
+
+   El panel ya se tocaba para copiar desde el 2026-09-08, pero aquel
+   arreglo tocó SOLO admin/: el pase del invitado, que es el que más se
+   comparte, se quedó afuera. Mismo gesto en los dos lados.
+
+   `user-select: all` es el respaldo: si el portapapeles falla (Safari
+   sin gesto de usuario, permisos), mantener el dedo selecciona el código
+   entero de una y no letra por letra. */
 .pase__codigo {
   font-family: monospace;
   font-size: .8rem;
   letter-spacing: .1em;
   color: var(--color-oro-apagado);
+  cursor: pointer;
+  user-select: all;
+  -webkit-user-select: all;
+  -moz-user-select: all;
+  border-radius: 4px;
+  padding: .15em .4em;
+  transition: background-color .25s ease, color .25s ease;
+}
+.pase__codigo:hover,
+.pase__codigo:focus-visible {
+  background: rgba(212, 168, 67, .14);
+}
+/* El destello de "ya está copiado", sin sacar un cartel encima. */
+.pase__codigo.esta-copiado {
+  background: rgba(212, 168, 67, .3);
+  color: var(--color-marfil, #f5efe6);
 }
 .pase__aviso {
   font-size: .8rem;
