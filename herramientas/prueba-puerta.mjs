@@ -272,6 +272,64 @@ for (const [que, datos] of LECTURAS) {
     r.ubicadas + ' ubicadas de ' + r.personas + ' personas');
 }
 
+/* ─── 7. Tocar el código para copiarlo ───────────────────────────────
+ *
+ * Los códigos se leen en pantalla y se pegan en WhatsApp o en el
+ * buscador de la puerta. Escribirlos a mano es pelearse con O contra 0 y
+ * 1 contra I, siete veces. Se pidió sin botón: se toca el código y ya. */
+
+console.log('\nTocar el código lo copia\n');
+
+const piezasJs = readFileSync(raiz('admin', 'codigo', '06-piezas.js'), 'utf8');
+const estilos  = readFileSync(raiz('admin', 'estilos', '03-vistas.css'), 'utf8');
+
+comprobar('el código se puede tocar en cualquier pantalla',
+  /addEventListener\('click',[\s\S]{0,400}closest\('\.codigo-pase'\)/.test(piezasJs),
+  'se engancha por delegación: la lista se repinta sola todo el tiempo');
+
+/* ⚠️ La que sostiene todo. En la lista de Gente el código vive DENTRO
+   del <button> que abre la ficha. Con un listener normal el clic burbujea
+   del código al botón, así que cuando esto corriera la ficha ya se
+   estaría abriendo. En captura corre ANTES y puede cortarle el paso. */
+comprobar('escucha en fase de CAPTURA, no de burbuja',
+  /closest\('\.codigo-pase'\)[\s\S]{0,700}\}, true\);/.test(piezasJs),
+  'sin captura, tocar el código copia PERO además abre la ficha');
+
+comprobar('le corta el paso al clic de la fila',
+  /evento\.stopPropagation\(\);/.test(piezasJs));
+
+comprobar('hay respaldo si no hay portapapeles',
+  /execCommand\('copy'\)/.test(piezasJs),
+  'sin https o en un navegador viejo, navigator.clipboard no existe');
+
+comprobar('si no se pudo copiar, NO dice que sí',
+  /No pude copiarlo/.test(piezasJs),
+  'un «copiado» falso hace pegar el código anterior sin que nadie lo note');
+
+/* Se recorta el bloque de la regla en vez de mirar con una ventana de
+   caracteres: el comentario que explica el porqué es largo, y una
+   ventana lo bastante grande para saltarlo dejaría de comprobar que el
+   padding está DENTRO de esta regla. */
+const empiezaLaRegla = estilos.indexOf('.codigo-pase {');
+const reglaDelCodigo = estilos.slice(empiezaLaRegla,
+                                     estilos.indexOf('}', empiezaLaRegla));
+
+comprobar('el toque tiene dónde caer',
+  /padding: 4px 6px;/.test(reglaDelCodigo) && /cursor: pointer;/.test(reglaDelCodigo),
+  'doce píxeles de letra son un blanco imposible con el dedo');
+
+comprobar('un toque largo selecciona el código entero',
+  /user-select: all;/.test(estilos),
+  'es el respaldo del respaldo: si el copiado falla, el dedo alcanza');
+
+/* Si una pantalla deja de usar la clase, ahí el código deja de poder
+   tocarse y no falla nada a la vista. */
+for (const archivo of ['08-vista-invitados.js', '25-hoy.js', '28-escaner.js']) {
+  comprobar(archivo + ' sigue marcando el código con .codigo-pase',
+    /codigo-pase/.test(readFileSync(raiz('admin', 'codigo', archivo), 'utf8')),
+    'sin la clase, ese código deja de copiarse al tocarlo');
+}
+
 console.log('');
 if (fallos) {
   console.log('✗ ' + fallos + ' comprobación(es) fallaron.\n');

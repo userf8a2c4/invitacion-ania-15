@@ -1296,6 +1296,38 @@
   font-size: 12px;
   letter-spacing: .08em;
   color: var(--oro);
+
+  /* ⚡ SE TOCA Y SE COPIA (2026-09-08)
+     Sin botón: se pidió así. El código ES el control.
+
+     `user-select: all` hace que un toque largo seleccione el código
+     ENTERO, no palabra por palabra. Es el respaldo para el día que el
+     portapapeles no esté disponible (navegador viejo, permiso negado):
+     ahí el copiado por JavaScript falla, avisa, y el dedo todavía
+     alcanza.
+
+     El padding no es estético: agranda el área que se puede tocar. Doce
+     píxeles de altura de letra son un blanco imposible en un teléfono,
+     con la fila entera compitiendo por el mismo toque. */
+  cursor: pointer;
+  user-select: all;
+  -webkit-user-select: all;
+  padding: 4px 6px;
+  margin: -4px -6px;            /* que el padding no mueva el diseño */
+  border-radius: 5px;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+/* La pista de que se puede tocar, sin llegar a parecer un botón. */
+.codigo-pase:hover {
+  background: color-mix(in srgb, var(--oro) 12%, transparent);
+}
+
+/* El destello al copiar: confirma DÓNDE se tocó. Con varios códigos en
+   pantalla, un cartel abajo no dice cuál se copió. */
+.codigo-pase--copiado {
+  background: color-mix(in srgb, var(--bien) 22%, transparent);
+  color: var(--bien);
 }
 
 /* Resumen de menús de una confirmación. */
