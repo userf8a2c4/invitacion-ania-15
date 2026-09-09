@@ -271,14 +271,41 @@ function ponerTituloDeInvitados(confirmaciones, personas, confirmados) {
    * Ahora dice lo que son —invitaciones— y agrega el número que de
    * verdad se usa para decidir: cuántas contestaron que vienen. Sobre
    * ESE se encarga la comida. */
+  /* ⚡ Y «CONFIRMARON» TODAVÍA CONTABA OTRA COSA QUE HOY (2026-09-09)
+   *
+   * El arreglo del 8 dejó de llamar «confirmaciones» a las filas, pero
+   * el número que agregó al lado seguía siendo un CONTEO DE FILAS:
+   * cuántas invitaciones contestaron que vienen. Y la tarjeta de Hoy,
+   * con la misma palabra —«Confirmaron»— muestra PERSONAS
+   * (hoy.php: SUM(adultos + ninos)).
+   *
+   * O sea: Gente decía «5 confirmaron» y Hoy «12 confirmaron», las dos
+   * en lo alto de la pantalla, las dos ciertas, contando cosas
+   * distintas. Es exactamente la familia de bug que ya mordió dos
+   * veces, y la que termina en un número mal dado al banquete.
+   *
+   * Se elige PERSONAS, que es la unidad con la que se encarga la
+   * comida y se le habla al salón, y se muestra el mismo par que Hoy
+   * —confirmadas de apartadas— para que las dos pantallas se puedan
+   * leer una al lado de la otra sin traducir nada.
+   *
+   * ⚠️ Este título describe LA LISTA QUE SE ESTÁ VIENDO, así que
+   * respeta el filtro puesto: con «Con alergias» los números son los de
+   * ese subconjunto y no van a coincidir con Hoy, que siempre es global.
+   * Es correcto —un encabezado de lista habla de su lista— y por eso
+   * dice «de N personas apartadas» y no «de todas». */
   if (confirmados === undefined) {
-    confirmados = visibles.filter(f => comoEstaLaAsistencia(f) === 'confirmo').length;
+    confirmados = visibles.reduce((suma, fila) => {
+      if (comoEstaLaAsistencia(fila) !== 'confirmo') return suma;
+      return suma + (Number(fila.adultos) || 0) + (Number(fila.ninos) || 0);
+    }, 0);
   }
 
   ponerTitulo('Gente',
     pluralizar(confirmaciones, 'invitación', 'invitaciones') +
-    (personas ? ' · ' + pluralizar(personas, 'persona', 'personas') : '') +
-    ' · ' + confirmados + ' confirmaron');
+    (personas
+      ? ' · ' + confirmados + ' de ' + personas + ' personas confirmadas'
+      : ' · ' + pluralizar(confirmados, 'persona confirmada', 'personas confirmadas')));
 }
 
 /**

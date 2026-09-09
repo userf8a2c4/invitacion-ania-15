@@ -209,11 +209,11 @@
   </main>
 
   <!-- ─── Botón flotante de acción rápida (FAB) ─────────────────────── -->
-  <!-- Antes era solo "nota rápida"; ahora es la capa de mínimo esfuerzo
-       de Lucila: un toque abre el asistente (cuando exista) o, mientras
-       tanto, el sandwich de herramientas configurado. Un toque largo
-       siempre abre el sandwich, tenga el asistente o no. Ver
-       codigo/29-fab.js. -->
+  <!-- La capa de mínimo esfuerzo de Lucila: UN TOQUE abre sus tres
+       herramientas elegidas, con MegaBot fijo debajo. Nada de gestos
+       ocultos — hasta el 2026-09-09 el toque simple abría el chat y las
+       herramientas estaban detrás de un toque largo que la app no
+       anunciaba en ninguna parte. Ver codigo/29-fab.js. -->
   <button id="boton-accion" class="boton-flotante" aria-label="Acción rápida">
     <svg viewBox="0 0 24 24" aria-hidden="true" class="icono">
       <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" fill="currentColor"/>
@@ -264,7 +264,7 @@
               stroke-width="1.5" stroke-linecap="round"/>
       </svg>
       <span>Dinero</span>
-      <em id="burbuja-resumen" class="burbuja burbuja--alerta oculto" data-cuenta="pagos urgentes"></em>
+      <em id="burbuja-dinero" class="burbuja burbuja--alerta oculto" data-cuenta="pagos urgentes"></em>
     </button>
 
     <button class="navegacion__boton" data-ir="mas">

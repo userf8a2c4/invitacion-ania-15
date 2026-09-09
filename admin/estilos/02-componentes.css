@@ -24,6 +24,43 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 
+/* ─── 0. NINGÚN BOTÓN ES TEXTO QUE SE SELECCIONA ────────────────────
+   ⚡ (2026-09-09) Reportado sobre el botón redondo: al soltar la presión
+   quedaba seleccionado el texto de alguno de los botones de abajo, con
+   su lupa azul y su menú de "Copiar" encima. Pero no era del botón
+   redondo: no había UN SOLO `user-select` en las tres hojas de estilo,
+   así que pasaba en cada control del panel.
+
+   En un teléfono, mantener el dedo sobre texto es el gesto de
+   SELECCIONAR. Sobre un botón eso nunca es lo que se quiso: se quiso
+   apretarlo, o se apoyó el dedo mientras se leía. La selección aparece,
+   tapa lo que hay debajo, y hay que tocar en otro lado para sacarla.
+
+   `-webkit-touch-callout` es la otra mitad, la de iOS: sin ella, una
+   presión larga sobre un enlace («Llamar», «WhatsApp» en la tarjeta de
+   a quién llamar) abre el menú del sistema con la vista previa.
+
+   ⚠️ LA EXCEPCIÓN ES EL CÓDIGO DE PASE. `.codigo-pase` declara
+   `user-select: all` sobre sí mismo, y una declaración propia gana
+   sobre lo que hereda de su fila: ahí el toque largo SÍ tiene que
+   seleccionar, es el último respaldo para copiar cuando el
+   portapapeles no está disponible. Lo cuida prueba-puerta.mjs. */
+.boton,
+.boton-icono,
+.boton-flotante,
+.filtro,
+.lista__fila,
+.indice__fila,
+.navegacion__boton,
+.rejilla-accesos__boton,
+.rejilla-ejecutiva__dato,
+.hoy-estado__cifra--tocable {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+
 /* ─── 1. BOTONES ───────────────────────────────────────────────────── */
 
 .boton {
