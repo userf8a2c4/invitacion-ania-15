@@ -179,29 +179,65 @@
    * @returns {void}
    */
   /**
+   * Cuántos lugares tiene esta invitación.
+   *
+   * @param {Object} datos - La respuesta de invitacion.php.
+   * @returns {number}
+   */
+  function cuantosLugares(datos) {
+    return (datos.personas && datos.personas.length) || Number(datos.pases) || 1;
+  }
+
+  /**
    * Cómo se saluda a este grupo arriba del formulario.
    *
-   * El nombre lo escribe Lucila en el panel y es texto libre: puede ser una
-   * persona ("Monserrat Barrera") o ya una familia ("Familia Zelaya"). Si el
-   * grupo tiene más de un lugar, se agrega " y familia" — pero solo cuando
-   * el nombre no dice ya algo así, para no terminar en "Familia Zelaya y
-   * familia".
+   * ⚡ LA REGLA SE MUDÓ A 02-utilidades.js (2026-09-09). Vivía acá y la
+   * usaba un solo lugar —este formulario—, así que el sobre saludaba con
+   * el nombre crudo y decía "Para Andy" mientras el formulario, más
+   * abajo en la misma página, decía "Andy y familia". Ahora el sobre, el
+   * formulario y el pase preguntan los tres a la misma función.
    *
    * @param {Object} datos - La respuesta de invitacion.php.
    * @returns {string}
    */
   function nombreParaMostrar(datos) {
-    const nombre = (datos.nombre || '').trim();
-    if (!nombre) return nombre;
+    return nombreDelGrupo(datos.nombre, cuantosLugares(datos));
+  }
 
-    const cuantos = (datos.personas && datos.personas.length) || Number(datos.pases) || 1;
-    if (cuantos < 2) return nombre;
+  /**
+   * Le habla de a varios a las invitaciones de dos lugares o más.
+   *
+   * ⚡ POR QUÉ EXISTE (2026-09-09). La invitación tuteaba a todo el mundo:
+   * un grupo de cinco leía "¿Nos acompañas?", "Completa el formulario" y
+   * un botón que decía "Confirmar MI asistencia" mientras marcaba a cinco
+   * personas. El nombre ya distinguía al titular del grupo; el resto de
+   * la sección, no.
+   *
+   * CÓMO. Cada texto lleva su versión de grupo en `data-plural`, en el
+   * HTML, al lado del original. Acá solo se cambia uno por otro. Se hizo
+   * así —y no con condicionales en el JS— para que las dos versiones se
+   * lean juntas: la única forma de que alguien que corrige una frase se
+   * acuerde de corregir la otra.
+   *
+   * ⚠️ SOLO SE APLICA UNA VEZ Y NUNCA AL REVÉS. El texto original queda
+   * guardado en `data-singular` la primera vez, para que volver a llamar
+   * a esta función no vaya acumulando reemplazos sobre reemplazos.
+   *
+   * @param {boolean} esDeVarios - Si la invitación tiene dos lugares o más.
+   * @returns {void}
+   */
+  function ajustarTratoAlGrupo(esDeVarios) {
+    const seccion = buscar('#confirmacion');
+    if (!seccion) return;
 
-    const enMinusculas = nombre.toLowerCase();
-    const yaEsFamilia = enMinusculas.indexOf('familia') !== -1 ||
-                        enMinusculas.indexOf('flia') !== -1 ||
-                        enMinusculas.indexOf(' y ') !== -1;
-    return yaEsFamilia ? nombre : nombre + ' y familia';
+    seccion.querySelectorAll('[data-plural]').forEach(elemento => {
+      if (elemento.dataset.singular === undefined) {
+        elemento.dataset.singular = elemento.textContent.trim();
+      }
+      elemento.textContent = esDeVarios
+        ? elemento.dataset.plural
+        : elemento.dataset.singular;
+    });
   }
 
   /**
@@ -330,8 +366,36 @@
       return;
     }
 
+    /* El trato de toda la sección se decide con los LUGARES de la
+       invitación, no con cuántos terminen viniendo: cuando esto corre,
+       todavía no contestó nadie. */
+    ajustarTratoAlGrupo(esGrupoDeVarios(cuantosLugares(datos)));
+
     if (campoNombre) {
       campoNombre.value = nombreParaMostrar(datos);
+
+      /* ⚠️ EL NOMBRE QUE SE VE Y EL QUE SE GUARDA NO SON EL MISMO (2026-09-09)
+       *
+       * Este input hace dos cosas a la vez: es el CARTEL que saluda al
+       * grupo (por eso, unas líneas más abajo, se le saca el borde y el
+       * fondo) y es el CAMPO que viaja en el POST a confirmar.php.
+       *
+       * Mientras el cartel decía "Andy y familia", eso era también lo
+       * que se enviaba — y confirmar.php lo escribía en
+       * `confirmaciones.nombre` tal cual. La lista de Gente muestra ese
+       * campo cuando existe, así que Lucila escribía "Andy", el invitado
+       * confirmaba, y el panel pasaba a decir "Andy y familia" para
+       * siempre. Un adorno de pantalla convertido en dato, imposible de
+       * distinguir después de un nombre tecleado de verdad.
+       *
+       * Se comprobó creando la invitación "Prueba Recorrido" y
+       * confirmándola: quedó como "Prueba Recorrido y familia" en el
+       * panel, con `invitaciones.nombre` intacto abajo.
+       *
+       * El titular queda guardado acá y es lo que se manda. El cartel
+       * puede decir lo que quiera. */
+      campoNombre.dataset.nombreDelTitular = (datos.nombre || '').trim();
+
       campoNombre.readOnly = true;
 
       /* ⚡ (2026-08-28) Antes esto dejaba el input intacto (solo con
@@ -815,7 +879,14 @@
     evento.preventDefault();
     mostrarError('');
 
-    const nombre     = campoNombre.value.trim();
+    /* Se manda el TITULAR, no el cartel. Ver la nota larga donde se
+       llena este campo: mientras se mandaba `campoNombre.value`, el
+       " y familia" que agrega la presentación se guardaba en la base y
+       de ahí salía al panel como si lo hubiera escrito el invitado.
+
+       El `||` cubre la invitación sin enlace personal (sin token no hay
+       titular que respetar, y ahí el campo sí es de escribir). */
+    const nombre     = (campoNombre.dataset.nombreDelTitular || campoNombre.value).trim();
     const correo     = campoCorreo.value.trim();
     const asistencia = campoAsistencia.value;
 

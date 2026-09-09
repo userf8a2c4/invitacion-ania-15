@@ -974,6 +974,72 @@ document.addEventListener('invitacion-visible', () => setTimeout(actualizarMedid
 
 
 /**
+ * Cómo se llama este grupo EN PANTALLA: "Andy" si tiene un solo lugar,
+ * "Andy y familia" si tiene dos o más.
+ *
+ * ⚡ VIVE ACÁ, Y NO EN EL FORMULARIO, DESDE 2026-09-09
+ *
+ * Esta regla estaba adentro de 11-formulario-confirmacion.js y la
+ * llamaba un solo lugar: el campo del nombre. El sobre (04) saludaba
+ * con `datos.nombre` crudo, así que la MISMA invitación se llamaba de
+ * dos maneras según qué parte de la página la nombrara: el sobre decía
+ * "Para Andy" y, tres pantallas más abajo, el formulario decía "Andy y
+ * familia". Se comprobó abriendo un enlace real: el sobre y el
+ * formulario, uno debajo del otro, con nombres distintos.
+ *
+ * Es la misma familia de bug que el menú que mostraba «correo»: la
+ * regla en un archivo y quien la necesita en otro. Ahora hay una sola y
+ * la usan el sobre, el formulario y el pase.
+ *
+ * ⚠️ ESTO ES PRESENTACIÓN, NUNCA UN DATO. Lo que se guarda es siempre
+ * el nombre que escribió Lucila. Ver la nota del envío en
+ * 11-formulario-confirmacion.js: este " y familia" llegó a guardarse en
+ * la base como si el invitado lo hubiera tecleado, y desde ahí salía al
+ * panel sin forma de distinguirlo de un nombre de verdad.
+ *
+ * @param {string} nombre - `invitaciones.nombre`, tal como lo escribió Lucila.
+ * @param {number} cuantos - Cuántos lugares tiene la invitación.
+ * @returns {string} El nombre para mostrar.
+ *
+ * @example
+ *   nombreDelGrupo('Andy', 2)            // → 'Andy y familia'
+ *   nombreDelGrupo('Andy', 1)            // → 'Andy'
+ *   nombreDelGrupo('Familia Zelaya', 4)  // → 'Familia Zelaya'
+ */
+function nombreDelGrupo(nombre, cuantos) {
+  const limpio = String(nombre || '').trim();
+  if (!limpio) return limpio;
+  if (Number(cuantos) < 2) return limpio;
+
+  /* "Familia Zelaya y familia" o "Ana y Luis y familia" se leen como un
+     error de la web, no como un saludo. Si el nombre ya nombra a más de
+     uno, se deja tal cual. */
+  const enMinusculas = limpio.toLowerCase();
+  const yaNombraAVarios = enMinusculas.indexOf('familia') !== -1 ||
+                          enMinusculas.indexOf('flia') !== -1 ||
+                          enMinusculas.indexOf(' y ') !== -1;
+
+  return yaNombraAVarios ? limpio : limpio + ' y familia';
+}
+
+
+/**
+ * Si a esta invitación hay que hablarle de a varios.
+ *
+ * Se usa para elegir entre "¿Nos acompañas?" y "¿Nos acompañan?". Vive
+ * al lado de nombreDelGrupo() a propósito: las dos contestan la misma
+ * pregunta —cuánta gente hay del otro lado— y separarlas sería volver a
+ * tener dos reglas para lo mismo.
+ *
+ * @param {number} cuantos - Cuántos lugares tiene la invitación.
+ * @returns {boolean}
+ */
+function esGrupoDeVarios(cuantos) {
+  return Number(cuantos) >= 2;
+}
+
+
+/**
  * Convierte un texto que puede venir del exterior (por ejemplo el nombre
  * del invitado en el enlace) en texto seguro para insertar en la página.
  *
