@@ -1356,3 +1356,171 @@ function insertarEnElCursor(campo, texto) {
   campo.focus();
   campo.setSelectionRange(nuevo, nuevo);
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   REVISAR QUE CADA LINK ABRA LA INVITACIÓN DE SU DUEÑO (2026-09-09)
+
+   POR QUÉ EXISTE
+   Cada invitación es PERSONALIZADA. Desde el panel no hay forma de ver
+   que el link de alguien abre la invitación de otro: la lista se ve
+   perfecta, el nombre está bien, el link está ahí. Hay que ABRIRLO para
+   enterarse — o sea, hay que abrir los 292 a mano.
+
+   Esto le pregunta al servidor por todos de una, con las mismas reglas
+   que aplica invitacion.php cuando un invitado abre el suyo.
+
+   QUÉ NO CUBRE, Y HAY QUE DECIRLO
+   Revisa el lado del servidor: a quién apunta cada token y con qué
+   nombre. NO puede ver lo que el teléfono del invitado tenga guardado —
+   ese era el otro bug, el de la ranura sin dueño, y se arregló donde
+   correspondía (codigo/02-utilidades.js).
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Pide el informe y lo pinta.
+ *
+ * @param {Element} boton
+ * @param {Element} donde
+ * @returns {Promise<void>}
+ */
+async function revisarTodosLosLinks(boton, donde) {
+  const textoOriginal = 'Revisar que todos los links abran la invitación correcta';
+
+  boton.disabled = true;
+  boton.textContent = 'Revisando…';
+  donde.innerHTML = '';
+
+  let r;
+  try {
+    r = await traer('invitaciones.php?accion=revisar_links');
+  } catch (error) {
+    donde.innerHTML = '<p class="aviso-error">' + seguro(error.message) + '</p>';
+    boton.disabled = false;
+    boton.textContent = textoOriginal;
+    return;
+  }
+
+  boton.disabled = false;
+  boton.textContent = 'Revisar de nuevo';
+
+  const lista = (titulo, filas, comoSeLee, porque) => {
+    if (!filas || !filas.length) return '';
+    return '<div class="tarjeta" style="margin-top:var(--esp-2)">' +
+             '<div class="tarjeta__titulo">' + seguro(titulo) +
+               ' (' + filas.length + ')</div>' +
+             (porque
+               ? '<p class="vacio__texto" style="margin-bottom:var(--esp-1)">' +
+                 seguro(porque) + '</p>'
+               : '') +
+             '<ul style="margin:0;padding-left:1.1rem;line-height:1.7">' +
+               filas.map(f => '<li>' + seguro(comoSeLee(f)) + '</li>').join('') +
+             '</ul>' +
+           '</div>';
+  };
+
+  if (!r.rotos) {
+    donde.innerHTML =
+      '<div class="tarjeta" style="margin-top:var(--esp-2)">' +
+        '<p><strong>Los ' + seguro(r.bien) + ' links abren la invitación de su dueño.</strong></p>' +
+        '<p class="vacio__texto" style="margin-top:var(--esp-1)">' +
+          'Se revisó cada token con el mismo filtro que aplica el servidor ' +
+          'cuando un invitado abre su enlace, y cada uno lleva al nombre y a ' +
+          'las personas que le corresponden.' +
+        '</p>' +
+      '</div>' +
+      lista('Sin ningún link todavía', r.sin_link, f => f.nombre,
+            'No es un link roto: es gente a la que todavía no se le puede ' +
+            'mandar nada. Se le genera uno desde su ficha.');
+    return;
+  }
+
+  donde.innerHTML =
+    '<p class="aviso-error" style="margin-top:var(--esp-2)">' +
+      '<strong>' + seguro(r.rotos) + ' link(s) no abren lo que deberían.</strong> ' +
+      'De ' + seguro(r.invitaciones) + ' revisados, ' + seguro(r.bien) + ' están bien.' +
+    '</p>' +
+
+    lista('El link abre con el nombre de otra persona', r.nombre_distinto,
+          f => f.nombre_del_invitado + ' → su sobre dice «' + f.nombre_en_el_link + '»',
+          'El sobre se lee mal. Se arregla poniéndole a cada link el nombre ' +
+          'de su invitado, sin tocar el enlace: los que ya se mandaron siguen ' +
+          'funcionando.') +
+
+    (r.nombre_distinto && r.nombre_distinto.length
+      ? '<button type="button" class="boton boton--principal boton--ancho" ' +
+                'id="links-arreglar-nombres" style="margin-top:var(--esp-2)">' +
+          'Ponerle a esos ' + r.nombre_distinto.length + ' el nombre correcto' +
+        '</button>'
+      : '') +
+
+    lista('Dos links para el mismo invitado', r.duplicadas,
+          f => f.nombre_del_invitado + ' · sobra el que dice «' + f.nombre_en_el_link + '»',
+          'Uno de los dos es de alguien que se borró y quedó enganchado acá. ' +
+          'Ese link muestra los datos de esta persona a quien tenga el enlace ' +
+          'viejo.') +
+
+    lista('Links que apuntan a alguien que ya no existe', r.huerfanas,
+          f => f.nombre_en_el_link + ' · ' + f.link,
+          'Se quedaron de un invitado borrado. Abren, y no llevan a nadie.') +
+
+    ((r.duplicadas && r.duplicadas.length) || (r.huerfanas && r.huerfanas.length)
+      ? '<button type="button" class="boton boton--peligro boton--ancho" ' +
+                'id="links-arreglar-identidades" style="margin-top:var(--esp-2)">' +
+          'Borrar esos links sueltos' +
+        '</button>' +
+        '<p class="vacio__texto" style="margin-top:var(--esp-1)">' +
+          'Solo se borran los LINKS, nunca a las personas. Si alguno se mandó, ' +
+          'hay que volver a mandar el nuevo.' +
+        '</p>'
+      : '') +
+
+    lista('Links sin lugares', r.sin_confirmacion,
+          f => f.nombre_en_el_link + ' · ' + f.link,
+          'Abren, pero no tienen a quién confirmar. Hay que mirarlos a mano.') +
+
+    lista('Tokens que el servidor no aceptaría', r.sin_token,
+          f => f.nombre_en_el_link + ' · «' + f.token + '»') +
+
+    lista('Token repetido', r.token_repetido,
+          f => f.nombre_en_el_link + ' y ' + f.tambien_de) +
+
+    lista('Sin ningún link todavía', r.sin_link, f => f.nombre,
+          'No es un link roto: es gente a la que todavía no se le puede ' +
+          'mandar nada.');
+
+  const arreglar = (id, modo, pregunta, opciones) => {
+    const b = buscar('#' + id, donde);
+    if (!b) return;
+    b.addEventListener('click', async () => {
+      // confirmarAccion() y con await: es el diálogo propio del panel
+      // (06-piezas.js). Sin await, la promesa siempre da verdadero y la
+      // pregunta no frena nada.
+      if (!await confirmarAccion(pregunta, opciones)) return;
+      b.disabled = true;
+      b.textContent = 'Arreglando…';
+      try {
+        const hecho = await mandar('invitaciones.php?accion=reparar_links', { modo: modo });
+        avisar('Listo: ' + hecho.cuantos + ' arreglado(s).');
+        // Los links viajan en la lista de Gente: hay que volver a pedirla.
+        ensuciarVistas('invitados');
+        revisarTodosLosLinks(boton, donde);
+      } catch (error) {
+        avisar(error.message, true);
+        b.disabled = false;
+      }
+    });
+  };
+
+  arreglar('links-arreglar-nombres', 'nombres',
+    '¿Poner el nombre correcto en cada link?\n\n' +
+    'Los enlaces NO cambian: los que ya mandaste siguen funcionando, solo ' +
+    'que ahora el sobre va a saludar bien.',
+    { confirmar: 'Corregir los nombres' });
+
+  arreglar('links-arreglar-identidades', 'identidades',
+    '¿Borrar los links sueltos y los repetidos?\n\n' +
+    'No se borra a ninguna persona: solo el link mal atado. Si alguno ya se ' +
+    'mandó, a esa persona hay que mandarle el nuevo.',
+    { confirmar: 'Borrar esos links', peligro: true });
+}

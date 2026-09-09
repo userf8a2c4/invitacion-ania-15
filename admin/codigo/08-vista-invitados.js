@@ -404,6 +404,19 @@ async function dibujarInvitados() {
       '<button class="boton" style="flex:1" id="inv-descargar">Descargar</button>' +
     '</div>' +
 
+    /* ⚠️ ANTES DE REPARTIR, NO DESPUÉS (2026-09-09)
+       Igual que «Revisar que todos los códigos funcionen» en el escáner,
+       pero para el otro extremo: el link personal. Una invitación cuyo
+       link abre la de otra persona no es un bug, es un invitado que no
+       puede confirmar — y del lado del panel no se ve nada raro, hay que
+       abrir el link para enterarse. Va abajo y en gris: se usa antes del
+       evento, no todos los días. */
+    '<button type="button" class="boton boton--ancho" id="inv-revisar-links" ' +
+            'style="margin-top:var(--esp-2)">' +
+      'Revisar que todos los links abran la invitación correcta' +
+    '</button>' +
+    '<div id="inv-revision-links"></div>' +
+
     /* La barra flotante de acciones en lote. Vive siempre en el DOM,
        oculta hasta que haya algo seleccionado — más simple que armarla
        y desarmarla cada vez que cambia la selección. */
@@ -495,6 +508,12 @@ function engancharInvitados(vista) {
   buscar('#inv-fecha-limite', vista).addEventListener('click', () => {
     abrirConfiguracionDeInvitaciones();
   });
+
+  const botonRevisarLinks = buscar('#inv-revisar-links', vista);
+  if (botonRevisarLinks) {
+    botonRevisarLinks.addEventListener('click', () =>
+      revisarTodosLosLinks(botonRevisarLinks, buscar('#inv-revision-links', vista)));
+  }
 
   buscar('#inv-nuevo', vista).addEventListener('click', () => {
     if (!INVITADOS_EDITABLES) {
