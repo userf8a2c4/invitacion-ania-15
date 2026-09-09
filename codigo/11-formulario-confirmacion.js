@@ -450,10 +450,36 @@
 
     const introduccion = buscar('.formulario__introduccion');
     if (introduccion) {
-      introduccion.innerHTML = 'Hemos reservado <strong>' + datos.pases +
-        (datos.pases === 1 ? ' lugar' : ' lugares') +
-        '</strong> para ustedes. Pueden modificar su respuesta cuantas ' +
-        'veces gusten mientras las confirmaciones sigan abiertas.';
+      /* ⚡ ESTA FRASE SE LE ESCAPÓ AL TRATO DE GRUPO (2026-09-09)
+       *
+       * El resto de la sección lo resuelve ajustarTratoAlGrupo() con
+       * data-plural en el HTML. Esta frase no puede vivir ahí porque
+       * interpola cuántos lugares son, así que se arma acá — y se armaba
+       * SIEMPRE en plural: una invitación de un solo lugar leía "Hemos
+       * reservado 1 lugar para ustedes. Pueden modificar su respuesta
+       * cuantas veces gusten". Además corría DESPUÉS de
+       * ajustarTratoAlGrupo(), así que pisaba cualquier arreglo que se
+       * intentara desde el HTML.
+       *
+       * Las dos versiones van una al lado de la otra por la misma razón
+       * que en el HTML: quien corrija una tiene que ver la otra.
+       *
+       * ⚠️ EL NÚMERO Y EL PRONOMBRE SALEN DE LA MISMA CUENTA. Antes el
+       * número era `datos.pases` y el trato del resto de la sección
+       * cuantosLugares(datos) — que prefiere los nombres cargados. Con
+       * las dos fuentes distintas, una invitación con 1 pase y 2 personas
+       * nombradas decía "1 lugar" acá y hablaba de a varios tres líneas
+       * más abajo. Ahora la frase es coherente consigo misma y con la
+       * sección.
+       */
+      const lugares = cuantosLugares(datos);
+      introduccion.innerHTML = 'Hemos reservado <strong>' + lugares +
+        (lugares === 1 ? ' lugar' : ' lugares') + '</strong> ' +
+        (esGrupoDeVarios(lugares)
+          ? 'para ustedes. Pueden modificar su respuesta cuantas ' +
+            'veces gusten mientras las confirmaciones sigan abiertas.'
+          : 'para ti. Puedes modificar tu respuesta cuantas ' +
+            'veces gustes mientras las confirmaciones sigan abiertas.');
     }
 
     const cajaCantidad = campoAdultos ? campoAdultos.closest('.campo') : null;

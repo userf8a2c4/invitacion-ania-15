@@ -2054,6 +2054,59 @@ const ETIQUETAS_SUGERIDAS = [
 ];
 
 /**
+ * Las tres que hablan de la EDAD de una persona. Son excluyentes entre
+ * sí: poner una saca la que estuviera puesta.
+ *
+ * ⚡ SE PODÍAN PONER LAS TRES A LA VEZ (2026-09-09)
+ * Nada impedía que la misma persona quedara marcada "Adulto" y "Niños",
+ * y pasó: en la ficha de un grupo se veía «Adulto · Familia materna ·
+ * Niños» en el mismo renglón. Las demás etiquetas sí se acumulan a
+ * propósito —alguien es "Familia materna" Y "Padrinos"— pero estas tres
+ * contestan una sola pregunta y solo una puede ser verdad.
+ *
+ * Importa más allá de lo que se lee: la cocina cuenta los menús de
+ * niño por acá, y las mesas se arman mirando quién es chico.
+ *
+ * ⚠️ NO se comparan con ===. El catálogo real crece con lo que se
+ * escriba a mano, así que puede existir "adulto" en minúscula creada
+ * antes que la sugerida. Se compara en minúscula, igual que hace el
+ * resto de este archivo para no duplicar etiquetas.
+ */
+const ETIQUETAS_DE_EDAD = ['Joven', 'Adulto', 'Niños'];
+
+/**
+ * Si esta etiqueta es una de las tres de edad.
+ *
+ * @param {string} nombre
+ * @returns {boolean}
+ */
+function esEtiquetaDeEdad(nombre) {
+  const clave = String(nombre || '').toLocaleLowerCase('es');
+  return ETIQUETAS_DE_EDAD.some(e => e.toLocaleLowerCase('es') === clave);
+}
+
+/**
+ * Apaga el chip de una etiqueta sin repintar el bloque entero.
+ *
+ * Se busca por el valor de `data-etiqueta-alternar` en vez de armar un
+ * selector con el nombre adentro: los nombres los escribe quien quiera
+ * («Niños», con acento y ñ; o uno con comillas) y meterlos en un
+ * selector CSS es pedir un error de sintaxis.
+ *
+ * @param {Element} contenedor
+ * @param {string} nombre
+ * @returns {void}
+ */
+function apagarChipDeEtiqueta(contenedor, nombre) {
+  const clave = String(nombre || '').toLocaleLowerCase('es');
+  buscarTodos('[data-etiqueta-alternar]', contenedor).forEach(chip => {
+    if (chip.dataset.etiquetaAlternar.toLocaleLowerCase('es') !== clave) return;
+    chip.classList.remove('etiqueta-chip--activa');
+    chip.setAttribute('aria-pressed', 'false');
+  });
+}
+
+/**
  * El bloque de etiquetas de una persona o una mesa: todas a la vista,
  * un toque para poner y otro para quitar.
  *
@@ -2196,6 +2249,26 @@ async function pintarEtiquetasDe(tipo, id, contenedor) {
             { etiqueta_id: puesta.id, tipo: tipo, id: id });
           puestas = puestas.filter(e => e.id !== puesta.id);
         } else {
+          /* ⚡ LAS DE EDAD SE SACAN ENTRE ELLAS (2026-09-09)
+             Ver ETIQUETAS_DE_EDAD: la misma persona podía quedar
+             marcada "Adulto" y "Niños" a la vez. Se saca la vieja ANTES
+             de poner la nueva: si el quitar falla, el catch de abajo
+             devuelve el chip a como estaba y nunca quedan las dos
+             encendidas. Al revés —poner primero— un fallo al quitar
+             dejaría justo el estado que esto viene a impedir. */
+          if (esEtiquetaDeEdad(nombre)) {
+            const otrasDeEdad = puestas.filter(e =>
+              esEtiquetaDeEdad(e.nombre) &&
+              e.nombre.toLocaleLowerCase('es') !== nombre.toLocaleLowerCase('es'));
+
+            for (const vieja of otrasDeEdad) {
+              await mandar('etiquetas_acomodo.php?accion=quitar',
+                { etiqueta_id: vieja.id, tipo: tipo, id: id });
+              puestas = puestas.filter(e => e.id !== vieja.id);
+              apagarChipDeEtiqueta(contenedor, vieja.nombre);
+            }
+          }
+
           const r = await mandar('etiquetas_acomodo.php?accion=asignar',
             { nombre: nombre, tipo: tipo, id: id });
           // El servidor devuelve el id de la etiqueta (la creó o la
