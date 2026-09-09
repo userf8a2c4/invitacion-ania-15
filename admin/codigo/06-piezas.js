@@ -2366,3 +2366,99 @@ const COMO_SE_LEE_EL_ESTADO = {
   confirmo:   { texto: 'Confirmó',      punto: ' punto--si',      etiqueta: ' etiqueta--bien' },
   no_viene:   { texto: 'No viene',      punto: ' punto--no',      etiqueta: ' etiqueta--alerta' },
 };
+
+/* ══════════════════════════════════════════════════════════════════════
+   TOCAR UN CÓDIGO PARA COPIARLO (2026-09-08)
+
+   Los códigos de pase (XV-0F7695) se leen en pantalla y se pegan en
+   WhatsApp, en el buscador de la puerta o en un mensaje. Antes había que
+   escribirlos a mano mirando la pantalla —siete caracteres que se
+   confunden entre O y 0, entre 1 y I— o seleccionarlos con el dedo, que
+   en un móvil es una pelea.
+
+   Se pidió explícitamente SIN botón de copiar: se toca el código y ya.
+
+   ⚠️ POR QUÉ EN FASE DE CAPTURA, Y NO UN LISTENER NORMAL
+
+   En la lista de Gente, el código vive DENTRO del <button> que abre la
+   ficha. Con un listener normal, el clic burbujea del código al botón:
+   cuando este código corriera, la ficha ya se estaría abriendo, y
+   stopPropagation() llegaría tarde.
+
+   En captura el recorrido es al revés —de document hacia adentro— así
+   que esto corre ANTES que el botón y puede cortarle el paso. Es la
+   única forma de que tocar el código copie sin abrir nada.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ⚠️ EL `typeof document` NO ES PARANOIA: LAS PRUEBAS EJECUTAN ESTE
+   ARCHIVO. herramientas/prueba-puerta.mjs y prueba-mensajes.mjs lo
+   evalúan con new Function() para correr funciones de verdad en vez de
+   leer su código. Ahí no hay navegador, y un addEventListener suelto al
+   nivel superior las tumbaba con «document is not defined». */
+if (typeof document !== 'undefined') {
+document.addEventListener('click', (evento) => {
+  const donde = evento.target && evento.target.closest
+    ? evento.target.closest('.codigo-pase')
+    : null;
+  if (!donde) return;
+
+  const texto = (donde.textContent || '').trim();
+  if (!texto || texto === '—') return;
+
+  // Antes de que el clic llegue a la fila que abre la ficha.
+  evento.preventDefault();
+  evento.stopPropagation();
+
+  copiarElCodigo(texto, donde);
+}, true);
+}
+
+/**
+ * Copia un código al portapapeles y lo dice.
+ *
+ * @param {string} texto
+ * @param {HTMLElement} donde - Para el destello de confirmación.
+ * @returns {Promise<void>}
+ */
+async function copiarElCodigo(texto, donde) {
+  let salio = false;
+
+  try {
+    await navigator.clipboard.writeText(texto);
+    salio = true;
+  } catch (error) {
+    /* Sin permiso de portapapeles, o en un navegador viejo: se copia a
+       la vieja usanza, con un campo invisible. Mismo respaldo que ya usa
+       copiarElLinkPersonal() para el link. */
+    try {
+      const campo = document.createElement('textarea');
+      campo.value = texto;
+      campo.setAttribute('readonly', 'readonly');
+      campo.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+      document.body.appendChild(campo);
+      campo.select();
+      salio = document.execCommand('copy');
+      document.body.removeChild(campo);
+    } catch (otro) {
+      salio = false;
+    }
+  }
+
+  if (!salio) {
+    /* No se pudo copiar. No se miente diciendo que sí: el código sigue
+       siendo seleccionable a mano (user-select:all en el CSS), así que
+       se dice qué hacer. */
+    avisar('No pude copiarlo. Mantené el dedo sobre el código para seleccionarlo.', true);
+    return;
+  }
+
+  avisar('Copiado: ' + texto);
+
+  /* Un destello corto en el propio código, además del aviso de arriba:
+     confirma DÓNDE se tocó, que con varios códigos en pantalla no es
+     obvio si solo aparece un cartel abajo. */
+  if (donde) {
+    donde.classList.add('codigo-pase--copiado');
+    setTimeout(() => donde.classList.remove('codigo-pase--copiado'), 900);
+  }
+}
