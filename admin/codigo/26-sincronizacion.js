@@ -780,6 +780,44 @@ const RUTAS_A_PRECALENTAR = [
   'hoy.php',
   'contactos.php?accion=todos',
   'llegadas.php?accion=ultimas&cuantas=10',
+
+  /* ⚡ LAS QUE FALTABAN (2026-09-08)
+   *
+   * Con las nueve de arriba, el panel guardaba copia de nueve secciones
+   * de las veintitantas que tiene. Si Lucila no entró nunca a Regalos, a
+   * Recibos o a Foráneos, el día que se queda sin señal esas pantallas
+   * están vacías — y no había forma de que ella lo supiera de antemano.
+   *
+   * En palabras de Carlos: «el usuario quiere no tener que pensar, que
+   * las cosas se hagan por sí mismas, que la app le resuelva problemas,
+   * no que le genere más». Pedirle que adivine qué va a necesitar más
+   * tarde es peor que pedirle que piense: no se puede acertar.
+   *
+   * ⚠️ ESTAS DIRECCIONES SON LAS QUE PIDE CADA PANTALLA, CARÁCTER POR
+   * CARÁCTER. La copia se guarda bajo la dirección exacta; si acá dice
+   * una y la pantalla pide otra, no falla nada a la vista —online sigue
+   * andando— y esa sección se queda sin copia en silencio. Lo comprueba
+   * herramientas/prueba-sincronizacion.mjs, que lee las llamadas reales
+   * del panel y las compara con esta lista. */
+  'acompanantes.php?accion=listar_todos',
+  'invitaciones.php?accion=listar',
+  'alarmas.php?accion=listar',
+  'direcciones.php?accion=listar',
+  'etiquetas_acomodo.php?accion=listar',
+  'etiquetas.php?accion=leer',
+  'recibos.php?accion=listar',
+  'comandos.php?accion=listar',
+  'mensajes.php?accion=listar',
+  'bitacora.php?accion=listar',
+  'usuarios.php?accion=listar',
+  'cotizador.php?accion=servicios',
+  'llegadas.php?accion=ultimas&cuantas=30',
+  'chat.php?accion=listar&despues_de=0',
+
+  /* Correo queda afuera, igual que antes: abre una conexión IMAP real,
+     tarda segundos y no sirve de nada sin red.
+     compras.php también: trae claves de Stripe, y el cobro está apagado.
+     sesion.php tampoco, faltaba más. */
 ];
 
 /** Para no lanzar dos precalentamientos a la vez (arranque + reconexión
@@ -811,9 +849,22 @@ const ENFRIAMIENTO_DE_PRECALENTADO = 5 * 60 * 1000;
  *
  * @returns {Promise<void>}
  */
-async function precalentarCopias() {
+async function precalentarCopias(porElReloj) {
   if (_precalentando || SIN_LLEGADA) return;
-  if (Date.now() - _precalentadoEn < ENFRIAMIENTO_DE_PRECALENTADO) return;
+
+  /* ⚠️ EL RELOJ NO PASA POR EL ENFRIAMIENTO (2026-09-08)
+   *
+   * El enfriamiento existe para los disparos por EVENTO —abrir la app,
+   * reconectar, volver del fondo— que pueden llegar de a tres casi
+   * juntos. El reloj de la puesta al día no: él mismo es el ritmo.
+   *
+   * Y si pasara por acá, elegir «cada 5 minutos» daría diez: el
+   * enfriamiento se cuenta desde que TERMINÓ la tanda anterior, o sea
+   * unos segundos después de empezarla, así que al cumplirse los cinco
+   * minutos justos todavía faltarían esos segundos y el tick se
+   * perdería entero hasta el siguiente. */
+  if (!porElReloj && Date.now() - _precalentadoEn < ENFRIAMIENTO_DE_PRECALENTADO) return;
+
   _precalentando = true;
 
   try {
@@ -826,10 +877,12 @@ async function precalentarCopias() {
         // Una ruta caída (sección sin datos todavía, permiso, lo que
         // sea) no debe frenar el resto.
       }
-      // Pausa corta entre una y otra: nueve pedidos de golpe se sienten
-      // en una red de salón compartida, aunque sea en silencio.
+      // Pausa corta entre una y otra: una tanda de pedidos de golpe se
+      // siente en una red de salón compartida, aunque sea en silencio.
       await new Promise(resolver => setTimeout(resolver, 400));
     }
+
+    await guardarLasTarjetasDeLaPuerta();
   } finally {
     _precalentando = false;
     // Se anota al TERMINAR, no al empezar: si la tanda tardó dos
@@ -891,6 +944,48 @@ const RUTA_DE_LA_VISTA = {
   evento:    'evento.php?accion=todo',
   correo:    null,   // IMAP es lento y caro: se refresca a mano.
 };
+
+/**
+ * Deja guardada la tarjeta de puerta de TODOS los pases.
+ *
+ * ⚡ ES EL CASO QUE MÁS VALE DE TODO ESTO (2026-09-08)
+ *
+ * El escáner pide `llegadas.php?accion=consultar&codigo=XV-…`, de a un
+ * código. El caché guarda copia de cada dirección que se pidió alguna
+ * vez — así que un pase que NUNCA se escaneó no tiene copia. Con el WiFi
+ * del salón caído, ese pase no se puede leer: una persona parada en la
+ * entrada, con su invitación en la mano, el día del evento.
+ *
+ * Se piden todas juntas en UNA petición y se guardan de a una bajo la
+ * dirección exacta que el escáner va a pedir después. Así el escáner no
+ * se entera de nada: encuentra la copia donde siempre la busca.
+ *
+ * Una petición y no cuarenta y siete: llegadas.php?accion=todas_las_tarjetas
+ * las arma con las mismas dos funciones que corre el escáner de verdad.
+ *
+ * Si esta cuenta no tiene permiso de escanear, el servidor contesta 403 y
+ * acá no pasa nada — no todas las cuentas van a la puerta.
+ *
+ * @returns {Promise<void>}
+ */
+async function guardarLasTarjetasDeLaPuerta() {
+  try {
+    const r = await traer('llegadas.php?accion=todas_las_tarjetas');
+    const tarjetas = (r && r.tarjetas) || {};
+
+    for (const codigo of Object.keys(tarjetas)) {
+      /* La dirección tiene que quedar IGUAL a la que arma el escáner al
+         consultar un pase (28-escaner.js → consultarPase). Si cambia una
+         y no la otra, esto guarda copias que nadie va a buscar. */
+      guardarLectura('llegadas.php?accion=consultar&codigo=' +
+                     encodeURIComponent(codigo), tarjetas[codigo]);
+    }
+  } catch (error) {
+    /* Sin permiso, sin señal o sin la acción todavía en el servidor: el
+       resto del precalentado ya se hizo y el escáner sigue funcionando
+       online como siempre. */
+  }
+}
 
 /** La huella de lo último que se pintó en cada vista. */
 const _huellaDeLaVista = {};
@@ -1005,6 +1100,77 @@ async function repintarConservandoElLugar(cual) {
 function arrancarRefrescoPeriodico() {
   if (_temporizadorRefresco) return;
   _temporizadorRefresco = setInterval(refrescarEnSegundoPlano, INTERVALO_REFRESCO_MS);
+  arrancarPuestaAlDia();
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   MANTENERSE AL DÍA SOLO (2026-09-08)
+
+   Hasta acá, el precalentado corría al abrir el panel, al volver la señal
+   y al volver a la app. Falta el caso más largo: la app abierta una hora
+   sin salir de ella. La copia de las secciones que no se están mirando
+   envejecía hasta la próxima vez que se cerrara.
+
+   ⚠️ CON LA PESTAÑA EN EL FONDO NO CORRE. El navegador congela los
+   temporizadores igual, y gastar batería por una copia que nadie va a
+   mirar en ese momento no compra nada: al volver a la app se sincroniza,
+   que es cuando importa.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Cada cuánto se puede elegir ponerse al día, en minutos. */
+const CADA_CUANTO_SE_PUEDE = [5, 10, 30, 60];
+
+/** Lo que vale si nadie eligió nada. Es el mismo número que
+    ENFRIAMIENTO_DE_PRECALENTADO, así que no hay dos ritmos discutiendo. */
+const CADA_CUANTO_POR_OMISION = 5;
+
+/**
+ * Cada cuántos minutos se pone al día este dispositivo.
+ *
+ * ⚡ SE GUARDA POR DISPOSITIVO Y NO EN EL SERVIDOR (2026-09-08)
+ * El teléfono de la puerta y la computadora de casa no tienen por qué
+ * querer lo mismo: uno está con datos móviles el día del evento y la
+ * otra con WiFi toda la tarde. Es una preferencia de ESE aparato.
+ *
+ * @returns {number} Minutos.
+ */
+function cadaCuantoSePoneAlDia() {
+  const guardado = Number(recordado('minutos-al-dia', CADA_CUANTO_POR_OMISION));
+  return CADA_CUANTO_SE_PUEDE.includes(guardado) ? guardado : CADA_CUANTO_POR_OMISION;
+}
+
+/**
+ * Cambia el ritmo y lo aplica en el acto.
+ *
+ * @param {number} minutos
+ * @returns {void}
+ */
+function ponerCadaCuantoSePoneAlDia(minutos) {
+  if (!CADA_CUANTO_SE_PUEDE.includes(Number(minutos))) return;
+  recordar('minutos-al-dia', Number(minutos));
+  arrancarPuestaAlDia(true);
+}
+
+/** El reloj de la puesta al día. */
+let _relojDeLaPuestaAlDia = null;
+
+/**
+ * Enciende (o reinicia) el reloj que mantiene las copias al día.
+ *
+ * @param {boolean} [reiniciar] Para cuando cambia el intervalo elegido.
+ * @returns {void}
+ */
+function arrancarPuestaAlDia(reiniciar) {
+  if (_relojDeLaPuestaAlDia && !reiniciar) return;
+  if (_relojDeLaPuestaAlDia) clearInterval(_relojDeLaPuestaAlDia);
+
+  _relojDeLaPuestaAlDia = setInterval(() => {
+    // En el fondo no: ver la nota de arriba.
+    if (document.visibilityState !== 'visible') return;
+    if (SIN_LLEGADA) return;
+    precalentarCopias(true);   // true: el reloj ES el ritmo, sin enfriamiento
+  }, cadaCuantoSePoneAlDia() * 60 * 1000);
 }
 
 
@@ -1046,3 +1212,56 @@ document.addEventListener('visibilitychange', () => {
      app no lo dispara una y otra vez. */
   precalentarCopias();
 });
+
+
+/**
+ * La hoja de Ajustes donde se elige cada cuánto ponerse al día.
+ *
+ * ⚡ POR QUÉ ES LO ÚNICO QUE SE VE DE TODO ESTO (2026-09-08)
+ *
+ * La sincronización entera es invisible a propósito: sin botones, sin
+ * «actualizando…», sin pasos. Carlos lo pidió así — «que se mantenga al
+ * día siempre y ya, sin pensar en ello».
+ *
+ * Esta pantalla existe solo para el caso contrario: el teléfono con
+ * datos móviles contados el día del evento, donde ponerse al día cada
+ * cinco minutos puede no convenir. No hay opción «nunca»: apagarlo
+ * devuelve el problema que esto vino a resolver, y lo devuelve en
+ * silencio, meses después, cuando ya nadie se acuerda de que se apagó.
+ *
+ * @returns {void}
+ */
+function abrirHojaDePuestaAlDia() {
+  const ahora = cadaCuantoSePoneAlDia();
+
+  const comoSeLee = (m) => m === 60 ? 'Cada hora' : 'Cada ' + m + ' minutos';
+
+  const cuerpo = abrirHoja('Mantener los datos al día',
+    '<div class="tarjeta">' +
+      '<p>El panel guarda una copia de todo en este dispositivo, para que ' +
+        'puedas abrir cualquier sección aunque te quedes sin señal.</p>' +
+      '<p class="vacio__texto" style="margin-top:var(--esp-1)">' +
+        'Se hace solo, por detrás. No hay nada que tocar: esto es solo por ' +
+        'si querés que gaste menos datos.' +
+      '</p>' +
+    '</div>' +
+
+    campoLista({
+      id: 'aldia-cada',
+      rotulo: 'Ponerse al día',
+      valor: ahora,
+      opciones: CADA_CUANTO_SE_PUEDE.map(m => ({ valor: m, texto: comoSeLee(m) })),
+    }) +
+
+    '<p class="vacio__texto">' +
+      'Además se pone al día siempre al abrir la app, al recuperar la señal ' +
+      'y al volver desde otra aplicación. Eso no se puede desactivar: son ' +
+      'los momentos en que más falta hace.' +
+    '</p>'
+  );
+
+  buscar('#aldia-cada', cuerpo).addEventListener('change', (evento) => {
+    ponerCadaCuantoSePoneAlDia(Number(evento.target.value));
+    avisar('Listo. ' + comoSeLee(cadaCuantoSePoneAlDia()) + '.');
+  });
+}

@@ -369,6 +369,9 @@ const CONFIGURACION = {
         ['fab-config', 'Elegir qué hace el botón redondo de abajo'],
         ['instalar',   'Poner el acceso directo en la pantalla de inicio'],
         ['respaldo',   'Cuándo se guardó por última vez la copia de todo', true],
+        /* Sin `true`: cualquiera que use el panel en su teléfono puede
+           querer que gaste menos datos, no solo la administradora. */
+        ['al-dia',     'Cada cuánto se ponen al día los datos en este dispositivo'],
       ],
     },
     {
