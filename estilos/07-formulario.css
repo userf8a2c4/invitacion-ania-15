@@ -457,6 +457,49 @@
   outline-offset: 2px;
 }
 
+/* ⚡ EL LATIDO QUE SEÑALA QUÉ HAY QUE HACER (2026-09-09)
+   ══════════════════════════════════════════════════════════════════
+
+   La casilla de cada persona es la llave de todo lo que sigue: hasta
+   que no se marca una, los menús no aparecen y el contador dice "0 de
+   N lugares confirmados". Pero quieta, apagada y del mismo color que
+   el resto del formulario, no se lee como "tocame": se lee como
+   adorno. Un latido lento de oro la señala sin gritar.
+
+   ⚠️ SE APAGA APENAS ENTIENDEN. No late "mientras haya casillas sin
+   marcar" —alguien puede dejar a un tío sin marcar a propósito, y esa
+   casilla latiría toda la noche como si estuviera mal—. Late mientras
+   NO HAY NINGUNA marcada, que es el único momento en que el gesto
+   todavía no se descubrió. Marcada la primera, se apagan todas: ya no
+   hay nada que enseñar.
+
+   ⚠️ EMPIEZA Y TERMINA APAGADO, y esto no es un detalle de gusto. La
+   red de `html.animaciones-off` y la de `prefers-reduced-motion`
+   (01-fundamentos.css) apagan las animaciones con
+   `animation-duration: .01ms` + `iteration-count: 1`, o sea que
+   SALTAN AL ÚLTIMO FOTOGRAMA. Si el brillo viviera en el 100%, quien
+   pidió menos movimiento se quedaría con las casillas encendidas para
+   siempre. El brillo va en el 50% y las dos puntas quedan neutras.
+
+   No se anima `box-shadow` sola por capricho de rendimiento: es lo
+   único que se puede encender sin mover ni un pixel de la fila. Nada
+   cambia de tamaño, así que no empuja el texto de al lado. */
+@keyframes latido-de-oro {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(201, 168, 76, 0);
+    border-color: var(--borde-oro-fuerte);
+  }
+  50% {
+    box-shadow: 0 0 12px 2px rgba(201, 168, 76, .45);
+    border-color: var(--color-oro-claro);
+  }
+}
+
+#menus-de-adultos:not(:has(input[data-persona-marcada]:checked))
+  .fila-persona__nombre input[data-persona-marcada] {
+  animation: latido-de-oro 2.8s ease-in-out infinite;
+}
+
 /* Toda la fila se enciende cuando esa persona queda confirmada: así se ve
    de un vistazo quiénes vienen, sin tener que leer casilla por casilla. */
 .fila-persona:has(input[data-persona-marcada]:checked) {
