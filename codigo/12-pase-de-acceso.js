@@ -236,7 +236,17 @@ function mostrarPaseDeAcceso(datos) {
     if (elemento) elemento.textContent = valor;
   };
 
-  escribir('#pase-nombre',   datos.nombre || '—');
+  /* ⚡ EL PASE TAMBIÉN DECORA, PORQUE EL DATO YA NO VIENE DECORADO
+     (2026-09-09). Antes acá salía "Andy y familia" sin hacer nada: era
+     lo que se había guardado, porque el formulario mandaba el cartel en
+     vez del titular. Arreglado eso, lo que llega es "Andy" — así que el
+     " y familia" hay que ponerlo al mostrar, que es donde corresponde.
+
+     Se cuenta CUÁNTOS VAN (adultos + niños), no cuántos lugares tenía la
+     invitación: si de tres lugares viene una sola persona, su pase es de
+     una sola persona y hablarle en plural sería mentirle a la puerta. */
+  const cuantosVan = (Number(datos.adultos) || 0) + (Number(datos.ninos) || 0);
+  escribir('#pase-nombre',   nombreDelGrupo(datos.nombre, cuantosVan) || '—');
   escribir('#pase-adultos',  datos.adultos || '1');
   escribir('#pase-ninos',    datos.ninos || '0');
   escribir('#pase-menus',    datos.resumenDeMenus || '—');
@@ -244,6 +254,8 @@ function mostrarPaseDeAcceso(datos) {
   escribir('#pase-fecha',    CONFIGURACION.fiesta.fechaEnPalabras);
   escribir('#pase-hora',     CONFIGURACION.fiesta.horaEnPalabras);
   escribir('#pase-lugar',    CONFIGURACION.lugar.nombre);
+
+  prepararCodigoCopiable(buscar('#pase-codigo'), datos.codigo || '');
 
   dibujarCodigoQR(datos.codigo || 'XV-2026');
 
@@ -259,6 +271,121 @@ function mostrarPaseDeAcceso(datos) {
   const botonCerrar = buscar('#boton-cerrar-pase');
   if (botonCerrar) requestAnimationFrame(() => botonCerrar.focus());
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   TOCAR EL CÓDIGO PARA COPIARLO (2026-09-09)
+
+   El código del pase (XV-702208) se lo pasa el invitado a quien lo
+   acompaña, o lo guarda para mostrarlo en la puerta. Antes había que
+   transcribirlo a ojo —siete caracteres donde la O se confunde con el 0
+   y la 1 con la I— o pelearse con la selección del dedo.
+
+   ⚡ ESTO YA EXISTÍA EN EL PANEL Y NO ACÁ. El arreglo del 2026-09-08
+   («Tocar un codigo de pase lo copia») tocó SOLO admin/: 06-piezas.js y
+   03-vistas.css. El pase del invitado —que es el que más se comparte,
+   porque lo tienen 47 personas y no una— se quedó con el gesto viejo.
+   Se descubrió abriendo un enlace real y mirando el elemento: `cursor:
+   auto`, `user-select: auto`, sin role ni tabindex.
+
+   ⚠️ SIN BOTÓN DE COPIAR, A PEDIDO: se toca el código y ya. Igual que en
+   el panel, para que el mismo gesto sirva en los dos lados.
+
+   ⚠️ Y NO SE MIENTE SI FALLA. Si el portapapeles no está disponible
+   (Safari sin gesto directo, permisos negados, http), no se dice
+   "copiado": se avisa que se puede seleccionar con el dedo, que es lo
+   que `user-select: all` deja hacer.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Deja el código del pase listo para copiarse de un toque.
+ *
+ * @param {HTMLElement|null} elemento - El `.pase__codigo`.
+ * @param {string} codigo - El código, para copiarlo tal cual.
+ * @returns {void}
+ */
+function prepararCodigoCopiable(elemento, codigo) {
+  if (!elemento || !codigo || codigo === '—') return;
+
+  /* Es un control, y tiene que decirlo: sin esto, quien navega con
+     teclado no llega nunca, y un lector de pantalla lo lee como texto
+     suelto sin contar que se puede activar. */
+  elemento.setAttribute('role', 'button');
+  elemento.setAttribute('tabindex', '0');
+  elemento.setAttribute('aria-label', 'Copiar el código de tu pase, ' + codigo);
+
+  /* Se vuelve a pintar el pase cada vez que se abre; sin esta marca se
+     irían apilando escuchas sobre el mismo elemento. */
+  if (elemento.dataset.copiadoEnganchado === 'si') return;
+  elemento.dataset.copiadoEnganchado = 'si';
+
+  elemento.addEventListener('click', () => copiarCodigoDelPase(elemento));
+  elemento.addEventListener('keydown', evento => {
+    // Enter y espacio: lo que hace cualquier botón de verdad.
+    if (evento.key === 'Enter' || evento.key === ' ') {
+      evento.preventDefault();
+      copiarCodigoDelPase(elemento);
+    }
+  });
+}
+
+/**
+ * Copia el código al portapapeles y lo dice, con un destello.
+ *
+ * @param {HTMLElement} elemento - El `.pase__codigo`.
+ * @returns {Promise<void>}
+ */
+async function copiarCodigoDelPase(elemento) {
+  const texto = (elemento.textContent || '').trim();
+  if (!texto || texto === '—') return;
+
+  let seCopio = false;
+  try {
+    await navigator.clipboard.writeText(texto);
+    seCopio = true;
+  } catch (error) {
+    seCopio = false;
+  }
+
+  anunciarEnElPase(seCopio
+    ? 'Copiado: ' + texto
+    : 'No se pudo copiar. Mantén el dedo sobre el código para seleccionarlo.');
+
+  if (!seCopio) return;
+
+  elemento.classList.add('esta-copiado');
+  setTimeout(() => elemento.classList.remove('esta-copiado'), 900);
+}
+
+/**
+ * Dice algo dentro del pase, en voz alta para los lectores de pantalla.
+ *
+ * El aviso vive en una región `aria-live` propia y se limpia sola: si
+ * quedara escrita, el próximo lector la leería como si acabara de pasar.
+ *
+ * @param {string} mensaje
+ * @returns {void}
+ */
+function anunciarEnElPase(mensaje) {
+  const ventana = buscar('#ventana-pase');
+  if (!ventana) return;
+
+  let region = buscar('#pase-anuncio');
+  if (!region) {
+    region = document.createElement('p');
+    region.id = 'pase-anuncio';
+    region.className = 'pase__aviso';
+    region.setAttribute('role', 'status');
+    region.setAttribute('aria-live', 'polite');
+    const codigo = buscar('#pase-codigo');
+    const donde = (codigo && codigo.parentElement) || ventana;
+    donde.appendChild(region);
+  }
+
+  region.textContent = mensaje;
+  clearTimeout(anunciarEnElPase.reloj);
+  anunciarEnElPase.reloj = setTimeout(() => { region.textContent = ''; }, 2600);
+}
+
 
 /** Quién tenía el foco antes de abrir el pase (para devolvérselo al cerrar). */
 let disparadorDelPase = null;

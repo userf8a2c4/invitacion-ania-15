@@ -236,10 +236,19 @@ let INVITACION = null;
 
           INVITACION = datos;
 
-          // El saludo del sobre se corrige con el nombre real del grupo,
-          // pisando el genérico (o el de ?invitado=) que ya se puso arriba.
+          /* El saludo del sobre se corrige con el nombre real del grupo,
+             pisando el genérico (o el de ?invitado=) que ya se puso arriba.
+
+             ⚡ Y AHORA CON EL MISMO NOMBRE QUE EL RESTO (2026-09-09). Acá
+             iba `datos.nombre` crudo: el sobre decía "Para Andy" y el
+             formulario, más abajo en la misma página, "Andy y familia".
+             Una invitación de 3 lugares recibida como si fuera para una
+             sola persona. La regla es una y vive en 02-utilidades.js. */
           if (saludoDelSobre) {
-            saludoDelSobre.innerHTML = 'Para ' + limpiarTexto(datos.nombre);
+            const lugares = (datos.personas && datos.personas.length) ||
+                            Number(datos.pases) || 1;
+            saludoDelSobre.innerHTML =
+              'Para ' + limpiarTexto(nombreDelGrupo(datos.nombre, lugares));
           }
 
           /* 11-formulario-confirmacion.js escucha esto para reemplazar el
