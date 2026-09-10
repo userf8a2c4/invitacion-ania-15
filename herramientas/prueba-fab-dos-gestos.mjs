@@ -136,6 +136,75 @@ comprobar('se limpia también en el cuadro siguiente',
   /requestAnimationFrame\(borrar\)/.test(codigo),
   'la hoja recién se está insertando: limpiar antes no borra nada');
 
+/* ─── 4b. El arranque corre SIN sesión ───────────────────────────── */
+
+/* ⚡ ESTO TUMBÓ EL PANEL EN PRODUCCIÓN (2026-09-09)
+ *
+ * `USUARIO` arranca en null y se llena cuando la sesión abre.
+ * prepararFab() corre ANTES, en el arranque, junto a los demás
+ * prepararX() de 20-arranque.js. Al hacer que el botón anuncie su
+ * rótulo, esa cadena terminó preguntando `USUARIO.rol` — y sobre null
+ * eso no es un aviso, es un TypeError que corta la función de arranque a
+ * la mitad. Todo lo que venía después no corrió nunca: el panel se quedó
+ * en la pantalla de carga, sin nada que dijera por qué.
+ *
+ * `node --check` no lo ve: la sintaxis es perfecta. Las comprobaciones de
+ * texto tampoco: el archivo dice exactamente lo que tiene que decir. La
+ * única forma de cazarlo es CORRER la función en el escenario del
+ * arranque, que es lo que hace esto. */
+
+console.log('\nArrancar sin sesión abierta\n');
+
+const desdeFn = codigo.indexOf('function herramientasElegidasDelFab');
+const cuerpoFn = codigo.slice(desdeFn, codigo.indexOf('\n}', desdeFn) + 2);
+const contexto = "const SANDWICH_FAB = ['escanear', 'buscar'];\n" +
+  "const CATALOGO_FAB = [{clave:'escanear', nombre:'Escanear pase', soloAdmin:false}," +
+  " {clave:'buscar', nombre:'Buscar persona', soloAdmin:true}];\n";
+
+const correrCon = declaracionDeUsuario => {
+  const fn = new Function(declaracionDeUsuario + '\n' + contexto + cuerpoFn +
+                          '\nreturn herramientasElegidasDelFab;')();
+  return fn();
+};
+
+const pruebasDeSesion = [
+  ['con USUARIO en null, como en el arranque', 'let USUARIO = null;', ['escanear']],
+  ['con USUARIO sin definir siquiera',          '',                    ['escanear']],
+  ['con sesión de administradora',              "let USUARIO = {rol:'admin'};",
+                                                ['escanear', 'buscar']],
+  ['con sesión que no es admin',                "let USUARIO = {rol:'ayudante'};",
+                                                ['escanear']],
+];
+
+for (const [queDice, declaracion, esperado] of pruebasDeSesion) {
+  let resultado, exploto = null;
+  try { resultado = correrCon(declaracion).map(h => h.clave); }
+  catch (error) { exploto = error.message; }
+
+  comprobar('la lista de herramientas se arma ' + queDice,
+    !exploto && String(resultado) === String(esperado),
+    exploto ? 'explotó: ' + exploto : 'devolvió ' + String(resultado));
+}
+
+/* ⚠️ Y QUE NADIE VUELVA A PONERLO CRUDO. Un `USUARIO.rol` sin guarda en
+   este archivo es el mismo TypeError esperando a que alguien lo llame
+   desde el arranque. Se permite dentro de abrirConfiguracionDelFab(),
+   que solo corre cuando alguien toca algo — o sea, con sesión abierta. */
+/* Se borran primero los usos QUE SÍ tienen red —`USUARIO && USUARIO.rol`—
+   para no contar la propia guarda como si fuera el problema. La primera
+   versión de esto se contaba a sí misma y fallaba con el arreglo puesto. */
+const sinLasGuardadas = codigo.replace(/USUARIO\s*&&\s*USUARIO\.rol/g, '');
+const configuracion = sinLasGuardadas.slice(
+  sinLasGuardadas.indexOf('function abrirConfiguracionDelFab'));
+
+const crudosEnTotal = (sinLasGuardadas.match(/USUARIO\.rol/g) || []).length;
+const crudosPermitidos = (configuracion.match(/USUARIO\.rol/g) || []).length;
+
+comprobar('nadie pregunta USUARIO.rol sin red fuera de la configuración',
+  crudosEnTotal - crudosPermitidos === 0,
+  (crudosEnTotal - crudosPermitidos) + ' uso(s) sin guarda: si el arranque ' +
+  'llega ahí, el panel no abre');
+
 /* ─── 5. Una sola regla para las dos puertas ─────────────────────── */
 
 console.log('\nEl toque y el menú miran la misma lista\n');

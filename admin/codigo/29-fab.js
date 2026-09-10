@@ -389,7 +389,23 @@ async function guardarSandwich(claves) {
  * @returns {Object[]} Entradas de CATALOGO_FAB, ya filtradas.
  */
 function herramientasElegidasDelFab() {
-  const esAdmin = USUARIO.rol === 'admin';
+  /* ⚡ SIN SESIÓN TODAVÍA, Y ESO TUMBABA EL PANEL ENTERO (2026-09-09)
+   *
+   * `USUARIO` arranca en null (04-sesion.js) y se llena recién cuando la
+   * sesión abre. prepararFab() corre ANTES, en el arranque —lo llama
+   * 20-arranque.js junto a los demás prepararX()— y desde que el botón
+   * anuncia su rótulo, esa cadena termina acá preguntando por el rol.
+   *
+   * `USUARIO.rol` sobre null no es un aviso: es un TypeError que corta la
+   * función de arranque a la mitad. Todo lo que venía después no se
+   * ejecutaba nunca y el panel se quedaba en la pantalla de carga, para
+   * siempre, sin nada en pantalla que dijera por qué.
+   *
+   * Sin sesión se asume el rol más restringido: se ofrece de menos, no de
+   * más. El rótulo se rehace en cuanto la elección llega del servidor
+   * (ver sincronizarSandwichConServidor), que ya es con sesión abierta.
+   */
+  const esAdmin = !!(typeof USUARIO !== 'undefined' && USUARIO && USUARIO.rol === 'admin');
   return SANDWICH_FAB
     .map(clave => CATALOGO_FAB.find(h => h.clave === clave))
     .filter(Boolean)
