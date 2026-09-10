@@ -162,28 +162,39 @@ $agregarColumna = function ($tabla, $columna, $definicion)
    respuestas, y sirve para notar envíos repetidos o pruebas. */
 $agregarColumna('invitaciones', 'veces_respondida', 'INT NOT NULL DEFAULT 0');
 
-/* EL NOMBRE DE CONFIANZA Y EL NOMBRE DE GALA (2026-09-09)
+/* EL APODO, QUE NO SALE DE LA APP (2026-09-09)
  *
- * En el panel se escribe el nombre con el que uno piensa a la gente:
- * "Pam", "el compadre", "Tía Chuy". Ese mismo texto era el que salía
- * impreso en la invitación, que es un documento formal y que el invitado
- * enseña. Nadie quiere que su invitación de quince años diga "Pam".
+ * Quien organiza piensa a la gente por su apodo: "Pam", "el compadre",
+ * "Tía Chuy". Y escribía eso en el nombre de la invitación, porque era
+ * el único campo que había — así que el apodo terminaba impreso en un
+ * documento formal que el invitado enseña.
  *
- * Ahora son dos. El de siempre (`nombre`) no se toca: sigue siendo el
- * interno, el que se busca y se lee en las listas del panel. El nuevo
- * (`nombre_publico`) es el que ve el invitado, y solo pisa al otro
- * cuando tiene algo escrito.
+ * Ahora hay una columna aparte para el apodo. `nombre` no cambia de
+ * sentido: sigue siendo lo que se imprime, lo único que el invitado ve y
+ * lo único que sale del servidor. El apodo es una etiqueta de trabajo
+ * para reconocer a alguien en el panel.
  *
- * ⚠️ ARRANCAN VACÍOS Y ESO ESTÁ BIEN. Vacío significa "usá el interno",
- * así que las 48 invitaciones que ya existen siguen viéndose EXACTAMENTE
- * igual hasta que alguien escriba un nombre formal. No hay que migrar
- * nada ni revisar nada: el día uno no cambia una sola pantalla.
+ * ⚠️ LA PROTECCIÓN ES QUE EL DATO NO SE PIDE. invitacion.php no nombra
+ * `apodo` en ninguna de sus consultas, así que no hay COALESCE que
+ * pueda salir mal ni condición que alguien pueda invertir por descuido:
+ * el apodo no está en la respuesta porque nunca se seleccionó. Si algún
+ * día hace falta mostrarlo del lado del invitado —no debería—, hay que
+ * agregarlo a mano, y eso se ve en el diff.
  *
- * Van los dos —la invitación y cada persona de adentro— porque el apodo
- * aparece en los dos lados: la ficha se llama "Pam" y el lugar que ocupa
- * también dice "Pam". */
-$agregarColumna('invitaciones', 'nombre_publico', "VARCHAR(150) NOT NULL DEFAULT ''");
-$agregarColumna('acompanantes', 'nombre_publico', "VARCHAR(150) NOT NULL DEFAULT ''");
+ * ⚠️ ARRANCAN VACÍOS, Y ESO DEJA TRABAJO PENDIENTE. Vacío significa "no
+ * hay apodo". Pero los nombres que HOY están cargados son los que se
+ * escribieron cuando no existía esta separación: hay apellidos completos
+ * y hay "Pam". Ninguna migración automática puede adivinar cuál es cuál,
+ * así que las invitaciones con apodo por nombre hay que corregirlas a
+ * mano, una por una, antes de mandarlas.
+ *
+ * ⚠️ QUEDA UNA COLUMNA HUÉRFANA. Una versión anterior de esto (subida el
+ * mismo día) creó `nombre_publico` con el sentido invertido. Si esta base
+ * ya la tiene, queda ahí sin que nadie la lea: borrar una columna es
+ * destructivo y no lo hace este instalador. Está vacía en todas las
+ * filas —nunca hubo pantalla que la escribiera— así que no molesta. */
+$agregarColumna('invitaciones', 'apodo', "VARCHAR(150) NOT NULL DEFAULT ''");
+$agregarColumna('acompanantes', 'apodo', "VARCHAR(150) NOT NULL DEFAULT ''");
 
 // Fijar una asignación de mesa para que la autoasignación no la toque.
 $agregarColumna('asignacion_mesas', 'fijada', 'TINYINT(1) NOT NULL DEFAULT 0');

@@ -1009,20 +1009,23 @@ function abrirFormularioDeInvitacion(inv) {
      selector de grupo arranca con solo "Sin grupo") y los grupos reales
      se cargan y se agregan al selector después, en segundo plano. */
   const cuerpo = abrirHoja(inv ? 'Editar invitación' : 'Nueva invitación',
-    campoTexto({ id: 'inv-nombre', rotulo: 'Nombre del grupo', valor: d.nombre,
-                 pista: 'Familia Zelaya, Ana y Miguel…',
-                 ayuda: 'El de acá adentro: con este se busca y así aparece ' +
-                        'en las listas. Pueden ser apodos.' }) +
+    /* ⚡ ESTE ES EL QUE SE IMPRIME, Y ES EL ÚNICO QUE SALE (2026-09-09)
+       El nombre de la invitación es un documento formal: el invitado la
+       enseña. Va impecable, con apellido si corresponde. */
+    campoTexto({ id: 'inv-nombre', rotulo: 'Nombre para la invitación', valor: d.nombre,
+                 pista: 'Familia Zelaya Robles, Ana y Miguel…',
+                 ayuda: 'Así se imprime en su invitación. Es lo único que ve el invitado.' }) +
 
-    /* ⚡ EL APODO SE QUEDA EN CASA (2026-09-09). El de arriba es para
-       trabajar; este es el que se imprime en la invitación, que es un
-       documento formal y que el invitado enseña. Vacío, se usa el de
-       arriba — o sea que las invitaciones que ya existen no cambian una
-       coma hasta que alguien escriba acá a propósito. */
-    campoTexto({ id: 'inv-nombre-publico', rotulo: 'Nombre para la invitación (opcional)',
-                 valor: d.nombre_publico || '',
-                 pista: 'Familia Zelaya Robles',
-                 ayuda: 'Cómo se imprime en la invitación. Vacío, se usa el de arriba.' }) +
+    /* ⚡ EL APODO NO SALE DE ACÁ, NUNCA (2026-09-09)
+       Es la referencia interna: sirve para encontrar a alguien en la app
+       sin tener que acordarse de su nombre completo — "Pam", "el
+       compadre", "Tía Chuy". No viaja a la invitación, y tampoco se pide
+       en ninguna consulta del sitio público: invitacion.php no lo
+       nombra, así que no puede filtrarse ni por error. */
+    campoTexto({ id: 'inv-apodo', rotulo: 'Apodo (solo para la app)',
+                 valor: d.apodo || '',
+                 pista: 'Pam, el compadre, Tía Chuy…',
+                 ayuda: 'Para encontrarlo rápido acá adentro. Nunca sale en la invitación.' }) +
 
     campoTelefono({ id: 'inv-telefono', rotulo: 'Teléfono (para WhatsApp)', valor: d.telefono }) +
     campoTexto({ id: 'inv-correo', rotulo: 'Correo', tipo: 'email', valor: d.correo }) +
@@ -1165,7 +1168,7 @@ function abrirFormularioDeInvitacion(inv) {
       nombre: nombre,
       /* Va siempre, también vacío: vaciarlo a mano tiene que volver a
          dejar mandando el nombre interno. */
-      nombre_publico: valorDe('inv-nombre-publico', cuerpo),
+      apodo: valorDe('inv-apodo', cuerpo),
       telefono: valorTelefonoDe('inv-telefono', cuerpo),
       correo: valorDe('inv-correo', cuerpo),
       grupo_id: grupoId,

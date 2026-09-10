@@ -419,10 +419,10 @@ function reconciliarPersonasDelGrupo($confirmacionId, $personas) {
     $idsActuales = array_map('intval', array_column($actuales, 'id'));
     $idsQueLlegan = [];
 
-    /* El nombre de gala de cada persona. La columna la agrega el
+    /* El apodo interno de cada persona. La columna la agrega el
        instalador, así que se pregunta una sola vez acá arriba y no una
        por persona. */
-    $guardaNombrePublico = in_array('nombre_publico', columnasDe('acompanantes'), true);
+    $guardaApodo = in_array('apodo', columnasDe('acompanantes'), true);
 
     foreach ($personas as $persona) {
         $nombre   = trim((string) ($persona['nombre'] ?? ''));
@@ -436,14 +436,14 @@ function reconciliarPersonasDelGrupo($confirmacionId, $personas) {
             'nombre' => $nombre, 'tipo' => $tipo,
             'telefono' => $telefono, 'correo' => $correo,
         ];
-        /* ⚠️ SOLO SI VINO EN EL PEDIDO. Un `?? ''` acá borraría el nombre
-           formal de todas las personas cada vez que guarde cualquier
-           pantalla del panel que mande la lista sin ese campo — que son
-           casi todas. Se distingue "no me lo mandaste" (no tocar) de
-           "me mandaste vacío" (borrarlo a propósito). */
-        if ($guardaNombrePublico && array_key_exists('nombre_publico', $persona)) {
-            $fila['nombre_publico'] = mb_substr(
-                trim((string) $persona['nombre_publico']), 0, 150);
+        /* ⚠️ SOLO SI VINO EN EL PEDIDO. Un `?? ''` acá borraría el apodo
+           de todas las personas cada vez que se guarde cualquier pantalla
+           del panel que mande la lista sin ese campo — que son casi
+           todas. Se distingue "no me lo mandaste" (no tocar) de "me
+           mandaste vacío" (borrarlo a propósito). */
+        if ($guardaApodo && array_key_exists('apodo', $persona)) {
+            $fila['apodo'] = mb_substr(
+                trim((string) $persona['apodo']), 0, 150);
         }
 
         if ($id > 0 && in_array($id, $idsActuales, true)) {
@@ -514,13 +514,16 @@ case 'listar':
     // llevaría con ellas sus reglas de mesa y su lugar ya asignado).
     $hayAcompanantes = existeTabla('acompanantes');
 
-    /* El nombre de gala viaja al panel para poder editarlo. Se pide solo
-       si la columna existe: el SELECT es explícito (no `*`), así que
-       nombrarla antes de que el instalador corra reventaría la lista
-       entera de Gente. */
+    /* El apodo viaja al panel —es donde sirve— para poder verlo y
+       editarlo. Se pide solo si la columna existe: el SELECT es
+       explícito (no `*`), así que nombrarla antes de que el instalador
+       corra reventaría la lista entera de Gente.
+
+       ⚠️ ESTA ES LA API DEL PANEL, detrás de sesión. La del sitio
+       público es invitacion.php, y ahí el apodo no se nombra nunca. */
     $columnasPersona = 'id, nombre, tipo, telefono, correo, menu, alergias'
-        . ($hayAcompanantes && in_array('nombre_publico', columnasDe('acompanantes'), true)
-            ? ', nombre_publico' : '');
+        . ($hayAcompanantes && in_array('apodo', columnasDe('acompanantes'), true)
+            ? ', apodo' : '');
 
     foreach ($filas as &$fila) {
         $fila['link'] = linkDeInvitacion($fila['token']);
@@ -570,13 +573,13 @@ case 'guardar':
     $grupoId  = campoEntero($datos, 'grupo_id', 0);
     $personas = is_array($datos['personas'] ?? null) ? $datos['personas'] : [];
 
-    /* El nombre de gala: el que ve el invitado impreso. Vacío significa
-       "usá el interno", y así se queda todo lo que ya existe.
+    /* El apodo: la referencia interna de quien organiza. Vacío = no hay
+       apodo, y el panel usa el nombre.
        La columna se agrega desde el instalador, así que se pregunta antes
        de escribirla — mismo criterio que `confirmaciones.nombre` unas
        líneas más abajo. */
-    $nombrePublico     = campoTexto($datos, 'nombre_publico', 150);
-    $guardaNombrePublico = in_array('nombre_publico', columnasDe('invitaciones'), true);
+    $apodo     = campoTexto($datos, 'apodo', 150);
+    $guardaApodo = in_array('apodo', columnasDe('invitaciones'), true);
 
     if ($nombre === '') responderMal('Falta el nombre del grupo.', 400);
     if ($correo !== '' && !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
@@ -616,7 +619,7 @@ case 'guardar':
             'pases'    => $pases,
             'grupo_id' => $grupoId > 0 ? $grupoId : null,
         ];
-        if ($guardaNombrePublico) $cambios['nombre_publico'] = $nombrePublico;
+        if ($guardaApodo) $cambios['apodo'] = $apodo;
         actualizar('invitaciones', $id, $cambios);
 
         if ($existente['confirmacion_id']) {
@@ -671,7 +674,7 @@ case 'guardar':
         'confirmacion_id' => $confirmacionId,
         'estado'          => 'sin_enviar',
     ];
-    if ($guardaNombrePublico) $filaInvitacion['nombre_publico'] = $nombrePublico;
+    if ($guardaApodo) $filaInvitacion['apodo'] = $apodo;
 
     $invitacionId = insertar('invitaciones', $filaInvitacion);
 
