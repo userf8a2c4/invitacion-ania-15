@@ -84,10 +84,28 @@ case 'listar':
 case 'listar_todos':
     exigirMetodo('GET');
 
+    /* ⚡ LOS MENÚS, SOLO SI SE PIDEN (2026-09-09)
+     *
+     * La nota de acá arriba explica por qué esta consulta devuelve lo
+     * justo, y sigue valiendo para la mudanza. Pero apareció un segundo
+     * lector con otra necesidad: la descarga de invitados, que hasta hoy
+     * ponía en la columna "Menús" un resumen del estilo "2 pollo, 1 res"
+     * — un número por plato, sin decir de quién es cada uno. Con eso, la
+     * cocina sabe cuántos platos hacer y el salón no sabe delante de
+     * quién ponerlos.
+     *
+     * Así que los menús viajan, pero SOLO cuando alguien los pide con
+     * `con_menus=1`. La mudanza sigue llamando sin el parámetro y sigue
+     * recibiendo lo mismo de siempre: no se le agrega a un pedido lo que
+     * ese pedido no necesita.
+     */
+    $conMenus = ($_GET['con_menus'] ?? '') === '1';
+    $columnasExtra = $conMenus ? ', menu, alergias' : '';
+
     $filas = consultarTodo(
-        'SELECT confirmacion_id, nombre, tipo
+        "SELECT confirmacion_id, nombre, tipo$columnasExtra
            FROM acompanantes
-          ORDER BY confirmacion_id, id'
+          ORDER BY confirmacion_id, id"
     );
 
     responderBien(['filas' => $filas]);
