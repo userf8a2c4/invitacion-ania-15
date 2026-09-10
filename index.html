@@ -2495,10 +2495,10 @@
      que pesa un 80% menos. Acá abajo se pide la copia liviana; el
      original comentado sigue intacto en codigo/, es el que se edita.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/produccion/01-configuracion.js?v=258"></script>
-<script defer src="codigo/produccion/02-utilidades.js?v=258"></script>
-<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=258"></script>
-<script defer src="codigo/produccion/04-invitado-personalizado.js?v=258"></script>
+<script defer src="codigo/produccion/01-configuracion.js?v=266"></script>
+<script defer src="codigo/produccion/02-utilidades.js?v=266"></script>
+<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=266"></script>
+<script defer src="codigo/produccion/04-invitado-personalizado.js?v=266"></script>
 
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda) — es MARCADO, no script.
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
@@ -2556,7 +2556,7 @@
      para EXISTIR, solo para reaccionar al clic — y ese clic no puede
      llegar antes de que la lista termine de bajar el archivo 20. -->
 <script type="application/json" id="scripts-de-la-escena">
-["codigo/produccion/10-reproductor-de-musica.js?v=258", "codigo/produccion/05-cursor-personalizado.js?v=258", "codigo/produccion/24-lienzo-de-petalos.js?v=258", "codigo/produccion/06-petalos-con-fisica.js?v=258", "codigo/produccion/07-marco-y-enredaderas.js?v=258", "codigo/produccion/08-efectos-de-scroll.js?v=258", "codigo/produccion/09-cuenta-regresiva.js?v=258", "codigo/produccion/11-formulario-confirmacion.js?v=258", "codigo/produccion/12-pase-de-acceso.js?v=258", "codigo/produccion/13-agregar-al-calendario.js?v=258", "codigo/produccion/23-lienzo-de-luz.js?v=258", "codigo/produccion/27-fauna-nocturna.js?v=258", "codigo/produccion/14-haces-de-luz.js?v=258", "codigo/produccion/15-registro-de-confirmaciones.js?v=258", "codigo/produccion/16-volver-arriba.js?v=258", "codigo/produccion/17-joyas-colgantes.js?v=258", "codigo/produccion/18-motas-de-polvo.js?v=258", "codigo/produccion/19-velas.js?v=258", "codigo/produccion/20-boton-de-animaciones.js?v=258", "codigo/produccion/21-monitor-de-rendimiento.js?v=258", "codigo/produccion/22-luz-de-la-hora.js?v=258", "codigo/produccion/25-preguntas-frecuentes.js?v=258", "codigo/produccion/26-mapa-a-pedido.js?v=258"]
+["codigo/produccion/10-reproductor-de-musica.js?v=266", "codigo/produccion/05-cursor-personalizado.js?v=266", "codigo/produccion/24-lienzo-de-petalos.js?v=266", "codigo/produccion/06-petalos-con-fisica.js?v=266", "codigo/produccion/07-marco-y-enredaderas.js?v=266", "codigo/produccion/08-efectos-de-scroll.js?v=266", "codigo/produccion/09-cuenta-regresiva.js?v=266", "codigo/produccion/11-formulario-confirmacion.js?v=266", "codigo/produccion/12-pase-de-acceso.js?v=266", "codigo/produccion/13-agregar-al-calendario.js?v=266", "codigo/produccion/23-lienzo-de-luz.js?v=266", "codigo/produccion/27-fauna-nocturna.js?v=266", "codigo/produccion/14-haces-de-luz.js?v=266", "codigo/produccion/15-registro-de-confirmaciones.js?v=266", "codigo/produccion/16-volver-arriba.js?v=266", "codigo/produccion/17-joyas-colgantes.js?v=266", "codigo/produccion/18-motas-de-polvo.js?v=266", "codigo/produccion/19-velas.js?v=266", "codigo/produccion/20-boton-de-animaciones.js?v=266", "codigo/produccion/21-monitor-de-rendimiento.js?v=266", "codigo/produccion/22-luz-de-la-hora.js?v=266", "codigo/produccion/25-preguntas-frecuentes.js?v=266", "codigo/produccion/26-mapa-a-pedido.js?v=266"]
 </script>
 
 <!-- ══════════════════════════════════════════════════════════════════
@@ -2588,7 +2588,7 @@
     var HORA_UTC = 12, MINUTO_UTC = 30;   // 06:30 en Toluca
     var DURA     = 60000;
     var AVISO    = 10000;                 // cuánto antes se pide el archivo
-    var ARCHIVO  = 'codigo/produccion/28-eclipse.js?v=258';
+    var ARCHIVO  = 'codigo/produccion/28-eclipse.js?v=266';
 
     /** Milisegundos hasta el próximo arranque. Negativo = ya empezó. */
     function faltaPara() {
@@ -2650,8 +2650,43 @@
       var esPbe = /(^|\.)pbe\./.test(location.hostname) ||
                   location.pathname.indexOf('/pbe/') === 0;
       if (esPbe && /[?&]eclipse=ensayo/.test(location.search)) {
-        setTimeout(function () { if (sePuede()) pedirElArchivo(1500); }, 2500);
+        /* ⚡ EL ENSAYO PASÓ DE UN DISPARO ÚNICO A UN PANEL (2026-09-10)
+
+           Antes esto corría la secuencia UNA vez, 2,5 s después de cargar,
+           y solo si sePuede() decía que sí. Si decía que no —animaciones
+           apagadas, pestaña de fondo, un campo en foco— no pasaba nada y
+           no se avisaba nada. Así fue como el eclipse llegó a producción
+           sin que nadie lo hubiera visto entero jamás.
+
+           Ahora se cargan los dos archivos y manda el panel: correr las
+           veces que haga falta, saltar a una fase, verlo en cámara lenta,
+           y —sobre todo— que diga CUÁL guarda lo está frenando. */
+        window.ECLIPSE_SOLO_ENSAYO = true;
+        pedirElArchivo(0);
+
+        var panel = document.createElement('script');
+        panel.src = 'codigo/produccion/29-ensayo-del-eclipse.js?v=266';
+        panel.async = true;
+        document.body.appendChild(panel);
         return;
+      }
+    } catch (e) { /* nada */ }
+
+    /* ⚡ QUIEN LLEGA CON EL MINUTO EMPEZADO ENTRA AHORA (2026-09-10)
+
+       El sondeo de abajo duerme hasta 60 s por vez. Alguien que abría la
+       invitación en el segundo 5 del eclipse podía tardar 55 s en
+       engancharlo — o perdérselo del todo, porque para cuando despertaba
+       ya había terminado.
+
+       El mecanismo para entrar a mitad ya existía (empezar(-faltan) en
+       28-eclipse.js): lo único que faltaba era preguntarlo al abrir la
+       página en vez de esperar al próximo sondeo. */
+    try {
+      var yaVaEmpezado = faltaPara();
+      if (yaVaEmpezado < 0 && yaVaEmpezado > -DURA) {
+        yaSePidio = true;
+        if (sePuede()) pedirElArchivo(yaVaEmpezado);
       }
     } catch (e) { /* nada */ }
 

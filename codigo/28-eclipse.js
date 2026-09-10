@@ -93,7 +93,33 @@
          : raiz.classList.contains('calidad-media') ? 'media' : 'alta';
   }
 
-  var esAlta = String(calidad()).toLowerCase().indexOf('alta') !== -1;
+  /* ⚡ ESTA LÍNEA HIZO QUE NADIE VIERA NUNCA EL ECLIPSE COMPLETO (2026-09-10)
+   *
+   * Decía:
+   *     var esAlta = String(calidad()).toLowerCase().indexOf('alta') !== -1;
+   *
+   * `nivelDeCalidad()` (02-utilidades.js) NO devuelve un texto: devuelve un
+   * NÚMERO —CALIDAD_GRAFICA.ALTA vale 0—. Y `String(0)` es "0", que no
+   * contiene "alta". O sea que `esAlta` daba `false` en todos los equipos,
+   * siempre, desde el primer día.
+   *
+   * El respaldo de abajo —el que sí devuelve el texto 'alta'— no salvaba
+   * nada, porque solo corre si `nivelDeCalidad` no existe, y existe siempre.
+   *
+   * QUÉ SE PERDÍA: 130 rosas en vez de 220, 40 pétalos en vez de 90, y
+   * tomarLasFloresReales() salía en su primera línea, así que las flores del
+   * marco no se movían nunca. El homenaje corrió siempre en su versión
+   * reducida, en el equipo más potente igual que en el más humilde.
+   *
+   * ⚠️ SE COMPARA CONTRA EL VOCABULARIO DE QUIEN CONTESTA, no contra un
+   * texto inventado acá. Si `CALIDAD_GRAFICA` está, se usa su constante; si
+   * no está —porque 02-utilidades.js no cargó—, el respaldo de calidad()
+   * devuelve texto y se compara como texto. Cada rama habla el idioma de su
+   * fuente, que es lo que faltaba.
+   */
+  var esAlta = (typeof CALIDAD_GRAFICA === 'object' && CALIDAD_GRAFICA)
+    ? calidad() === CALIDAD_GRAFICA.ALTA
+    : String(calidad()).toLowerCase().indexOf('alta') !== -1;
 
   /* Cuántas rosas tiene la marea. El detalle va al máximo siempre —una
      rosa rasterizada cuesta lo mismo de estampar que una silueta— así
@@ -188,6 +214,58 @@
   var copiaDelNombre = null;
   var visibilidadOriginal = '';
 
+  /* Las propiedades que hacen que el nombre se vea como se ve. Es la lista
+     de respaldo para cuando `cssText` viene vacío — ver la nota de abajo.
+     Son pocas a propósito: se copia lo que define la LETRA, no el layout,
+     porque la copia se posiciona sola dentro de la jaula. */
+  var ESTILOS_DEL_NOMBRE = [
+    'font-family', 'font-size', 'font-weight', 'font-style', 'line-height',
+    'letter-spacing', 'word-spacing', 'color', 'text-transform', 'text-shadow',
+    'text-align', 'white-space', '-webkit-text-stroke', 'background-image',
+    'background-clip', '-webkit-background-clip', '-webkit-text-fill-color',
+    'opacity', 'filter', 'transform'
+  ];
+
+  /**
+   * Le pasa a la copia los estilos ya resueltos del original.
+   *
+   * ⚠️ `cssText` SOBRE UN ESTILO COMPUTADO VIENE VACÍO EN FIREFOX
+   * (2026-09-10). Es no-estándar para `getComputedStyle`: Chrome y Safari
+   * devuelven la declaración entera, Firefox devuelve "". Y no lanza
+   * excepción, así que el `try` que había acá no saltaba: simplemente
+   * asignaba una cadena vacía y seguía como si todo hubiera ido bien.
+   *
+   * Qué se veía: durante los 60 segundos, en Firefox, el nombre de Ania
+   * salía con otro cuerpo de letra. `font-size: calc(var(--ancho-broche) *
+   * 0.115)` está definido sobre `.portada__broche`, y la copia vive fuera
+   * de la portada: la variable no resuelve y el navegador cae al tamaño
+   * por defecto. Justo el elemento que el eclipse existe para honrar.
+   *
+   * Ahora se intenta `cssText` —que es una línea y trae todo— y si viene
+   * vacío se copian a mano las que importan.
+   *
+   * @param {Element} origen
+   * @param {Element} destino
+   * @returns {void}
+   */
+  function copiarLosEstilosResueltos(origen, destino) {
+    var resuelto;
+    try { resuelto = window.getComputedStyle(origen); } catch (e) { return; }
+    if (!resuelto) return;
+
+    try {
+      if (resuelto.cssText) { destino.style.cssText = resuelto.cssText; return; }
+    } catch (e) { /* sigue por la lista */ }
+
+    for (var i = 0; i < ESTILOS_DEL_NOMBRE.length; i++) {
+      var propiedad = ESTILOS_DEL_NOMBRE[i];
+      try {
+        var valor = resuelto.getPropertyValue(propiedad);
+        if (valor) destino.style.setProperty(propiedad, valor);
+      } catch (e) { /* una propiedad que este navegador no conoce */ }
+    }
+  }
+
   function coronarElNombre() {
     visibilidadOriginal = nombre.style.visibility;
 
@@ -203,9 +281,7 @@
        de letra sale de `--ancho-broche`, una variable que vive en un
        ancestro: fuera de la portada no resolvería y el nombre saldría
        con otro cuerpo. Se hace UNA vez, no por cuadro. */
-    try {
-      copiaDelNombre.style.cssText = window.getComputedStyle(nombre).cssText;
-    } catch (e) { /* navegador que no lo da: se queda con sus clases */ }
+    copiarLosEstilosResueltos(nombre, copiaDelNombre);
 
     copiaDelNombre.style.margin = '0';
     jaula.appendChild(copiaDelNombre);
@@ -397,19 +473,47 @@
 
   var floresReales = [];
 
+  /* ⚠️ SE ESCRIBE `style.transform`, NO EL ATRIBUTO (2026-09-10)
+   *
+   * Este bloque escribía `setAttribute('transform', ...)`. En SVG, la
+   * propiedad CSS `transform` LE GANA al atributo de presentación del mismo
+   * nombre — y 07-marco-y-enredaderas.js anima estas mismas flores con
+   * `flor.movil.style.transform` cuando el mouse pasa cerca (ver su nota:
+   * se cambió de atributo a estilo justamente por rendimiento).
+   *
+   * O sea: cualquier flor que el mouse hubiera rozado alguna vez en la
+   * sesión conservaba su `style.transform` inline y habría ignorado al
+   * eclipse por completo. Unas flores se movían y otras no, según por dónde
+   * hubiera pasado el dedo media hora antes.
+   *
+   * Nunca se vio porque `esAlta` era falso y este bloque no llegaba a
+   * correr (ver la nota grande de esAlta, arriba). Al arreglar aquello,
+   * esto salía a la luz. Se escribe por el mismo canal que 07 para que el
+   * último que escribe mande, que es lo que uno espera.
+   */
   function tomarLasFloresReales() {
     if (!esAlta) return;
     var todas = document.querySelectorAll('.flor-de-enredadera__movil');
     for (var i = 0; i < todas.length; i++) {
-      floresReales.push({ nodo: todas[i], antes: todas[i].getAttribute('transform') || '' });
+      floresReales.push({
+        nodo: todas[i],
+        /* Lo que tenía puesto 07 en el momento de entrar. Se guarda para
+           devolvérselo tal cual: si el eclipse lo borrara, la flor quedaría
+           quieta hasta que el mouse volviera a pasarle por al lado. */
+        antes: todas[i].style.transform || '',
+        /* El atributo también se respeta: es el que trae el SVG de origen
+           con la posición de la flor en el marco. Nunca se toca, solo se
+           lee para no pisarlo desde el estilo. */
+        atributo: todas[i].getAttribute('transform') || ''
+      });
     }
   }
 
   function devolverLasFloresReales() {
     for (var i = 0; i < floresReales.length; i++) {
       var f = floresReales[i];
-      if (f.antes) f.nodo.setAttribute('transform', f.antes);
-      else         f.nodo.removeAttribute('transform');
+      if (f.antes) f.nodo.style.transform = f.antes;
+      else         f.nodo.style.removeProperty('transform');
     }
     floresReales.length = 0;
   }
@@ -430,6 +534,28 @@
 
   function engancharElSonido() {
     if (!audio || audio.paused || audio.muted) return;
+
+    /* ⚡ EL GRAFO SE CONSTRUYE UNA VEZ Y SE GUARDA (2026-09-10)
+     *
+     * createMediaElementSource() lanza InvalidStateError si se lo llama dos
+     * veces sobre el mismo <audio>. Antes, la excepción caía en el catch de
+     * abajo y dejaba `sonido = null`: la SEGUNDA corrida del eclipse pasaba
+     * muda, sin un error visible y sin nada que lo explicara.
+     *
+     * No era un caso raro reservado al panel de ensayo: una pestaña dejada
+     * abierta dispara el eclipse otra vez al día siguiente, y ese segundo
+     * eclipse ya corría en silencio.
+     *
+     * El grafo vive en `window` y no en este archivo a propósito: el archivo
+     * se inyecta de nuevo en cada disparo —es un IIFE nuevo cada vez— así
+     * que una variable de módulo no sobreviviría de una corrida a la otra.
+     * El <audio> sí sobrevive, y el grafo está atado a él.
+     */
+    if (window.__ECLIPSE_GRAFO_DE_SONIDO) {
+      sonido = window.__ECLIPSE_GRAFO_DE_SONIDO;
+      despertarElContexto();
+      return;
+    }
 
     var Contexto = window.AudioContext || window.webkitAudioContext;
     if (!Contexto) return;
@@ -452,9 +578,32 @@
       ganancia.connect(ctx.destination);
 
       sonido = { ctx: ctx, filtro: filtro, forma: forma, ganancia: ganancia };
+      window.__ECLIPSE_GRAFO_DE_SONIDO = sonido;
+      despertarElContexto();
     } catch (e) {
       sonido = null;      // el eclipse sigue, en silencio de novedades
     }
+  }
+
+  /**
+   * Despierta el AudioContext si nació dormido.
+   *
+   * ⚠️ POR QUÉ HACE FALTA. En Safari y en iOS un AudioContext puede nacer
+   * `suspended` cuando no lo creó un gesto de la persona — y el eclipse lo
+   * crea solo, a las 6:30 de la mañana, sin que nadie toque nada. Con el
+   * contexto dormido, conectar el grafo no ahoga la música: la CALLA
+   * ENTERA, porque el audio ya pasa obligatoriamente por un grafo que no
+   * corre. Sería el peor final posible para un homenaje.
+   *
+   * `resume()` devuelve una promesa que puede rechazarse sin que eso sea
+   * grave; se atrapa y se sigue.
+   */
+  function despertarElContexto() {
+    if (!sonido || !sonido.ctx || sonido.ctx.state !== 'suspended') return;
+    try {
+      var promesa = sonido.ctx.resume();
+      if (promesa && promesa.catch) promesa.catch(function () { /* nada */ });
+    } catch (e) { /* nada */ }
   }
 
   /** La curva de saturación. `cuanto` va de 0 (limpia) a 1 (rota). */
@@ -470,11 +619,30 @@
   function ajustarElSonido(t) {
     if (!sonido) return;
 
-    /* Se enturbia acompañando al eclipse y se limpia de golpe en la
-       sumisión: el scratch de disco rayado es justamente que esto vuelva
-       a la normalidad de un tirón y no con un fundido. */
-    var hundimiento = t < FRENESI ? Math.min(1, t / TOTALIDAD)
-                    : t < DURACION - 800 ? 1 : 0;
+    /* ⚡ EL SONIDO SALÍA DEL POZO CINCO SEGUNDOS TARDE (2026-09-10)
+     *
+     * Decía:
+     *     var hundimiento = t < FRENESI ? Math.min(1, t / TOTALIDAD)
+     *                     : t < DURACION - 800 ? 1 : 0;
+     *
+     * O sea: la música se mantenía ahogada hasta el segundo 59,2. Pero las
+     * dos capas de color ya están en CERO desde el 54,6 (ver coloresEn) y
+     * las rosas se desvanecen entre el 54,0 y el 54,9. El resultado eran
+     * cinco segundos largos de pantalla completamente limpia con la música
+     * todavía sonando como debajo del agua — que no se lee como un efecto,
+     * se lee como que algo quedó colgado.
+     *
+     * Ahora sale del pozo CON el color: empieza a soltarse en FRENESI y
+     * llega a limpio alrededor del 54,6, siguiendo la misma forma que usan
+     * las capas. El scratch de disco rayado sigue estando —son 600 ms, no
+     * un fundido largo— pero cae donde la imagen lo acompaña.
+     *
+     * Los últimos ~5 s quedan de vuelta a la normalidad completa: la marea
+     * retirándose, la rosa cayendo, y la canción como estaba.
+     */
+    var hundimiento = t < FRENESI
+      ? Math.min(1, t / TOTALIDAD)
+      : 1 - tramo(t, FRENESI, FRENESI + 600);
 
     sonido.filtro.frequency.value = 20000 - hundimiento * 19100;
     sonido.ganancia.gain.value    = 1 - hundimiento * 0.35;
@@ -719,9 +887,13 @@
                   (t >= SHOCK && !enSumision ? 6 : 2) * estira;
       var crece = 1 + estira * 0.22;
 
-      f.nodo.setAttribute('transform',
+      /* Se apila sobre lo que 07 tuviera puesto, no se lo reemplaza: si esa
+         flor estaba apartándose del mouse, sigue apartándose mientras
+         tiembla. Y en unidades de CSS —`deg`—, que es lo que espera la
+         propiedad; el atributo SVG usa números pelados y no son lo mismo. */
+      f.nodo.style.transform =
         (f.antes ? f.antes + ' ' : '') +
-        'rotate(' + vibra.toFixed(2) + ') scale(' + crece.toFixed(3) + ')');
+        'rotate(' + vibra.toFixed(2) + 'deg) scale(' + crece.toFixed(3) + ')';
     }
   }
 
@@ -730,6 +902,19 @@
   var arranque = 0;
   var vivo = false;
   var pedidoDeCuadro = 0;
+  var relojDeSeguridad = 0;
+  var escuchaDeMedida = null;
+
+  /* Multiplicador del paso del tiempo. Siempre 1 en el eclipse de verdad;
+     el panel de ensayo (29-ensayo-del-eclipse.js) lo mueve para mirar una
+     fase en cámara lenta o para saltearse la parte lenta.
+
+     ⚠️ MULTIPLICA EL TIEMPO, NO LAS CONSTANTES. Las fases siguen cayendo
+     en el mismo milisegundo de la secuencia (TOTALIDAD son 42 000 ms
+     siempre); lo que cambia es a qué velocidad se avanza hacia ellos. Si
+     en cambio se dividieran las constantes, cada fase duraría distinto y
+     lo que se estaría mirando ya no sería la secuencia. */
+  var velocidad = 1;
 
   /* Gobernador en vivo: si el equipo se ahoga, se bajan rosas. NO se
      vuelven a subir a mitad del ritual — ir prendiendo y apagando se ve
@@ -750,7 +935,9 @@
   function cuadro(ahora) {
     if (!vivo) return;
 
-    var t = ahora - arranque;
+    /* `velocidad` es 1 en el eclipse de verdad, así que esto es la resta de
+       siempre. El panel de ensayo la mueve para mirar en cámara lenta. */
+    var t = (ahora - arranque) * velocidad;
     if (t >= DURACION) { terminar(); return; }
 
     /* ⚠️ SI ALGO REVIENTA, SE TERMINA EL ECLIPSE — NO LA INVITACIÓN.
@@ -789,9 +976,41 @@
 
   /* ─── 16. EMPEZAR Y TERMINAR ────────────────────────────────────── */
 
+  /**
+   * Deja el estado como recién cargado, para poder correr de nuevo.
+   *
+   * ⚡ HACE FALTA DESDE QUE EL ECLIPSE SE PUEDE REPETIR (2026-09-10)
+   *
+   * `sembrarLaMarea()` y `sembrarLosPetalos()` ya vaciaban sus listas, pero
+   * había estado suelto que sobrevivía de una corrida a la otra:
+   *
+   *   · `muerte.suelta` quedaba en `true`. En la segunda corrida la rosa
+   *     del sacrificio arrancaba YA SOLTADA, en el segundo cero, en vez de
+   *     esperar al 36,5. Se veía enseguida y no había forma de explicarlo.
+   *   · `promedio` guardaba el tiempo de cuadro de la corrida anterior. Si
+   *     esa había ido pesada, la nueva arrancaba con el gobernador ya
+   *     convencido de que había que recortar rosas, y recortaba antes de
+   *     dibujar un solo cuadro.
+   *
+   * En el eclipse de verdad esto corre una sola vez y no cambia nada. Es
+   * para el panel de ensayo, que es donde se ve la secuencia muchas veces
+   * seguidas — y donde un arrastre así se confundiría con un defecto del
+   * diseño en vez de con lo que es.
+   *
+   * @returns {void}
+   */
+  function reiniciarElEstado() {
+    muerte.x = 0; muerte.y = 0; muerte.vx = 0; muerte.vy = 0;
+    muerte.giro = 0; muerte.giroVel = 0; muerte.suelta = false;
+    laQueMuere = null;
+    ultimoCuadro = 0;
+    promedio = 16.7;
+  }
+
   function empezar(desfase) {
     if (vivo) return;
     vivo = true;
+    reiniciarElEstado();
 
     coronarElNombre();
     document.body.appendChild(capaFria);
@@ -806,11 +1025,37 @@
     apagarLosPetalosDeSiempre();
     engancharElSonido();
 
-    window.addEventListener('resize', medirElLienzo);
+    /* ⚡ EN EL CELULAR, EL LIENZO SE BORRABA SOLO A MITAD DEL RITUAL
+       (2026-09-10)
+
+       Esto estaba enganchado a `resize` en crudo. En un teléfono, la barra
+       del navegador aparece y desaparece al desplazarse, y cada vez que lo
+       hace dispara un `resize` — aunque el ancho no haya cambiado ni un
+       pixel. `medirElLienzo` reasigna `canvas.width`, y asignar el ancho de
+       un canvas LO BORRA ENTERO: la marea desaparecía y volvía a dibujarse
+       al cuadro siguiente, con un parpadeo, cada vez que el dedo se movía.
+
+       Los otros dos lienzos del proyecto ya se protegen de ese resize falso
+       con alCambiarElAncho() (23-lienzo-de-luz.js, 24-lienzo-de-petalos.js).
+       Se reusa esa misma función en vez de escribir otra: es exactamente el
+       mismo problema.
+
+       ⚠️ Se guarda la referencia envuelta porque removeEventListener()
+       necesita LA MISMA función para poder quitarla. Pasarle
+       `alCambiarElAncho(medirElLienzo)` de nuevo al terminar crearía una
+       envoltura distinta y el escucha quedaría puesto para siempre. */
+    escuchaDeMedida = (typeof alCambiarElAncho === 'function')
+      ? alCambiarElAncho(medirElLienzo)
+      : medirElLienzo;
+    window.addEventListener('resize', escuchaDeMedida);
 
     /* Si alguien llegó con el minuto empezado, se entra por donde va: el
-       eclipse no espera a nadie ni se reinicia para nadie. */
-    arranque = performance.now() - (desfase > 0 ? desfase : 0);
+       eclipse no espera a nadie ni se reinicia para nadie.
+
+       El `/ velocidad` es para que el desfase se lea en tiempo de la
+       SECUENCIA y no en tiempo de reloj: pedir "arrancá en el segundo 42"
+       a media velocidad tiene que dejar la secuencia en el 42, no en el 21. */
+    arranque = performance.now() - (desfase > 0 ? desfase : 0) / velocidad;
     pedidoDeCuadro = requestAnimationFrame(cuadro);
 
     /* ⚠️ EL SEGURO DE ÚLTIMA INSTANCIA.
@@ -824,8 +1069,21 @@
      *
      * Este reloj no depende de los cuadros: a los 61 s se acabó, se haya
      * dibujado o no. Es la diferencia entre un homenaje y una invitación
-     * arruinada. */
-    setTimeout(function () { if (vivo) terminar(); }, DURACION + 1000);
+     * arruinada.
+     *
+     * ⚠️ SE GUARDA Y SE CANCELA AL TERMINAR (2026-09-10). Antes se lanzaba
+     * y se olvidaba, lo cual era inofensivo cuando el eclipse corría una
+     * sola vez. Con el panel de ensayo se corre muchas: cada corrida
+     * dejaba su reloj andando, y el de la corrida vieja podía cortar la
+     * NUEVA en cualquier momento. El `if (vivo)` no alcanzaba, porque en
+     * la corrida siguiente `vivo` vuelve a ser verdadero.
+     *
+     * El plazo se divide por la velocidad: a ×0.25 el minuto dura cuatro
+     * minutos de reloj, y un seguro de 61 s cortaría la secuencia por la
+     * mitad. Se le suma el margen de siempre sobre el tiempo real. */
+    relojDeSeguridad = setTimeout(function () {
+      if (vivo) terminar();
+    }, DURACION / velocidad + 1000);
   }
 
   /* ⚠️ EL FINAL ES UN FRENAZO Y NO SE PUEDE SUAVIZAR.
@@ -837,7 +1095,13 @@
     vivo = false;
     if (pedidoDeCuadro) cancelAnimationFrame(pedidoDeCuadro);
 
-    window.removeEventListener('resize', medirElLienzo);
+    /* El seguro de esta corrida ya no tiene a quién cuidar. Si se dejara
+       andando, cortaría la corrida SIGUIENTE del panel de ensayo. */
+    if (relojDeSeguridad) { clearTimeout(relojDeSeguridad); relojDeSeguridad = 0; }
+
+    // La MISMA función que se enganchó, no una envoltura nueva. Ver arriba.
+    if (escuchaDeMedida) window.removeEventListener('resize', escuchaDeMedida);
+    escuchaDeMedida = null;
 
     devolverLasFloresReales();
     devolverLosPetalosDeSiempre();
@@ -856,8 +1120,102 @@
   var faltan = typeof window.ECLIPSE_EMPIEZA_EN === 'number'
              ? window.ECLIPSE_EMPIEZA_EN : 0;
 
+  /* ⚠️ EN MODO ENSAYO EL ARCHIVO SE CARGA PERO NO ARRANCA SOLO.
+     El panel (29-ensayo-del-eclipse.js) es quien decide cuándo correr y
+     desde qué segundo. Sin esta bandera, abrir el ensayo dispararía la
+     secuencia entera en la cara antes de que el panel existiera siquiera,
+     y habría que esperar el minuto completo para poder tocar un botón.
+     La rosa igual se rasteriza ahora: es el trabajo pesado, y conviene
+     tenerlo hecho antes del primer «Reproducir». */
+  var soloEnsayo = window.ECLIPSE_SOLO_ENSAYO === true;
+
   rasterizarLaRosa(function () {
+    if (soloEnsayo) return;
     if (faltan > 0) setTimeout(function () { empezar(0); }, faltan);
     else            empezar(-faltan);      // ya había empezado: se entra en curso
   });
+
+  /* ─── 18. LA PUERTA DEL ENSAYO · SOLO EN PBE ────────────────────────
+
+     El eclipse ocurre una vez al día, a las 6:30 de la mañana. Eso lo
+     vuelve casi imposible de mirar mientras se lo construye: hay que
+     estar despierto, en la pestaña correcta, sin haber tocado un campo de
+     texto, y acertarle al minuto. En la práctica el homenaje se subió a
+     producción sin que nadie lo hubiera visto entero ni una vez.
+
+     Esta puerta la abre 29-ensayo-del-eclipse.js, que pinta un panel con
+     los botones para correrlo cuantas veces haga falta.
+
+     ⚠️ NO EXISTE EN PRODUCCIÓN, Y ESO NO ES UNA PRECAUCIÓN DE ESTILO.
+     Un `window.ECLIPSE.correr()` disponible en aniaxv.com es un botón
+     para taparle la invitación de rojo a un invitado que está llenando
+     el formulario. La misma prueba que ya encierra `?eclipse=ensayo` en
+     PBE (comprobación 15 de prueba-eclipse.mjs) comprueba también esto.
+
+     Se pregunta por el HOSTNAME, no por un parámetro de URL: un
+     parámetro lo escribe cualquiera. */
+  var esPbe = /(^|\.)pbe\./.test(location.hostname) ||
+              location.pathname.indexOf('/pbe/') === 0;
+
+  if (esPbe) {
+    window.ECLIPSE = {
+      /**
+       * Corre la secuencia.
+       *
+       * @param {number} [desde] - Milisegundo de la secuencia por el que
+       *   entrar. 0 es el principio.
+       * @param {number} [aQueVelocidad] - 1 es tiempo real; 0.25 es cuatro
+       *   veces más lento; 4 es cuatro veces más rápido.
+       * @returns {void}
+       */
+      correr: function (desde, aQueVelocidad) {
+        if (vivo) terminar();          // cortar la anterior antes de empezar
+        velocidad = Number(aQueVelocidad) > 0 ? Number(aQueVelocidad) : 1;
+        empezar(Number(desde) > 0 ? Number(desde) : 0);
+      },
+
+      cortar: function () { if (vivo) terminar(); },
+
+      enCurso: function () { return vivo; },
+
+      /** El milisegundo de la secuencia que se está dibujando, o -1. */
+      dondeVa: function () {
+        return vivo ? (performance.now() - arranque) * velocidad : -1;
+      },
+
+      /* Las fases con su milisegundo real, sacadas de las constantes de
+         este archivo. El panel las lee de acá y no las copia: si mañana
+         alguien mueve TOTALIDAD, el botón se mueve con ella.
+
+         ⚠️ LAS CONSTANTES ESTÁN NOMBRADAS POR DÓNDE TERMINA CADA COSA, NO
+         POR DÓNDE EMPIEZA, y es una trampa fácil de pisar. Las banderas
+         de dibujar() son la verdad:
+
+             enShock    = t >= TOTALIDAD && t < SHOCK     → 42 s a 44 s
+             enFrenesi  = t >= SHOCK     && t < FRENESI   → 44 s a 54 s
+             enSumision = t >= FRENESI                    → 54 s en adelante
+
+         O sea que la constante `SHOCK` marca el FIN del shock y el
+         principio del frenesí. La primera versión de esta lista usaba los
+         nombres tal cual —Totalidad en TOTALIDAD, Shock en SHOCK— y el
+         reloj del panel decía «Shock» en el segundo 49, con el frenesí en
+         plena marcha. Se notó a los dos minutos de poder mirarlo, que es
+         exactamente para lo que sirve poder mirarlo. */
+      fases: [
+        { nombre: 'Penumbra',      en: 0 },
+        { nombre: 'Despiertan',    en: PENUMBRA },
+        { nombre: 'La secta',      en: UMBRA },
+        { nombre: 'El esfuerzo',   en: PROFUNDA },
+        { nombre: 'Muere la rosa', en: MUERE_EN },
+        { nombre: 'Shock',         en: TOTALIDAD },
+        { nombre: 'Frenesí',       en: SHOCK },
+        { nombre: 'Sumisión',      en: FRENESI }
+      ],
+
+      duracion: DURACION,
+
+      /** Para que el panel pueda decir si la calidad alta está activa. */
+      esAlta: esAlta
+    };
+  }
 })();
