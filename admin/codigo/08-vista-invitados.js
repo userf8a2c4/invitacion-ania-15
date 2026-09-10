@@ -785,8 +785,15 @@ function invitadoPasaElFiltro(fila) {
   if (!BUSQUEDA_INVITADOS.trim()) return true;
 
   const aguja = paraBuscar(BUSQUEDA_INVITADOS);
+  /* ⚡ EL APODO TAMBIÉN SE BUSCA (2026-09-09)
+     Es la razón de ser del campo: quien organiza piensa a la gente por
+     su apodo. Si el nombre de la invitación pasa a ser el formal
+     —"Familia Zelaya Robles"— y el apodo no fuera buscable, escribir
+     "Pam" en el buscador no encontraría a nadie y el apodo sería un
+     adorno inútil. */
   const pajar = paraBuscar(
-    [fila.nombre, fila.correo, fila.codigo, fila.notas].join(' ')
+    [fila.nombre, fila.apodo, fila.invitacion_apodo,
+     fila.correo, fila.codigo, fila.notas].join(' ')
   );
 
   return pajar.includes(aguja);
@@ -878,7 +885,20 @@ function filaDeInvitado(fila) {
             (COMO_SE_LEE_EL_ESTADO[comoEstaLaAsistencia(fila)] || {}).punto +
           '"></span>') +
       '<span class="lista__cuerpo">' +
-        '<span class="lista__titulo">' + seguro(fila.nombre || 'Sin nombre') + '</span>' +
+        /* ⚡ EL APODO, AL LADO DEL NOMBRE (2026-09-09)
+           El nombre de la lista es ahora el formal, el que se imprime.
+           Quien organiza no piensa "Familia Zelaya Robles": piensa "los
+           de enfrente". El apodo va detrás, en gris y más chico, para
+           reconocer la fila de un vistazo sin quitarle el lugar al
+           nombre de verdad. Solo aparece si hay uno cargado. */
+        '<span class="lista__titulo">' + seguro(fila.nombre || 'Sin nombre') +
+          (fila.invitacion_apodo
+            ? ' <span style="color:var(--texto-tenue);font-size:.85em;' +
+                           'font-weight:400">· ' +
+                seguro(fila.invitacion_apodo) +
+              '</span>'
+            : '') +
+        '</span>' +
         '<span class="lista__pie">' + seguro(pie.join(' · ')) + '</span>' +
       '</span>' +
       puntoEnvio +
@@ -2014,17 +2034,21 @@ function formularioDeAcompanante(confirmacionId, cupan, alGuardar, existente, su
       ? '<button type="button" class="boton boton--ancho" id="acomp-de-contactos" ' +
                'style="margin-bottom:var(--esp-2)">Traer de mis contactos</button>'
       : '') +
-    campoTexto({ id: 'acomp-nombre', rotulo: 'Nombre', valor: d.nombre || '' }) +
-    /* ⚡ EL APODO SE QUEDA EN CASA (2026-09-09). El de arriba es el
-       interno: el que uno usa para pensar a la gente y para buscarla acá
-       —"Pam", "el compadre"—. Este es el que se imprime en la invitación,
-       que es un documento formal y que el invitado enseña. Vacío, se usa
-       el de arriba, así que dejarlo en blanco es exactamente lo de antes. */
+    /* Este nombre lo ve el invitado: es el que aparece en la lista de
+       lugares de su invitación, al lado de su casilla de menú. */
+    campoTexto({ id: 'acomp-nombre', rotulo: 'Nombre', valor: d.nombre || '',
+                 ayuda: 'Así aparece en la invitación, en su lugar de la mesa.' }) +
+
+    /* ⚡ EL APODO NO SALE DE ACÁ, NUNCA (2026-09-09)
+       Referencia interna, para reconocer a alguien en la app sin
+       acordarse de su nombre completo. No viaja a la invitación:
+       invitacion.php no nombra esta columna, así que no puede filtrarse
+       ni por un descuido. */
     campoTexto({
-      id: 'acomp-nombre-publico',
-      rotulo: 'Nombre para la invitación (opcional)',
-      valor: d.nombre_publico || '',
-      ayuda: 'Cómo se imprime en su invitación. Vacío, se usa el de arriba.',
+      id: 'acomp-apodo',
+      rotulo: 'Apodo (solo para la app)',
+      valor: d.apodo || '',
+      ayuda: 'Para reconocerlo acá adentro. Nunca sale en la invitación.',
     }) +
     campoLista({
       id: 'acomp-tipo', rotulo: 'Tipo', valor: d.tipo || 'adulto',
@@ -2073,7 +2097,7 @@ function formularioDeAcompanante(confirmacionId, cupan, alGuardar, existente, su
       /* Va SIEMPRE, también vacío: así borrarlo a mano vuelve a dejar
          mandando el nombre interno. La API distingue "no vino" de "vino
          vacío" justamente para esto. */
-      nombre_publico: valorDe('acomp-nombre-publico', cuerpo),
+      apodo: valorDe('acomp-apodo', cuerpo),
       tipo:     valorDe('acomp-tipo', cuerpo),
       telefono: valorDe('acomp-telefono', cuerpo),
       correo:   valorDe('acomp-correo', cuerpo),

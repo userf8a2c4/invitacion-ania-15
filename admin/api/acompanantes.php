@@ -149,9 +149,9 @@ case 'agregar':
         'alergias'        => campoTexto($datos, 'alergias', 200),
         'notas'           => campoTexto($datos, 'notas', 300),
     ];
-    // El nombre de gala, si la columna ya está (la agrega el instalador).
-    if (in_array('nombre_publico', columnasDe('acompanantes'), true)) {
-        $fila['nombre_publico'] = campoTexto($datos, 'nombre_publico', 150);
+    // El apodo interno, si la columna ya está (la agrega el instalador).
+    if (in_array('apodo', columnasDe('acompanantes'), true)) {
+        $fila['apodo'] = campoTexto($datos, 'apodo', 150);
     }
 
     $id = insertar('acompanantes', $fila);
@@ -175,15 +175,15 @@ case 'editar':
     if (!$antes) responderMal('Ese acompañante no existe.', 404);
 
     $cambios  = [];
-    $largos   = ['nombre' => 150, 'nombre_publico' => 150];
+    $largos   = ['nombre' => 150, 'apodo' => 150];
     $editables = ['nombre', 'telefono', 'correo', 'menu', 'alergias', 'notas'];
 
-    /* El nombre de gala, solo si la columna ya está: la agrega el
+    /* El apodo, solo si la columna ya está: la agrega el
        instalador del panel, y sin esta guarda actualizar() armaría un
        UPDATE nombrando una columna que no existe — con lo cual el editor
        de personas dejaría de guardar NADA, ni el nombre ni el menú. */
-    if (in_array('nombre_publico', columnasDe('acompanantes'), true)) {
-        $editables[] = 'nombre_publico';
+    if (in_array('apodo', columnasDe('acompanantes'), true)) {
+        $editables[] = 'apodo';
     }
 
     foreach ($editables as $campo) {
