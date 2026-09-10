@@ -47,6 +47,19 @@
    portapapeles no está disponible. Lo cuida prueba-puerta.mjs. */
 .boton,
 .boton-icono,
+/* ⚡ `.boton` ENTRÓ A ESTA LISTA (2026-09-09)
+   El FAB ya estaba acá, pero el problema aparecía DESPUÉS de soltarlo:
+   el toque sostenido abre la hoja de herramientas debajo del dedo, y la
+   selección de texto que el navegador había empezado terminaba
+   agarrando el rótulo de una de las tres opciones — el menú quedaba con
+   un renglón resaltado en azul, como si se fuera a copiar. El rótulo de
+   un botón no es texto que alguien quiera copiar; no tiene por qué ser
+   seleccionable en ningún caso.
+
+   ⚠️ Esto NO pisa a `.codigo-pase`, que pide `user-select: all` a
+   propósito para poder copiar el código con un toque largo: no es un
+   `.boton`, es un span. */
+.boton,
 .boton-flotante,
 .filtro,
 .lista__fila,
