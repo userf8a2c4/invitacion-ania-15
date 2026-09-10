@@ -1010,7 +1010,19 @@ function abrirFormularioDeInvitacion(inv) {
      se cargan y se agregan al selector después, en segundo plano. */
   const cuerpo = abrirHoja(inv ? 'Editar invitación' : 'Nueva invitación',
     campoTexto({ id: 'inv-nombre', rotulo: 'Nombre del grupo', valor: d.nombre,
-                 pista: 'Familia Zelaya, Ana y Miguel…' }) +
+                 pista: 'Familia Zelaya, Ana y Miguel…',
+                 ayuda: 'El de acá adentro: con este se busca y así aparece ' +
+                        'en las listas. Pueden ser apodos.' }) +
+
+    /* ⚡ EL APODO SE QUEDA EN CASA (2026-09-09). El de arriba es para
+       trabajar; este es el que se imprime en la invitación, que es un
+       documento formal y que el invitado enseña. Vacío, se usa el de
+       arriba — o sea que las invitaciones que ya existen no cambian una
+       coma hasta que alguien escriba acá a propósito. */
+    campoTexto({ id: 'inv-nombre-publico', rotulo: 'Nombre para la invitación (opcional)',
+                 valor: d.nombre_publico || '',
+                 pista: 'Familia Zelaya Robles',
+                 ayuda: 'Cómo se imprime en la invitación. Vacío, se usa el de arriba.' }) +
 
     campoTelefono({ id: 'inv-telefono', rotulo: 'Teléfono (para WhatsApp)', valor: d.telefono }) +
     campoTexto({ id: 'inv-correo', rotulo: 'Correo', tipo: 'email', valor: d.correo }) +
@@ -1151,6 +1163,9 @@ function abrirFormularioDeInvitacion(inv) {
 
     const carga = {
       nombre: nombre,
+      /* Va siempre, también vacío: vaciarlo a mano tiene que volver a
+         dejar mandando el nombre interno. */
+      nombre_publico: valorDe('inv-nombre-publico', cuerpo),
       telefono: valorTelefonoDe('inv-telefono', cuerpo),
       correo: valorDe('inv-correo', cuerpo),
       grupo_id: grupoId,

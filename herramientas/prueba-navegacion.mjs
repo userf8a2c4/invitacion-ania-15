@@ -279,8 +279,18 @@ comprobar('no quedó una segunda tabla de nombres del menú',
 /* ⚠️ NINGÚN GESTO OCULTO EN EL BOTÓN REDONDO.
    Las herramientas vivían detrás de sostener el dedo 480 ms, sin que
    nada lo dijera. Un gesto que no se anuncia es una función que para
-   quien usa la app no existe — y de paso dejaba el texto seleccionado
-   al soltar. Si vuelve un temporizador de presión acá, que se vea. */
+   quien usa la app no existe.
+
+   ⚡ LA REGLA CAMBIÓ DE FORMA, NO DE FONDO (2026-09-09, misma tarde)
+   Esta comprobación prohibía el toque largo a secas. Se pidió que el
+   botón volviera a tener sus dos funciones —toque corto = la primera
+   herramienta, sostenido = el menú— y prohibir el gesto habría sido
+   prohibir el pedido. Lo que hacía daño nunca fue el gesto: era que
+   NADIE PODÍA SABER QUE EXISTÍA. Así que ahora se exige lo que de
+   verdad protege: si hay un sostenido, tiene que estar escrito en el
+   botón y tiene que haber forma de llegar sin dedo.
+   (Lo que el sostenido hace, y que al soltar no quede texto
+   seleccionado, lo cuida prueba-fab-dos-gestos.mjs.) */
 /* ⚠️ `\r?\n\}` y no `\n\}`: los archivos del proyecto son CRLF, así que
    el cierre de una función al nivel superior es «\r\n}» y una expresión
    que espere «\n}» seguido de «\n» no encuentra nada — y al no encontrar
@@ -290,9 +300,17 @@ const bloqueFabPreparar = (fab.match(
   /function prepararFab\(\)[\s\S]*?\r?\n\}/
 ) || [''])[0];
 
-comprobar('el botón redondo no esconde nada detrás de un toque largo',
-  !/pointerdown|MILISEGUNDOS_TOQUE_LARGO|setTimeout/.test(bloqueFabPreparar),
-  'volvió un gesto que hay que descubrir para usar el botón');
+const hayGestoSostenido = /pointerdown|setTimeout/.test(bloqueFabPreparar);
+
+comprobar('el gesto del botón redondo está anunciado',
+  !hayGestoSostenido || (/setAttribute\('title'/.test(fab) &&
+                         /setAttribute\('aria-label'/.test(fab)),
+  'hay un sostenido que no se anuncia: para quien usa la app, no existe');
+
+comprobar('y se puede llegar a lo mismo sin dedo',
+  !hayGestoSostenido || (/contextmenu/.test(bloqueFabPreparar) &&
+                         /shiftKey/.test(bloqueFabPreparar)),
+  'un sostenido no existe para el teclado ni para un lector de pantalla');
 
 /* Y que MegaBot no se haya perdido en la mudanza: era lo que abría el
    toque simple, así que al cambiarlo podría haber quedado sin ninguna

@@ -951,7 +951,10 @@ CREATE TABLE IF NOT EXISTS acomodo_respaldo (
 CREATE TABLE IF NOT EXISTS acompanantes (
   id               INT AUTO_INCREMENT PRIMARY KEY,
   confirmacion_id  INT NOT NULL,
+  -- El interno, con apodos si hacen falta: "Pam", "el compadre".
   nombre           VARCHAR(150) NOT NULL,
+  -- El formal, el que ve el invitado. Vacío = usá el de arriba.
+  nombre_publico   VARCHAR(150) NOT NULL DEFAULT '',
   tipo             ENUM('adulto','nino') NOT NULL DEFAULT 'adulto',
   telefono         VARCHAR(40) NOT NULL DEFAULT '',
   correo           VARCHAR(190) NOT NULL DEFAULT '',
@@ -1086,7 +1089,13 @@ CREATE TABLE IF NOT EXISTS invitaciones (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   token           VARCHAR(32) NOT NULL,
   -- Cómo se le habla a este grupo: "Familia Zelaya", "Ana y Miguel".
+  -- Es el nombre INTERNO: el que se escribe pensando en la gente, el que
+  -- se busca y el que se lee en las listas del panel. Admite apodos.
   nombre          VARCHAR(150) NOT NULL,
+  -- El nombre formal, el que ve el invitado impreso en su invitación.
+  -- Vacío significa "usá el de arriba", así que una invitación vieja se
+  -- sigue viendo igual hasta que alguien escriba acá.
+  nombre_publico  VARCHAR(150) NOT NULL DEFAULT '',
   telefono        VARCHAR(40) NOT NULL DEFAULT '',
   correo          VARCHAR(190) NOT NULL DEFAULT '',
   -- Cuántos lugares se le reservan. Es el tope que el invitado puede

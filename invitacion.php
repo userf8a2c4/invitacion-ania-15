@@ -126,17 +126,57 @@ if ($token === '' || strlen($token) < 8) {
     responderMalPublico('Ese link no es válido.', 400);
 }
 
-try {
+/* ⚡ EL NOMBRE DE GALA SE RESUELVE ACÁ, NO EN EL NAVEGADOR (2026-09-09)
+ *
+ * En el panel se escribe el nombre con el que uno piensa a la gente
+ * —"Pam", "el compadre"— y ese mismo texto salía impreso en la
+ * invitación, que es un documento formal y que el invitado enseña.
+ * Ahora hay dos: `nombre` (interno, con apodos) y `nombre_publico`
+ * (formal). Vacío el segundo, manda el primero.
+ *
+ * SE ELIGE EN EL SQL, de una vez, y lo que viaja al navegador sigue
+ * llamándose `nombre` a secas. Así la invitación, el sobre, el
+ * formulario y el pase no se enteran de que existen dos nombres: no hay
+ * cuatro lugares donde equivocarse de cuál mostrar, que es exactamente
+ * el bug del " y familia" que costó la ronda del 9 de septiembre.
+ *
+ * ⚠️ Y EL APODO NO VIAJA. No es solo cuestión de qué se muestra: el
+ * nombre interno puede ser algo que uno no le diría al invitado en la
+ * cara ("los pesados del trabajo"). Si viajara en el JSON, estaría a un
+ * "ver código fuente" de distancia. Solo sale el que corresponde.
+ */
+const NOMBRE_A_MOSTRAR = "COALESCE(NULLIF(TRIM(%s.nombre_publico), ''), %s.nombre)";
+
+/* ⚠️ LA COLUMNA PUEDE NO EXISTIR TODAVÍA. Se agrega desde el instalador
+   del panel (admin/api/instalar.php), y entre que sube este archivo y
+   que alguien abre el panel puede pasar un rato. Sin esta red, ese rato
+   son 48 invitaciones contestando "No se pudo cargar tu invitación": el
+   SELECT entero falla por una columna que falta. Se intenta con el
+   nombre nuevo y, si el servidor dice que no existe, se repite la
+   consulta como era antes. Cuando la columna aparece, la segunda vuelta
+   no vuelve a usarse nunca. */
+$columnas = sprintf(NOMBRE_A_MOSTRAR, 'i', 'i') . ' AS nombre';
+$buscarLaInvitacion = function ($queNombre) use ($pdo, $token) {
     $stmt = $pdo->prepare(
-        'SELECT i.id, i.nombre, i.correo, i.pases, i.estado, i.confirmacion_id,
+        "SELECT i.id, $queNombre, i.correo, i.pases, i.estado, i.confirmacion_id,
                 c.asiste, c.adultos, c.ninos, c.resumen_menus, c.alergias,
                 c.codigo
          FROM invitaciones i
          LEFT JOIN confirmaciones c ON c.id = i.confirmacion_id
-         WHERE i.token = :t LIMIT 1'
+         WHERE i.token = :t LIMIT 1"
     );
     $stmt->execute([':t' => $token]);
-    $inv = $stmt->fetch();
+    return $stmt->fetch();
+};
+
+try {
+    try {
+        $inv = $buscarLaInvitacion($columnas);
+    } catch (PDOException $e) {
+        error_log('[Ania XV · invitacion.php] Sin nombre_publico todavía, uso el interno: '
+                  . $e->getMessage());
+        $inv = $buscarLaInvitacion('i.nombre');
+    }
 } catch (PDOException $e) {
     error_log('[Ania XV · invitacion.php] Error al buscar: ' . $e->getMessage());
     responderMalPublico('No se pudo cargar tu invitación ahora. Intenta de nuevo en un rato.', 500);
@@ -172,11 +212,29 @@ if ($inv['confirmacion_id']) {
     try {
         // alergias: cada persona lleva la suya (ver la nota grande en
         // confirmar.php, sección "PERSONAS DEL GRUPO").
-        $stmtP = $pdo->prepare(
-            'SELECT id, nombre, tipo, menu, alergias FROM acompanantes WHERE confirmacion_id = :c ORDER BY id ASC'
-        );
-        $stmtP->execute([':c' => $inv['confirmacion_id']]);
-        $personas = $stmtP->fetchAll();
+        /* Mismo criterio que arriba: el apodo se queda en el panel y sale
+           el nombre de gala, elegido en el SQL. Y la misma red por si la
+           columna todavía no está — acá el costo de no tenerla es más
+           silencioso: no rompe la invitación entera, solo deja la lista
+           de personas vacía, y el grupo ve lugares sin nombre sin que
+           nadie entienda por qué. */
+        $unaPersona = sprintf(NOMBRE_A_MOSTRAR, 'a', 'a') . ' AS nombre';
+        $leerLasPersonas = function ($queNombre) use ($pdo, $inv) {
+            $stmtP = $pdo->prepare(
+                "SELECT a.id, $queNombre, a.tipo, a.menu, a.alergias
+                 FROM acompanantes a WHERE a.confirmacion_id = :c ORDER BY a.id ASC"
+            );
+            $stmtP->execute([':c' => $inv['confirmacion_id']]);
+            return $stmtP->fetchAll();
+        };
+
+        try {
+            $personas = $leerLasPersonas($unaPersona);
+        } catch (PDOException $e) {
+            error_log('[Ania XV · invitacion.php] Personas sin nombre_publico todavía: '
+                      . $e->getMessage());
+            $personas = $leerLasPersonas('a.nombre');
+        }
     } catch (PDOException $e) {
         error_log('[Ania XV · invitacion.php] No se pudieron leer las personas: ' . $e->getMessage());
     }

@@ -419,6 +419,11 @@ function reconciliarPersonasDelGrupo($confirmacionId, $personas) {
     $idsActuales = array_map('intval', array_column($actuales, 'id'));
     $idsQueLlegan = [];
 
+    /* El nombre de gala de cada persona. La columna la agrega el
+       instalador, así que se pregunta una sola vez acá arriba y no una
+       por persona. */
+    $guardaNombrePublico = in_array('nombre_publico', columnasDe('acompanantes'), true);
+
     foreach ($personas as $persona) {
         $nombre   = trim((string) ($persona['nombre'] ?? ''));
         if ($nombre === '') continue;
@@ -427,18 +432,26 @@ function reconciliarPersonasDelGrupo($confirmacionId, $personas) {
         $correo   = trim((string) ($persona['correo'] ?? ''));
         $id       = (int) ($persona['id'] ?? 0);
 
+        $fila = [
+            'nombre' => $nombre, 'tipo' => $tipo,
+            'telefono' => $telefono, 'correo' => $correo,
+        ];
+        /* ⚠️ SOLO SI VINO EN EL PEDIDO. Un `?? ''` acá borraría el nombre
+           formal de todas las personas cada vez que guarde cualquier
+           pantalla del panel que mande la lista sin ese campo — que son
+           casi todas. Se distingue "no me lo mandaste" (no tocar) de
+           "me mandaste vacío" (borrarlo a propósito). */
+        if ($guardaNombrePublico && array_key_exists('nombre_publico', $persona)) {
+            $fila['nombre_publico'] = mb_substr(
+                trim((string) $persona['nombre_publico']), 0, 150);
+        }
+
         if ($id > 0 && in_array($id, $idsActuales, true)) {
-            actualizar('acompanantes', $id, [
-                'nombre' => $nombre, 'tipo' => $tipo,
-                'telefono' => $telefono, 'correo' => $correo,
-            ]);
+            actualizar('acompanantes', $id, $fila);
             $idsQueLlegan[] = $id;
         } else {
-            $nuevoId = insertar('acompanantes', [
-                'confirmacion_id' => $confirmacionId,
-                'nombre' => $nombre, 'tipo' => $tipo,
-                'telefono' => $telefono, 'correo' => $correo,
-            ]);
+            $nuevoId = insertar('acompanantes',
+                array_merge(['confirmacion_id' => $confirmacionId], $fila));
             $idsQueLlegan[] = $nuevoId;
         }
     }
@@ -500,12 +513,21 @@ case 'listar':
     // las tomaría por nuevas y borraría las viejas en cascada (se
     // llevaría con ellas sus reglas de mesa y su lugar ya asignado).
     $hayAcompanantes = existeTabla('acompanantes');
+
+    /* El nombre de gala viaja al panel para poder editarlo. Se pide solo
+       si la columna existe: el SELECT es explícito (no `*`), así que
+       nombrarla antes de que el instalador corra reventaría la lista
+       entera de Gente. */
+    $columnasPersona = 'id, nombre, tipo, telefono, correo, menu, alergias'
+        . ($hayAcompanantes && in_array('nombre_publico', columnasDe('acompanantes'), true)
+            ? ', nombre_publico' : '');
+
     foreach ($filas as &$fila) {
         $fila['link'] = linkDeInvitacion($fila['token']);
         $fila['personas'] = ($hayAcompanantes && $fila['confirmacion_id'])
             ? consultarTodo(
-                'SELECT id, nombre, tipo, telefono, correo, menu, alergias
-                 FROM acompanantes WHERE confirmacion_id = :c ORDER BY id ASC',
+                "SELECT $columnasPersona
+                 FROM acompanantes WHERE confirmacion_id = :c ORDER BY id ASC",
                 [':c' => $fila['confirmacion_id']])
             : [];
     }
@@ -548,6 +570,14 @@ case 'guardar':
     $grupoId  = campoEntero($datos, 'grupo_id', 0);
     $personas = is_array($datos['personas'] ?? null) ? $datos['personas'] : [];
 
+    /* El nombre de gala: el que ve el invitado impreso. Vacío significa
+       "usá el interno", y así se queda todo lo que ya existe.
+       La columna se agrega desde el instalador, así que se pregunta antes
+       de escribirla — mismo criterio que `confirmaciones.nombre` unas
+       líneas más abajo. */
+    $nombrePublico     = campoTexto($datos, 'nombre_publico', 150);
+    $guardaNombrePublico = in_array('nombre_publico', columnasDe('invitaciones'), true);
+
     if ($nombre === '') responderMal('Falta el nombre del grupo.', 400);
     if ($correo !== '' && !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         responderMal('Ese correo no parece válido.', 400);
@@ -579,13 +609,15 @@ case 'guardar':
         $existente = consultarUno('SELECT * FROM invitaciones WHERE id = :i', [':i' => $id]);
         if (!$existente) responderMal('Esa invitación no existe.', 404);
 
-        actualizar('invitaciones', $id, [
+        $cambios = [
             'nombre'   => $nombre,
             'telefono' => $telefono,
             'correo'   => $correo,
             'pases'    => $pases,
             'grupo_id' => $grupoId > 0 ? $grupoId : null,
-        ]);
+        ];
+        if ($guardaNombrePublico) $cambios['nombre_publico'] = $nombrePublico;
+        actualizar('invitaciones', $id, $cambios);
 
         if ($existente['confirmacion_id']) {
             $columnasConf = columnasDe('confirmaciones');
@@ -629,7 +661,7 @@ case 'guardar':
     $filaConfirmacion = armarFilaDeConfirmacion($nombre, $correo, $pases);
     $confirmacionId = insertar('confirmaciones', $filaConfirmacion);
 
-    $invitacionId = insertar('invitaciones', [
+    $filaInvitacion = [
         'token'           => $token,
         'nombre'          => $nombre,
         'telefono'        => $telefono,
@@ -638,7 +670,10 @@ case 'guardar':
         'grupo_id'        => $grupoId > 0 ? $grupoId : null,
         'confirmacion_id' => $confirmacionId,
         'estado'          => 'sin_enviar',
-    ]);
+    ];
+    if ($guardaNombrePublico) $filaInvitacion['nombre_publico'] = $nombrePublico;
+
+    $invitacionId = insertar('invitaciones', $filaInvitacion);
 
     if (!empty($nombresValidos)) {
         reconciliarPersonasDelGrupo($confirmacionId, $personas);

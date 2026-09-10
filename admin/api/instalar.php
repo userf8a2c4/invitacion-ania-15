@@ -162,6 +162,29 @@ $agregarColumna = function ($tabla, $columna, $definicion)
    respuestas, y sirve para notar envíos repetidos o pruebas. */
 $agregarColumna('invitaciones', 'veces_respondida', 'INT NOT NULL DEFAULT 0');
 
+/* EL NOMBRE DE CONFIANZA Y EL NOMBRE DE GALA (2026-09-09)
+ *
+ * En el panel se escribe el nombre con el que uno piensa a la gente:
+ * "Pam", "el compadre", "Tía Chuy". Ese mismo texto era el que salía
+ * impreso en la invitación, que es un documento formal y que el invitado
+ * enseña. Nadie quiere que su invitación de quince años diga "Pam".
+ *
+ * Ahora son dos. El de siempre (`nombre`) no se toca: sigue siendo el
+ * interno, el que se busca y se lee en las listas del panel. El nuevo
+ * (`nombre_publico`) es el que ve el invitado, y solo pisa al otro
+ * cuando tiene algo escrito.
+ *
+ * ⚠️ ARRANCAN VACÍOS Y ESO ESTÁ BIEN. Vacío significa "usá el interno",
+ * así que las 48 invitaciones que ya existen siguen viéndose EXACTAMENTE
+ * igual hasta que alguien escriba un nombre formal. No hay que migrar
+ * nada ni revisar nada: el día uno no cambia una sola pantalla.
+ *
+ * Van los dos —la invitación y cada persona de adentro— porque el apodo
+ * aparece en los dos lados: la ficha se llama "Pam" y el lugar que ocupa
+ * también dice "Pam". */
+$agregarColumna('invitaciones', 'nombre_publico', "VARCHAR(150) NOT NULL DEFAULT ''");
+$agregarColumna('acompanantes', 'nombre_publico', "VARCHAR(150) NOT NULL DEFAULT ''");
+
 // Fijar una asignación de mesa para que la autoasignación no la toque.
 $agregarColumna('asignacion_mesas', 'fijada', 'TINYINT(1) NOT NULL DEFAULT 0');
 
