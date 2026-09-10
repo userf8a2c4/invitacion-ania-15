@@ -85,6 +85,13 @@ const A_PROPOSITO = {
   'invitaciones.php?accion=reparar_links': 'escribe: nunca se guarda una copia',
   'llegadas.php?accion=consultar': 'se guarda desde todas_las_tarjetas',
   'llegadas.php?accion=todas_las_tarjetas': 'ES el mecanismo del precalentado',
+  /* La descarga de invitados la pide para poner el menú de cada persona
+     en el archivo (13-exportar.js). No se precalienta a propósito: no es
+     una pantalla, es una acción que alguien dispara —y cuando la
+     dispara, quiere los platos de HOY, no los de la última vez que hubo
+     señal. Si falla, la descarga sale igual con el resumen de siempre. */
+  'acompanantes.php?accion=listar_todos&con_menus=1':
+    'la arma una descarga a pedido, y quiere datos frescos',
 };
 
 /* ⚠️ LAS «DE A UNA», Y HAY QUE DECIRLAS
