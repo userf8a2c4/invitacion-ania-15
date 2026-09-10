@@ -62,19 +62,13 @@ function abrirEscaner() {
              'autocomplete="off" spellcheck="false">' +
     '</div>' +
 
-    '<div id="escaner-resultado"></div>' +
-
-    /* ⚠️ ANTES DE REPARTIR, NO DESPUÉS.
-       Una vez que las invitaciones salieron, un código que no funciona
-       deja de ser un bug y pasa a ser una persona parada en la puerta
-       con su pase en la mano. Este botón le pregunta a la puerta por
-       TODOS los códigos, uno por uno, mientras todavía se puede
-       arreglar. Va abajo y en gris: se usa antes del evento, no durante. */
-    '<button type="button" class="boton boton--ancho" id="escaner-revisar" ' +
-            'style="margin-top:var(--esp-3)">' +
-      'Revisar que todos los códigos funcionen' +
-    '</button>' +
-    '<div id="escaner-revision"></div>'
+    /* ⚡ ACÁ VIVÍA «REVISAR QUE TODOS LOS CÓDIGOS FUNCIONEN» (2026-09-09)
+       Se sacó a pedido. Esta hoja se abre en la puerta, con gente
+       esperando: lo único que tiene que haber es la cámara y el campo
+       para buscar. Una revisión de 48 códigos contra el servidor no es
+       algo que se quiera ni ver mientras entra el primer invitado.
+       revisarTodosLosCodigos() sigue más abajo, sin nadie que la llame. */
+    '<div id="escaner-resultado"></div>'
   );
 
   // Se apaga la cámara pase lo que pase: la X, el fondo, Escape, el
@@ -83,12 +77,6 @@ function abrirEscaner() {
   alSoltarLaHoja(apagarCamaraDelEscaner);
 
   const caja = buscar('#escaner-resultado', cuerpo);
-
-  const botonRevisar = buscar('#escaner-revisar', cuerpo);
-  if (botonRevisar) {
-    botonRevisar.addEventListener('click',
-      () => revisarTodosLosCodigos(botonRevisar, buscar('#escaner-revision', cuerpo)));
-  }
 
   if (tieneCamara) {
     iniciarCamaraDelEscaner(buscar('#escaner-video', cuerpo), codigo =>

@@ -6,14 +6,17 @@
    mínimo esfuerzo del panel: hasta tres herramientas que cada persona
    elige, a un toque de distancia desde cualquier pantalla.
 
-   UN TOQUE. NO HAY GESTO OCULTO.
-   El toque abre el sandwich: hasta tres herramientas fijas, un toque y
-   listo, sin escribir nada. Abajo de las tres va MegaBot, siempre, para
-   lo que no entra en un botón.
+   DOS GESTOS, Y LOS DOS ANUNCIADOS
+   · Un toque corto corre LA PRIMERA de las herramientas elegidas, sin
+     pantallas en el medio. Es lo que se hace veinte veces por noche.
+   · Mantenerlo presionado abre el sandwich: las tres elegidas y, abajo,
+     MegaBot para lo que no entra en un botón.
 
-   Hasta el 2026-09-09 era al revés —toque simple = chat de MegaBot,
-   toque largo = las herramientas— y el toque largo no se anunciaba en
-   ninguna parte de la app. Ver la nota en prepararFab().
+   El botón dice las dos cosas en su `title` y su `aria-label` (ver
+   anunciarLoQueHaceElFab), así que el sostenido no es un gesto oculto —
+   que fue justamente lo que hizo que se quitara en un intento anterior.
+   Y como un sostenido no existe para el teclado, el menú tiene dos
+   puertas más: clic derecho y Shift+Enter. Ver prepararFab().
 
    ES POR PERSONA, NO DEL EVENTO
    Lo que Carlos elige no tiene por qué ser lo que elige Lucila. Se
@@ -311,6 +314,9 @@ async function sincronizarSandwichConServidor() {
 
     localStorage.setItem(claveDelSandwich(), JSON.stringify(lista));
     SANDWICH_FAB = lista;
+    // Igual que al guardar: el rótulo nombra la primera y acaba de
+    // llegar la elección de verdad desde el servidor.
+    if (typeof anunciarLoQueHaceElFab === 'function') anunciarLoQueHaceElFab();
   } catch (error) {
     // Sin señal, o todavía no había elegido nada: se sigue con lo que
     // ya estaba aplicado.
@@ -330,39 +336,94 @@ async function guardarSandwich(claves) {
   });
   localStorage.setItem(claveDelSandwich(), JSON.stringify(claves));
   SANDWICH_FAB = claves;
+  /* El rótulo del botón nombra la PRIMERA herramienta, así que cambia
+     con la elección. Sin esto, el botón seguía prometiendo «Escanear
+     pase» después de que alguien pusiera «Buscar persona» adelante — y
+     el toque corto sí hacía lo nuevo: el cartel mentía. */
+  if (typeof anunciarLoQueHaceElFab === 'function') anunciarLoQueHaceElFab();
 }
 
 
 /* ─── 3. EL TOQUE: ABRIR EL SANDWICH ───────────────────────────────── */
 
+/* ⚡ LA HISTORIA DE ESTE BOTÓN, PARA NO DAR OTRA VUELTA (2026-09-09)
+ *
+ * En un mismo día tuvo tres formas, y las tres razones eran buenas:
+ *
+ *   1. Toque = chat de MegaBot; sostenido = las tres herramientas. Lo
+ *      configurable estaba detrás de un gesto que NADA en la app
+ *      anunciaba: se podían elegir tres herramientas en Ajustes y no
+ *      verlas nunca.
+ *   2. Se pasó todo al toque simple, que abría un menú siempre. Se ganó
+ *      descubribilidad y se perdió la razón de ser del botón: lo más
+ *      frecuente pasó a costar dos toques y una lectura, en la capa que
+ *      existe para el mínimo esfuerzo.
+ *   3. La de ahora: toque = la primera herramienta, sostenido = el menú,
+ *      Y LOS DOS ESCRITOS en el `title` y el `aria-label` del botón. El
+ *      gesto sigue existiendo, pero ya no es oculto — que era la única
+ *      objeción real contra la forma 1.
+ *
+ * EL COSTO DEL SOSTENIDO, Y CÓMO SE PAGA. Sostener el dedo sobre un
+ * botón es, para el teléfono, el gesto de SELECCIONAR TEXTO: al soltar
+ * quedaba resaltado el rótulo de una de las opciones, como si se fuera a
+ * copiar. La vuelta anterior dijo que eso quedaba resuelto con
+ * `user-select: none` en 02-componentes.css, pero `.boton` NO estaba en
+ * esa lista y el menú del FAB está hecho de `.boton`: seguía pasando.
+ * Ahora `.boton` está en la lista, y además se limpia la selección que
+ * haya quedado (ver limpiarLaSeleccionDelSostenido) porque la hoja se
+ * abre debajo del dedo a mitad del gesto.
+ *
+ * DÓNDE QUEDÓ MEGABOT. Abajo del sandwich, como fila fija: a un toque
+ * más, sin gastar ninguno de los tres lugares elegibles. Ver
+ * abrirSandwich(). La campana (37-campana.js) también lo abre directo.
+ */
+
 /**
- * Engancha el FAB. Un toque abre las herramientas elegidas. Nada más.
+ * Las herramientas elegidas que ESTA cuenta puede ver, en su orden.
  *
- * ⚡ SE RETIRÓ EL TOQUE LARGO (2026-09-09)
+ * Vive aparte porque la usan el toque corto (para saber cuál es la
+ * primera) y el sostenido (para pintarlas todas). Con la cuenta hecha en
+ * dos lugares, alcanzaba con que una filtrara `soloAdmin` y la otra no
+ * para que el toque corto ejecutara algo que el menú no mostraba.
  *
- * QUÉ PASABA
- * El botón decía `aria-label="Acción rápida"`, mostraba un rayo, y un
- * toque abría el CHAT de MegaBot. Las tres herramientas —lo que de
- * verdad es una acción rápida, y lo único que se puede configurar de
- * este botón— estaban detrás de sostener el dedo 480 ms, sin que nada
- * en toda la app lo dijera nunca.
+ * @returns {Object[]} Entradas de CATALOGO_FAB, ya filtradas.
+ */
+function herramientasElegidasDelFab() {
+  const esAdmin = USUARIO.rol === 'admin';
+  return SANDWICH_FAB
+    .map(clave => CATALOGO_FAB.find(h => h.clave === clave))
+    .filter(Boolean)
+    .filter(h => !h.soloAdmin || esAdmin);
+}
+
+/**
+ * Engancha el botón: toque corto = la primera herramienta, sostenido =
+ * el menú con las tres.
  *
- * Un gesto que no se anuncia no es una función escondida: es una
- * función que para quien usa la app no existe. Lucila puede haber
- * elegido sus tres herramientas en Ajustes y no haberlas visto jamás.
+ * ⚡ LAS DOS FUNCIONES, COMO CORRESPONDE (2026-09-09)
  *
- * Y encima el toque largo tenía un costo real que se notaba: sostener
- * el dedo sobre un botón es, para el teléfono, el gesto de SELECCIONAR
- * TEXTO. Al soltar quedaba el texto de algún botón resaltado, con la
- * lupa y el menú de «Copiar» tapando la pantalla. (Eso se arregló
- * aparte, con `user-select: none` en 02-componentes.css, porque pasaba
- * en todos los controles y no solo acá.)
+ * Este botón tuvo tres formas en un día. Primero: toque = MegaBot,
+ * sostenido = herramientas. Después se pasó todo al toque simple —el
+ * sostenido no se anunciaba en ninguna parte y nadie lo iba a
+ * descubrir—, y quedó abriendo siempre un menú de cuatro renglones. Eso
+ * le sacó al botón su razón de ser: era la capa de MÍNIMO esfuerzo, y
+ * hacer lo más frecuente pasó a costar dos toques y una lectura.
  *
- * DÓNDE QUEDÓ MEGABOT
- * Abajo del sandwich, como fila fija: sigue estando a un toque más,
- * pero no gasta ninguno de los tres lugares elegibles. Ver
- * abrirSandwich(). La campana (37-campana.js) también lo sigue
- * abriendo directo.
+ * Ahora hace las dos cosas: un toque corre la primera de las elegidas,
+ * sin pantallas en el medio; mantenerlo presionado abre el menú con
+ * todas. Lo que se hace veinte veces por noche cuesta un toque; lo que
+ * se hace de vez en cuando, uno largo.
+ *
+ * ⚠️ Y EL GESTO SE ANUNCIA, que era la objeción legítima de la vuelta
+ * anterior. El botón dice en su `title` y en su `aria-label` qué hace el
+ * toque y qué hace el sostenido, así que aparece al pasar el mouse por
+ * encima y lo lee un lector de pantalla. Ya no es un gesto oculto.
+ *
+ * ⚠️ NO SOLO CON EL DEDO. Un toque sostenido no existe para el teclado
+ * ni para un lector de pantalla, así que el menú tiene DOS puertas más:
+ * clic derecho (que en el teclado es la tecla de menú contextual) y
+ * Shift+Enter sobre el botón enfocado. Sin esas, quien no usa la pantalla
+ * táctil se quedaba sin las otras dos herramientas.
  *
  * @returns {void}
  */
@@ -370,7 +431,127 @@ function prepararFab() {
   const boton = buscar('#boton-accion');
   if (!boton) return;
 
-  boton.addEventListener('click', () => abrirSandwich());
+  const DEMORA_DEL_SOSTENIDO = 450;
+  let reloj = null;
+  let yaAbrioElMenu = false;
+
+  /* Sin herramientas elegidas no hay "primera": el toque corto abre el
+     menú, que en ese caso es la pantalla que ofrece elegirlas. */
+  function tocarCorto() {
+    const elegidas = herramientasElegidasDelFab();
+    if (!elegidas.length) { abrirSandwich(); return; }
+    elegidas[0].ejecutar();
+  }
+
+  function abrirElMenu() {
+    yaAbrioElMenu = true;
+    reloj = null;
+    /* La vibración es la única señal de que el sostenido ya contó: sin
+       ella no se sabe si hay que seguir apretando. Va antes de abrir la
+       hoja, que es lo que tarda. */
+    if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) { /* da igual */ } }
+    abrirSandwich();
+    limpiarLaSeleccionDelSostenido();
+  }
+
+  function empezarAContar() {
+    yaAbrioElMenu = false;
+    clearTimeout(reloj);
+    reloj = setTimeout(abrirElMenu, DEMORA_DEL_SOSTENIDO);
+  }
+
+  function dejarDeContar() {
+    clearTimeout(reloj);
+    reloj = null;
+  }
+
+  boton.addEventListener('pointerdown', empezarAContar);
+
+  /* Se cancela el conteo si el dedo se va, si el navegador se lleva el
+     puntero (un scroll que arranca sobre el botón) o si la pestaña se
+     esconde a mitad del gesto. Sin esto, arrastrar desde el botón para
+     scrollear abría el menú solo. */
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(cual => {
+    boton.addEventListener(cual, dejarDeContar);
+  });
+  document.addEventListener('visibilitychange', dejarDeContar);
+
+  boton.addEventListener('click', evento => {
+    /* Si el sostenido ya abrió el menú, el click que llega después es el
+       final del MISMO gesto: si se dejara pasar, ejecutaría además la
+       primera herramienta con el menú abierto encima. */
+    if (yaAbrioElMenu) {
+      yaAbrioElMenu = false;
+      evento.preventDefault();
+      return;
+    }
+    /* Shift+clic (y Shift+Enter con el botón enfocado) es la puerta del
+       menú para quien usa teclado. */
+    if (evento.shiftKey) { abrirSandwich(); return; }
+    tocarCorto();
+  });
+
+  /* Clic derecho, y la tecla de menú contextual del teclado. */
+  boton.addEventListener('contextmenu', evento => {
+    evento.preventDefault();
+    dejarDeContar();
+    abrirSandwich();
+  });
+
+  anunciarLoQueHaceElFab(boton);
+}
+
+/**
+ * Deshace la selección de texto que deja el toque sostenido.
+ *
+ * ⚡ POR QUÉ HACE FALTA, ADEMÁS DEL CSS (2026-09-09)
+ * `user-select: none` en `.boton` evita que la selección EMPIECE en un
+ * rótulo, y con eso alcanza en la mayoría de los casos. Pero el gesto
+ * arranca sobre el FAB y la hoja se abre debajo del dedo a mitad del
+ * sostenido: el navegador ya venía armando una selección y, al soltar,
+ * quedaba un renglón del menú resaltado en azul como si se fuera a
+ * copiar. Se limpia lo que haya quedado.
+ *
+ * Se hace en el cuadro siguiente porque la hoja recién se está
+ * insertando: limpiar antes de que el navegador termine de acomodarla no
+ * borra nada.
+ *
+ * @returns {void}
+ */
+function limpiarLaSeleccionDelSostenido() {
+  const borrar = () => {
+    try {
+      const seleccion = window.getSelection();
+      if (!seleccion || seleccion.isCollapsed) return;
+      if (seleccion.removeAllRanges) seleccion.removeAllRanges();
+      else if (seleccion.empty) seleccion.empty();   // navegadores viejos
+    } catch (e) { /* si el navegador no deja, no es grave */ }
+  };
+  borrar();
+  requestAnimationFrame(borrar);
+}
+
+/**
+ * Pone en el botón, por escrito, qué hace el toque y qué el sostenido.
+ *
+ * Se vuelve a llamar cada vez que cambia la elección (ver
+ * guardarElSandwich), porque el rótulo nombra la primera herramienta y
+ * esa puede cambiar.
+ *
+ * @param {Element} [boton]
+ * @returns {void}
+ */
+function anunciarLoQueHaceElFab(boton) {
+  const elBoton = boton || buscar('#boton-accion');
+  if (!elBoton) return;
+
+  const elegidas = herramientasElegidasDelFab();
+  const texto = elegidas.length
+    ? elegidas[0].nombre + ' · mantené presionado para las demás'
+    : 'Elegir herramientas para este botón';
+
+  elBoton.setAttribute('title', texto);
+  elBoton.setAttribute('aria-label', texto);
 }
 
 /**
@@ -379,12 +560,11 @@ function prepararFab() {
  * @returns {void}
  */
 function abrirSandwich() {
-  const esAdmin = USUARIO.rol === 'admin';
-
-  const elegidas = SANDWICH_FAB
-    .map(clave => CATALOGO_FAB.find(h => h.clave === clave))
-    .filter(Boolean)
-    .filter(h => !h.soloAdmin || esAdmin);
+  /* La misma cuenta que usa el toque corto para saber cuál es la
+     primera. Estaba escrita acá y se copió al toque corto; con dos
+     copias, alcanzaba con que una filtrara `soloAdmin` y la otra no para
+     que el toque ejecutara algo que el menú no muestra. */
+  const elegidas = herramientasElegidasDelFab();
 
   /* MegaBot va SIEMPRE, y va último. Antes era lo que abría el toque
      simple de este botón; al pasar el toque simple a las herramientas,

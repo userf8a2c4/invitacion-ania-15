@@ -951,7 +951,11 @@ CREATE TABLE IF NOT EXISTS acomodo_respaldo (
 CREATE TABLE IF NOT EXISTS acompanantes (
   id               INT AUTO_INCREMENT PRIMARY KEY,
   confirmacion_id  INT NOT NULL,
+  -- El público: así aparece en la invitación, en su lugar de la mesa.
   nombre           VARCHAR(150) NOT NULL,
+  -- La referencia interna de quien organiza. No sale al sitio público:
+  -- ver la nota de invitaciones.apodo, más abajo.
+  apodo            VARCHAR(150) NOT NULL DEFAULT '',
   tipo             ENUM('adulto','nino') NOT NULL DEFAULT 'adulto',
   telefono         VARCHAR(40) NOT NULL DEFAULT '',
   correo           VARCHAR(190) NOT NULL DEFAULT '',
@@ -1086,7 +1090,17 @@ CREATE TABLE IF NOT EXISTS invitaciones (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   token           VARCHAR(32) NOT NULL,
   -- Cómo se le habla a este grupo: "Familia Zelaya", "Ana y Miguel".
+  -- ES EL PÚBLICO: el único que se imprime en la invitación y el único
+  -- que sale del servidor al navegador. Va impecable.
   nombre          VARCHAR(150) NOT NULL,
+  -- La referencia interna de quien organiza: "Pam", "el compadre", "Tía
+  -- Chuy". Sirve para reconocer a alguien en el panel sin acordarse de
+  -- su nombre completo.
+  -- ⚠️ NO SALE NUNCA AL SITIO PÚBLICO. invitacion.php no nombra esta
+  -- columna en ninguna consulta, así que no puede filtrarse ni por un
+  -- descuido: la protección es que el dato no se pide, no que se filtre
+  -- bien. Vacío = no hay apodo, se usa el nombre en todo el panel.
+  apodo           VARCHAR(150) NOT NULL DEFAULT '',
   telefono        VARCHAR(40) NOT NULL DEFAULT '',
   correo          VARCHAR(190) NOT NULL DEFAULT '',
   -- Cuántos lugares se le reservan. Es el tope que el invitado puede

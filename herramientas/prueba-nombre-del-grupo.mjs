@@ -125,6 +125,45 @@ comprobar('el original se guarda para no acumular reemplazos',
 comprobar('esGrupoDeVarios() vive junto a nombreDelGrupo()',
   utilidades.includes('function esGrupoDeVarios'));
 
+/* ─── 4b. La frase que se le escapó al trato de grupo ────────────── */
+
+/* POR QUÉ (2026-09-09, la ronda siguiente). El arreglo de arriba movió
+   al HTML todos los textos de la sección… menos uno. "Hemos reservado N
+   lugares para ustedes. Pueden modificar su respuesta cuantas veces
+   gusten" se arma en el JS porque interpola el número, y se armaba
+   SIEMPRE en plural: una invitación de un solo lugar leía "1 lugar para
+   ustedes". Peor, corre DESPUÉS de ajustarTratoAlGrupo(), así que
+   pisaba cualquier intento de resolverlo desde el HTML.
+   Lo reportó el usuario con una captura de una invitación de 1 lugar. */
+
+console.log('\nLa frase de "Hemos reservado"\n');
+
+/* ⚠️ SIN LOS COMENTARIOS. El comentario que explica este arreglo nombra
+   `datos.pases` para contar qué se hacía antes, y la comprobación de
+   abajo lo contaba como si el código siguiera usándolo: la prueba
+   fallaba con el arreglo puesto. Se mira el código, no la prosa.
+   (Solo bloques y líneas que EMPIEZAN con //: barrer todo lo que
+   parezca // se comería cualquier línea con un "https://" adentro.) */
+const sinComentarios = texto => texto
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
+
+const introduccion = sinComentarios(formulario.slice(
+  formulario.indexOf("buscar('.formulario__introduccion')"),
+  formulario.indexOf('const cajaCantidad')));
+
+comprobar('la frase tiene su versión de a uno',
+  introduccion.includes('para ti. Puedes modificar tu respuesta'));
+comprobar('y conserva la de a varios',
+  introduccion.includes('para ustedes. Pueden modificar su respuesta'));
+comprobar('elige con la misma regla que el resto de la sección',
+  introduccion.includes('esGrupoDeVarios('));
+comprobar('el número y el pronombre salen de la misma cuenta',
+  introduccion.includes('cuantosLugares(datos)') && !introduccion.includes('datos.pases'),
+  introduccion.includes('datos.pases') ? 'todavía usa datos.pases' : '');
+comprobar('ya no habla de a varios sin preguntar',
+  !/'<\/strong> para ustedes/.test(introduccion));
+
 /* ─── 5. El código del pase se toca y se copia ───────────────────── */
 
 console.log('\nEl código del pase, del lado del invitado\n');

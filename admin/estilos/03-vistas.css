@@ -1290,12 +1290,29 @@
 }
 
 /* El código de pase, en monoespaciada para que se lea letra por letra
-   al compararlo con el que muestra el invitado en la entrada. */
+   al compararlo con el que muestra el invitado en la entrada.
+
+   ⚡ EN ORO, NO EN MORADO (2026-09-09, a pedido)
+   Estaba en `--oro`, que en este panel es el morado de Lucila (ver
+   01-fundamentos.css): el mismo color de los botones, los chips activos
+   y el FAB. En una lista de 48 renglones el código se perdía entre todo
+   lo demás que también es morado, y es justo el dato que hay que
+   encontrar rápido — para comparar contra el pase que trae el invitado o
+   para buscarlo en el buscador.
+
+   ⚠️ ESTO PISA UNA REGLA DE LA CASA, A PROPÓSITO. 01-fundamentos.css
+   dice que `--acento-victoriano` "nunca se usa en botones ni en texto
+   interactivo", porque el morado ya significa "toca aquí" y dos colores
+   de acción confundirían. El código SÍ se toca (se copia desde el
+   2026-09-08), así que la excepción es deliberada: acá el código es un
+   DATO que hay que distinguir de un vistazo, y que además se pueda
+   copiar es un extra. La pista de que se toca no la da el color, la dan
+   el cursor y el fondo al pasar por encima, acá abajo. */
 .codigo-pase {
   font-family: "SF Mono", Menlo, Consolas, monospace;
   font-size: 12px;
   letter-spacing: .08em;
-  color: var(--oro);
+  color: var(--acento-victoriano);
 
   /* ⚡ SE TOCA Y SE COPIA (2026-09-08)
      Sin botón: se pidió así. El código ES el control.
@@ -1318,9 +1335,11 @@
   transition: background-color .15s ease, color .15s ease;
 }
 
-/* La pista de que se puede tocar, sin llegar a parecer un botón. */
+/* La pista de que se puede tocar, sin llegar a parecer un botón. Va en
+   el mismo oro que el texto: un fondo morado debajo de letras doradas
+   se veía como un error de dos colores peleando. */
 .codigo-pase:hover {
-  background: color-mix(in srgb, var(--oro) 12%, transparent);
+  background: color-mix(in srgb, var(--acento-victoriano) 14%, transparent);
 }
 
 /* El destello al copiar: confirma DÓNDE se tocó. Con varios códigos en

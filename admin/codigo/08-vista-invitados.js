@@ -390,32 +390,42 @@ async function dibujarInvitados() {
        el 3 de septiembre.
        (abrirConfiguracionDeInvitaciones() sigue en 48-invitaciones.js,
        sin tocar: solo cambia desde dónde se la llama.) */
+    /* ⚡ TODO LO QUE SE TOCA, ARRIBA DE LA LISTA (2026-09-09, a pedido)
+       «Seleccionar», «Descargar» y el revisor de links vivían DEBAJO de
+       la lista entera, con el argumento de que se usan después de mirarla.
+       En el teléfono eso significaba bajar 48 invitaciones para llegar a
+       cualquiera de los tres, y la lista solo se va a hacer más larga.
+       Ahora los cinco controles están juntos, antes de la lista, y a la
+       lista se llega scrolleando una vez.
+
+       ⚠️ EL BOTÓN SE LLAMA «CREAR INVITACIÓN», NO «AGREGAR INVITADO».
+       Lo que se crea es una invitación —con su link, su cupo y su gente
+       adentro—, no una persona. El rótulo viejo hacía pensar que para
+       una familia de cuatro había que tocarlo cuatro veces. */
     '<div style="display:flex;gap:var(--esp-2);margin-bottom:var(--esp-2)">' +
       '<button class="boton boton--principal" style="flex:2" id="inv-nuevo">' +
-        'Agregar invitado</button>' +
+        'Crear invitación</button>' +
       '<button class="boton" style="flex:1" id="inv-fecha-limite">' +
         '⚙️ Fecha límite</button>' +
     '</div>' +
 
-    '<div id="lista-invitados"></div>' +
-
-    '<div style="display:flex;gap:var(--esp-2);margin-top:var(--esp-1)">' +
+    '<div style="display:flex;gap:var(--esp-2);margin-bottom:var(--esp-2)">' +
       '<button class="boton" style="flex:1" id="inv-seleccionar">Seleccionar</button>' +
       '<button class="boton" style="flex:1" id="inv-descargar">Descargar</button>' +
     '</div>' +
 
     /* ⚠️ ANTES DE REPARTIR, NO DESPUÉS (2026-09-09)
-       Igual que «Revisar que todos los códigos funcionen» en el escáner,
-       pero para el otro extremo: el link personal. Una invitación cuyo
-       link abre la de otra persona no es un bug, es un invitado que no
-       puede confirmar — y del lado del panel no se ve nada raro, hay que
-       abrir el link para enterarse. Va abajo y en gris: se usa antes del
-       evento, no todos los días. */
+       El otro extremo del link personal: una invitación cuyo link abre la
+       de otra persona no es un bug, es un invitado que no puede confirmar
+       — y del lado del panel no se ve nada raro, hay que abrir el link
+       para enterarse. */
     '<button type="button" class="boton boton--ancho" id="inv-revisar-links" ' +
-            'style="margin-top:var(--esp-2)">' +
+            'style="margin-bottom:var(--esp-2)">' +
       'Revisar que todos los links abran la invitación correcta' +
     '</button>' +
     '<div id="inv-revision-links"></div>' +
+
+    '<div id="lista-invitados"></div>' +
 
     /* La barra flotante de acciones en lote. Vive siempre en el DOM,
        oculta hasta que haya algo seleccionado — más simple que armarla
@@ -775,8 +785,15 @@ function invitadoPasaElFiltro(fila) {
   if (!BUSQUEDA_INVITADOS.trim()) return true;
 
   const aguja = paraBuscar(BUSQUEDA_INVITADOS);
+  /* ⚡ EL APODO TAMBIÉN SE BUSCA (2026-09-09)
+     Es la razón de ser del campo: quien organiza piensa a la gente por
+     su apodo. Si el nombre de la invitación pasa a ser el formal
+     —"Familia Zelaya Robles"— y el apodo no fuera buscable, escribir
+     "Pam" en el buscador no encontraría a nadie y el apodo sería un
+     adorno inútil. */
   const pajar = paraBuscar(
-    [fila.nombre, fila.correo, fila.codigo, fila.notas].join(' ')
+    [fila.nombre, fila.apodo, fila.invitacion_apodo,
+     fila.correo, fila.codigo, fila.notas].join(' ')
   );
 
   return pajar.includes(aguja);
@@ -868,7 +885,20 @@ function filaDeInvitado(fila) {
             (COMO_SE_LEE_EL_ESTADO[comoEstaLaAsistencia(fila)] || {}).punto +
           '"></span>') +
       '<span class="lista__cuerpo">' +
-        '<span class="lista__titulo">' + seguro(fila.nombre || 'Sin nombre') + '</span>' +
+        /* ⚡ EL APODO, AL LADO DEL NOMBRE (2026-09-09)
+           El nombre de la lista es ahora el formal, el que se imprime.
+           Quien organiza no piensa "Familia Zelaya Robles": piensa "los
+           de enfrente". El apodo va detrás, en gris y más chico, para
+           reconocer la fila de un vistazo sin quitarle el lugar al
+           nombre de verdad. Solo aparece si hay uno cargado. */
+        '<span class="lista__titulo">' + seguro(fila.nombre || 'Sin nombre') +
+          (fila.invitacion_apodo
+            ? ' <span style="color:var(--texto-tenue);font-size:.85em;' +
+                           'font-weight:400">· ' +
+                seguro(fila.invitacion_apodo) +
+              '</span>'
+            : '') +
+        '</span>' +
         '<span class="lista__pie">' + seguro(pie.join(' · ')) + '</span>' +
       '</span>' +
       puntoEnvio +
@@ -1732,15 +1762,23 @@ async function dibujarAcompanantes(confirmacionId, cupo, contenedor) {
   contenedor.innerHTML = '<div class="esqueleto"></div>';
 
   let filas;
+  let cupoDeVerdad = cupo;
   try {
     const r = await traer('acompanantes.php?accion=listar&confirmacion_id=' + confirmacionId);
     filas = r.filas || [];
+    /* ⚡ EL CUPO SE VUELVE A PREGUNTAR EN CADA DIBUJO (2026-09-09)
+       Desde que se agrega y se quita gente desde esta misma ficha, el
+       `cupo` que llegó por parámetro envejece: después de sumar un primo
+       decía "3 de 3" con cuatro personas listadas. El del servidor manda;
+       el parámetro queda solo como respaldo para una base vieja que no lo
+       devuelva. */
+    if (Number.isFinite(Number(r.cupo))) cupoDeVerdad = Number(r.cupo);
   } catch (error) {
     contenedor.innerHTML = '';
     return; // No es crítico: la confirmación se puede ver igual sin esto.
   }
 
-  pintarAcompanantes(confirmacionId, cupo, filas, contenedor);
+  pintarAcompanantes(confirmacionId, cupoDeVerdad, filas, contenedor);
 }
 
 /**
@@ -1755,9 +1793,18 @@ async function dibujarAcompanantes(confirmacionId, cupo, contenedor) {
  * LO QUE HAY QUE ENTENDER, Y QUE LA PANTALLA NO DECÍA
  * El CUPO y los NOMBRES son dos cosas separadas:
  *   · El cupo son los lugares que tiene la familia. Sale de lo que
- *     contestaron al confirmar, y solo se cambia editando la invitación.
+ *     contestaron al confirmar.
  *   · Los nombres son quiénes ocupan esos lugares. Se pueden llenar,
  *     corregir y vaciar sin que el cupo se mueva ni un poco.
+ *
+ * ⚡ Y DESDE EL 2026-09-09 EL CUPO TAMBIÉN SE MUEVE DESDE ACÁ. Antes
+ * había que ir a «Editar invitación» para cambiarlo, y esta ficha lo
+ * decía como un cartel sin salida. Ahora «Agregar a alguien más» suma un
+ * lugar y «Quitar del grupo» resta uno — las dos avisando en el rótulo
+ * qué va a pasar con la silla, porque eso lo ve la cocina, el plano de
+ * mesas y el invitado en su formulario. Lo que NO cambió: «Dejar sin
+ * nombre» sigue conservando el lugar, que es el caso de "vienen cuatro,
+ * tres los tengo".
  *
  * "Adulto 2" no es una persona: es un lugar reservado todavía sin
  * nombre. Por eso "Quitar" no saca a nadie del evento — deja ese lugar
@@ -1805,7 +1852,7 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
                 (a.alergias ? ' <span style="color:var(--texto-tenue);font-size:.85em">· ' +
                   seguro(a.alergias) + '</span>' : '') +
               '</span>' +
-              '<span style="display:flex;gap:6px;flex-shrink:0">' +
+              '<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">' +
                 /* Los rótulos dicen la acción, no la categoría. "Editar"
                    y "Quitar" podían leerse como "editar al invitado" y
                    "sacarlo del evento", que es lo que NO hacen. */
@@ -1814,6 +1861,17 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
                 '<button class="boton boton--chico" data-quitar-acomp="' + a.id + '" ' +
                         'title="El lugar sigue reservado, pero queda sin nombre">' +
                   'Dejar sin nombre</button>' +
+                /* ⚡ LA TERCERA, QUE ANTES NO EXISTÍA (2026-09-09)
+                   "Dejar sin nombre" conserva el lugar: es para cuando
+                   todavía no se sabe quién viene. Faltaba la otra mitad
+                   —alguien que NO va a venir— y su lugar quedaba de
+                   fantasma: contado en la cocina, sentado en una mesa y
+                   ofrecido al invitado en su formulario. Las dos se
+                   ofrecen juntas y cada título dice qué pasa con la
+                   silla, que es lo único que las distingue. */
+                '<button class="boton boton--chico" data-sacar-acomp="' + a.id + '" ' +
+                        'title="La familia pasa a tener un lugar menos">' +
+                  'Quitar del grupo</button>' +
               '</span>' +
             '</div>' +
             /* ⚡ (2026-08-28) A pedido: las etiquetas de cada persona se
@@ -1826,17 +1884,34 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
       : '<p class="vacio__texto" style="padding:var(--esp-1) 0">' +
         'Todavía nadie tiene nombre. Los lugares están reservados igual.</p>') +
 
+    /* ⚡ AGREGAR YA NO MANDA A OTRA PANTALLA (2026-09-09)
+       Cuando estaban todos nombrados, acá no había botón: había un cartel
+       que decía "para agregar a alguien más, primero súbele los pases a
+       la invitación". O sea, salir de esta ficha, abrir «Editar
+       invitación», cambiar un número, guardar, volver a entrar y recién
+       ahí poner el nombre. Cinco pasos para sumar un primo, y con la
+       lista de invitados creciendo hasta el día de la fiesta.
+
+       Ahora el botón está siempre. Si hay un lugar libre, lo llena —lo de
+       antes—; si no hay, le suma un lugar a la familia. El rótulo dice
+       cuál de las dos cosas va a pasar ANTES de tocarlo, y el cartel de
+       abajo dice qué se mueve, porque sumar un lugar no es gratis: lo ve
+       la cocina, lo ven las mesas y lo ve el invitado en su formulario. */
+    '<button class="boton boton--ancho" style="margin-top:var(--esp-1)" ' +
+            'id="agregar-acompanante" ' +
+            'data-sube-cupo="' + (puedeAgregarMas ? '0' : '1') + '">' +
+      (puedeAgregarMas
+        ? 'Ponerle nombre a ' + (sinNombre === 1 ? 'el lugar que falta'
+                                                 : 'uno de los ' + sinNombre + ' que faltan')
+        : 'Agregar a alguien más') +
+    '</button>' +
+
     (puedeAgregarMas
-      ? '<button class="boton boton--ancho" style="margin-top:var(--esp-1)" ' +
-               'id="agregar-acompanante">' +
-          'Ponerle nombre a ' + (sinNombre === 1 ? 'el lugar que falta'
-                                                 : 'uno de los ' + sinNombre + ' que faltan') +
-        '</button>'
-      // Todos nombrados: se dice por qué no hay botón, en vez de que
-      // simplemente no esté y parezca que falta algo.
-      : '<p class="vacio__texto" style="margin-top:var(--esp-1)">' +
-        'Ya están nombrados los ' + cupo + ' lugares. Para agregar a ' +
-        'alguien más, primero súbele los pases a la invitación.</p>');
+      ? ''
+      : '<p class="vacio__texto" style="margin-top:4px">' +
+        'Ya están nombrados los ' + cupo + ' lugares. Agregar a alguien le ' +
+        'suma un lugar a esta familia: se le reserva una silla más y su ' +
+        'invitación pasa a decir ' + (cupo + 1) + ' lugares.</p>');
 
   filas.forEach(a => {
     pintarEtiquetasDe('acompanante', a.id, buscar('#etiquetas-acomp-' + a.id, contenedor));
@@ -1876,12 +1951,53 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
     });
   });
 
+  buscarTodos('[data-sacar-acomp]', contenedor).forEach(boton => {
+    boton.addEventListener('click', async () => {
+      const id = Number(boton.dataset.sacarAcomp);
+      const persona = filas.find(a => Number(a.id) === id);
+      const comoSeLlama = persona ? persona.nombre : 'esta persona';
+
+      /* La pregunta dice el número exacto de después, no "un lugar
+         menos": el que confirma tiene que poder comparar contra lo que
+         ve en pantalla sin hacer la cuenta de cabeza. */
+      if (!await confirmarAccion(
+        '¿Quitar a ' + comoSeLlama + ' del grupo?\n\n' +
+        'La familia pasa a tener ' + Math.max(1, cupo - 1) + ' lugares en vez de ' +
+        cupo + ': se libera su silla y su invitación pasa a decir ' +
+        Math.max(1, cupo - 1) + '.\n\n' +
+        'Si lo que no sabes es QUIÉN ocupa ese lugar, usa «Dejar sin ' +
+        'nombre»: ahí el lugar se conserva.',
+        { confirmar: 'Quitar del grupo', peligro: true })) return;
+
+      try {
+        await mandar('acompanantes.php?accion=borrar', { id: id, bajar_cupo: true });
+        dibujarAcompanantes(confirmacionId, Math.max(1, cupo - 1), contenedor);
+        // El cupo cambió: los conteos de Resumen y el plano de mesas
+        // quedaron viejos.
+        ensuciarVistas('resumen');
+        avisar('Quitado del grupo.');
+      } catch (error) {
+        avisar(error.message, true);
+      }
+    });
+  });
+
   const agregar = buscar('#agregar-acompanante', contenedor);
   if (agregar) {
     agregar.addEventListener('click', () => {
-      formularioDeAcompanante(confirmacionId, cupo - filas.length, () =>
-        dibujarAcompanantes(confirmacionId, cupo, contenedor)
-      );
+      /* Si no queda lugar libre, el formulario avisa al servidor que
+         suba el cupo. La bandera se decide ACÁ, al dibujar, no en el
+         servidor: es la diferencia entre "llená el lugar que ya está
+         reservado" y "reservá uno nuevo", y quien lo sabe es la pantalla
+         que le mostró al usuario cuál de las dos iba a pasar. */
+      const subeElCupo = agregar.dataset.subeCupo === '1';
+      formularioDeAcompanante(confirmacionId, cupo - filas.length, () => {
+        dibujarAcompanantes(confirmacionId, subeElCupo ? cupo + 1 : cupo, contenedor);
+        // Si el cupo subió, los conteos de Resumen y el plano de mesas
+        // quedaron viejos. Si solo se nombró un lugar que ya existía, no
+        // cambió ningún número y no hace falta ensuciar nada.
+        if (subeElCupo) ensuciarVistas('resumen');
+      }, undefined, subeElCupo);
     });
   }
 }
@@ -1908,7 +2024,7 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
  * @param {Object} [existente] - Si se manda, el formulario edita esta persona en vez de crear una.
  * @returns {void}
  */
-function formularioDeAcompanante(confirmacionId, cupan, alGuardar, existente) {
+function formularioDeAcompanante(confirmacionId, cupan, alGuardar, existente, subirCupo) {
   const tieneContactPicker =
     typeof navigator !== 'undefined' && navigator.contacts && navigator.contacts.select;
   const d = existente || {};
@@ -1918,7 +2034,22 @@ function formularioDeAcompanante(confirmacionId, cupan, alGuardar, existente) {
       ? '<button type="button" class="boton boton--ancho" id="acomp-de-contactos" ' +
                'style="margin-bottom:var(--esp-2)">Traer de mis contactos</button>'
       : '') +
-    campoTexto({ id: 'acomp-nombre', rotulo: 'Nombre', valor: d.nombre || '' }) +
+    /* Este nombre lo ve el invitado: es el que aparece en la lista de
+       lugares de su invitación, al lado de su casilla de menú. */
+    campoTexto({ id: 'acomp-nombre', rotulo: 'Nombre', valor: d.nombre || '',
+                 ayuda: 'Así aparece en la invitación, en su lugar de la mesa.' }) +
+
+    /* ⚡ EL APODO NO SALE DE ACÁ, NUNCA (2026-09-09)
+       Referencia interna, para reconocer a alguien en la app sin
+       acordarse de su nombre completo. No viaja a la invitación:
+       invitacion.php no nombra esta columna, así que no puede filtrarse
+       ni por un descuido. */
+    campoTexto({
+      id: 'acomp-apodo',
+      rotulo: 'Apodo (solo para la app)',
+      valor: d.apodo || '',
+      ayuda: 'Para reconocerlo acá adentro. Nunca sale en la invitación.',
+    }) +
     campoLista({
       id: 'acomp-tipo', rotulo: 'Tipo', valor: d.tipo || 'adulto',
       opciones: [
@@ -1963,6 +2094,10 @@ function formularioDeAcompanante(confirmacionId, cupan, alGuardar, existente) {
 
     const campos = {
       nombre:   nombre,
+      /* Va SIEMPRE, también vacío: así borrarlo a mano vuelve a dejar
+         mandando el nombre interno. La API distingue "no vino" de "vino
+         vacío" justamente para esto. */
+      apodo: valorDe('acomp-apodo', cuerpo),
       tipo:     valorDe('acomp-tipo', cuerpo),
       telefono: valorDe('acomp-telefono', cuerpo),
       correo:   valorDe('acomp-correo', cuerpo),
@@ -1975,8 +2110,13 @@ function formularioDeAcompanante(confirmacionId, cupan, alGuardar, existente) {
         await mandar('acompanantes.php?accion=editar',
           Object.assign({ id: existente.id }, campos));
       } else {
+        /* `subir_cupo` solo va cuando quien abrió este formulario ya
+           sabía que no quedaba lugar libre. Sin la bandera, el servidor
+           sigue rechazando pasarse del cupo — que es lo correcto para
+           las otras pantallas que llaman a esta misma dirección. */
         await mandar('acompanantes.php?accion=agregar',
-          Object.assign({ confirmacion_id: confirmacionId }, campos));
+          Object.assign({ confirmacion_id: confirmacionId }, campos,
+                        subirCupo ? { subir_cupo: true } : {}));
       }
       registrarEvento('accion', 'crear_editar_acompanante');
       cerrarHoja(true);
