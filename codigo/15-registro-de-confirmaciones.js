@@ -223,37 +223,25 @@ async function anotarEnLaHoja(datos) {
     .catch(() => { /* Sigue pendiente para la próxima visita. */ });
 })();
 
-/* ─── 4. EL ACCESO DISCRETO DEL PIE ─────────────────────────────────── */
-(function preparaElAccesoAlRegistro() {
-  const rosa = buscar('#rosa-secreta');
-  if (!rosa) return;
+/* ─── 4. EL ACCESO DISCRETO DEL PIE · DESACTIVADO ───────────────────── */
 
-  const direccion = CONFIGURACION.registro.urlDeLaHoja;
-  if (!direccion || direccion.startsWith('PEGA_AQUI')) return;
-
-  const TOQUES_NECESARIOS = 3;
-  const VENTANA_DE_TIEMPO = 1500;
-  let toques = 0;
-  let reloj  = null;
-
-  rosa.style.cursor = 'default';
-
-  function volverAEmpezar() {
-    toques = 0;
-    rosa.classList.remove('contando-1', 'contando-2');
-    clearTimeout(reloj);
-  }
-
-  rosa.addEventListener('click', function alTocarLaRosa() {
-    toques++;
-    if (toques >= TOQUES_NECESARIOS) {
-      volverAEmpezar();
-      window.open(direccion, '_blank', 'noopener');
-      return;
-    }
-    rosa.classList.toggle('contando-1', toques === 1);
-    rosa.classList.toggle('contando-2', toques === 2);
-    clearTimeout(reloj);
-    reloj = setTimeout(volverAEmpezar, VENTANA_DE_TIEMPO);
-  });
-})();
+/* ⚡ SE SACÓ A PEDIDO (2026-09-09)
+ *
+ * Acá vivía un gesto oculto: tres toques en la rosa del pie
+ * (`#rosa-secreta`), dentro de una ventana de 1,5 s, y se abría en una
+ * pestaña nueva la hoja de Google del registro de confirmaciones.
+ *
+ * POR QUÉ IMPORTA QUE YA NO ESTÉ. La invitación es pública: cualquiera
+ * con el link la abre. El gesto era discreto, no privado — descubrirlo
+ * era tocar tres veces un adorno—, y del otro lado hay una hoja con los
+ * nombres, los teléfonos y los correos de los invitados. Un atajo cómodo
+ * para quien lo conocía y una puerta abierta para quien lo encontrara.
+ *
+ * La rosa sigue en el pie, ahora solo como adorno: no escucha clics y
+ * las clases `contando-1` / `contando-2` que marcaban el conteo quedaron
+ * sin usar (siguen en 06-secciones.css, sin nadie que las ponga).
+ *
+ * Para volver a habilitarlo hay que traer este bloque del historial
+ * (`git log -p codigo/15-registro-de-confirmaciones.js`), no reescribirlo
+ * de memoria: la parte delicada era reiniciar el conteo con un reloj,
+ * para que dos toques sueltos con un rato de diferencia no sumaran. */

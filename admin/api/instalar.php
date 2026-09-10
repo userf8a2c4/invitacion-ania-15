@@ -162,6 +162,40 @@ $agregarColumna = function ($tabla, $columna, $definicion)
    respuestas, y sirve para notar envíos repetidos o pruebas. */
 $agregarColumna('invitaciones', 'veces_respondida', 'INT NOT NULL DEFAULT 0');
 
+/* EL APODO, QUE NO SALE DE LA APP (2026-09-09)
+ *
+ * Quien organiza piensa a la gente por su apodo: "Pam", "el compadre",
+ * "Tía Chuy". Y escribía eso en el nombre de la invitación, porque era
+ * el único campo que había — así que el apodo terminaba impreso en un
+ * documento formal que el invitado enseña.
+ *
+ * Ahora hay una columna aparte para el apodo. `nombre` no cambia de
+ * sentido: sigue siendo lo que se imprime, lo único que el invitado ve y
+ * lo único que sale del servidor. El apodo es una etiqueta de trabajo
+ * para reconocer a alguien en el panel.
+ *
+ * ⚠️ LA PROTECCIÓN ES QUE EL DATO NO SE PIDE. invitacion.php no nombra
+ * `apodo` en ninguna de sus consultas, así que no hay COALESCE que
+ * pueda salir mal ni condición que alguien pueda invertir por descuido:
+ * el apodo no está en la respuesta porque nunca se seleccionó. Si algún
+ * día hace falta mostrarlo del lado del invitado —no debería—, hay que
+ * agregarlo a mano, y eso se ve en el diff.
+ *
+ * ⚠️ ARRANCAN VACÍOS, Y ESO DEJA TRABAJO PENDIENTE. Vacío significa "no
+ * hay apodo". Pero los nombres que HOY están cargados son los que se
+ * escribieron cuando no existía esta separación: hay apellidos completos
+ * y hay "Pam". Ninguna migración automática puede adivinar cuál es cuál,
+ * así que las invitaciones con apodo por nombre hay que corregirlas a
+ * mano, una por una, antes de mandarlas.
+ *
+ * ⚠️ QUEDA UNA COLUMNA HUÉRFANA. Una versión anterior de esto (subida el
+ * mismo día) creó `nombre_publico` con el sentido invertido. Si esta base
+ * ya la tiene, queda ahí sin que nadie la lea: borrar una columna es
+ * destructivo y no lo hace este instalador. Está vacía en todas las
+ * filas —nunca hubo pantalla que la escribiera— así que no molesta. */
+$agregarColumna('invitaciones', 'apodo', "VARCHAR(150) NOT NULL DEFAULT ''");
+$agregarColumna('acompanantes', 'apodo', "VARCHAR(150) NOT NULL DEFAULT ''");
+
 // Fijar una asignación de mesa para que la autoasignación no la toque.
 $agregarColumna('asignacion_mesas', 'fijada', 'TINYINT(1) NOT NULL DEFAULT 0');
 

@@ -205,6 +205,23 @@ case 'listar':
        existe en una base vieja. */
     $selectRespondidaEn = in_array('respondida_en', $columnasInv, true)
         ? 'inv.respondida_en' : 'NULL';
+
+    /* ⚡ EL APODO, PARA RECONOCER A LA GENTE EN LA LISTA (2026-09-09)
+       Desde que `invitaciones.nombre` es el nombre formal —el que se
+       imprime—, la lista de Gente puede estar llena de "Familia Zelaya
+       Robles" y quien organiza piensa a esa familia como "los Zelaya de
+       enfrente". El apodo va al panel para poder mostrarlo al lado del
+       nombre y para que el buscador lo encuentre.
+
+       Se consulta con el mismo criterio defensivo que las de arriba: la
+       columna la agrega el instalador, y este SELECT nombra columnas una
+       por una, así que pedirla antes de que exista reventaría la lista
+       entera de Gente.
+
+       ⚠️ Esto es la API DEL PANEL, detrás de sesión. El apodo no aparece
+       en invitacion.php, que es la que contesta al invitado. */
+    $selectApodo = in_array('apodo', $columnasInv, true)
+        ? 'inv.apodo' : "''";
     $selectInv = $conInvitacion
         /* `invitacion_correo` es el correo de la INVITACIÓN, que no es
            el mismo campo que confirmaciones.correo: es a donde se manda
@@ -216,6 +233,7 @@ case 'listar':
             inv.estado AS invitacion_estado, inv.grupo_id AS invitacion_grupo_id,
             ' . $selectVecesEnviado . ' AS invitacion_veces_enviado,
             ' . $selectRespondidaEn . ' AS invitacion_respondida_en,
+            ' . $selectApodo . ' AS invitacion_apodo,
             g.nombre AS invitacion_grupo_nombre'
         : '';
     $joinInv = $conInvitacion

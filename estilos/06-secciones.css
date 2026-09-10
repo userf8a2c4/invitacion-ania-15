@@ -370,12 +370,22 @@
   opacity: .55;
 }
 
-/* LA ROSA SECRETA DEL PIE.
-   Es el acceso a la hoja de confirmaciones (ver 15-registro-de-
-   confirmaciones.js): parece un adorno del pie —el invitado no la
-   registra como botón—, pero tres toques la abren. Con cada toque
-   FLORECE (crece y se enciende), que es la única señal de que la cuenta
-   va bien; se apaga sola al segundo y medio. En reposo es un adorno más. */
+/* La segunda firma —quién la construyó— va PEGADA a la de Lucila: son
+   dos renglones de un mismo crédito, no dos bloques separados. Misma
+   tipografía, mismo tamaño y mismo tono a propósito: la de arriba es de
+   quien pensó la fiesta y no tiene que perder peso por esta. */
+.pie__firma--taller {
+  margin-top: .15rem;
+}
+
+/* LA ROSA DEL PIE · YA NO ES UN BOTÓN (2026-09-09).
+   Era el acceso oculto a la hoja de confirmaciones: tres toques y se
+   abría. Se desactivó a pedido — ver el por qué en
+   15-registro-de-confirmaciones.js, sección 4.
+   Queda el `transition`, que es lo que la hace sentirse viva al pasar por
+   encima. Las dos reglas `contando-*` de acá abajo son las que la hacían
+   florecer con cada toque: nadie pone ya esas clases, y se dejan por si
+   el gesto vuelve — borrarlas sería lo único que habría que reescribir. */
 #pie-de-pagina .rosa {
   display: inline-block;
   vertical-align: middle;
