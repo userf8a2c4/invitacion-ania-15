@@ -105,24 +105,30 @@ console.log('\nAl soltar, sin texto resaltado\n');
    seleccionar texto. La hoja se abre DEBAJO del dedo a mitad del
    sostenido, así que la selección terminaba agarrando el rótulo de una
    de las tres opciones. */
-/* ⚠️ SE PARSEA LA REGLA EXACTA, Y COSTÓ DOS INTENTOS.
+/* ⚠️ SE PARSEA LA REGLA EXACTA, Y COSTÓ TRES INTENTOS.
    1º: cortar el archivo hasta el primer `user-select: none` y buscar
-       ".boton," ahí. Pero ese trozo incluye el COMENTARIO que explica la
+       ".boton," ahí. Ese trozo incluye el COMENTARIO que explica la
        regla, donde `.boton` aparece nombrado en prosa: sacarlo de la
        lista de verdad no hacía fallar nada.
    2º: una expresión regular sobre el archivo sin comentarios. Quitar los
-       comentarios se lleva puestas las llaves que haya adentro de ellos,
-       así que la captura se comía los selectores de la regla anterior y
-       `.boton` seguía apareciendo igual.
-   Lo que sí funciona: anclar en `-webkit-touch-callout`, que aparece una
-   sola vez, y tomar el texto entre el final de lo anterior —una llave o
-   el cierre de un comentario, lo que esté más cerca— y su `{`. */
+       comentarios primero movía los índices y la captura se comía los
+       selectores de la regla anterior.
+   3º: cortar desde el cierre de comentario más cercano. Falló al revés:
+       esta lista tiene
+       un comentario INTERCALADO entre dos selectores, así que arrancar
+       después de él se comía los de arriba —`.boton` entre ellos— y la
+       prueba fallaba con el CSS correcto.
+
+   Lo que funciona, y es lo que ya hacía prueba-navegacion.mjs: cortar
+   desde el final de la regla ANTERIOR (la última `}`) y recién ahí
+   quitar los comentarios. Así entra la lista entera, con comentarios
+   intercalados o sin ellos. */
 const iCallout = css.indexOf('-webkit-touch-callout: none');
 const iLlave   = css.lastIndexOf('{', iCallout);
-const iInicio  = Math.max(css.lastIndexOf('}', iLlave) + 1,
-                          css.lastIndexOf('*/', iLlave) + 2);
 const selectoresSinSeleccion = iCallout === -1 ? []
-  : css.slice(iInicio, iLlave).split(',').map(s => s.trim()).filter(Boolean);
+  : css.slice(css.lastIndexOf('}', iLlave) + 1, iLlave)
+       .replace(/\/\*[\s\S]*?\*\//g, ' ')
+       .split(',').map(s => s.trim()).filter(Boolean);
 
 comprobar('los botones no son texto seleccionable',
   selectoresSinSeleccion.includes('.boton'),
