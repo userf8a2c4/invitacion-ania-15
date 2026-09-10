@@ -425,6 +425,12 @@ async function dibujarInvitados() {
     '</button>' +
     '<div id="inv-revision-links"></div>' +
 
+    /* El cartel de "qué cambió desde la última vez". Va vacío en el
+       molde y se llena más abajo, porque las novedades se calculan
+       después de que este HTML está armado. Vive ARRIBA de la lista: es
+       lo primero que hay que leer al entrar. */
+    '<div id="novedades-gente-caja"></div>' +
+
     '<div id="lista-invitados"></div>' +
 
     /* La barra flotante de acciones en lote. Vive siempre en el DOM,
@@ -498,6 +504,33 @@ async function dibujarInvitados() {
     ? respondidasSegunHoy
     : INVITADOS.filter(f => f.invitacion_respondida_en).length);
   if (typeof ponerBurbuja === 'function') ponerBurbuja('#burbuja-gente', 0);
+
+  /* ⚡ EL NÚMERO DECÍA CUÁNTAS, NUNCA CUÁLES (2026-09-09)
+     La burbuja marcaba "3" y ahí terminaba: había que abrir Gente y
+     buscar a ojo entre 48 renglones cuáles eran los tres, sin ninguna
+     señal. Enterarse de que alguien confirmó era imposible salvo que uno
+     recordara de memoria cómo estaba la lista antes.
+     Acá se calculan las novedades ANTES de pisar la marca — si se
+     guardara primero, todo quedaría "ya visto" y no habría nada que
+     mostrar nunca. */
+  NOVEDADES_DE_GENTE = novedadesDesdeLaUltimaVisita();
+  recordarLaUltimaRespuestaVista();
+
+  const cajaDeNovedades = buscar('#novedades-gente-caja', vista);
+  if (cajaDeNovedades) {
+    cajaDeNovedades.innerHTML = carteldeNovedades();
+
+    const cerrar = buscar('#cerrar-novedades', cajaDeNovedades);
+    if (cerrar) {
+      cerrar.addEventListener('click', () => {
+        /* Se vacía el cartel, no se esconde: quien lo cerró ya lo leyó, y
+           dejarlo en el DOM oculto solo deja algo que un lector de
+           pantalla puede seguir anunciando. Las novedades quedan igual
+           marcadas en la lista, que es donde se actúa sobre ellas. */
+        cajaDeNovedades.innerHTML = '';
+      });
+    }
+  }
 
   engancharInvitados(vista);
   pintarListaDeInvitados();
@@ -604,6 +637,118 @@ function actualizarElNumeroDeQuienFalta() {
   if (!chip) return;
   const faltan = INVITADOS.reduce((suma, fila) => suma + (yaRespondio(fila) ? 0 : 1), 0);
   chip.textContent = faltan ? 'Sin responder · ' + faltan : 'Sin responder';
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   QUÉ CAMBIÓ DESDE LA ÚLTIMA VEZ
+
+   La burbuja de Gente decía un número —"3"— y nada más. Para saber
+   quiénes eran esos tres había que recorrer 48 renglones comparándolos
+   con la memoria. En la práctica significaba que las confirmaciones
+   entraban sin que nadie se enterara.
+
+   ⚠️ SE COMPARA CONTRA LA MISMA FUENTE, NO CONTRA EL RELOJ
+   La tentación era guardar "cuándo entré" con la hora del teléfono y
+   comparar contra `respondida_en`. Son dos relojes distintos: el del
+   teléfono y el del servidor, en husos que no tienen por qué coincidir
+   —y el hosting está en otro país—. Un desfase de horas haría aparecer
+   novedades viejas o esconder las nuevas.
+
+   Se guarda LA RESPUESTA MÁS RECIENTE QUE YA SE VIO, que es un valor del
+   servidor. La comparación queda entre dos fechas del mismo reloj, y
+   como `respondida_en` viene en 'YYYY-MM-DD HH:MM:SS', comparar los
+   textos alcanza: ese formato ordena igual alfabética que
+   cronológicamente. Es el mismo criterio que ya usa la burbuja al
+   guardar el conteo "según Hoy" en vez del suyo propio.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Las novedades de esta visita. Se llena al entrar y se pinta arriba. */
+let NOVEDADES_DE_GENTE = [];
+
+/**
+ * Quiénes respondieron después de la última respuesta que ya se había
+ * visto.
+ *
+ * @returns {Object[]} Filas de INVITADOS, de la más reciente a la más vieja.
+ */
+function novedadesDesdeLaUltimaVisita() {
+  const vistoHasta = recordado('gente-ultima-respuesta-vista', null);
+
+  /* La primera vez no hay con qué comparar. Se guarda y no se avisa de
+     nada: decir "38 respuestas nuevas" la primera vez que se abre la app
+     es cierto y a la vez inútil. Mismo criterio que la burbuja. */
+  if (vistoHasta === null) return [];
+
+  return INVITADOS
+    .filter(f => f.invitacion_respondida_en &&
+                 String(f.invitacion_respondida_en) > String(vistoHasta))
+    .sort((a, b) => String(b.invitacion_respondida_en)
+                      .localeCompare(String(a.invitacion_respondida_en)));
+}
+
+/**
+ * Guarda la respuesta más reciente de la lista como "ya vista".
+ *
+ * @returns {void}
+ */
+function recordarLaUltimaRespuestaVista() {
+  const fechas = INVITADOS
+    .map(f => f.invitacion_respondida_en)
+    .filter(Boolean)
+    .map(String);
+
+  /* Sin ninguna respuesta todavía no hay marca que guardar — y no se
+     escribe una vacía, porque `null` es lo que significa "primera vez" y
+     pisarlo con "" haría que la primera confirmación no se anunciara. */
+  if (!fechas.length) return;
+
+  recordar('gente-ultima-respuesta-vista', fechas.sort().pop());
+}
+
+/**
+ * El cartel de novedades, arriba de la lista.
+ *
+ * Se arma con lo que ya está en pantalla: ni una petición más.
+ *
+ * @returns {string} HTML, o cadena vacía si no hay nada que contar.
+ */
+function carteldeNovedades() {
+  if (!NOVEDADES_DE_GENTE.length) return '';
+
+  /* Se dice QUÉ hizo cada uno, no solo que "hay novedades": confirmar y
+     darse de baja son noticias opuestas y merecen leerse distinto. Se usa
+     la misma función que la lista y que la descarga, así que las tres
+     dicen lo mismo. */
+  const renglones = NOVEDADES_DE_GENTE.slice(0, 8).map(f => {
+    const como = comoEstaLaAsistencia(f);
+    const dice = (COMO_SE_LEE_EL_ESTADO[como] || {}).texto || '';
+    const cuantos = (Number(f.adultos) || 0) + (Number(f.ninos) || 0);
+    return '<li>' +
+      '<b>' + seguro(f.nombre || 'Sin nombre') + '</b> · ' + seguro(dice) +
+      (como === 'confirmo' && cuantos
+        ? ' <span class="que-cambio__gente">' + cuantos +
+          (cuantos === 1 ? ' persona' : ' personas') + '</span>'
+        : '') +
+    '</li>';
+  }).join('');
+
+  const cuantas = NOVEDADES_DE_GENTE.length;
+  const sobran = cuantas - 8;
+
+  return '<div class="que-cambio" id="novedades-gente">' +
+      '<div class="que-cambio__cabecera">' +
+        '<span class="que-cambio__titulo">' +
+          (cuantas === 1 ? 'Una respuesta nueva' : cuantas + ' respuestas nuevas') +
+          ' desde tu última visita' +
+        '</span>' +
+        '<button type="button" class="que-cambio__cerrar" id="cerrar-novedades" ' +
+                'aria-label="Ocultar las novedades">✕</button>' +
+      '</div>' +
+      '<ul class="que-cambio__lista">' + renglones + '</ul>' +
+      (sobran > 0
+        ? '<p class="que-cambio__mas">y ' + sobran + ' más en la lista</p>'
+        : '') +
+    '</div>';
 }
 
 function pintarListaDeInvitados() {
@@ -874,8 +1019,16 @@ function filaDeInvitado(fila) {
       '</span>'
     : '';
 
+  /* ⚡ LAS NOVEDADES SE MARCAN EN LA LISTA (2026-09-09)
+     El cartel de arriba las nombra, pero se cierra y se va. La marca en
+     la fila es la que queda mientras se trabaja: sirve para encontrar a
+     quien acaba de contestar entre 48 renglones, que es exactamente lo
+     que antes había que hacer de memoria. */
+  const esNovedad = NOVEDADES_DE_GENTE.some(n => n.id === fila.id);
+
   return '' +
-    '<button class="lista__fila" data-invitado="' + seguro(fila.id) + '">' +
+    '<button class="lista__fila' + (esNovedad ? ' lista__fila--nueva' : '') +
+            '" data-invitado="' + seguro(fila.id) + '">' +
       (SELECCION_ACTIVA
         ? '<span class="lista__casilla' + (marcado ? ' lista__casilla--marcada' : '') + '"></span>'
         /* EL único punto de color de la fila. Sale del mismo estado que
