@@ -322,9 +322,62 @@ for (const archivo of ['06-petalos-con-fisica.js', '07-marco-y-enredaderas.js',
     'el eclipse actúa DESDE AFUERA; tocar estos archivos afecta a las otras 23:59');
 }
 
-comprobar('la calidad manda sobre la cantidad de rosas',
-  /var CUANTAS = esAlta \? 220/.test(eclipse) && /marea\.length = Math\.floor/.test(eclipse),
+/* ⚡ ESTA COMPROBACIÓN CAMBIÓ DE SENTIDO (2026-09-10)
+   Pedía `var CUANTAS = esAlta ? 220`, o sea que la calidad decidiera
+   cuántas rosas SUELTAS tenía la marea. Esa marea se apagó: 220 cabezas
+   de rosa sin tallo flotando alrededor del nombre no comunicaban nada, y
+   lo que la escena cuenta —las enredaderas del marco cobrando conciencia
+   y estirando hacia el nombre— ahora lo hacen las plantas que ya están
+   ahí. Queda una sola rosa suelta: la que se suelta y muere sobre el
+   nombre. Lo que se protege ahora es eso. */
+comprobar('la marea suelta quedó en una sola rosa',
+  /var CUANTAS = 1;/.test(eclipseCodigo),
+  'una rosa sin tallo flotando no es una planta deseando algo');
+comprobar('y esa es la que se suelta y muere',
+  /laQueMuere = mejor;/.test(eclipseCodigo));
+comprobar('el gobernador sigue puesto',
+  /marea\.length = Math\.floor/.test(eclipse),
   'entre más rosas y que vaya fluido, gana la fluidez');
+
+
+/* ─── 16. Las plantas del marco son las protagonistas ──────────────── */
+
+console.log('\nLa histeria de las enredaderas\n');
+
+comprobar('las flores del marco ya no dependen de la calidad alta',
+  !/function tomarLasFloresReales\(\) \{\s*if \(!esAlta\) return;/.test(eclipseCodigo),
+  'cuando eran un adorno se podían saltear; ahora son la escena');
+
+comprobar('cada flor sabe hacia dónde queda el nombre',
+  /haciaElNombre/.test(eclipseCodigo) && /Math\.atan2\(altar\.y - cy, altar\.x - cx\)/.test(eclipseCodigo),
+  'sin esto no pueden estirar hacia el altar, solo temblar en el lugar');
+
+comprobar('el giro toma el camino corto',
+  /while \(giro > 180\) giro -= 360;/.test(eclipseCodigo),
+  'sin normalizar, una flor a la izquierda daría la vuelta entera');
+
+comprobar('la conciencia se propaga desde el nombre hacia afuera',
+  /f\.distancia \/ lejaniaMaxima/.test(eclipseCodigo),
+  'si despiertan todas juntas parece un interruptor, no una noticia corriendo');
+
+comprobar('el deseo crece en vez de encenderse',
+  /var fervor =/.test(eclipseCodigo) && /despierta \* tramo\(/.test(eclipseCodigo));
+
+comprobar('hay un tope de inclinación',
+  /if \(inclina >  52\) inclina =  52;/.test(eclipseCodigo),
+  'más de eso deja de leerse como estirar y parece una flor rota');
+
+comprobar('el temblor crece con el fervor',
+  /fervor \* fervor \* 9/.test(eclipseCodigo));
+
+comprobar('en el shock contienen el aliento',
+  /enShock \? 0 : fervor \* fervor/.test(eclipseCodigo),
+  'los dos segundos de vacío valen para la marea y para las plantas');
+
+comprobar('la flor que no despertó queda como la dejó 07',
+  /if \(f\.tocada\) \{ f\.nodo\.style\.transform = f\.antes; f\.tocada = false; \}/
+    .test(eclipseCodigo),
+  'una flor dócil tiene que verse dócil, no congelada a medio gesto');
 
 
 /* ─── 10. Que la calidad alta LLEGUE A USARSE ──────────────────────────
