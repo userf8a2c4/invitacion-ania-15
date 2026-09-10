@@ -121,11 +121,38 @@
     ? calidad() === CALIDAD_GRAFICA.ALTA
     : String(calidad()).toLowerCase().indexOf('alta') !== -1;
 
+  /* La flor más lejana del nombre. La usa la onda de conciencia para
+     repartir los tiempos entre la primera flor que despierta y la última. */
+  var lejaniaMaxima = 1;
+
+  /* Cuándo se intentó por última vez recoger las flores del marco. Ver la
+     nota de moverLasFloresReales: el marco puede nacer después que el
+     eclipse. */
+  var ultimoIntentoDeFlores = -1000;
+
   /* Cuántas rosas tiene la marea. El detalle va al máximo siempre —una
      rosa rasterizada cuesta lo mismo de estampar que una silueta— así
      que lo que se adapta al equipo es la CANTIDAD, no el detalle. */
-  var CUANTAS = esAlta ? 220
-              : raiz.classList.contains('calidad-baja') ? 60 : 130;
+  /* ⚡ LA MAREA DE ROSAS SUELTAS SE APAGÓ (2026-09-10)
+   *
+   * Eran 130 a 220 cabezas de rosa dibujadas en el lienzo, sin tallo,
+   * apareciendo de la nada y flotando alrededor del nombre.
+   *
+   * No comunicaban nada. Una rosa sin tallo flotando en el aire no es una
+   * planta deseando algo: es una mancha roja moviéndose. La escena
+   * necesita que se entienda que son LAS ENREDADERAS DEL MARCO —las que
+   * llevan toda la invitación ahí, quietas y dóciles— las que cobran
+   * conciencia y se lanzan hacia el nombre. Eso ahora lo hacen ellas
+   * mismas (ver moverLasFloresReales), que es de donde sale el sentido.
+   *
+   * ⚠️ NO SE BORRA EL SISTEMA, SE PONE EN CERO. `laQueMuere` —la rosa que
+   * se suelta a los 36,5 s, se posa sobre el nombre y cae al final— se
+   * elige de esta lista, y esa sí se aprobó tal cual está. Con la marea en
+   * una sola rosa, esa rosa existe y es la única que se ve suelta: deja de
+   * ser una entre doscientas y pasa a ser LA que se soltó, que es
+   * exactamente lo que significa.
+   */
+  var CUANTAS = 1;
 
   /* ─── 3. LAS CAPAS ──────────────────────────────────────────────────
 
@@ -611,21 +638,85 @@
    * esto salía a la luz. Se escribe por el mismo canal que 07 para que el
    * último que escribe mande, que es lo que uno espera.
    */
+  /* ⚡ LAS PLANTAS DEL MARCO SON LAS PROTAGONISTAS (2026-09-10)
+   *
+   * Antes esto era un adorno: las flores del marco temblaban un poco,
+   * solo en calidad alta, mientras el peso de la escena lo llevaba una
+   * marea de 130 rosas sueltas dibujadas en el lienzo.
+   *
+   * Esas rosas sueltas no comunicaban nada. Aparecían de la nada, sin
+   * tallo, flotando: no eran plantas, eran manchas rojas moviéndose. Lo
+   * que la escena quiere contar es otra cosa —las enredaderas que
+   * enmarcan la invitación, siempre dóciles, cobran conciencia, desean el
+   * nombre y entran en una histeria colectiva de adoración— y eso solo se
+   * puede contar con las plantas QUE YA ESTÁN AHÍ. Una planta que se
+   * retuerce hacia el nombre significa algo. Una rosa flotando, no.
+   *
+   * ⚠️ CADA FLOR PIVOTA SOBRE SU CUELLO, y eso es lo que hace posible
+   * todo esto. 07-marco-y-enredaderas.js le pone a cada `__movil` un
+   * `transform-origin` en el punto donde la flor se une al tallo (ver su
+   * nota de 2026-08-23, que corrigió justamente que las flores "se
+   * soltaban y volaban"). Así que rotarla no la despega: la DOBLA sobre
+   * su tallo, como se dobla una planta que estira hacia algo.
+   *
+   * ⚠️ YA NO SE EXIGE CALIDAD ALTA. Cuando esto era un adorno, saltárselo
+   * en un equipo flojo no costaba nada. Ahora es la escena: sin esto no
+   * hay eclipse, solo una pantalla que se pone roja.
+   */
   function tomarLasFloresReales() {
-    if (!esAlta) return;
     var todas = document.querySelectorAll('.flor-de-enredadera__movil');
+
     for (var i = 0; i < todas.length; i++) {
+      var nodo = todas[i];
+
+      /* Dónde está esta flor en la pantalla. Se mide UNA vez, acá: son
+         ~60 flores y preguntarle al navegador por cada una en cada cuadro
+         serían 60 lecturas forzadas de layout por cuadro. */
+      var caja;
+      try { caja = nodo.getBoundingClientRect(); } catch (e) { continue; }
+      if (!caja || (!caja.width && !caja.height)) continue;
+
+      var cx = caja.left + caja.width / 2;
+      var cy = caja.top + caja.height / 2;
+
+      /* Hacia dónde queda el nombre, visto desde esta flor. El 0° de una
+         flor es "mirando hacia arriba" —así están dibujadas—, así que al
+         ángulo del vector se le suma 90°. */
+      var haciaElNombre = Math.atan2(altar.y - cy, altar.x - cx) * 180 / Math.PI + 90;
+
+      /* Cuánto le falta girar desde donde está. Se normaliza a ±180 para
+         que cada flor tome el camino corto: sin esto, una flor a la
+         izquierda del nombre daría una vuelta entera para llegar. */
+      var giro = haciaElNombre;
+      while (giro > 180) giro -= 360;
+      while (giro < -180) giro += 360;
+
       floresReales.push({
-        nodo: todas[i],
+        nodo: nodo,
         /* Lo que tenía puesto 07 en el momento de entrar. Se guarda para
            devolvérselo tal cual: si el eclipse lo borrara, la flor quedaría
            quieta hasta que el mouse volviera a pasarle por al lado. */
-        antes: todas[i].style.transform || '',
-        /* El atributo también se respeta: es el que trae el SVG de origen
-           con la posición de la flor en el marco. Nunca se toca, solo se
-           lee para no pisarlo desde el estilo. */
-        atributo: todas[i].getAttribute('transform') || ''
+        antes: nodo.style.transform || '',
+        haciaElNombre: giro,
+        /* La distancia decide quién se entera primero. Las que están cerca
+           del nombre despiertan antes: la conciencia se contagia hacia
+           afuera, desde el altar, como una onda. */
+        distancia: Math.sqrt((altar.x - cx) * (altar.x - cx) +
+                             (altar.y - cy) * (altar.y - cy)),
+        /* Que no despierten todas exactamente igual, ni tiemblen al
+           unísono: un coro, no un metrónomo. */
+        fase: Math.random() * Math.PI * 2,
+        ansia: 0.7 + Math.random() * 0.3
       });
+    }
+
+    /* La onda de conciencia necesita saber cuál es la flor más lejana
+       para repartir los tiempos entre la primera y la última. */
+    lejaniaMaxima = 1;
+    for (var j = 0; j < floresReales.length; j++) {
+      if (floresReales[j].distancia > lejaniaMaxima) {
+        lejaniaMaxima = floresReales[j].distancia;
+      }
     }
   }
 
@@ -1049,23 +1140,82 @@
   /* ─── 14. LAS FLORES DEL MARCO, DESDE AFUERA ────────────────────── */
 
   function moverLasFloresReales(t) {
-    if (!floresReales.length) return;
+    /* ⚡ EL MARCO PUEDE NO EXISTIR TODAVÍA CUANDO EL ECLIPSE ARRANCA
+     *   (2026-09-10)
+     *
+     * Las flores las construye 07-marco-y-enredaderas.js cuando la escena
+     * se monta, y eso pasa DESPUÉS de abrir el sobre. El eclipse puede
+     * empezar antes: en el ensayo siempre, y en el de verdad cada vez que
+     * alguien abre la invitación con el minuto ya empezado.
+     *
+     * Si se midieran una sola vez al empezar, `floresReales` quedaría
+     * vacío y no pasaría absolutamente nada durante los 60 segundos — sin
+     * error, sin aviso, igual que pasaba con la rosa que no rasterizaba.
+     * Es la misma trampa: pedirle a la escena algo que todavía no nació.
+     *
+     * Se vuelve a intentar mientras no haya ninguna. La consulta al DOM es
+     * barata y deja de hacerse en cuanto aparecen. */
+    if (!floresReales.length) {
+      if (t - ultimoIntentoDeFlores < 500) return;
+      ultimoIntentoDeFlores = t;
+      tomarLasFloresReales();
+      if (!floresReales.length) return;
+    }
 
     var enSumision = t >= FRENESI;
-    /* Misma rampa que la marea y los pétalos: las tres se retiran juntas.
-       Antes esto era `enSumision ? 0` y el marco se congelaba de un tirón
-       mientras las rosas todavía se estaban desvaneciendo. */
-    var estira = enSumision ? 0.7 * (1 - tramo(t, FRENESI, FRENESI + 900))
-               : t >= SHOCK ? 0.7 + tramo(t, SHOCK, SHOCK + 2000) * 0.3
-               : tramo(t, PENUMBRA * 0.4, PROFUNDA) * 0.7;
-
+    var enShock    = t >= TOTALIDAD && t < SHOCK;
     var ahora = t / 1000;
+
+    /* Cuánto se retira todo al final, por la misma rampa que la marea y
+       los pétalos: las tres se van juntas. */
+    var retirada = enSumision ? tramo(t, FRENESI, FRENESI + 900) : 0;
 
     for (var i = 0; i < floresReales.length; i++) {
       var f = floresReales[i];
-      var vibra = Math.sin(ahora * (t >= SHOCK && !enSumision ? 9 : 2) + i) *
-                  (t >= SHOCK && !enSumision ? 6 : 2) * estira;
-      var crece = 1 + estira * 0.22;
+
+      /* ── 1. LA CONCIENCIA, QUE LLEGA COMO UNA ONDA ──
+         Las flores más cercanas al nombre despiertan primero y las de las
+         esquinas van último. No es un detalle: es lo que hace que se lea
+         como algo que SE PROPAGA —una noticia corriendo por la planta—
+         en vez de como un interruptor que alguien apretó. */
+      var suTurno = PENUMBRA * 0.3 + (f.distancia / lejaniaMaxima) * UMBRA * 0.8;
+      var despierta = suave(limitar((t - suTurno) / 6000, 0, 1));
+
+      /* ── 2. EL DESEO, QUE CRECE ──
+         De dócil a histérica. En el shock se congela —dos segundos de
+         vacío, igual que la marea— y en el frenesí se desata. */
+      var fervor =
+          enSumision ? despierta * (1 - retirada)
+        : enShock    ? despierta * 0.55
+        : t >= SHOCK ? despierta * (0.55 + tramo(t, SHOCK, SHOCK + 2500) * 0.45)
+        :              despierta * tramo(t, PENUMBRA * 0.3, PROFUNDA) * 0.55;
+
+      if (fervor <= 0.001) {
+        // Todavía dócil: se la deja exactamente como la dejó 07.
+        if (f.tocada) { f.nodo.style.transform = f.antes; f.tocada = false; }
+        continue;
+      }
+      f.tocada = true;
+
+      /* ── 3. ESTIRAR HACIA EL NOMBRE ──
+         Se dobla sobre su cuello en dirección al altar. El tope es 52°:
+         más que eso deja de leerse como una planta estirando y empieza a
+         parecer una flor rota. El `ansia` de cada una lo desordena un
+         poco, que es lo que separa un coro de un pelotón. */
+      var inclina = f.haciaElNombre * fervor * f.ansia * 0.58;
+      if (inclina >  52) inclina =  52;
+      if (inclina < -52) inclina = -52;
+
+      /* ── 4. EL TEMBLOR ──
+         Lento y mínimo cuando recién despierta; rápido y amplio en la
+         histeria. En el shock se queda quieta: contiene el aliento. */
+      var frecuencia = 1.4 + fervor * 9;
+      var amplitud   = enShock ? 0 : fervor * fervor * 9;
+      var tiembla    = Math.sin(ahora * frecuencia + f.fase) * amplitud;
+
+      /* ── 5. TENSARSE ──
+         Crece un poco al estirar, como algo que se estira de verdad. */
+      var crece = 1 + fervor * 0.26;
 
       /* Se apila sobre lo que 07 tuviera puesto, no se lo reemplaza: si esa
          flor estaba apartándose del mouse, sigue apartándose mientras
@@ -1073,7 +1223,8 @@
          propiedad; el atributo SVG usa números pelados y no son lo mismo. */
       f.nodo.style.transform =
         (f.antes ? f.antes + ' ' : '') +
-        'rotate(' + vibra.toFixed(2) + 'deg) scale(' + crece.toFixed(3) + ')';
+        'rotate(' + (inclina + tiembla).toFixed(2) + 'deg) ' +
+        'scale(' + crece.toFixed(3) + ')';
     }
   }
 
@@ -1185,6 +1336,7 @@
     laQueMuere = null;
     ultimoCuadro = 0;
     promedio = 16.7;
+    ultimoIntentoDeFlores = -1000;
   }
 
   function empezar(desfase) {
@@ -1395,7 +1547,13 @@
       duracion: DURACION,
 
       /** Para que el panel pueda decir si la calidad alta está activa. */
-      esAlta: esAlta
+      esAlta: esAlta,
+
+      /* Cuántas flores del marco alcanzó a tomar. Es el número que decide
+         si hay escena o no: con cero, el eclipse corre sin que las plantas
+         se muevan y no se entiende nada. El panel lo muestra para que un
+         cero se vea en vez de tener que deducirlo. */
+      cuantasFlores: function () { return floresReales.length; }
     };
   }
 })();
