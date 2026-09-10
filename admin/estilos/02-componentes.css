@@ -47,19 +47,16 @@
    portapapeles no está disponible. Lo cuida prueba-puerta.mjs. */
 .boton,
 .boton-icono,
-/* ⚡ `.boton` ENTRÓ A ESTA LISTA (2026-09-09)
-   El FAB ya estaba acá, pero el problema aparecía DESPUÉS de soltarlo:
-   el toque sostenido abre la hoja de herramientas debajo del dedo, y la
-   selección de texto que el navegador había empezado terminaba
-   agarrando el rótulo de una de las tres opciones — el menú quedaba con
-   un renglón resaltado en azul, como si se fuera a copiar. El rótulo de
-   un botón no es texto que alguien quiera copiar; no tiene por qué ser
-   seleccionable en ningún caso.
-
-   ⚠️ Esto NO pisa a `.codigo-pase`, que pide `user-select: all` a
-   propósito para poder copiar el código con un toque largo: no es un
-   `.boton`, es un span. */
-.boton,
+/* ⚠️ ACÁ SE AGREGÓ UN `.boton` DUPLICADO, Y NO HACÍA FALTA (2026-09-09)
+   Al arreglar el texto que quedaba resaltado tras el toque largo del FAB
+   se sumó `.boton` a esta lista, con un comentario que decía que "entró
+   ahora". Era falso: `.boton` ya estaba tres renglones más arriba, desde
+   siempre. O sea que esa mitad del arreglo no cambió nada — lo que de
+   verdad lo resolvió fue limpiar la selección ya empezada desde el JS
+   (limpiarLaSeleccionDelSostenido, en 29-fab.js), porque el gesto
+   arranca sobre el FAB y la hoja se abre debajo del dedo a mitad de
+   camino. El duplicado se saca y queda esto anotado para no volver a
+   "arreglarlo" por el mismo lado. */
 .boton-flotante,
 .filtro,
 .lista__fila,
@@ -71,6 +68,82 @@
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   QUÉ CAMBIÓ DESDE LA ÚLTIMA VEZ (2026-09-09)
+
+   El cartel que aparece arriba de Gente cuando alguien contestó. La
+   burbuja de la pestaña decía un número —"3"— y para saber quiénes eran
+   había que recorrer 48 renglones de memoria.
+
+   Va en oro —el `--acento-victoriano`, no el morado— por la misma razón
+   que los códigos de pase: en una pantalla donde todo lo tocable es
+   morado, una noticia tiene que leerse como noticia y no como un botón
+   más. Sin animación y sin color de alarma: que alguien confirme es una
+   buena noticia, no una urgencia.
+
+   ⚠️ SE LLAMA `que-cambio` Y NO `novedades` a propósito. Más abajo en
+   este mismo archivo vive `.novedad__tarjeta`, que es otra cosa: el
+   globo que señala una novedad de la APP (40-novedades.js). Dos nombres
+   casi iguales para dos cosas distintas es una confusión garantizada
+   para quien venga a tocar esto. */
+.que-cambio {
+  border: 1px solid var(--acento-victoriano);
+  border-radius: var(--redondeo-chico);
+  background: color-mix(in srgb, var(--acento-victoriano) 8%, transparent);
+  padding: var(--esp-2);
+  margin-bottom: var(--esp-2);
+}
+.que-cambio__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-2);
+  margin-bottom: var(--esp-1);
+}
+.que-cambio__titulo {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--acento-victoriano);
+}
+/* El botón de cerrar es un blanco de 32px aunque la ✕ mida menos: en un
+   teléfono, un carácter suelto es imposible de acertar. */
+.que-cambio__cerrar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--redondeo-chico);
+  background: transparent;
+  color: var(--texto-suave);
+  font-size: 14px;
+  cursor: pointer;
+}
+.que-cambio__cerrar:hover { background: var(--borde); color: var(--texto); }
+
+.que-cambio__lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.que-cambio__gente { color: var(--texto-tenue); }
+.que-cambio__mas {
+  margin: var(--esp-1) 0 0;
+  font-size: 12px;
+  color: var(--texto-tenue);
+}
+
+/* La misma noticia, marcada en su fila: el cartel se cierra, esto queda
+   mientras dure la visita. Un filete en el borde de arranque, que no le
+   quita ni un pixel de ancho al contenido de la fila. */
+.lista__fila--nueva {
+  border-inline-start: 3px solid var(--acento-victoriano);
 }
 
 
