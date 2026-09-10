@@ -345,17 +345,77 @@
 
   function rasterizarLaRosa(cuandoEste) {
     var biblioteca = document.getElementById('biblioteca-de-rosas');
-    var unaFlor    = document.querySelector('.flor-de-enredadera use');
-    if (!biblioteca || !unaFlor) { cuandoEste(false); return; }
+    if (!biblioteca) { cuandoEste(false); return; }
 
-    var tipo = unaFlor.getAttribute('href') || unaFlor.getAttribute('xlink:href');
+    /* ⚡ ACÁ SE PERDÍAN LAS ROSAS, TODAS, SIEMPRE (2026-09-10)
+     *
+     * Esto pedía `.flor-de-enredadera use` para saber qué símbolo dibujar.
+     * Esas flores NO existen todavía: las construye
+     * 07-marco-y-enredaderas.js cuando la escena se monta, y el eclipse se
+     * carga antes — en el ensayo siempre, y en el eclipse de verdad cada
+     * vez que alguien abre la invitación con el minuto ya empezado.
+     *
+     * Sin ese elemento, la función salía por `cuandoEste(false)`,
+     * `mapaDeLaRosa` quedaba en null y las 130 rosas de la marea se
+     * dibujaban con el respaldo: seis elipses en #12060a, un negro
+     * rojizo, sobre un fondo ya negro. Eso es lo que se veía —lo que se
+     * NO se veía—: puntos flotantes que parecían luciérnagas.
+     *
+     * El símbolo vive en la biblioteca del HTML estático, que está desde
+     * el primer byte. Se lo pide a ella y no a un elemento que quizás no
+     * nació todavía. Se sigue prefiriendo el del marco cuando existe,
+     * para que el eclipse dibuje la misma flor que ya está en pantalla. */
+    var tipo = '';
+
+    var unaFlor = document.querySelector('.flor-de-enredadera use');
+    if (unaFlor) {
+      tipo = unaFlor.getAttribute('href') || unaFlor.getAttribute('xlink:href') || '';
+    }
+
+    if (!tipo) {
+      /* La rosa más abierta de la biblioteca; si algún día se le cambia el
+         nombre, se prueban las otras antes de rendirse. */
+      var candidatas = ['rosa-frente', 'rosa-tres-cuartos', 'rosa-media', 'rosa-perfil'];
+      for (var c = 0; c < candidatas.length; c++) {
+        if (biblioteca.querySelector('#' + candidatas[c])) {
+          tipo = '#' + candidatas[c];
+          break;
+        }
+      }
+    }
+
     if (!tipo) { cuandoEste(false); return; }
 
+    /* ⚡ UN COMENTARIO DEJÓ AL ECLIPSE SIN ROSAS, DESDE EL PRIMER DÍA
+     *   (2026-09-10)
+     *
+     * Un `data:image/svg+xml` lo parsea el navegador como XML ESTRICTO, no
+     * como HTML. Y en XML un comentario NO PUEDE CONTENER `--`.
+     *
+     * La biblioteca de rosas tiene, adentro, un comentario que explica las
+     * variables CSS de los pétalos y las nombra: «define las variables
+     * --pet-cara, --pet-media, etc.». Ese doble guion hace que el
+     * documento entero no parsee. El navegador no avisa nada: dispara
+     * `onerror`, se cumple el plazo de 1 200 ms, `mapaDeLaRosa` queda en
+     * null y las 130 rosas de la marea se dibujan con el respaldo —seis
+     * elipses en #12060a, un negro rojizo— sobre un fondo ya negro.
+     *
+     * Así se veía el homenaje: puntos flotantes que parecían luciérnagas.
+     * Nadie vio nunca una rosa. Se descubrió preguntándole al DOMParser
+     * qué le molestaba, después de que la rasterización fallara sin decir
+     * por qué.
+     *
+     * Se quitan los comentarios antes de armar el SVG. No hacen falta para
+     * dibujar y son la única parte del marcado que XML rechaza.
+     *
+     * ⚠️ NO se toca el HTML: el comentario está bien donde está y explica
+     * algo que hace falta entender. El que tiene que adaptarse es quien lo
+     * mete en un contexto más estricto, que es este archivo. */
     var svg =
       '<svg xmlns="http://www.w3.org/2000/svg" ' +
            'xmlns:xlink="http://www.w3.org/1999/xlink" ' +
            'width="' + LADO + '" height="' + LADO + '" viewBox="-30 -30 60 60">' +
-        biblioteca.innerHTML +
+        biblioteca.innerHTML.replace(/<!--[\s\S]*?-->/g, '') +
         '<use href="' + tipo + '" xlink:href="' + tipo + '"/>' +
       '</svg>';
 
@@ -448,7 +508,61 @@
 
   var petalos = [];
 
+  /* ⚡ LOS PÉTALOS ERAN ÓVALOS SÓLIDOS (2026-09-10)
+   *
+   * Se dibujaban con `pincel.ellipse(0, 0, tam, tam * 0.55, ...)`: una
+   * mancha lisa, sin forma de pétalo. Al lado de los pétalos de la
+   * invitación —que son tres dibujos de verdad— se leían como puntos.
+   *
+   * La invitación ya los tiene cargados y los deja a la vista en
+   * `window.LienzoDePetalos.imagenes` (24-lienzo-de-petalos.js). Se usan
+   * ESOS, así que el pétalo que cae durante el eclipse es el mismo que
+   * caía un segundo antes. Si el registro no está —porque ese módulo se
+   * apagó para medir— se cargan los archivos directamente.
+   *
+   * ⚠️ SE RASTERIZAN UNA VEZ, igual que hace 24-lienzo-de-petalos.js por
+   * el mismo motivo: un <img> que apunta a un SVG se vuelve a rasterizar
+   * en CADA rotación distinta, y acá hay 90 pétalos girando cada uno por
+   * su cuenta. Serían 90 rasterizaciones vectoriales por cuadro. */
+  var LADO_DEL_PETALO = 96;
+  var mapasDePetalos = [];
+
+  function prepararLosPetalos() {
+    if (mapasDePetalos.length) return;
+
+    var fuentes = (window.LienzoDePetalos && window.LienzoDePetalos.imagenes) || null;
+
+    if (!fuentes) {
+      fuentes = ['recursos/petalo-rosa-1.svg',
+                 'recursos/petalo-rosa-2.svg',
+                 'recursos/petalo-rosa-3.svg'].map(function (ruta) {
+        var img = new Image();
+        img.src = ruta;
+        return img;
+      });
+    }
+
+    fuentes.forEach(function (img) {
+      var mapa = document.createElement('canvas');
+      mapa.width = mapa.height = LADO_DEL_PETALO;
+
+      var pintar = function () {
+        try {
+          mapa.getContext('2d').drawImage(img, 0, 0, LADO_DEL_PETALO, LADO_DEL_PETALO);
+          mapa.listo = true;
+        } catch (e) { /* se sigue con la silueta */ }
+      };
+
+      if (img.complete && img.naturalWidth) pintar();
+      else img.addEventListener('load', pintar, { once: true });
+
+      mapasDePetalos.push(mapa);
+    });
+  }
+
   function sembrarLosPetalos() {
+    prepararLosPetalos();
+
     var cuantos = esAlta ? 90 : 40;
     petalos.length = 0;
     for (var i = 0; i < cuantos; i++) {
@@ -456,8 +570,14 @@
         x: Math.random() * window.innerWidth,
         y: Math.random() * window.innerHeight,
         vx: 0, vy: 0,
-        tam: 3 + Math.random() * 4,
+        /* Más grandes que antes (eran 3–7 px). Un pétalo de 7 px no es un
+           pétalo: es un punto. Los de la invitación llegan a 62 px. */
+        tam: 9 + Math.random() * 13,
         giro: Math.random() * Math.PI * 2,
+        /* Cada uno gira a su ritmo y en su sentido: noventa pétalos con
+           el mismo `+= 0.03` se movían como un solo objeto. */
+        giroVel: (Math.random() - 0.5) * 0.05,
+        cual: i % 3,
         posado: false,
       });
     }
@@ -759,10 +879,28 @@
     var enShock    = t >= TOTALIDAD && t < SHOCK;
     var enSumision = t >= FRENESI;
 
-    /* Cuánto se estiran, en general. Sube con el eclipse, se congela en
-       el shock, estalla en el frenesí y se corta de golpe. */
+    /* ⚡ EL CICLO SE CORTABA DE GOLPE (2026-09-10)
+     *
+     * Esto decía `enSumision ? 0`. En el milisegundo 54 000 el
+     * estiramiento saltaba de 1,0 a 0 —de un cuadro al siguiente— y con
+     * él saltaban la atracción de los pétalos y el temblor de las flores
+     * del marco, las tres a la vez. Las rosas, en cambio, se desvanecían
+     * en 900 ms. O sea que la marea se congelaba de un tirón mientras las
+     * flores todavía se estaban yendo: se leía como que algo se rompió,
+     * no como que el eclipse pasó.
+     *
+     * Un eclipse se retira como llegó. Ahora las tres bajan por la MISMA
+     * rampa que usan las rosas para desvanecerse (FRENESI → +900 ms), así
+     * que todo se retira junto y en el mismo tiempo.
+     *
+     * El frenazo del final sigue intacto: es a los 60 s, cuando
+     * terminar() saca las capas de un tirón, y eso es a propósito. Lo que
+     * se arregla es el paso de la sumisión, que era un corte donde tenía
+     * que haber una marea bajando. */
+    var retirada = enSumision ? tramo(t, FRENESI, FRENESI + 900) : 0;
+
     var estiramiento =
-        enSumision ? 0
+        enSumision ? (1 - retirada)
       : enShock    ? 0.62
       : enFrenesi  ? 0.62 + tramo(t, SHOCK, SHOCK + 2500) * 0.38
       :              tramo(t, PENUMBRA * 0.4, PROFUNDA) * 0.62;
@@ -837,7 +975,9 @@
     }
 
     /* ── Los pétalos, arrastrados por la gravedad nueva ── */
-    var atraccion = enSumision ? 0 : tramo(t, PENUMBRA * 0.5, PROFUNDA) * 0.55;
+    /* Baja por la misma rampa que el estiramiento y que las rosas: la
+       gravedad no le devuelve el mando de un tirón, se lo va soltando. */
+    var atraccion = tramo(t, PENUMBRA * 0.5, PROFUNDA) * 0.55 * (1 - retirada);
 
     pincel.fillStyle = '#7d1a26';
     for (var p = 0; p < petalos.length; p++) {
@@ -845,26 +985,63 @@
       var dx = altar.x - pt.x, dy = altar.y - pt.y;
       var d = Math.sqrt(dx * dx + dy * dy) || 1;
 
-      if (enSumision) {
-        pt.vy += 0.28;                       // la gravedad vuelve a ser la gravedad
-      } else {
-        pt.vx += (dx / d) * atraccion * 0.42;
-        pt.vy += (dy / d) * atraccion * 0.42 + 0.05;
-      }
+      /* La gravedad vuelve a ser la gravedad, pero entrando de a poco por
+         la misma rampa: antes aparecía entera en un solo cuadro. */
+      pt.vx += (dx / d) * atraccion * 0.42;
+      pt.vy += (dy / d) * atraccion * 0.42 + 0.05 + retirada * 0.28;
       pt.vx *= 0.965; pt.vy *= 0.965;
 
-      // No entran al altar: se acumulan alrededor, como ofrenda.
-      if (d < altar.radio * 0.92 && !enSumision) { pt.vx *= -0.25; pt.vy *= -0.25; }
+      /* ⚡ SE PEGABAN AL RELICARIO (2026-09-10)
+       *
+       * Acá había un rebote: `pt.vx *= -0.25; pt.vy *= -0.25`. Con la
+       * atracción tirando hacia adentro cuadro tras cuadro y el rebote
+       * devolviéndolos con un cuarto de la velocidad, los pétalos
+       * quedaban vibrando contra el borde del anillo y se amontonaban
+       * ahí, encimados, como una costra alrededor del nombre. El
+       * comentario decía "como ofrenda"; en pantalla se leía como
+       * suciedad pegada.
+       *
+       * Ahora, al llegar al anillo, la velocidad que apunta hacia adentro
+       * se convierte en velocidad TANGENTE: en vez de rebotar, el pétalo
+       * dobla y sigue de largo bordeando el relicario. Se lee como una
+       * corriente girando alrededor del nombre, que es lo que la escena
+       * quería decir, y ninguno se queda quieto.
+       */
+      if (d < altar.radio * 0.98 && !enSumision) {
+        var nx = -dx / d, ny = -dy / d;              // hacia afuera del altar
+        var haciaAdentro = pt.vx * (dx / d) + pt.vy * (dy / d);
 
-      pt.x += pt.vx; pt.y += pt.vy; pt.giro += 0.03;
+        if (haciaAdentro > 0) {
+          // Se le quita el avance hacia el centro…
+          pt.vx -= (dx / d) * haciaAdentro;
+          pt.vy -= (dy / d) * haciaAdentro;
+          // …y se le devuelve como giro alrededor, conservando el impulso.
+          pt.vx += -ny * haciaAdentro * 0.9;
+          pt.vy +=  nx * haciaAdentro * 0.9;
+        }
+
+        /* Un empujón suave hacia afuera si igual quedó adentro del anillo:
+           el nombre no se toca, es la regla 2. */
+        if (d < altar.radio * 0.9) { pt.vx += nx * 0.35; pt.vy += ny * 0.35; }
+      }
+
+      pt.x += pt.vx; pt.y += pt.vy; pt.giro += pt.giroVel;
 
       pincel.save();
       pincel.translate(pt.x, pt.y);
       pincel.rotate(pt.giro);
       pincel.globalAlpha = 0.75;
-      pincel.beginPath();
-      pincel.ellipse(0, 0, pt.tam, pt.tam * 0.55, 0, 0, Math.PI * 2);
-      pincel.fill();
+
+      var mapa = mapasDePetalos[pt.cual];
+      if (mapa && mapa.listo) {
+        // El dibujo de verdad, centrado en su punto.
+        pincel.drawImage(mapa, -pt.tam, -pt.tam, pt.tam * 2, pt.tam * 2);
+      } else {
+        // Mientras el SVG no terminó de decodificar, la silueta de antes.
+        pincel.beginPath();
+        pincel.ellipse(0, 0, pt.tam * 0.5, pt.tam * 0.28, 0, 0, Math.PI * 2);
+        pincel.fill();
+      }
       pincel.restore();
     }
   }
@@ -875,7 +1052,10 @@
     if (!floresReales.length) return;
 
     var enSumision = t >= FRENESI;
-    var estira = enSumision ? 0
+    /* Misma rampa que la marea y los pétalos: las tres se retiran juntas.
+       Antes esto era `enSumision ? 0` y el marco se congelaba de un tirón
+       mientras las rosas todavía se estaban desvaneciendo. */
+    var estira = enSumision ? 0.7 * (1 - tramo(t, FRENESI, FRENESI + 900))
                : t >= SHOCK ? 0.7 + tramo(t, SHOCK, SHOCK + 2000) * 0.3
                : tramo(t, PENUMBRA * 0.4, PROFUNDA) * 0.7;
 
