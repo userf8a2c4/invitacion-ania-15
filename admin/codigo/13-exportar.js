@@ -177,8 +177,15 @@ function nombreConFechaYHora(base) {
  * @param {Array} bloques
  * @returns {void}
  */
-function armarPdf(titulo, bloques) {
-  const ventana = window.open('', '_blank');
+function armarPdf(titulo, bloques, extra) {
+  /* ⚠️ LA VENTANA PUEDE VENIR YA ABIERTA, Y ES A PROPÓSITO (2026-09-09)
+     `window.open()` solo funciona si la llamada nace de un toque del
+     usuario. Desde que la descarga de invitados pide los menús al
+     servidor ANTES de armar el archivo, este `open()` ya no ocurre
+     dentro del toque —ocurre después del `await`— y el navegador lo
+     bloquea. Quien tenga que esperar algo abre la ventana primero,
+     mientras el toque todavía cuenta, y la pasa acá. */
+  const ventana = (extra && extra.ventana) || window.open('', '_blank');
 
   if (!ventana) {
     avisar('El navegador bloqueó la ventana. Permite las ventanas emergentes.', true);
@@ -212,7 +219,16 @@ function armarPdf(titulo, bloques) {
     '<title>' + seguro(nombreConFechaYHora(titulo)) + '</title><style>' +
       // Impreso en papel: fondo blanco y letra negra, no la paleta oscura.
       'body{font-family:Georgia,serif;color:#222;padding:24px;}' +
-      'h1{color:#8a6a2c;border-bottom:2px solid #d4a843;padding-bottom:8px;}' +
+      'h1{color:#8a6a2c;border-bottom:2px solid #d4a843;padding-bottom:8px;' +
+        'margin-bottom:6px;}' +
+      // El subtítulo va pegado al título: son una sola cabecera.
+      '.subtitulo{margin:0 0 2px;font-size:13px;color:#5a4a2c;}' +
+      /* El aviso de uso interno se ve, pero no compite con los datos:
+         recuadro tenue, no un cartel rojo. Se lee una vez, al recibir la
+         hoja, y después estorba. */
+      '.uso-interno{font-size:11px;color:#7a6a4a;background:#fdf3e3;' +
+        'border:1px solid #e8d5b0;border-radius:4px;padding:6px 8px;' +
+        'margin:10px 0 4px;}' +
       'h2{color:#8a6a2c;margin-top:24px;font-size:15px;}' +
       'table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;}' +
       'th{background:#fdf3e3;text-align:left;border:1px solid #e8d5b0;padding:6px;}' +
@@ -235,9 +251,24 @@ function armarPdf(titulo, bloques) {
       '@media print{ body{padding:0;} .volver{display:none;} }' +
     '</style></head><body>' +
     '<button type="button" class="volver" onclick="window.close()">← Volver</button>' +
+
+    /* ⚡ EL DOCUMENTO SE PRESENTA (2026-09-09)
+       Antes empezaba con el título y una línea gris con la fecha de
+       generación. Impreso y sobre una mesa, eso no dice de qué fiesta es
+       ni qué contiene: aparecía un papel con 48 nombres y ningún
+       encabezado. Ahora lleva el subtítulo con la fecha y el lugar del
+       evento, y el aviso de que es de uso interno — que importa porque
+       estas hojas se imprimen, se dejan en el salón y traen teléfonos y
+       correos de 108 personas. */
     '<h1>' + seguro(titulo) + '</h1>' +
+    (extra && extra.subtitulo
+      ? '<p class="subtitulo">' + seguro(extra.subtitulo) + '</p>'
+      : '') +
     '<p style="font-size:12px;color:#888">Generado el ' +
       seguro(new Date().toLocaleString(CONFIGURACION.dinero.region)) + '</p>' +
+    (extra && extra.aviso
+      ? '<p class="uso-interno">' + seguro(extra.aviso) + '</p>'
+      : '') +
     tablas +
     '</body></html>'
   );
@@ -256,8 +287,8 @@ function armarPdf(titulo, bloques) {
  * @param {Array} bloques - [{ titulo, encabezados, filas }]
  * @returns {void}
  */
-function exportar(formato, nombreBase, titulo, bloques) {
-  if (formato === 'pdf') { armarPdf(titulo, bloques); return; }
+function exportar(formato, nombreBase, titulo, bloques, extra) {
+  if (formato === 'pdf') { armarPdf(titulo, bloques, extra); return; }
 
   // Mismo motivo que en el PDF: sin fecha, dos descargas de semanas
   // distintas se pisan o quedan indistinguibles ("(1)", "(2)"…).
@@ -781,7 +812,55 @@ async function exportarResumenEjecutivoDinero() {
  * @param {string} formato
  * @returns {void}
  */
-function exportarInvitados(formato) {
+/**
+ * Un guion en vez de una celda vacía.
+ *
+ * ⚡ POR QUÉ (2026-09-09). Una fila con cuatro huecos en blanco no se lee
+ * como "esto todavía no se sabe": se lee como si el documento estuviera
+ * a medio hacer, o como si el renglón se hubiera cortado. El guion dice
+ * que el dato se miró y no está, que es información distinta.
+ *
+ * @param {*} valor
+ * @returns {string}
+ */
+function oGuion(valor) {
+  const texto = String(valor === undefined || valor === null ? '' : valor).trim();
+  return texto === '' ? '—' : texto;
+}
+
+/**
+ * Los menús de una familia, persona por persona.
+ *
+ * ⚡ ANTES ERA UN CONTEO Y NO ALCANZABA (2026-09-09)
+ * La columna decía "2 pollo, 1 res": la cocina sabe cuántos platos hacer
+ * y el salón no sabe delante de quién ponerlos. Ahora dice
+ * "Ana: Pollo · Luis: Res · Diana: Pescado".
+ *
+ * Los que no eligieron plato no se omiten —se los nombra con "sin
+ * elegir"— porque un nombre que falta en la lista es indistinguible de
+ * un nombre que nadie cargó, y a la hora de servir esa diferencia
+ * importa.
+ *
+ * @param {Object[]} personas - Las de esa confirmación, con su `menu`.
+ * @param {string} respaldo - `resumen_menus`, para cuando no hay personas.
+ * @returns {string}
+ */
+function menusPersonaPorPersona(personas, respaldo) {
+  if (!personas || !personas.length) return oGuion(respaldo);
+
+  const detalle = personas.map(p => {
+    const nombre = (p.nombre || '').trim() || (p.tipo === 'nino' ? 'Niño' : 'Adulto');
+    const plato  = (p.menu || '').trim();
+    return nombre + ': ' + (plato || 'sin elegir');
+  }).join(' · ');
+
+  /* Los niños se cuentan aparte además de nombrarse: la cocina pide ese
+     número suelto y no tiene por qué contar renglones. */
+  const ninos = personas.filter(p => p.tipo === 'nino').length;
+  return detalle + (ninos ? '  ·  Menú infantil: ' + ninos : '');
+}
+
+async function exportarInvitados(formato) {
   if (!INVITADOS || !INVITADOS.length) {
     avisar('Todavía no hay invitados que descargar.', true);
     return;
@@ -789,21 +868,92 @@ function exportarInvitados(formato) {
 
   const visibles = INVITADOS.filter(invitadoPasaElFiltro);
 
-  const bloques = [{
-    titulo: 'Confirmaciones',
-    encabezados: ['Nombre', 'Correo', 'Asiste', 'Adultos', 'Niños', 'Total',
-                  'Menús', 'Alergias', 'Notas', 'Código', 'Fecha'],
-    filas: visibles.map(f => [
-      f.nombre || '', f.correo || '',
-      Number(f.asiste) === 1 ? 'Sí' : 'No',
-      f.adultos || 0, f.ninos || 0,
-      (Number(f.adultos) || 0) + (Number(f.ninos) || 0),
-      f.resumen_menus || '', f.alergias || '', f.notas || '',
-      f.codigo || '', f.fecha_hora || '',
-    ]),
-  }];
+  /* ⚠️ LA VENTANA DEL PDF SE ABRE ACÁ, ANTES DE ESPERAR NADA.
+     Abajo se le piden los menús al servidor, y después de ese `await` el
+     navegador ya no considera que estemos dentro del toque del usuario:
+     un `window.open()` ahí se bloquea y la descarga en PDF no sale
+     nunca. Se abre primero, en blanco, y se le escribe cuando estén los
+     datos. Para los otros tres formatos no hace falta ninguna ventana. */
+  const ventana = formato === 'pdf' ? window.open('', '_blank') : null;
 
-  exportar(formato, 'invitados-ania-xv', 'Invitados · XV de Ania', bloques);
+  /* Los menús de cada persona no están en la lista de la pantalla: viven
+     en `acompanantes`. Se piden en UNA sola consulta para las 48
+     familias (ver la nota de listar_todos). Si falla —sin señal, por
+     ejemplo— la descarga sale igual con el resumen de siempre: es mejor
+     un archivo con menos detalle que ningún archivo. */
+  let porFamilia = {};
+  try {
+    const r = await traer('acompanantes.php?accion=listar_todos&con_menus=1');
+    for (const p of (r.filas || [])) {
+      (porFamilia[p.confirmacion_id] = porFamilia[p.confirmacion_id] || []).push(p);
+    }
+  } catch (error) {
+    avisar('No pude traer el detalle de menús; va el resumen.', true);
+  }
+
+  /* ⚡ EL ESTADO DE VERDAD, NO EL SUPUESTO (2026-09-09)
+     La columna se llamaba "Asiste" y decía "Sí" para TODOS, incluso para
+     invitaciones que ni siquiera se mandaron. No era un error de la
+     descarga: `asiste` arranca en 1 a propósito, para que el bot de
+     mesas pueda acomodar antes de que nadie conteste. Es un supuesto de
+     trabajo, no una respuesta.
+     Ahora se lee con la misma función que la pantalla
+     (comoEstaLaAsistencia), así que el archivo y el panel no pueden
+     decir cosas distintas: "Sin enviar", "Sin responder", "Confirmó",
+     "No viene". */
+  const comoSeLee = f =>
+    (COMO_SE_LEE_EL_ESTADO[comoEstaLaAsistencia(f)] || {}).texto || '—';
+
+  const confirmados = visibles.filter(f => comoEstaLaAsistencia(f) === 'confirmo');
+  const sumar = (lista, campo) =>
+    lista.reduce((total, f) => total + (Number(f[campo]) || 0), 0);
+
+  const adultos = sumar(confirmados, 'adultos');
+  const ninos   = sumar(confirmados, 'ninos');
+
+  const bloques = [
+    /* El resumen va PRIMERO y como bloque propio: así aparece en los
+       cuatro formatos —no solo en el PDF— y es lo primero que se lee. */
+    {
+      titulo: 'Resumen',
+      encabezados: ['Dato', 'Cantidad'],
+      filas: [
+        ['Grupos confirmados', confirmados.length + ' de ' + visibles.length],
+        ['Total de personas confirmadas', adultos + ninos],
+        ['· Adultos', adultos],
+        ['· Niños', ninos],
+      ],
+    },
+    {
+      titulo: 'Confirmaciones',
+      encabezados: ['Nombre', 'Correo', 'Estado', 'Adultos', 'Niños', 'Total',
+                    'Menús', 'Alergias', 'Notas', 'Código', 'Confirmó el'],
+      filas: visibles.map(f => [
+        oGuion(f.nombre), oGuion(f.correo),
+        comoSeLee(f),
+        Number(f.adultos) || 0, Number(f.ninos) || 0,
+        (Number(f.adultos) || 0) + (Number(f.ninos) || 0),
+        menusPersonaPorPersona(porFamilia[f.id], f.resumen_menus),
+        oGuion(f.alergias), oGuion(f.notas),
+        oGuion(f.codigo),
+        /* ⚡ LA FECHA ERA LA DE ALTA, NO LA DE LA RESPUESTA (2026-09-09)
+           Estaba `fecha_hora`, que es cuándo se creó la fila —o sea,
+           cuándo Lucila cargó la invitación—. Se veía una fecha para
+           todos, incluso para quienes no contestaron nunca. La de verdad
+           es `respondida_en`, y quien no contestó no tiene ninguna. */
+        oGuion(f.invitacion_respondida_en
+          ? comoFecha(f.invitacion_respondida_en) : ''),
+      ]),
+    },
+  ];
+
+  exportar(formato, 'invitados-ania-xv', 'Invitados · Ania XV', bloques, {
+    ventana: ventana,
+    subtitulo: 'Lista de confirmaciones · ' + CONFIGURACION.fiesta.fechaEnPalabras +
+               ' · ' + CONFIGURACION.fiesta.lugar,
+    aviso: 'Documento de uso interno. Contiene datos personales de los ' +
+           'invitados: no se comparte fuera de la organización de la fiesta.',
+  });
 }
 
 /* ─── LA MUDANZA DE UN ENTORNO A OTRO ───────────────────────────────
