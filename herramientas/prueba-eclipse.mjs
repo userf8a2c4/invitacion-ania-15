@@ -208,7 +208,9 @@ comprobar('las rosas nacen fuera del radio',
   /base:\s*altar\.radio \+ 30/.test(eclipse));
 
 comprobar('la única que lo cruza es la que se soltó',
-  /if \(laQueMuere && t >= MUERE_EN\)/.test(eclipse));
+  /if \(laQueMuere && muerte\.suelta && t >= MUERE_EN\)/.test(eclipse),
+  'y ahora además tiene que haberse soltado de verdad: `muerte.suelta` lo ' +
+  'pone arrancarALaMartir() al medir la flor del marco que se arranca');
 
 console.log('\nRegla 3 · muere una sola\n');
 
@@ -228,7 +230,12 @@ console.log('\nEl frenazo\n');
    arrastraba la sección 17, que sí tiene un setTimeout —el de esperar a
    la hora— y hacía fallar la comprobación por algo que no es el final. */
 const elFinal = (function () {
-  const desde = eclipseCodigo.indexOf('function terminar()');
+  /* ⚠️ SIN LOS PARÉNTESIS VACÍOS. terminar() pasó a recibir un argumento
+     —`completo`, que decide si queda la evidencia— y buscar el texto
+     `function terminar()` devolvía -1: las seis comprobaciones de esta
+     sección pasaban a mirar el último carácter del archivo y fallaban
+     todas juntas. Se busca el nombre, no la firma. */
+  const desde = eclipseCodigo.indexOf('function terminar(');
   const hasta = eclipseCodigo.indexOf('\n  }', desde);
   return eclipseCodigo.slice(desde, hasta > 0 ? hasta : undefined);
 })();
@@ -330,11 +337,15 @@ for (const archivo of ['06-petalos-con-fisica.js', '07-marco-y-enredaderas.js',
    y estirando hacia el nombre— ahora lo hacen las plantas que ya están
    ahí. Queda una sola rosa suelta: la que se suelta y muere sobre el
    nombre. Lo que se protege ahora es eso. */
-comprobar('la marea suelta quedó en una sola rosa',
-  /var CUANTAS = 1;/.test(eclipseCodigo),
-  'una rosa sin tallo flotando no es una planta deseando algo');
-comprobar('y esa es la que se suelta y muere',
-  /laQueMuere = mejor;/.test(eclipseCodigo));
+comprobar('no queda NINGUNA rosa suelta flotando',
+  /var CUANTAS = 0;/.test(eclipseCodigo),
+  'una rosa sin tallo flotando no es una planta deseando algo; la última ' +
+  'que quedaba era la que se sacrificaba, y ahora ésa es una flor del marco');
+comprobar('y la que muere se elige entre las flores REALES',
+  /laQueMuere = mejor;/.test(eclipseCodigo) &&
+  /cerca\.sort\(function \(a, b\) \{ return a\.distancia - b\.distancia; \}\);/
+    .test(eclipseCodigo),
+  'si se elige de la marea, se sacrifica algo que nunca estuvo sujeto a nada');
 comprobar('el gobernador sigue puesto',
   /marea\.length = Math\.floor/.test(eclipse),
   'entre más rosas y que vaya fluido, gana la fluidez');
@@ -364,8 +375,19 @@ comprobar('el deseo crece en vez de encenderse',
   /var fervor =/.test(eclipseCodigo) && /despierta \* tramo\(/.test(eclipseCodigo));
 
 comprobar('hay un tope de inclinación',
-  /if \(inclina >  TOPE_DE_INCLINACION\)/.test(eclipseCodigo),
+  /var tope = TOPE_DE_INCLINACION \* \(1 \+ esfuerzo \* 0\.45\);/
+    .test(eclipseCodigo) &&
+  /if \(inclina >  tope\) inclina =  tope;/.test(eclipseCodigo),
   'más de eso deja de leerse como estirar y parece una flor rota');
+
+/* ⚠️ Y LO PASA UNA SOLA, A PROPÓSITO. `esfuerzo` solo es distinto de cero
+   para la mártir (`f.martir ? ... : 0`), del segundo 35 al 36,5: parece
+   rota porque SE ESTÁ rompiendo. Si el esfuerzo fuera de todas, el tope
+   dejaría de ser un tope y la escena entera se vería quebrada. */
+comprobar('y solo la mártir lo pasa',
+  /var esfuerzo = f\.martir \? tramo\(t, PROFUNDA, MUERE_EN\) : 0;/
+    .test(eclipseCodigo),
+  'el tope roto tiene que ser el aviso de UNA, no el estado de doscientas');
 
 /* ⚡ EL TOPE DEJÓ DE SER UN NÚMERO FIJO (2026-09-10). Una cabeza de 20 px
    inclinada 52° se lee como un tic; una de 72 px, como una reverencia. El
@@ -690,6 +712,419 @@ if (typeof calibrar === 'undefined') {
       compensar(47) > 1.35, 'dio ' + compensar(47).toFixed(3));
     comprobar('y con muy pocas no se dispara',
       compensar(5) <= 1.45, 'dio ' + compensar(5).toFixed(3));
+  }
+}
+
+
+/* ─── 14d. EL ESPEJO DEL MARCO ──────────────────────────────────────
+   El defecto más grave que tuvo esta escena, y el que menos se veía:
+   medido en PBE sobre el v273, 94 de 198 flores, 40 de 80 nudos y 16 de
+   32 llamas se inclinaban APARTÁNDOSE del nombre. La mitad derecha del
+   marco es la izquierda reflejada (`transform: scaleX(-1)`), y dentro de
+   un espejo los ángulos se invierten. */
+
+console.log('\nLa mitad reflejada del marco\n');
+
+comprobar('se mide el sentido de la pantalla',
+  /function sentidoDeLaPantalla/.test(eclipseCodigo),
+  'sin esto, la mitad del culto le da la espalda al dios');
+
+comprobar('y se mide por el DETERMINANTE, no por la palabra scaleX',
+  /n\[0\] \* n\[3\] - n\[1\] \* n\[2\]/.test(eclipseCodigo) &&
+  !/indexOf\('scaleX'\)/.test(eclipseCodigo),
+  'un determinante negativo ES la definición de reflejado, venga escrito ' +
+  'como scaleX(-1), como scale(-1,1) o como una matriz a mano');
+
+for (const [que, quien] of [
+  ['las flores',  /'rotate\(' \+ \(f\.espejo \* gesto\)\.toFixed\(2\)/],
+  ['las ramas',   /\(r\.espejo \* \(dobla \+ tiembla \+ latigazo\)\)/],
+  ['las llamas',  /l\.espejo \* \(l\.ladeo \* atraccion \+ vaiven\)/],
+]) {
+  comprobar(que + ' aplican el espejo al escribir el ángulo',
+    quien.test(eclipseCodigo),
+    'medir el reflejo y no usarlo es peor que no medirlo');
+}
+
+/* Se EJECUTA el lector de matrices con cadenas de ancestros armadas a
+   mano. Leerlo no dice si distingue un espejo de un giro, que es
+   exactamente donde esto se puede romper sin que se note: una rotación
+   también cambia el primer número de la matriz, pero NO es un reflejo. */
+{
+  const fuenteSentido = (eclipseCodigo.match(
+    /function sentidoDeLaPantalla\(nodo\) \{[\s\S]*?\n  \}/) || [''])[0];
+
+  if (!fuenteSentido) {
+    comprobar('se puede ejecutar sentidoDeLaPantalla()', false,
+      'no se encontró la función para ejecutarla');
+  } else {
+    const tope = { nodeType: 1, __tr: 'none', parentNode: null };
+
+    const medir = (transforms) => {
+      const nodos = transforms.map(tr => ({ nodeType: 1, __tr: tr, parentNode: null }));
+      for (let i = 0; i < nodos.length - 1; i++) nodos[i].parentNode = nodos[i + 1];
+      nodos[nodos.length - 1].parentNode = tope;
+
+      return new Function('getComputedStyle', 'document', 'nodo',
+        'var sentidosMedidos = [];' + fuenteSentido +
+        '\nreturn sentidoDeLaPantalla(nodo);'
+      )(
+        (el) => ({ transform: el.__tr }),
+        { documentElement: tope },
+        nodos[0]
+      );
+    };
+
+    comprobar('sin transformaciones, se ve tal cual',
+      medir(['none', 'none']) === 1);
+
+    comprobar('un scaleX(-1) en un ancestro lo detecta',
+      medir(['none', 'matrix(-1, 0, 0, 1, 0, 0)']) === -1,
+      'es el caso real: .marco__ramillete--derecho');
+
+    comprobar('una ROTACIÓN no es un reflejo',
+      medir(['matrix(0.707, 0.707, -0.707, 0.707, 0, 0)', 'none']) === 1,
+      'un giro también cambia el primer número de la matriz; confundirlos ' +
+      'invertiría flores que están perfectamente bien');
+
+    comprobar('dos espejos se cancelan',
+      medir(['matrix(-1, 0, 0, 1, 0, 0)', 'matrix(-1, 0, 0, 1, 0, 0)']) === 1);
+
+    comprobar('un scaleY(-1) también es un reflejo',
+      medir(['none', 'matrix(1, 0, 0, -1, 0, 0)']) === -1);
+
+    comprobar('y una matrix3d reflejada también',
+      medir(['none',
+        'matrix3d(-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)']) === -1);
+  }
+}
+
+
+/* ─── 14e. ACTO IV · LA MÁRTIR SE ARRANCA A LA VISTA ───────────────── */
+
+console.log('\nLa mártir, beat por beat\n');
+
+comprobar('la mártir es una flor DEL MARCO, no una rosa inventada',
+  /if \(!floresReales\.length\) return;/.test(
+    (eclipseCodigo.match(/function elegirALaQueMuere[\s\S]*?\n  \}/) || [''])[0]),
+  'una rosa que nunca estuvo sujeta a un tallo no puede arrancarse de él');
+
+comprobar('se elige entre las más cercanas al nombre',
+  /cerca\.length = Math\.max\(1, Math\.floor\(cerca\.length \* 0\.2\)\);/
+    .test(eclipseCodigo),
+  'quien se ofrece es quien ya estaba tocando el altar');
+
+comprobar('y entre ésas, la más grande',
+  /cerca\[i\]\.tamano > mejor\.tamano/.test(eclipseCodigo),
+  'una cabeza de 14 px arrancándose no se ve, y el sacrificio hay que verlo');
+
+comprobar('se la elige cuando el marco existe, no al empezar',
+  /elegirALaQueMuere\(\);/.test(
+    (eclipseCodigo.match(/function tomarLasFloresReales[\s\S]*?\n  \}/) || [''])[0]),
+  'el marco nace después que el eclipse: elegirla en empezar() la dejaría en null');
+
+/* ⚠️ EL RELEVO TIENE QUE PASAR DENTRO DE UN MISMO CUADRO. Si la flor se
+   apaga en un cuadro y la copia aparece en el siguiente, hay 16 ms con el
+   tallo vacío y sin rosa: un parpadeo que delata el truco entero. */
+{
+  const cuerpoDeUnCuadro = (eclipseCodigo.match(
+    /function unCuadro\(ahora, t\) \{[\s\S]*?\n  \}/) || [''])[0];
+
+  comprobar('las plantas se mueven ANTES de dibujar el lienzo',
+    cuerpoDeUnCuadro.indexOf('moverLasFloresReales(t);') > 0 &&
+    cuerpoDeUnCuadro.indexOf('moverLasFloresReales(t);') <
+    cuerpoDeUnCuadro.indexOf('dibujar(t);'),
+    'al revés, el relevo de la mártir tendría un cuadro de hueco vacío');
+}
+
+comprobar('el arranque se mide antes de escribir nada en el cuadro',
+  /arrancarALaMartir\(t\);[\s\S]{0,600}for \(var i = 0; i < floresReales\.length/
+    .test(eclipseCodigo),
+  'un getBoundingClientRect() después de mover 200 flores fuerza a ' +
+  'recalcularlas todas, justo en el cuadro que el espectador está mirando');
+
+comprobar('la copia se dibuja del tamaño MEDIDO de la flor',
+  /muerte\.escala = \(lado \* \(f\.creceAhora \|\| 1\)\) \/ \(LADO \* tintaDeLaRosa\);/
+    .test(eclipseCodigo),
+  'si el tamaño se estima, la copia no calza y el relevo se ve');
+
+/* ⚠️ Y SE MIDE CON LA MATRIZ, NO CON LA CAJA DE PANTALLA. La caja de
+   getBoundingClientRect está alineada a los ejes, y las flores están
+   giradas dentro de su <use>: medido sobre las 198 flores de PBE, esa caja
+   exagera el tamaño un 18 % en la mediana y hasta un 39 %. Con la matriz
+   de pantalla y getBBox, el error baja a 0,22 %. */
+comprobar('y el tamaño real sale de la matriz, no de la caja de pantalla',
+  /function ladoRealDeLaFlor/.test(eclipseCodigo) &&
+  /Math\.sqrt\(Math\.abs\(m\.a \* m\.d - m\.b \* m\.c\)\)/.test(eclipseCodigo),
+  'la caja de una rosa girada 30° es mucho más grande que la rosa');
+
+comprobar('y la tinta del mapa de bits se MIDE, no se estima',
+  /getImageData\(0, 0, LADO, LADO\)/.test(eclipseCodigo) &&
+  /function medirLaTintaDeLaRosa/.test(eclipseCodigo),
+  'sin medir el margen del mapa, la copia sale de otro tamaño');
+
+/* ⚡ EL RECUADRO DE LA RASTERIZACIÓN CORTABA LA ROSA (2026-09-11). El
+   `viewBox="-30 -30 60 60"` estaba escrito a mano y los símbolos no caben:
+   rosa-perfil y rosa-tres-cuartos miden 87,2 unidades y empiezan en
+   x = -43,2. Al mapa de bits le faltaba un 30 % de la flor, recortada a
+   cuchillo por los dos costados. */
+comprobar('el recuadro de la rosa sale de su caja real, no de un número',
+  /function medirElSimbolo/.test(eclipseCodigo) &&
+  /viewBox="' \+ recuadro \+ '"/.test(eclipseCodigo) &&
+  !/viewBox="-30 -30 60 60"/.test(eclipseCodigo),
+  'el recuadro escrito a mano le cortaba el 30 % a tres de los seis símbolos');
+
+comprobar('y es cuadrado y centrado en la flor',
+  /Math\.max\(cajaDelSimbolo\.width, cajaDelSimbolo\.height\) \* 1\.04 \/ 2/
+    .test(eclipseCodigo),
+  'cuadrado para que girarlo no lo deforme, centrado para que la copia ' +
+  'caiga exactamente encima de la flor');
+
+comprobar('la copia hereda el giro que el dibujo ya traía',
+  /function giroDelUse/.test(eclipseCodigo) &&
+  /f\.espejo \* f\.giroDelDibujo \+ \(f\.gesto \|\| 0\)/.test(eclipseCodigo),
+  'el <use> lleva su propio rotate(); el mapa de bits se rasteriza sin girar');
+
+comprobar('y se refleja si la flor estaba en el lado reflejado',
+  /if \(espejo === -1\) pincel\.scale\(-1, 1\);/.test(eclipseCodigo),
+  'una rosa no es simétrica: la copia sin reflejar sería otra rosa');
+
+comprobar('el tallo queda VACÍO',
+  /f\.nodo\.style\.opacity = '0';/.test(eclipseCodigo),
+  'la ausencia es la mitad del significado: murió LA QUE ESTABA AHÍ');
+
+comprobar('y el hueco se vuelve a llenar en el frenazo',
+  /removeProperty\('opacity'\)/.test(
+    (eclipseCodigo.match(/function devolverLasFloresReales[\s\S]*?\n  \}/) || [''])[0]),
+  'si no, la flor queda invisible después del eclipse');
+
+comprobar('la rama da el latigazo al perder su flor',
+  /function darleElLatigazoALaRama/.test(eclipseCodigo) &&
+  /latigazo = -\(dobla >= 0 \? 1 : -1\)/.test(eclipseCodigo),
+  'sin el latigazo el arranque es un corte de montaje, no un desgarro');
+
+/* ⚠️ EL VIAJE VA POR EL RELOJ, NO POR CUADROS. La versión anterior
+   acumulaba `muerte.vy += 0.55` en cada cuadro: a 30 cuadros por segundo
+   la rosa caía la mitad de rápido que a 60, o sea que en un teléfono
+   lento se posaba en otro momento de la escena. */
+comprobar('el viaje de la mártir va por el reloj de la secuencia',
+  /var viaje = suave\(limitar\(\(t - MUERE_EN\) \/ \(TOTALIDAD - MUERE_EN\), 0, 1\)\);/
+    .test(eclipseCodigo) &&
+  !/muerte\.vy \+= /.test(eclipseCodigo),
+  'acumular por cuadro hace que la escena dure distinto en cada equipo');
+
+comprobar('y la caída también',
+  /muerte\.y \+= 900 \* cae \* cae \* 0\.5;/.test(eclipseCodigo));
+
+
+/* ─── 14f. ACTO II · LAS LLAMAS SE INCLINAN ────────────────────────── */
+
+console.log('\nLas velas notan algo\n');
+
+comprobar('las llamas se inclinan hacia el nombre',
+  /function moverLasLlamas/.test(eclipseCodigo) &&
+  /moverLasLlamas\(t\);/.test(eclipseCodigo));
+
+comprobar('empieza en el segundo 18',
+  /var atraccion = tramo\(t, 18000, 20500\);/.test(eclipseCodigo),
+  'es el beat del guion: «las velas notan algo»');
+
+/* ⚠️ ACÁ ESTÁ LA TRAMPA DEL BLOQUE, Y ES LA MISMA QUE CON LOS NUDOS.
+   19-velas.js le escribe a cada .llama su propio style.transform (el
+   titileo) muchas veces por segundo. Escribir `transform` acá sería una
+   pelea que se pierde en el cuadro siguiente, y además dejaría la llama
+   sin titilar. `rotate` y `scale` se COMPONEN con transform. */
+comprobar('se escriben con rotate/scale, NUNCA con transform',
+  /l\.nodo\.style\.rotate =/.test(eclipseCodigo) &&
+  /l\.nodo\.style\.scale =/.test(eclipseCodigo) &&
+  !/l\.nodo\.style\.transform/.test(eclipseCodigo),
+  '19-velas.js le reescribe el transform a cada llama: perderíamos, y de ' +
+  'paso le apagaríamos el titileo');
+
+comprobar('en la totalidad se quedan quietas',
+  /var vaiven = enShock \? 0/.test(eclipseCodigo),
+  'los dos segundos de vacío también son de las velas');
+
+comprobar('y se les devuelve todo al terminar',
+  /function devolverLasLlamas/.test(eclipseCodigo) &&
+  /devolverLasLlamas\(\);/.test(
+    (eclipseCodigo.match(/function terminar\([\s\S]*?\n  \}/) || [''])[0]));
+
+/* Inclinarse no es iluminar: la regla de que las velas no SUBEN de brillo
+   sigue en pie y la cuida la comprobación «las velas no se tocan». Acá se
+   cuida que no se cuele por otra puerta.
+
+   ⚠️ SE MIRA SOLO LO QUE TOCA A LAS LLAMAS, no el archivo entero. La
+   primera versión de esto buscaba `l.nodo.style.opacity` en todo el
+   código y fallaba por `devolverLosPetalosDeSiempre()`, que usa la misma
+   letra para otra cosa. Una prueba que muerde por un nombre de variable
+   ajeno enseña a ignorarla. */
+{
+  const loDeLasLlamas = ['tomarLasLlamas', 'moverLasLlamas', 'devolverLasLlamas']
+    .map(n => (eclipseCodigo.match(
+      new RegExp('function ' + n + '\\([\\s\\S]*?\\n  \\}')) || [''])[0])
+    .join(' | ');
+
+  comprobar('y no se les toca el brillo por otro lado',
+    !/lienzo-de-velas/.test(eclipseCodigo) &&
+    !/vela--nucleo/.test(eclipseCodigo) &&
+    !/opacity/.test(loDeLasLlamas) &&
+    !/filter/.test(loDeLasLlamas),
+    'la sala pasa a cripta por contraste, no por aumento: inclinarse no es ' +
+    'iluminar');
+}
+
+
+/* ─── 14g. ACTO VIII · LA RELIQUIA ─────────────────────────────────── */
+
+console.log('\nLo único que sobrevive al frenazo\n');
+
+comprobar('hay un pétalo que se posa sobre el relicario',
+  /function elegirLaReliquia/.test(eclipseCodigo) &&
+  /if \(t >= TOTALIDAD\) elegirLaReliquia\(\);/.test(eclipseCodigo),
+  'se elige en los dos segundos de quietud, cuando nada se mueve');
+
+comprobar('el posado no tiene física: está apoyado',
+  /if \(pt\.posada\) \{/.test(eclipseCodigo),
+  'si lo sigue empujando la atracción, no está posado, está flotando');
+
+comprobar('sobrevive al frenazo SOLO si el eclipse llegó al final',
+  /if \(completo\) dejarLaReliquia\(\);/.test(eclipseCodigo) &&
+  /terminar\(true\);/.test(eclipseCodigo),
+  'si se cortó por un error o desde el panel, no hubo ritual: no hay evidencia');
+
+comprobar('se queda quieto tres segundos',
+  /if \(desde >= 3000\) \{/.test(eclipseCodigo),
+  'el que lo vio ya había decidido que no había pasado nada: por eso llega tarde');
+
+/* ⚠️ Y SE CAE COMO UN PÉTALO, NO COMO UNA PIEDRA. La primera versión le
+   puso la gravedad de la mártir —900 px/s², la caída de un cuerpo— y
+   medido en vivo salía de la pantalla en siete décimas de segundo. Es la
+   última imagen de la pieza: tiene que leerse como algo que SE SUELTA. */
+comprobar('y se cae como se cae un pétalo',
+  /var arranque = 1 - Math\.exp\(-cae \* 1\.6\);/.test(eclipseCodigo) &&
+  /x = x0 \+ Math\.sin\(cae \* 2\.3\) \* 16;/.test(eclipseCodigo),
+  'con la gravedad de un cuerpo se va de la pantalla en 0,7 s y se lee ' +
+  'como que algo se cayó, no como que algo se soltó');
+
+/* ⚠️ ES EL ÚNICO rAF QUE SOBREVIVE AL ECLIPSE, y la regla de este archivo
+   dice que eso es exactamente lo prohibido. Se permite con candados, y los
+   candados se comprueban. */
+comprobar('su bucle tiene techo duro',
+  /desde > 9000/.test(eclipseCodigo),
+  'un rAF sin techo después del eclipse es lo que el archivo prohíbe');
+
+comprobar('y un reloj que lo saca aunque el rAF no corra nunca',
+  /relojDeLaReliquia = setTimeout\([\s\S]{0,160}\}, 12000\);/.test(eclipseCodigo),
+  'si la pestaña se va al fondo en el frenazo, los cuadros se congelan y el ' +
+  'pétalo se quedaría pegado sobre el relicario');
+
+comprobar('el lienzo se reserva en el segundo 42, no en el frenazo',
+  /lienzoDeLaReliquia = document\.createElement\('canvas'\);/.test(
+    (eclipseCodigo.match(/function elegirLaReliquia[\s\S]*?\n  \}/) || [''])[0]),
+  'reservar un lienzo cuesta un cuadro, y el del segundo 60 es EL cuadro');
+
+comprobar('y se limpia entre corridas',
+  /limpiarLaReliquia\(\);/.test(
+    (eclipseCodigo.match(/function reiniciarElEstado[\s\S]*?\n  \}/) || [''])[0]),
+  'en el ensayo la secuencia se corre una y otra vez');
+
+
+/* ─── 14h. EL SOL, EJECUTADO ───────────────────────────────────────────
+   Este bloque toca módulos que no se pudieron ver corriendo juntos. En el
+   navegador de prueba el eclipse parecía no apagar el sol nunca — y era un
+   artefacto de la medición: con el panel oculto, requestAnimationFrame no
+   corre, así que la secuencia dibujaba UN cuadro y el reloj de seguridad
+   la terminaba a los 61 s. Para no volver a depender de mirar, acá se
+   EJECUTA la función de verdad con perillas de mentira y se le leen los
+   valores beat por beat. */
+
+console.log('\nEl sol muriendo, ejecutando la función\n');
+
+{
+  const fuenteMundo = (eclipseCodigo.match(
+    /function moverElMundo\(t\) \{[\s\S]*?\n  \}/) || [''])[0];
+
+  if (!fuenteMundo) {
+    comprobar('se puede ejecutar moverElMundo()', false, 'no se encontró');
+  } else {
+    const enElSegundo = (ms) => {
+      const haces = [1, 2, 3, 4];
+      const motas = new Array(32).fill(0);
+      const fauna = [1, 2, 3, 4];
+      const ventana = {
+        LuzDeLaHora: { largoDelHaz: 1.2, anguloDelSol: -26.7 },
+        LienzoDeLuz: { haces: haces, motas: motas, fauna: fauna }
+      };
+      const mundo = {
+        largoDelHaz: 1.2, anguloDelSol: -26.7,
+        haces: haces, motas: motas, fauna: fauna, velo: null
+      };
+
+      new Function('window', 'mundo', 'limitar', 't',
+        fuenteMundo + '\nmoverElMundo(t);'
+      )(ventana, mundo, (v, a, b) => Math.min(Math.max(v, a), b), ms);
+
+      return {
+        largo: ventana.LuzDeLaHora.largoDelHaz,
+        angulo: ventana.LuzDeLaHora.anguloDelSol,
+        haces: ventana.LienzoDeLuz.haces.length,
+        motas: ventana.LienzoDeLuz.motas.length,
+        fauna: ventana.LienzoDeLuz.fauna.length
+      };
+    };
+
+    const en0  = enElSegundo(0);
+    const en13 = enElSegundo(13000);
+    const en26 = enElSegundo(26000);
+    const en30 = enElSegundo(30000);
+    const en33 = enElSegundo(33000);
+    const en42 = enElSegundo(42000);
+    const en58 = enElSegundo(58450);
+    const en59 = enElSegundo(59900);
+
+    comprobar('en el segundo 0 el sol está entero',
+      Math.abs(en0.largo - 1.2) < 0.001, 'dio ' + en0.largo.toFixed(3));
+
+    comprobar('a los 13 s va por la mitad',
+      Math.abs(en13.largo - 0.6) < 0.01, 'dio ' + en13.largo.toFixed(3));
+
+    comprobar('a los 26 s el haz mide CERO',
+      en26.largo < 0.0001, 'dio ' + en26.largo.toFixed(4));
+
+    comprobar('y a los 26 s no queda ni un rayo dibujado',
+      en26.haces === 0, 'quedaban ' + en26.haces);
+
+    comprobar('la sombra entra por un lado: el sol se corre 18°',
+      Math.abs(en26.angulo - (-26.7 + 18)) < 0.01,
+      'dio ' + en26.angulo.toFixed(2));
+
+    comprobar('a los 30 s las motas todavía están',
+      en30.motas === 32, 'quedaban ' + en30.motas);
+
+    comprobar('a los 33 s se apagan motas y fauna',
+      en33.motas === 0 && en33.fauna === 0,
+      'motas ' + en33.motas + ', fauna ' + en33.fauna);
+
+    comprobar('en la totalidad no hay nada vivo que no sea el culto',
+      en42.largo < 0.0001 && en42.haces === 0 && en42.motas === 0,
+      'largo ' + en42.largo + ', haces ' + en42.haces + ', motas ' + en42.motas);
+
+    comprobar('a los 58,45 s la luz va volviendo, a mitad de camino',
+      en58.largo > 0.4 && en58.largo < 0.8, 'dio ' + en58.largo.toFixed(3));
+
+    comprobar('a los 59,9 s el sol está entero otra vez',
+      Math.abs(en59.largo - 1.2) < 0.02, 'dio ' + en59.largo.toFixed(3));
+
+    comprobar('y los rayos y las motas volvieron a su sitio',
+      en59.haces === 4 && en59.motas === 32 && en59.fauna === 4,
+      'haces ' + en59.haces + ', motas ' + en59.motas + ', fauna ' + en59.fauna);
+
+    /* ⚠️ LAS PLANTAS NO SE CALMAN CUANDO VUELVE LA LUZ. Ese desacople es
+       el momento más perturbador del minuto y se puede romper sin querer
+       moviendo un número: la luz vuelve a los 57, el frenazo es a los 60. */
+    comprobar('la luz vuelve ANTES que el frenazo',
+      en58.largo > 0 && enElSegundo(56900).largo < 0.0001,
+      'a los 56,9 tiene que seguir apagado y a los 58,45 ya volviendo');
   }
 }
 

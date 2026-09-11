@@ -145,14 +145,19 @@
    * conciencia y se lanzan hacia el nombre. Eso ahora lo hacen ellas
    * mismas (ver moverLasFloresReales), que es de donde sale el sentido.
    *
-   * ⚠️ NO SE BORRA EL SISTEMA, SE PONE EN CERO. `laQueMuere` —la rosa que
-   * se suelta a los 36,5 s, se posa sobre el nombre y cae al final— se
-   * elige de esta lista, y esa sí se aprobó tal cual está. Con la marea en
-   * una sola rosa, esa rosa existe y es la única que se ve suelta: deja de
-   * ser una entre doscientas y pasa a ser LA que se soltó, que es
-   * exactamente lo que significa.
+   * ⚠️ NO SE BORRA EL SISTEMA, SE PONE EN CERO. Queda entero y explicado
+   * por si alguna vez hace falta, y un bucle sobre un array vacío no
+   * cuesta nada.
+   *
+   * ⚡ Y AHORA SON CERO (2026-09-11). Quedaba una: la rosa que se
+   * sacrifica, que se elegía de esta lista. Desde que la mártir es una
+   * flor DE VERDAD del marco —una que estaba sujeta a un tallo y se
+   * arranca de él a la vista, ver la sección 8—, esta última rosa suelta
+   * pasó a ser lo que eran las otras ciento veintinueve: una mancha roja
+   * apareciendo de la nada al lado de algo que sí significa. No queda
+   * ninguna flotando.
    */
-  var CUANTAS = 1;
+  var CUANTAS = 0;
 
   /* ─── 3. LAS CAPAS ──────────────────────────────────────────────────
 
@@ -432,6 +437,117 @@
   var LADO = 96;                       // píxeles del mapa de bits
   var mapaDeLaRosa = null;             // se llena si la rasterización sale
 
+  /* Qué fracción del mapa de bits ocupa de verdad la rosa.
+   *
+   * El símbolo se dibuja en un viewBox de -30 a 30 y se rasteriza a 96 px,
+   * pero la tinta no llega a los bordes: sobra margen. Sin saber cuánto,
+   * la copia de la mártir saldría más chica que la flor que reemplaza y el
+   * relevo se vería.
+   *
+   * Se MIDE, no se estima: se recorre el alfa del mapa y se busca su caja.
+   * Son 9 216 píxeles una sola vez, al rasterizar. El número de abajo es
+   * solo el respaldo para cuando el canvas no se deja leer.
+   *
+   * ⚠️ Solo hace falta el LADO, no el centro, porque los seis símbolos de
+   * rosa están dibujados centrados en su propio origen —lo dice y lo usa
+   * 07-marco-y-enredaderas.js en su nota de 2026-08-23— así que la tinta
+   * ya está centrada en el mapa. */
+  var tintaDeLaRosa = 0.92;
+
+  /**
+   * La caja de un símbolo de la biblioteca, en sus propias unidades.
+   *
+   * Se le pregunta al navegador en vez de suponerla: los seis símbolos
+   * miden cosas distintas (de 40 a 87 unidades de ancho, medido) y el
+   * recuadro escrito a mano que había antes recortaba a los tres más
+   * anchos.
+   *
+   * @param {string} tipo - `#rosa-perfil`, por ejemplo.
+   * @returns {?{x:number,y:number,width:number,height:number}}
+   */
+  function medirElSimbolo(tipo) {
+    var svg = null;
+    try {
+      svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '10');
+      svg.setAttribute('height', '10');
+      svg.setAttribute('aria-hidden', 'true');
+      svg.style.cssText = 'position:absolute;left:-9999px;top:0;' +
+                          'opacity:0;pointer-events:none';
+
+      var uso = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+      uso.setAttribute('href', tipo);
+      uso.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', tipo);
+      svg.appendChild(uso);
+      document.body.appendChild(svg);
+
+      var caja = uso.getBBox();
+      document.body.removeChild(svg);
+      svg = null;
+
+      if (caja && caja.width && caja.height) return caja;
+    } catch (e) {
+      if (svg && svg.parentNode) svg.parentNode.removeChild(svg);
+    }
+    return null;
+  }
+
+  /**
+   * Cuánto mide DE VERDAD una flor del marco en pantalla, en píxeles.
+   *
+   * ⚠️ NO se usa getBoundingClientRect() para esto, y la diferencia es
+   * grande. Esa caja está alineada a los ejes de la pantalla, y las flores
+   * están giradas dentro de su `<use>`: la caja de una rosa girada 30° es
+   * bastante más grande que la rosa. Medido sobre las 198 flores de PBE, la
+   * caja exagera un 18 % en la mediana y hasta un 39 %. Una copia un 39 %
+   * más grande que la flor que reemplaza no releva a nadie: se ve.
+   *
+   * La matriz de pantalla del `<use>` da los píxeles por unidad de dibujo,
+   * y getBBox() da la caja del símbolo SIN girar. El producto es la
+   * extensión real de la flor. Comprobado contra las cajas reales de las
+   * 198 flores: 0,22 % de error en la mediana, 2,6 % en el peor caso.
+   *
+   * @param {Element} movil
+   * @returns {number} píxeles, o 0 si el navegador no contesta.
+   */
+  function ladoRealDeLaFlor(movil) {
+    try {
+      var uso = movil.querySelector('use');
+      if (!uso || !uso.getScreenCTM || !uso.getBBox) return 0;
+
+      var m = uso.getScreenCTM();
+      var caja = uso.getBBox();
+      if (!m || !caja || !caja.width) return 0;
+
+      /* La raíz del determinante es el factor de escala de la matriz, sin
+         que el giro ni el reflejo lo ensucien. */
+      var k = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c));
+      return Math.max(caja.width, caja.height) * k;
+    } catch (e) { return 0; }
+  }
+
+  function medirLaTintaDeLaRosa(mapa) {
+    try {
+      var datos = mapa.getContext('2d').getImageData(0, 0, LADO, LADO).data;
+      var x0 = LADO, y0 = LADO, x1 = -1, y1 = -1;
+
+      for (var y = 0; y < LADO; y++) {
+        for (var x = 0; x < LADO; x++) {
+          if (datos[(y * LADO + x) * 4 + 3] > 24) {
+            if (x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+      }
+
+      if (x1 < x0 || y1 < y0) return;          // mapa vacío: queda el respaldo
+      var lado = Math.max(x1 - x0 + 1, y1 - y0 + 1);
+      tintaDeLaRosa = limitar(lado / LADO, 0.4, 1);
+    } catch (e) { /* canvas trabado: queda el respaldo */ }
+  }
+
   function rasterizarLaRosa(cuandoEste) {
     var biblioteca = document.getElementById('biblioteca-de-rosas');
     if (!biblioteca) { cuandoEste(false); return; }
@@ -475,6 +591,36 @@
 
     if (!tipo) { cuandoEste(false); return; }
 
+    /* ⚡ EL RECUADRO ESTABA CORTANDO LA ROSA POR LOS DOS LADOS (2026-09-11)
+     *
+     * Acá había un `viewBox="-30 -30 60 60"` escrito a mano. Medido en PBE
+     * con getBBox(), los símbolos de la biblioteca NO caben en ese
+     * recuadro: `rosa-perfil` y `rosa-tres-cuartos` miden 87,2 unidades de
+     * ancho y empiezan en x = -43,2. O sea que el mapa de bits perdía un
+     * 30 % de la flor, recortada a cuchillo por los dos costados.
+     *
+     * Con la marea de rosas flotantes no se notaba —eran manchas rojas
+     * moviéndose—, pero la copia de la mártir tiene que ser LA MISMA FLOR
+     * que acaba de desaparecer del marco, y una rosa a la que le faltan
+     * los pétalos de los lados es otra flor.
+     *
+     * Ahora el recuadro sale de la caja REAL del símbolo, medida al
+     * navegador, y es CUADRADO y centrado en ella: cuadrado para que girar
+     * el mapa de bits no lo deforme, y centrado para que dibujarlo en el
+     * centro de la flor lo deje exactamente encima de ella. El 4 % de
+     * margen es para que el suavizado del borde no quede cortado. */
+    var cajaDelSimbolo = medirElSimbolo(tipo);
+    var medioLado = 30, centroX = 0, centroY = 0;
+
+    if (cajaDelSimbolo) {
+      medioLado = Math.max(cajaDelSimbolo.width, cajaDelSimbolo.height) * 1.04 / 2;
+      centroX = cajaDelSimbolo.x + cajaDelSimbolo.width / 2;
+      centroY = cajaDelSimbolo.y + cajaDelSimbolo.height / 2;
+    }
+
+    var recuadro = (centroX - medioLado) + ' ' + (centroY - medioLado) + ' ' +
+                   (medioLado * 2) + ' ' + (medioLado * 2);
+
     /* ⚡ UN COMENTARIO DEJÓ AL ECLIPSE SIN ROSAS, DESDE EL PRIMER DÍA
      *   (2026-09-10)
      *
@@ -503,7 +649,7 @@
     var svg =
       '<svg xmlns="http://www.w3.org/2000/svg" ' +
            'xmlns:xlink="http://www.w3.org/1999/xlink" ' +
-           'width="' + LADO + '" height="' + LADO + '" viewBox="-30 -30 60 60">' +
+           'width="' + LADO + '" height="' + LADO + '" viewBox="' + recuadro + '">' +
         biblioteca.innerHTML.replace(/<!--[\s\S]*?-->/g, '') +
         '<use href="' + tipo + '" xlink:href="' + tipo + '"/>' +
       '</svg>';
@@ -519,6 +665,7 @@
         fuera.width = fuera.height = LADO;
         fuera.getContext('2d').drawImage(imagen, 0, 0, LADO, LADO);
         mapaDeLaRosa = fuera;
+        medirLaTintaDeLaRosa(fuera);
         cuandoEste(true);
       } catch (e) { cuandoEste(false); }
     };
@@ -577,17 +724,60 @@
   }
 
   /* ─── 8. LA QUE MUERE ───────────────────────────────────────────────
-     Se elige la de más ansia: la que se esforzó de más. Es la única que
-     cruza el radio, y lo cruza soltándose. */
+
+     ⚡ LA MÁRTIR ES UNA FLOR DEL MARCO, Y SE LA VE ARRANCARSE (2026-09-11)
+
+     Hasta el v273 la que moría era una rosa de la marea: aparecía de la
+     nada, flotando, y a los 36,5 s se «soltaba». No se soltaba de nada.
+     Nunca había estado sujeta a ningún tallo, así que su sacrificio era
+     una afirmación del código que en pantalla no tenía respaldo.
+
+     Ahora es UNA FLOR CONCRETA DEL MARCO, de las que llevan toda la
+     invitación ahí, quietas. Se la elige entre las que ya están al lado
+     del nombre, y de ésas la más grande: la que se va a ver.
+
+     Lo que la vuelve legible es lo que pasa ANTES. Desde el segundo 35 se
+     esfuerza más que nadie: pasa el tope de inclinación que respetan las
+     otras doscientas y tiembla el doble. Es la única que se está
+     rompiendo, y eso es lo que hace que el ojo esté mirándola cuando se
+     arranca.
+
+     A los 36,5 s se le pone `opacity: 0` a la flor y se dibuja en el
+     lienzo una copia en su posición exacta, con su tamaño y su giro
+     exactos. Es la misma flor, en otro dibujo: no hay salto. Y en ese
+     mismo cuadro su rama da un latigazo hacia atrás —la tensión contra la
+     que estaba tirando se acabó de golpe—, que es el gesto que cuenta que
+     algo se rompió ahí.
+
+     Su tallo queda VACÍO el resto del minuto. Esa ausencia es la mitad
+     del significado: no murió una rosa cualquiera, murió la que estaba
+     en ese hueco. */
   var laQueMuere = null;
-  var muerte = { x: 0, y: 0, vx: 0, vy: 0, giro: 0, giroVel: 0, suelta: false };
+  var muerte = {
+    x: 0, y: 0, vx: 0, vy: 0, giro: 0, giroVel: 0, suelta: false,
+    escala: 0.5
+  };
 
   function elegirALaQueMuere() {
+    laQueMuere = null;
+    if (!floresReales.length) return;
+
+    /* Las que ya están al lado del nombre: la quinta parte más cercana.
+       Que se arranque una de la esquina no significaría nada — quien se
+       ofrece es quien ya estaba tocando el altar. */
+    var cerca = floresReales.slice();
+    cerca.sort(function (a, b) { return a.distancia - b.distancia; });
+    cerca.length = Math.max(1, Math.floor(cerca.length * 0.2));
+
+    /* Y de ésas, la más grande. Una cabeza de 14 px arrancándose no se ve;
+       el sacrificio tiene que poder mirarse. */
     var mejor = null;
-    for (var i = 0; i < marea.length; i++) {
-      if (!mejor || marea[i].ansia > mejor.ansia) mejor = marea[i];
+    for (var i = 0; i < cerca.length; i++) {
+      if (!mejor || cerca[i].tamano > mejor.tamano) mejor = cerca[i];
     }
+
     laQueMuere = mejor;
+    if (laQueMuere) laQueMuere.martir = true;
   }
 
   /* ─── 9. LOS PÉTALOS DEL ECLIPSE ────────────────────────────────────
@@ -649,6 +839,45 @@
     });
   }
 
+  /**
+   * El radio de un pétalo del eclipse, en píxeles de pantalla.
+   *
+   * Se toma de los pétalos que ya están cayendo en la invitación: se mira
+   * cuánto miden los suyos y se elige uno al azar dentro de ese rango. Se
+   * dibuja con `drawImage(mapa, -tam, -tam, tam*2, tam*2)`, o sea que `tam`
+   * es el RADIO y el lado es el doble — de ahí la división.
+   *
+   * @returns {number}
+   */
+  function tamanoDeUnPetalo() {
+    var medidas = [];
+
+    try {
+      var planos = window.LienzoDePetalos && window.LienzoDePetalos.planos;
+      if (planos) {
+        for (var nombre in planos) {
+          if (!Object.prototype.hasOwnProperty.call(planos, nombre)) continue;
+          var lista = planos[nombre];
+          for (var i = 0; i < lista.length; i++) {
+            var t = lista[i] && lista[i]['tamaño'];
+            if (t > 0) medidas.push(t);
+          }
+        }
+      }
+    } catch (e) { /* se usa el respaldo */ }
+
+    if (medidas.length) {
+      var cual = medidas[(Math.random() * medidas.length) | 0];
+      return cual / 2;
+    }
+
+    /* Respaldo: la misma proporción con el marco que usa 06, a ojo, para no
+       volver a un número fijo que en un teléfono se ve enorme. */
+    var grosor = limitar(window.innerWidth * 0.034, 20, 72);
+    var escala = limitar(grosor / 49, 0.34, 1.15);
+    return (18 + Math.random() * 26) * escala / 2;
+  }
+
   function sembrarLosPetalos() {
     prepararLosPetalos();
 
@@ -659,9 +888,24 @@
         x: Math.random() * window.innerWidth,
         y: Math.random() * window.innerHeight,
         vx: 0, vy: 0,
-        /* Más grandes que antes (eran 3–7 px). Un pétalo de 7 px no es un
-           pétalo: es un punto. Los de la invitación llegan a 62 px. */
-        tam: 9 + Math.random() * 13,
+        /* ⚡ EL TAMAÑO SALE DE LOS PÉTALOS DE LA INVITACIÓN (2026-09-11)
+         *
+         * Acá había `9 + Math.random() * 13` — píxeles fijos, iguales en un
+         * monitor de 27 pulgadas y en un teléfono. Se dibujan a `tam * 2`,
+         * así que eran de 18 a 44 px SIEMPRE; y en una pantalla angosta la
+         * rosa mediana del marco mide 13 px. Un pétalo tres veces más
+         * grande que la flor de al lado.
+         *
+         * El eclipse ya usa los DIBUJOS de los pétalos de la invitación
+         * —para que el pétalo que cae durante el minuto sea el mismo que
+         * caía un segundo antes—. Con más razón tiene que usar sus
+         * TAMAÑOS, que 06-petalos-con-fisica.js ya calcula en proporción al
+         * marco, en cada ancho de pantalla. Así esto queda proporcionado
+         * sin tener que repetir acá la cuenta ni mantenerla sincronizada.
+         *
+         * El respaldo es para cuando ese módulo se apagó para medir: la
+         * misma cuenta, a ojo, en vez de un número fijo. */
+        tam: tamanoDeUnPetalo(),
         giro: Math.random() * Math.PI * 2,
         /* Cada uno gira a su ritmo y en su sentido: noventa pétalos con
            el mismo `+= 0.03` se movían como un solo objeto. */
@@ -725,6 +969,99 @@
    * en un equipo flojo no costaba nada. Ahora es la escena: sin esto no
    * hay eclipse, solo una pantalla que se pone roja.
    */
+  /* ⚡ LA MITAD DEL CULTO ESTIRABA AL REVÉS (2026-09-11)
+   *
+   * Medido en PBE sobre el v273, con la página viva: de 198 flores, 94
+   * se inclinaban ALEJÁNDOSE del nombre. De 80 nudos, 40. De 32 llamas,
+   * 16. Casi exactamente la mitad de todo.
+   *
+   * La causa es que el marco no dibuja dos lados: dibuja UNO y lo
+   * refleja. `.marco__ramillete--derecho`, `--intermedio-derecho` y las
+   * plantas del lado derecho llevan `transform: scaleX(-1)`
+   * (estilos/02-marco-victoriano.css:379, :401). Es la decisión correcta
+   * —es el mismo dibujo, cuesta la mitad— y llevaba ahí desde agosto sin
+   * molestar a nadie, porque hasta ahora nadie le escribía un giro a una
+   * flor desde afuera.
+   *
+   * Dentro de un contenedor reflejado, un `rotate(30deg)` se ve en
+   * pantalla como `rotate(-30deg)`: el espejo invierte el sentido de los
+   * ángulos. Y `haciaElNombre` se calcula en coordenadas DE PANTALLA
+   * —con getBoundingClientRect—, así que para esas flores el número
+   * correcto se aplicaba al revés y la flor se apartaba del altar.
+   *
+   * No se veía como un error: se veía como que «algunas no despiertan
+   * tanto». Un culto donde la mitad de los fieles le da la espalda al
+   * dios, exactamente en la escena cuyo único asunto es que TODAS estiran
+   * hacia el nombre.
+   *
+   * Se comprueba el DETERMINANTE de las matrices de todos los ancestros,
+   * no la palabra `scaleX`: un determinante negativo es la definición de
+   * «esto está reflejado», valga como venga escrito —scaleX(-1), un
+   * scale(-1,1), una matriz a mano— y no se rompe si mañana el marco se
+   * refleja de otra manera. El resultado se guarda por raíz SVG porque
+   * todas las flores de un mismo ramillete comparten ancestros: son
+   * ~20 cadenas, no 200.
+   *
+   * @param {Element} nodo
+   * @returns {number} 1 si se ve tal cual, -1 si está reflejado.
+   */
+  var sentidosMedidos = [];
+
+  /**
+   * El giro que el `<use>` de una flor ya trae puesto en su atributo.
+   *
+   * 07 genera cada flor como `<use transform="rotate(-15.4) scale(0.53)">`:
+   * ese giro es parte del DIBUJO, no del gesto, y por eso no aparece en
+   * ninguna cuenta de este archivo. Pero el mapa de bits de la rosa se
+   * rasteriza sin girar, así que la copia de la mártir tiene que
+   * recuperarlo o saldría torcida respecto de la flor que reemplaza.
+   *
+   * @param {Element} movil - el `.flor-de-enredadera__movil`.
+   * @returns {number} grados.
+   */
+  function giroDelUse(movil) {
+    try {
+      var uso = movil.querySelector('use');
+      if (!uso) return 0;
+      var tr = uso.getAttribute('transform') || '';
+      var m = tr.match(/rotate\(\s*(-?[\d.]+)/);
+      return m ? parseFloat(m[1]) || 0 : 0;
+    } catch (e) { return 0; }
+  }
+
+  function sentidoDeLaPantalla(nodo) {
+    var raiz = nodo.ownerSVGElement || nodo;
+
+    for (var c = 0; c < sentidosMedidos.length; c++) {
+      if (sentidosMedidos[c].raiz === raiz) return sentidosMedidos[c].signo;
+    }
+
+    var signo = 1;
+    var el = raiz;
+
+    while (el && el.nodeType === 1 && el !== document.documentElement) {
+      var tr = '';
+      try { tr = getComputedStyle(el).transform; } catch (e) { tr = ''; }
+
+      if (tr && tr !== 'none') {
+        var n = tr.slice(tr.indexOf('(') + 1, -1).split(',');
+        for (var k = 0; k < n.length; k++) n[k] = parseFloat(n[k]);
+
+        /* matrix(a,b,c,d,e,f) → a*d - b*c. matrix3d lleva los mismos
+           cuatro números en 0,1,4,5. Negativo = reflejado. */
+        var det = n.length >= 16 ? n[0] * n[5] - n[1] * n[4]
+                : n.length >= 6  ? n[0] * n[3] - n[1] * n[2]
+                : 1;
+        if (det < 0) signo = -signo;
+      }
+
+      el = el.parentNode;
+    }
+
+    sentidosMedidos.push({ raiz: raiz, signo: signo });
+    return signo;
+  }
+
   function tomarLasFloresReales() {
     var todas = document.querySelectorAll('.flor-de-enredadera__movil');
 
@@ -760,6 +1097,20 @@
            quieta hasta que el mouse volviera a pasarle por al lado. */
         antes: nodo.style.transform || '',
         haciaElNombre: giro,
+        /* 1 o -1. Las flores del lado derecho del marco viven dentro de un
+           contenedor reflejado y hay que escribirles el ángulo al revés
+           para que en PANTALLA se inclinen hacia el nombre. Ver la nota
+           grande de sentidoDeLaPantalla(). */
+        espejo: sentidoDeLaPantalla(nodo),
+        /* Dónde está en pantalla, quieta. Lo usa la mártir para dibujar su
+           copia exactamente encima de sí misma. */
+        cx: cx,
+        cy: cy,
+        /* El giro que el dibujo ya trae puesto dentro del <use>
+           (`rotate(-15.4) scale(0.53)`, lo pone 07 al generar la flor). El
+           mapa de bits de la rosa NO lo tiene, así que para que la copia
+           quede orientada igual que el original hay que sumárselo. */
+        giroDelDibujo: giroDelUse(nodo),
         /* La distancia decide quién se entera primero. Las que están cerca
            del nombre despiertan antes: la conciencia se contagia hacia
            afuera, desde el altar, como una onda. */
@@ -771,7 +1122,12 @@
         ansia: 0.7 + Math.random() * 0.3,
         /* El tamaño en pantalla, para calibrar el gesto: ver
            calibrarParaLaPantalla(). */
-        tamano: Math.max(caja.width, caja.height)
+        tamano: Math.max(caja.width, caja.height),
+        /* Y el tamaño REAL de la rosa, que no es lo mismo: ver
+           ladoRealDeLaFlor(). Solo lo usa la mártir, pero se mide acá
+           porque acá la maquetación ya está resuelta y preguntar es
+           gratis; en el segundo 36,5 costaría un recálculo entero. */
+        ladoReal: ladoRealDeLaFlor(nodo)
       });
     }
 
@@ -786,6 +1142,15 @@
 
     calibrarParaLaPantalla();
     tomarLasRamas();
+    tomarLasLlamas();
+
+    /* ⚠️ ACÁ Y NO EN empezar(). La mártir es una flor DEL MARCO, así que
+       no se la puede elegir antes de que el marco exista — y puede no
+       existir todavía cuando el eclipse arranca (ver la nota de
+       moverLasFloresReales). Elegirla acá significa que se elige en el
+       mismo momento en que hay de dónde elegir, corra esto al empezar o
+       quince segundos después. */
+    elegirALaQueMuere();
   }
 
   /* ─── LAS RAMAS ─────────────────────────────────────────────────────
@@ -856,6 +1221,12 @@
       ramas.push({
         nodo: nudo,
         haciaElNombre: haciaElNombre,
+        /* La mitad derecha del marco está reflejada y ahí los ángulos van
+           al revés: 40 de 80 nudos se retorcían apartándose del nombre.
+           Ver sentidoDeLaPantalla(). */
+        espejo: sentidoDeLaPantalla(nudo),
+        /* El milisegundo en que esta rama perdió su flor, o 0. */
+        latigazo: 0,
         distancia: Math.sqrt((altar.x - cx) * (altar.x - cx) +
                              (altar.y - cy) * (altar.y - cy)),
         fase: Math.random() * Math.PI * 2,
@@ -925,8 +1296,111 @@
       var tiembla = enShock ? 0
         : Math.sin(ahora * (1.1 + fervor * 6) + r.fase) * fervor * fervor * 4;
 
-      r.nodo.style.rotate = (dobla + tiembla).toFixed(2) + 'deg';
+      /* ── EL LATIGAZO DE LA RAMA QUE PERDIÓ SU FLOR ──
+         700 ms de oscilación amortiguada, y hacia el lado CONTRARIO al
+         que estaba tirando: la tensión se descargó. Ver
+         darleElLatigazoALaRama(). */
+      var latigazo = 0;
+      if (r.latigazo) {
+        var desde = t - r.latigazo;
+        if (desde >= 0 && desde < 700) {
+          var queda = 1 - desde / 700;
+          latigazo = -(dobla >= 0 ? 1 : -1) *
+                     Math.sin(desde / 700 * Math.PI * 2.5) * 15 * queda * queda;
+        }
+      }
+
+      /* ⚠️ Por `r.espejo`, igual que las flores: dentro de un contenedor
+         reflejado los ángulos se invierten. */
+      r.nodo.style.rotate =
+        (r.espejo * (dobla + tiembla + latigazo)).toFixed(2) + 'deg';
       r.nodo.style.scale  = (1 + fervor * 0.1).toFixed(3);
+    }
+  }
+
+  /**
+   * El segundo 36,5: la mártir se arranca de su tallo, a la vista.
+   *
+   * ⚠️ SE LLAMA ANTES DE ESCRIBIRLE UN SOLO ESTILO A UNA FLOR EN ESTE
+   * CUADRO, y eso no es un detalle de orden. Acá adentro hay un
+   * getBoundingClientRect(), que obliga al navegador a resolver la
+   * maquetación. Llamado al principio del cuadro, el navegador YA la tiene
+   * resuelta del cuadro anterior y la lectura es gratis. Llamado después
+   * de mover doscientas flores, obligaría a recalcularlas todas de golpe
+   * — justo en el cuadro donde no puede haber un tirón, porque es el
+   * cuadro que el espectador está mirando.
+   *
+   * ⚠️ Y EL RELEVO OCURRE DENTRO DEL MISMO CUADRO. Por eso en unCuadro()
+   * moverLasFloresReales() va antes que dibujar(): si la flor se apagara
+   * en un cuadro y la copia apareciera en el siguiente, habría 16 ms con
+   * el hueco vacío. Un parpadeo de un cuadro es exactamente lo que
+   * delataría el truco.
+   *
+   * @param {number} t - milisegundo de la secuencia.
+   * @returns {void}
+   */
+  function arrancarALaMartir(t) {
+    if (!laQueMuere || muerte.suelta || t < MUERE_EN) return;
+
+    var f = laQueMuere;
+
+    var caja = null;
+    try { caja = f.nodo.getBoundingClientRect(); } catch (e) { caja = null; }
+
+    muerte.suelta = true;
+    muerte.x0 = (caja && caja.width) ? caja.left + caja.width / 2 : f.cx;
+    muerte.y0 = (caja && caja.height) ? caja.top + caja.height / 2 : f.cy;
+    muerte.x = muerte.x0;
+    muerte.y = muerte.y0;
+
+    /* El tamaño de la copia sale del tamaño REAL que tenía la flor en
+       pantalla, dividido por cuánto del mapa de bits ocupa la tinta de la
+       rosa. Las dos cosas están medidas, ninguna estimada: por eso la
+       copia mide lo mismo que la flor, mida el marco lo que mida y sea el
+       teléfono o el monitor.
+
+       El respaldo es la caja alineada a los ejes, que exagera un 18 % —
+       vale más una copia algo grande que ninguna. */
+    var lado = f.ladoReal || f.tamano;
+    muerte.escala = (lado * (f.creceAhora || 1)) / (LADO * tintaDeLaRosa);
+
+    /* Y sale girada como estaba ella: el giro que el dibujo trae puesto
+       más el gesto con el que estaba estirando, los dos en grados de
+       pantalla (de ahí el `espejo` sobre el primero: el del gesto ya lo
+       lleva incorporado). */
+    muerte.espejo = f.espejo;
+    muerte.giro0 = (f.espejo * f.giroDelDibujo + (f.gesto || 0)) * Math.PI / 180;
+    muerte.giro = muerte.giro0;
+
+    /* El hueco. Queda vacío hasta el frenazo: no murió una rosa
+       cualquiera, murió LA QUE ESTABA AHÍ, y el sitio lo dice. */
+    try { f.nodo.style.opacity = '0'; } catch (e) { /* nada */ }
+
+    darleElLatigazoALaRama(f, t);
+  }
+
+  /**
+   * La rama que acaba de perder su flor da un latigazo hacia atrás.
+   *
+   * Es el gesto que convierte «la flor desapareció» en «algo se rompió
+   * ahí». La rama venía tirando contra la flor; cuando la flor se suelta,
+   * esa tensión se descarga de golpe y el tallo se va para el otro lado
+   * antes de asentarse. Sin esto el arranque es un corte de montaje; con
+   * esto es un desgarro.
+   *
+   * @param {Object} f - la entrada de floresReales de la mártir.
+   * @param {number} t
+   * @returns {void}
+   */
+  function darleElLatigazoALaRama(f, t) {
+    var suNudo = null;
+    try {
+      suNudo = f.nodo.closest ? f.nodo.closest('.nudo-del-tallo') : null;
+    } catch (e) { suNudo = null; }
+    if (!suNudo) return;
+
+    for (var i = 0; i < ramas.length; i++) {
+      if (ramas[i].nodo === suNudo) { ramas[i].latigazo = t; return; }
     }
   }
 
@@ -935,8 +1409,353 @@
       var f = floresReales[i];
       if (f.antes) f.nodo.style.transform = f.antes;
       else         f.nodo.style.removeProperty('transform');
+
+      /* El hueco de la mártir se vuelve a llenar en el frenazo, con todo
+         lo demás y en el mismo cuadro. La flor vuelve a su tallo como si
+         nunca se hubiera ido, que es exactamente la orden que se está
+         obedeciendo. */
+      f.nodo.style.removeProperty('opacity');
     }
     floresReales.length = 0;
+  }
+
+  /* ─── 9b. LA RELIQUIA ───────────────────────────────────────────────
+
+     ⚡ LO ÚNICO QUE SOBREVIVE AL FRENAZO (2026-09-11)
+
+     El segundo 60 devuelve TODO a su sitio en un cuadro: las flores, las
+     ramas, las llamas, la luz, el sonido. Esa violencia es el efecto y no
+     se toca.
+
+     Pero un frenazo perfecto también es un frenazo negable. Si no queda
+     absolutamente nada, el espectador cierra la escena en dos segundos:
+     «se me trabó la página». La duda hay que dejarla apoyada en algo.
+
+     Ese algo es un pétalo. Se elige en el segundo 42 —los dos segundos de
+     totalidad, cuando todo está quieto— el que más cerca haya quedado del
+     anillo del relicario, y ahí se queda posado el resto del minuto,
+     inmóvil, mientras los otros ochenta y nueve giran alrededor sin tocar
+     nada. Cuando llega el frenazo y desaparece la escena entera, él NO
+     desaparece: sigue exactamente donde estaba, sobre el nombre, en una
+     página que ya volvió a ser una invitación.
+
+     Tres segundos después se desprende y cae. Es la única evidencia, y
+     llega tarde a propósito: el que lo vio ya había decidido que no había
+     pasado nada.
+
+     ⚠️ ESTE ES EL ÚNICO requestAnimationFrame QUE SOBREVIVE AL ECLIPSE,
+     y la regla de este archivo dice que eso es exactamente lo prohibido.
+     Se permite con tres candados: dibuja UN pétalo y nada más, se corta
+     solo en cuanto el pétalo sale de la pantalla, y tiene un techo duro
+     de 9 s pase lo que pase. Además hay un setTimeout que saca el lienzo
+     a los 12 s aunque el rAF no haya corrido nunca — si la pestaña se va
+     al fondo justo en el frenazo, los cuadros se congelan y sin esto el
+     pétalo se quedaría pegado sobre el relicario hasta que alguien
+     recargue. */
+
+  var reliquia = null;
+  var lienzoDeLaReliquia = null;
+  var pincelDeLaReliquia = null;
+  var relojDeLaReliquia = 0;
+
+  function elegirLaReliquia() {
+    if (reliquia || !petalos.length) return;
+
+    /* ⚠️ TIENE QUE QUEDAR APOYADO ARRIBA, NO AL COSTADO. Medido en una
+       ventana angosta: el primer criterio era «el más cerca del anillo», y
+       eligió uno del extremo izquierdo del óvalo. Ahí no se lee como
+       posado, se lee como flotando al lado del nombre. Un pétalo que cayó
+       encima de algo está ARRIBA de ese algo.
+       Se pide entonces el arco de arriba —y no el de abajo, donde se
+       leería como suciedad acumulada— y de ésos, el más pegado al anillo. */
+    var mejor = null, mejorDistancia = 1e9;
+
+    for (var i = 0; i < petalos.length; i++) {
+      var pt = petalos[i];
+      var dx = pt.x - altar.x, dy = pt.y - altar.y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+
+      if (dy > 0) continue;                              // el arco de abajo, no
+      if (Math.abs(dx) > altar.radio * 0.75) continue;   // los costados, tampoco
+
+      var cuanLejosDelAnillo = Math.abs(d - altar.radio);
+      if (cuanLejosDelAnillo < mejorDistancia) {
+        mejorDistancia = cuanLejosDelAnillo;
+        mejor = pt;
+      }
+    }
+
+    if (!mejor) return;
+
+    mejor.posada = true;
+    reliquia = mejor;
+
+    /* El lienzo se reserva ACÁ, en el segundo 42, y no en el frenazo.
+       Reservar un lienzo del tamaño de la pantalla cuesta un cuadro, y en
+       el segundo 60 ese cuadro se vería: es EL cuadro. Acá, en mitad de la
+       totalidad, no lo nota nadie. */
+    try {
+      lienzoDeLaReliquia = document.createElement('canvas');
+      lienzoDeLaReliquia.className = 'eclipse-capa';
+      lienzoDeLaReliquia.style.cssText =
+        'position:fixed;inset:0;pointer-events:none;z-index:2147483001;';
+      lienzoDeLaReliquia.width  = Math.floor(window.innerWidth  * dpr);
+      lienzoDeLaReliquia.height = Math.floor(window.innerHeight * dpr);
+      pincelDeLaReliquia = lienzoDeLaReliquia.getContext('2d');
+      pincelDeLaReliquia.setTransform(dpr, 0, 0, dpr, 0, 0);
+    } catch (e) {
+      lienzoDeLaReliquia = null;
+      pincelDeLaReliquia = null;
+    }
+  }
+
+  function limpiarLaReliquia() {
+    if (relojDeLaReliquia) { clearTimeout(relojDeLaReliquia); relojDeLaReliquia = 0; }
+    if (lienzoDeLaReliquia && lienzoDeLaReliquia.parentNode) {
+      lienzoDeLaReliquia.parentNode.removeChild(lienzoDeLaReliquia);
+    }
+    lienzoDeLaReliquia = null;
+    pincelDeLaReliquia = null;
+    reliquia = null;
+  }
+
+  /**
+   * Suelta la reliquia después del frenazo.
+   *
+   * Se llama desde terminar() SOLO cuando la secuencia llegó hasta el
+   * final. Si el eclipse se cortó —por un error, por el reloj de
+   * seguridad o porque alguien apretó «Cortar» en el ensayo— no hay
+   * evidencia que dejar: no hubo ritual.
+   *
+   * @returns {void}
+   */
+  function dejarLaReliquia() {
+    if (!reliquia || !lienzoDeLaReliquia || !pincelDeLaReliquia) {
+      limpiarLaReliquia();
+      return;
+    }
+
+    /* Se copian los números ahora: el objeto del pétalo pertenece a la
+       corrida que acaba de terminar y la siguiente lo va a reescribir. */
+    var x0 = reliquia.x, y0 = reliquia.y, giro0 = reliquia.giro;
+    var tam = reliquia.tam, cual = reliquia.cual;
+    var lienzoPropio = lienzoDeLaReliquia;
+    var pincelPropio = pincelDeLaReliquia;
+
+    document.body.appendChild(lienzoPropio);
+
+    var nacio = performance.now();
+    var pedido = 0;
+
+    /* El techo duro, por si el rAF no corre (pestaña al fondo). */
+    relojDeLaReliquia = setTimeout(function () {
+      if (pedido) cancelAnimationFrame(pedido);
+      limpiarLaReliquia();
+    }, 12000);
+
+    function pintar(ahora) {
+      var desde = ahora - nacio;
+      var x = x0, y = y0, giro = giro0;
+
+      /* TRES SEGUNDOS QUIETO. La página ya es una invitación normal y
+         esto sigue ahí, sobre el relicario, sin explicación. */
+      if (desde >= 3000) {
+        var cae = (desde - 3000) / 1000;
+
+        /* ⚠️ UN PÉTALO NO CAE COMO UNA PIEDRA, Y ÉSTA ES LA ÚLTIMA IMAGEN
+           DE LA PIEZA. La primera versión usaba la gravedad de la mártir
+           —900 px/s², la caída de un cuerpo— y el pétalo salía de la
+           pantalla en siete décimas: se leía como que algo se cayó, no
+           como que algo se soltó.
+           Un pétalo tiene muchísima resistencia al aire: arranca quieto,
+           toma enseguida su velocidad de régimen y ya no acelera más. La
+           exponencial es exactamente eso, y de paso hace que el primer
+           instante sea un desprenderse y no un tirón. Con el vaivén, tarda
+           unos dos segundos en irse. */
+        var arranque = 1 - Math.exp(-cae * 1.6);
+        y = y0 + 165 * cae - 103 * arranque;
+        x = x0 + Math.sin(cae * 2.3) * 16;
+        giro = giro0 + Math.sin(cae * 1.7) * 0.55;
+      }
+
+      if (y - tam > window.innerHeight || desde > 9000) {
+        limpiarLaReliquia();
+        return;
+      }
+
+      pincelPropio.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      pincelPropio.save();
+      pincelPropio.translate(x, y);
+      pincelPropio.rotate(giro);
+      pincelPropio.globalAlpha = 0.75;
+
+      var mapa = mapasDePetalos[cual];
+      if (mapa && mapa.listo) {
+        pincelPropio.drawImage(mapa, -tam, -tam, tam * 2, tam * 2);
+      } else {
+        pincelPropio.fillStyle = '#7d1a26';
+        pincelPropio.beginPath();
+        pincelPropio.ellipse(0, 0, tam * 0.5, tam * 0.28, 0, 0, Math.PI * 2);
+        pincelPropio.fill();
+      }
+      pincelPropio.restore();
+
+      pedido = requestAnimationFrame(pintar);
+    }
+
+    pedido = requestAnimationFrame(pintar);
+  }
+
+  /* ─── 10a. LAS LLAMAS ───────────────────────────────────────────────
+
+     ⚡ EL SEGUNDO 18: LAS VELAS NOTAN ALGO (2026-09-11)
+
+     Las velas son la luz votiva del culto y el eclipse no las toca: lo
+     que convierte la sala en cripta no es que ellas suban, es que todo lo
+     demás se apague. Esa regla sigue en pie y la prueba la cuida.
+
+     Pero una llama que se inclina no es subir el brillo: es la única
+     cosa de la escena que reacciona a algo que no está. No hay viento, no
+     hay corriente, no hay nada que lo explique — y las treinta y dos
+     llamas de la habitación se ladean a la vez hacia el mismo punto. Es
+     el primer momento en que la escena dice, sin decirlo, que hay algo
+     ahí que ejerce fuerza.
+
+     ⚠️ SE ESCRIBE `rotate`, NO `transform`, Y ES OBLIGATORIO. 19-velas.js
+     le escribe a cada `.llama` su propio `style.transform`
+     (`scaleY(...) scaleX(...)`, el titileo) cada vez que cambia el brillo,
+     o sea muchas veces por segundo. Escribir `transform` acá sería una
+     pelea que se pierde en el cuadro siguiente, y además dejaría la llama
+     sin titilar. Las propiedades independientes `rotate` y `scale` no
+     pisan a `transform`: se COMPONEN con ella. La llama se inclina Y
+     sigue titilando, cada módulo mandando sobre lo suyo.
+
+     ⚠️ Y EL PIVOTE YA ESTÁ PUESTO, por 12-haces-de-luz.css:205
+     (`transform-box: fill-box; transform-origin: 50% 90%`): el origen está
+     en la mecha, así que girar la llama la ladea desde su base, como se
+     ladea una llama de verdad. No hay que tocar nada de eso. */
+
+  var llamas = [];
+
+  function tomarLasLlamas() {
+    if (llamas.length) return;
+
+    var sePuede = false;
+    try {
+      sePuede = typeof CSS !== 'undefined' && CSS.supports &&
+                CSS.supports('rotate', '1deg') && CSS.supports('scale', '1.1');
+    } catch (e) { sePuede = false; }
+    if (!sePuede) return;
+
+    var todas = document.querySelectorAll('.llama');
+
+    for (var i = 0; i < todas.length; i++) {
+      var nodo = todas[i];
+
+      var caja;
+      try { caja = nodo.getBoundingClientRect(); } catch (e) { continue; }
+      if (!caja || (!caja.width && !caja.height)) continue;
+
+      var cx = caja.left + caja.width / 2;
+      var cy = caja.top + caja.height / 2;
+
+      /* Cuánto tiene que ladearse para «mirar» al nombre. Es el ángulo
+         desde la vertical: una llama justo debajo del nombre casi no se
+         mueve, una del otro extremo de la sala se tuerce entera.
+         El valor absoluto del vertical evita que una vela POR ENCIMA del
+         nombre se incline al revés — hacia el nombre es hacia el nombre,
+         esté arriba o abajo. */
+      var ladeo = Math.atan2(altar.x - cx, Math.abs(altar.y - cy) + 1) *
+                  180 / Math.PI;
+
+      /* 14° de tope. Más que eso deja de ser una llama atraída y pasa a
+         ser una llama soplada, que es otra cosa y se ve barata. */
+      if (ladeo >  14) ladeo =  14;
+      if (ladeo < -14) ladeo = -14;
+
+      llamas.push({
+        nodo: nodo,
+        ladeo: ladeo,
+        /* 16 de las 32 llamas viven en el candelabro reflejado
+           (estilos/12-haces-de-luz.css, `.marco__…--derecho`): medido en
+           PBE. Sin esto la mitad de la habitación se ladearía al revés. */
+        espejo: sentidoDeLaPantalla(nodo),
+        fase: Math.random() * Math.PI * 2,
+        /* Lo último escrito, en milésimas. Comparar enteros evita armar
+           una cadena nueva por llama y por cuadro cuando nada cambió:
+           es el mismo criterio que usa 19-velas.js para su titileo. */
+        ultimo: -999,
+        ultimoAlto: -999
+      });
+    }
+  }
+
+  /**
+   * Las llamas durante el minuto.
+   *
+   * @param {number} t
+   * @returns {void}
+   */
+  var ultimoIntentoDeLlamas = -1000;
+
+  function moverLasLlamas(t) {
+    /* Los candelabros los arma 19-velas.js cuando se monta la escena, y no
+       hay garantía de que eso pase antes que el marco. Se vuelve a
+       intentar, igual que con las flores, y se deja de intentar en cuanto
+       aparecen. Después del segundo 18 ya no tiene sentido empezar. */
+    if (!llamas.length) {
+      if (t > 18000 || t - ultimoIntentoDeLlamas < 500) return;
+      ultimoIntentoDeLlamas = t;
+      tomarLasLlamas();
+      if (!llamas.length) return;
+    }
+
+    /* Entra en el segundo 18 y tarda 2,5 s en completarse: una corriente
+       que aparece, no un interruptor. */
+    var atraccion = tramo(t, 18000, 20500);
+
+    /* En la totalidad se quedan QUIETAS: los dos segundos de vacío también
+       son suyos. Y en el frenesí arden altas — es lo único que sube
+       cuando todo lo demás ya se apagó. */
+    var enShock = t >= TOTALIDAD && t < SHOCK;
+    var alto = 1 + tramo(t, SHOCK, SHOCK + 1800) * 0.22;
+
+    var ahora = t / 1000;
+
+    for (var i = 0; i < llamas.length; i++) {
+      var l = llamas[i];
+
+      /* El vaivén propio de cada llama, para que no se ladeen las 32 como
+         una sola pieza. En el shock, cero. */
+      var vaiven = enShock ? 0
+        : Math.sin(ahora * 1.7 + l.fase) * 1.6 * atraccion;
+
+      var grados = l.espejo * (l.ladeo * atraccion + vaiven);
+
+      var enMilesimas = Math.round(grados * 100);
+      if (enMilesimas !== l.ultimo) {
+        l.ultimo = enMilesimas;
+        l.nodo.style.rotate = (enMilesimas / 100).toFixed(2) + 'deg';
+      }
+
+      var altoEnMilesimas = Math.round(alto * 1000);
+      if (altoEnMilesimas !== l.ultimoAlto) {
+        l.ultimoAlto = altoEnMilesimas;
+        /* Solo a lo alto: una llama que arde fuerte se estira, no engorda.
+           `scale` con dos valores es ancho y alto. */
+        l.nodo.style.scale = '1 ' + (altoEnMilesimas / 1000).toFixed(3);
+      }
+    }
+  }
+
+  function devolverLasLlamas() {
+    for (var i = 0; i < llamas.length; i++) {
+      try {
+        llamas[i].nodo.style.removeProperty('rotate');
+        llamas[i].nodo.style.removeProperty('scale');
+      } catch (e) { /* nada */ }
+    }
+    llamas.length = 0;
   }
 
   /* ─── 10b. EL MUNDO ALREDEDOR ───────────────────────────────────────
@@ -1296,11 +2115,19 @@
     return { frio: frio, sangre: sangre };
   }
 
-  function dibujarUnaRosa(x, y, escala, giro, alfa) {
+  /**
+   * @param {number} [espejo] - -1 para dibujarla reflejada. La mártir sale
+   *   de un lado del marco que puede estar en espejo, y la copia tiene que
+   *   ser la MISMA imagen que estaba en pantalla, no su reflejo. Se aplica
+   *   después del giro para que el orden sea el mismo que en el DOM:
+   *   primero se refleja el dibujo, después se lo gira.
+   */
+  function dibujarUnaRosa(x, y, escala, giro, alfa, espejo) {
     pincel.save();
     pincel.globalAlpha = alfa;
     pincel.translate(x, y);
     pincel.rotate(giro);
+    if (espejo === -1) pincel.scale(-1, 1);
 
     if (mapaDeLaRosa) {
       var l = LADO * escala;
@@ -1366,7 +2193,10 @@
       if (enSumision) brote *= 1 - tramo(t, FRENESI, FRENESI + 900);
       if (brote <= 0.01) continue;
 
-      if (r === laQueMuere && t >= MUERE_EN) continue;   // se dibuja aparte
+      /* (Acá había un `if (r === laQueMuere)`: la que se sacrificaba salía
+         de esta lista y había que saltearla para dibujarla aparte. Ya no:
+         la mártir es una flor del marco y esta lista está vacía. Ver las
+         secciones 7 y 8.) */
 
       /* El anhelo la acerca al altar… hasta el radio y ni un píxel más.
          REGLA 2: esto es un tope, no una intención. */
@@ -1396,32 +2226,38 @@
         brote * (enSumision ? 0.85 : 1));
     }
 
-    /* ── La que murió: ya no se estira, cae ── */
-    if (laQueMuere && t >= MUERE_EN) {
-      if (!muerte.suelta) {
-        muerte.suelta = true;
-        var d0 = altar.radio;
-        muerte.x = altar.x + Math.cos(laQueMuere.angulo) * d0;
-        muerte.y = altar.y + Math.sin(laQueMuere.angulo) * d0;
-        // Sale disparada HACIA el nombre: es lo que consiguió.
-        muerte.vx = (altar.x - muerte.x) * 0.02;
-        muerte.vy = (altar.y - muerte.y) * 0.02;
-        muerte.giroVel = (Math.random() - 0.5) * 0.05;
+    /* ── La mártir: ya no se estira, es un cuerpo ──
+
+       El arranque lo hace arrancarALaMartir(), en el mismo cuadro y antes
+       que esto. Acá solo se la dibuja.
+
+       ⚠️ EL VIAJE VA POR EL RELOJ DE LA SECUENCIA, NO POR CUADROS. Antes
+       esto acumulaba `muerte.vy += 0.55` en cada cuadro: a 30 cuadros por
+       segundo caía la mitad de rápido que a 60, o sea que en un teléfono
+       lento la rosa se posaba en otro momento de la escena. Con `t` de por
+       medio, el segundo 42 es el segundo 42 en cualquier equipo. */
+    if (laQueMuere && muerte.suelta && t >= MUERE_EN) {
+
+      /* 36,5 → 42,0: viaja hasta el nombre y se posa. Es la única que
+         cruza el radio, y lo cruza porque se soltó (regla 2). */
+      var viaje = suave(limitar((t - MUERE_EN) / (TOTALIDAD - MUERE_EN), 0, 1));
+
+      muerte.x = muerte.x0 + (altar.x - muerte.x0) * viaje;
+      muerte.y = muerte.y0 + (altar.y - muerte.y0) * viaje
+                 - Math.sin(viaje * Math.PI) * 26;   // un cuerpo describe un arco
+      muerte.giro = muerte.giro0 + viaje * 1.1;
+
+      /* 54,0 en adelante: resbala del nombre y cae. Se le acabó el
+         permiso, como a todas. 900 px/s², que es una caída creíble a
+         cualquier tamaño de pantalla. */
+      if (t >= FRENESI) {
+        var cae = (t - FRENESI) / 1000;
+        muerte.y += 900 * cae * cae * 0.5;
+        muerte.giro += cae * 1.8;
       }
 
-      /* Antes del segundo 54 descansa sobre el nombre. Después resbala y
-         cae: se le acabó el permiso, como a todas. */
-      if (t < FRENESI) {
-        muerte.x += (altar.x - muerte.x) * 0.12;
-        muerte.y += (altar.y - muerte.y) * 0.12;
-        muerte.vy = 0;
-      } else {
-        muerte.vy += 0.55;
-        muerte.y += muerte.vy;
-      }
-      muerte.giro += muerte.giroVel;
-
-      dibujarUnaRosa(muerte.x, muerte.y, laQueMuere.escala * 1.15, muerte.giro, 1);
+      dibujarUnaRosa(muerte.x, muerte.y, muerte.escala, muerte.giro, 1,
+                     muerte.espejo);
     }
 
     /* ── Los pétalos, arrastrados por la gravedad nueva ── */
@@ -1429,9 +2265,32 @@
        gravedad no le devuelve el mando de un tirón, se lo va soltando. */
     var atraccion = tramo(t, PENUMBRA * 0.5, PROFUNDA) * 0.55 * (1 - retirada);
 
+    /* El segundo 42: en la quietud de la totalidad, uno se posa sobre el
+       relicario. Es el que va a sobrevivir al frenazo. Ver la sección 9b. */
+    if (t >= TOTALIDAD) elegirLaReliquia();
+
     pincel.fillStyle = '#7d1a26';
     for (var p = 0; p < petalos.length; p++) {
       var pt = petalos[p];
+
+      /* El posado no tiene física: está apoyado. Se dibuja y ya. */
+      if (pt.posada) {
+        pincel.save();
+        pincel.translate(pt.x, pt.y);
+        pincel.rotate(pt.giro);
+        pincel.globalAlpha = 0.75;
+        var mapaPosado = mapasDePetalos[pt.cual];
+        if (mapaPosado && mapaPosado.listo) {
+          pincel.drawImage(mapaPosado, -pt.tam, -pt.tam, pt.tam * 2, pt.tam * 2);
+        } else {
+          pincel.beginPath();
+          pincel.ellipse(0, 0, pt.tam * 0.5, pt.tam * 0.28, 0, 0, Math.PI * 2);
+          pincel.fill();
+        }
+        pincel.restore();
+        continue;
+      }
+
       var dx = altar.x - pt.x, dy = altar.y - pt.y;
       var d = Math.sqrt(dx * dx + dy * dy) || 1;
 
@@ -1521,6 +2380,10 @@
       if (!floresReales.length) return;
     }
 
+    /* El arranque de la mártir va ACÁ ARRIBA, antes de escribirle un solo
+       estilo a una flor en este cuadro. Ver la nota de la función. */
+    arrancarALaMartir(t);
+
     var enSumision = t >= FRENESI;
     var enShock    = t >= TOTALIDAD && t < SHOCK;
     var ahora = t / 1000;
@@ -1544,6 +2407,9 @@
 
     for (var i = 0; i < floresReales.length; i++) {
       var f = floresReales[i];
+
+      /* La mártir ya no está en su tallo: su hueco no se anima. */
+      if (f.martir && muerte.suelta) continue;
 
       /* ── 1. LA CONCIENCIA, QUE LLEGA COMO UNA ONDA ──
          Las flores más cercanas al nombre despiertan primero y las de las
@@ -1573,28 +2439,48 @@
          más que eso deja de leerse como una planta estirando y empieza a
          parecer una flor rota. El `ansia` de cada una lo desordena un
          poco, que es lo que separa un coro de un pelotón. */
+
+      /* ── 3b. EL ESFUERZO DE MÁS, QUE SOLO HACE UNA ──
+         Del segundo 35 al 36,5 la mártir pasa el tope que respetan las
+         otras doscientas y tiembla casi el triple. Parece rota porque SE
+         ESTÁ rompiendo: es el único aviso de lo que va a pasar, y es lo
+         que hace que el ojo esté puesto en ella cuando se arranque. */
+      var esfuerzo = f.martir ? tramo(t, PROFUNDA, MUERE_EN) : 0;
+
       var inclina = f.haciaElNombre * fervor * f.ansia * 0.58 * compensacion;
-      if (inclina >  TOPE_DE_INCLINACION) inclina =  TOPE_DE_INCLINACION;
-      if (inclina < -TOPE_DE_INCLINACION) inclina = -TOPE_DE_INCLINACION;
+      var tope = TOPE_DE_INCLINACION * (1 + esfuerzo * 0.45);
+      if (inclina >  tope) inclina =  tope;
+      if (inclina < -tope) inclina = -tope;
 
       /* ── 4. EL TEMBLOR ──
          Lento y mínimo cuando recién despierta; rápido y amplio en la
          histeria. En el shock se queda quieta: contiene el aliento. */
-      var frecuencia = 1.4 + fervor * 9;
-      var amplitud   = enShock ? 0 : fervor * fervor * 9;
+      var frecuencia = 1.4 + fervor * 9 + esfuerzo * 7;
+      var amplitud   = enShock ? 0 : fervor * fervor * 9 * (1 + esfuerzo * 1.8);
       var tiembla    = Math.sin(ahora * frecuencia + f.fase) * amplitud;
 
       /* ── 5. TENSARSE ──
          Crece un poco al estirar, como algo que se estira de verdad. */
-      var crece = 1 + fervor * 0.26;
+      var crece = 1 + fervor * 0.26 + esfuerzo * 0.12;
+
+      /* El gesto, en grados de PANTALLA. Se guarda solo para la mártir,
+         que lo necesita en el cuadro del arranque para que su copia salga
+         girada exactamente como estaba ella. */
+      var gesto = inclina + tiembla;
+      if (f.martir) { f.gesto = gesto; f.creceAhora = crece; }
 
       /* Se apila sobre lo que 07 tuviera puesto, no se lo reemplaza: si esa
          flor estaba apartándose del mouse, sigue apartándose mientras
          tiembla. Y en unidades de CSS —`deg`—, que es lo que espera la
-         propiedad; el atributo SVG usa números pelados y no son lo mismo. */
+         propiedad; el atributo SVG usa números pelados y no son lo mismo.
+
+         ⚠️ EL ÁNGULO SE MULTIPLICA POR `f.espejo`. La mitad derecha del
+         marco es la izquierda reflejada, y dentro de un espejo los
+         ángulos se invierten: sin esto, 94 de 198 flores se apartaban del
+         nombre en vez de estirar hacia él. Ver sentidoDeLaPantalla(). */
       f.nodo.style.transform =
         (f.antes ? f.antes + ' ' : '') +
-        'rotate(' + (inclina + tiembla).toFixed(2) + 'deg) ' +
+        'rotate(' + (f.espejo * gesto).toFixed(2) + 'deg) ' +
         'scale(' + crece.toFixed(3) + ')';
     }
 
@@ -1687,7 +2573,10 @@
     /* `velocidad` es 1 en el eclipse de verdad, así que esto es la resta de
        siempre. El panel de ensayo la mueve para mirar en cámara lenta. */
     var t = (ahora - arranque) * velocidad;
-    if (t >= DURACION) { terminar(); return; }
+
+    /* El único final que cuenta como completo: llegó al segundo 60 por su
+       propio pie. Es lo que decide si queda la evidencia. */
+    if (t >= DURACION) { terminar(true); return; }
 
     /* ⚠️ SI ALGO REVIENTA, SE TERMINA EL ECLIPSE — NO LA INVITACIÓN.
      *
@@ -1728,8 +2617,15 @@
     moverElMundo(t);
     elNombreNoSeEntera(t);
 
-    dibujar(t);
+    /* ⚠️ LAS PLANTAS VAN ANTES QUE EL LIENZO, Y EL ORDEN IMPORTA UNA SOLA
+       VEZ EN TODO EL MINUTO: en el cuadro 36 500, cuando la mártir se
+       apaga en el marco y aparece dibujada en el lienzo. Las dos cosas
+       tienen que pasar en el MISMO cuadro o hay 16 ms con el hueco vacío,
+       y un parpadeo de un cuadro es justo lo que delataría el relevo.
+       Ver arrancarALaMartir(). */
     moverLasFloresReales(t);
+    moverLasLlamas(t);
+    dibujar(t);
     ajustarElSonido(t);
 
     pedidoDeCuadro = requestAnimationFrame(cuadro);
@@ -1762,11 +2658,23 @@
    */
   function reiniciarElEstado() {
     muerte.x = 0; muerte.y = 0; muerte.vx = 0; muerte.vy = 0;
+    muerte.x0 = 0; muerte.y0 = 0; muerte.giro0 = 0;
     muerte.giro = 0; muerte.giroVel = 0; muerte.suelta = false;
+    muerte.escala = 0.5; muerte.espejo = 1;
     laQueMuere = null;
     ultimoCuadro = 0;
     promedio = 16.7;
     ultimoIntentoDeFlores = -1000;
+    ultimoIntentoDeLlamas = -1000;
+
+    /* La evidencia de la corrida anterior no puede quedar colgada de la
+       siguiente: en el ensayo se corre la secuencia una y otra vez. */
+    limpiarLaReliquia();
+
+    /* El marco se reconstruye al cambiar el tamaño de la ventana, así que
+       los nodos de la corrida anterior pueden ya no existir. La caché de
+       reflejos se mide de nuevo con las flores. */
+    sentidosMedidos.length = 0;
   }
 
   function empezar(desfase) {
@@ -1784,8 +2692,9 @@
 
     medirElAltar();
     sembrarLaMarea();
-    elegirALaQueMuere();
     sembrarLosPetalos();
+    /* ⚠️ La mártir se elige DENTRO de esto, no acá: es una flor del marco
+       y el marco puede no existir todavía. Ver la sección 8. */
     tomarLasFloresReales();
     apagarLosPetalosDeSiempre();
     engancharElSonido();
@@ -1856,7 +2765,14 @@
      cierra la escena y sigue. El empujón violento no lo deja cerrarla y
      lo deja preguntándose qué acaba de ver. Esa duda ES el efecto.
      Nada de transiciones acá. Se ve brusco a propósito. */
-  function terminar() {
+  /**
+   * @param {boolean} [completo] - true solo cuando la secuencia llegó al
+   *   segundo 60 por su propio pie. El pétalo que sobrevive al frenazo
+   *   —la única evidencia— depende de esto: si el eclipse se cortó por un
+   *   error, por el reloj de seguridad o porque alguien apretó «Cortar»
+   *   en el panel de ensayo, no hubo ritual y no hay nada que dejar.
+   */
+  function terminar(completo) {
     vivo = false;
     if (pedidoDeCuadro) cancelAnimationFrame(pedidoDeCuadro);
 
@@ -1870,6 +2786,7 @@
 
     devolverLasFloresReales();
     devolverLasRamas();
+    devolverLasLlamas();
     devolverLosPetalosDeSiempre();
     devolverElNombre();
     soltarElSonido();
@@ -1884,6 +2801,12 @@
     [capaFria, capaSangre, capaDestello, lienzo].forEach(function (c) {
       if (c.parentNode) c.parentNode.removeChild(c);
     });
+
+    /* Y en el mismo cuadro en que desaparece todo, lo único que no
+       desaparece. No es una transición: es un objeto que se queda. Ver la
+       sección 9b. */
+    if (completo) dejarLaReliquia();
+    else          limpiarLaReliquia();
 
     // Mañana otra vez.
   }
@@ -1994,7 +2917,33 @@
          si hay escena o no: con cero, el eclipse corre sin que las plantas
          se muevan y no se entiende nada. El panel lo muestra para que un
          cero se vea en vez de tener que deducirlo. */
-      cuantasFlores: function () { return floresReales.length; }
+      cuantasFlores: function () { return floresReales.length; },
+
+      /**
+       * El recuento de la escena, para mirarlo en vez de deducirlo.
+       *
+       * `reflejadas` es el que importa: si diera 0 con el marco entero en
+       * pantalla, sería que el detector de espejos dejó de funcionar y la
+       * mitad del culto está estirando al revés otra vez — que es el
+       * defecto que estuvo dos versiones sin que nadie lo viera.
+       *
+       * @returns {Object}
+       */
+      recuento: function () {
+        var reflejadas = 0;
+        for (var i = 0; i < floresReales.length; i++) {
+          if (floresReales[i].espejo === -1) reflejadas++;
+        }
+        return {
+          flores: floresReales.length,
+          reflejadas: reflejadas,
+          ramas: ramas.length,
+          llamas: llamas.length,
+          martir: !!laQueMuere,
+          rosaRasterizada: !!mapaDeLaRosa,
+          tinta: tintaDeLaRosa
+        };
+      }
     };
   }
 })();
