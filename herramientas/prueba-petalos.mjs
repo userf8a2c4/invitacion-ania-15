@@ -159,6 +159,15 @@ comprobar('y deja de preguntar en cuanto lo consigue',
   /if \(!yaSeCalibro && momentoActual - ultimoIntentoDeCalibrar > 500\)/.test(fisica),
   'un querySelectorAll por cuadro para siempre sería peor que el problema');
 
+/* ⚠️ TOPE ABSOLUTO. El p90 es buena referencia, pero el reparto de
+   tamaños de las rosas no es igual en todos los anchos: en alguno el p90
+   puede quedar lejos del máximo y el pétalo más grande dominar igual.
+   Carlos, después de la v278: «los pétalos gigantes aún existen». */
+comprobar('ningún pétalo supera a la rosa más grande de la pantalla',
+  /const laMayor = lados\[lados\.length - 1\];/.test(fisica) &&
+  /ladoDeLaRosa = Math\.min\(p90, topeAbsoluto\);/.test(fisica),
+  'el p90 solo no alcanza: hace falta un tope contra lo que de verdad se ve');
+
 comprobar('reescalar no reinicia los pétalos, solo los multiplica',
   /petalo\.tamaño \*= factor;/.test(fisica),
   'volver a crearlos los teletransportaría a mitad de la lluvia');

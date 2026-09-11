@@ -225,9 +225,34 @@
 
   var capaDelEclipse = document.createElement('div');
   capaDelEclipse.className = 'eclipse-capa';
+  /* ⚡ `will-change: opacity` — ESTE ES EL ARREGLO DE LOS 159 ms (2026-09-11)
+   *
+   * La v278 quitó `mix-blend-mode` para eliminar la mezcla, y eso estuvo
+   * bien: medido, pasó de 0,871 Mpx mezclados por cuadro a cero. Pero el
+   * blend mode era ADEMÁS lo que obligaba al navegador a darle a esta capa
+   * su propia textura. Sin él, la capa dejó de estar promovida.
+   *
+   * Una capa sin textura propia se REPINTA cada vez que cambia su
+   * opacidad. Y acá la opacidad cambia en cada cuadro, sobre un degradado
+   * radial a pantalla completa, que además hay que rasterizar. En el
+   * ProDesk de Carlos —i5-4590T con HD 4600— eso dio 159,5 ms por cuadro,
+   * 6 fps. Cambié un coste de compositor por uno de pintura, que en una
+   * integrada es muchísimo peor.
+   *
+   * Con `will-change: opacity` el degradado se rasteriza UNA vez y la
+   * opacidad pasa a ser trabajo del compositor. Sin mezcla, que es lo que
+   * la v278 ganó y hay que conservar.
+   *
+   * ⚠️ ESTE PROYECTO DESCONFÍA DE `will-change`, Y CON RAZÓN: hay notas en
+   * 02-marco-victoriano.css y 12-haces-de-luz.css contando cómo 179
+   * elementos promovidos se comían el 31 % del cuadro en «Layerize». Pero
+   * el criterio que esas mismas notas fijan no es «will-change malo», es:
+   * corresponde cuando el elemento ANIMA de verdad y NO vive dentro de un
+   * contexto de mezcla. Es exactamente este caso. Y es UNA capa, que existe
+   * sesenta segundos al día. */
   capaDelEclipse.style.cssText =
     'position:fixed;inset:0;pointer-events:none;opacity:0;' +
-    'z-index:2147483000;';
+    'z-index:2147483000;will-change:opacity;';
 
   /* Los cuatro tramos del degradado, del altar hacia afuera.
 
@@ -251,17 +276,18 @@
      Un factor de dos entre uno y otro: se lee como un golpe de oscuridad
      sin que nada llegue a desaparecer. */
   var TRAMOS_DEL_VELO = [
-    { r:   0, c: '140, 38, 30', a: 0.14 },   // el altar: teñido, casi sin velo
-    { r:  30, c: '112, 28, 24', a: 0.44 },
-    { r:  62, c: ' 54, 14, 16', a: 0.74 },
-    { r: 100, c: ' 24,  8, 12', a: 0.92 }    // las esquinas: rojo muy oscuro
+    { r:   0, c: '140, 38, 30', a: 0.10 },   // el altar: teñido, casi sin velo
+    { r:  30, c: '112, 28, 24', a: 0.45 },
+    { r:  62, c: ' 54, 14, 16', a: 0.80 },
+    { r: 100, c: ' 24,  8, 12', a: 0.95 }    // las esquinas: rojo muy oscuro
   ];
 
   /* Cuánto se abre el velo. 1 es su tamaño natural; más chico cierra la
      luz sobre el nombre, más grande la abre. Lo mueve la secuencia. */
   var aperturaDelVelo = 1;
   var ultimaAperturaPintada = -1;
-  var ultimoCentroPintado = '';
+  var ultimoCentroX = -999;
+  var ultimoCentroY = -999;
 
   /**
    * Reescribe el degradado del velo.
@@ -277,14 +303,30 @@
     var cx = altar.radio ? (altar.x / window.innerWidth) * 100 : 50;
     var cy = altar.radio ? (altar.y / window.innerHeight) * 100 : 42;
 
-    /* Redondeado al 1 %: el relicario se mueve fracciones de pixel con el
-       vaivén de la portada y no hay que repintar por eso. */
-    var centro = Math.round(cx) + '% ' + Math.round(cy) + '%';
-    var apertura = Math.round(aperturaDelVelo * 20) / 20;   // pasos de 5 %
+    /* ⚡ PEGAJOSO, NO REDONDEADO (2026-09-11)
+     *
+     * Acá se redondeaba al 1 %. El relicario se mueve con el vaivén de la
+     * portada, y un 1 % son cuatro píxeles en un teléfono: cruzaba el
+     * borde del redondeo varias veces por segundo, y CADA cruce es
+     * reescribir el `background` de una capa a pantalla completa, o sea
+     * rasterizar el degradado entero otra vez.
+     *
+     * Ahora se compara contra lo último pintado con una banda muerta: el
+     * centro tiene que haberse movido más de un 2 % y la apertura más de
+     * un 8 % para justificar un repintado. Por debajo de eso no se nota en
+     * pantalla y sí se nota en el cuadro. */
+    var apertura = aperturaDelVelo;
 
-    if (centro === ultimoCentroPintado && apertura === ultimaAperturaPintada) return;
-    ultimoCentroPintado = centro;
+    if (ultimaAperturaPintada >= 0 &&
+        Math.abs(cx - ultimoCentroX) < 2 &&
+        Math.abs(cy - ultimoCentroY) < 2 &&
+        Math.abs(apertura - ultimaAperturaPintada) < 0.08) return;
+
+    ultimoCentroX = cx;
+    ultimoCentroY = cy;
     ultimaAperturaPintada = apertura;
+
+    var centro = cx.toFixed(1) + '% ' + cy.toFixed(1) + '%';
 
     /* El radio del degradado se mide contra la esquina más lejana, que es
        lo que hace que la caída sea igual de redonda en un monitor ancho y
@@ -1068,14 +1110,12 @@
       /* ── SU SITIO EN LA CORRIENTE ──
          Cada pétalo tiene su propio radio, su propia velocidad angular y
          su propia turbulencia. Ver la nota de la corriente en dibujar(). */
-      radio: 0.75 + Math.random() * 1.45,      // × altar.radio
-      sentido: Math.random() < 0.5 ? -1 : 1,
-      prisa: 0.55 + Math.random() * 0.9,
-      fase: Math.random() * Math.PI * 2,
-      frecuencia: 0.5 + Math.random() * 1.1,
-      /* Uno de cada cinco sale despedido hacia afuera y vuelve: es lo que
-         rompe el anillo y lo convierte en una corriente. */
-      expulsado: Math.random() < 0.2
+      /* Un radio parecido para todos, con un 18 % de variación: lo justo
+         para que no sea una hilera, lo poco para que siga siendo UNA
+         figura. Con la dispersión de antes (0,75 a 2,2) se leía como caos. */
+      radio: 1.06 + Math.random() * 0.36,     // × altar.radio
+      prisa: 0.88 + Math.random() * 0.24,
+      fase: Math.random() * Math.PI * 2
     };
   }
 
@@ -1575,6 +1615,7 @@
    * @returns {void}
    */
   function moverLasRamas(t, retirada) {
+    if (recortado('ramas')) return;
     if (!ramas.length) return;
 
     var enShock = t >= TOTALIDAD && t < SHOCK;
@@ -2059,6 +2100,9 @@
   var ultimoIntentoDeLlamas = -1000;
 
   function moverLasLlamas(t) {
+    /* Apagadas por el recorte: ver soltarLastre(). */
+    if (recortado('llamas')) return;
+
     /* Los candelabros los arma 19-velas.js cuando se monta la escena, y no
        hay garantía de que eso pase antes que el marco. Se vuelve a
        intentar, igual que con las flores, y se deja de intentar en cuanto
@@ -2811,30 +2855,39 @@
        * carril y vuelve a ser lo que era: un tope duro. Ningún pétalo cruza
        * `altar.radio`, y el que lo intenta se frena ahí. */
       if (!enSumision) {
-        var suRadio = altar.radio * pt.radio *
-          (1 + Math.sin(ahora * pt.frecuencia + pt.fase) * 0.22);
-
-        if (pt.expulsado) {
-          /* Los díscolos: su radio respira mucho más y en contra, así que
-             se alejan cuando los demás se acercan. */
-          suRadio *= 1.15 + Math.sin(ahora * 0.6 + pt.fase) * 0.45;
-        }
+        /* ⚡ ERA CAOS, NO UNA CORRIENTE (2026-09-11)
+         *
+         * La ronda anterior le dio a cada pétalo su propio radio (de 0,75
+         * a 2,2 veces el del altar), su propia velocidad, turbulencia, y
+         * uno de cada cinco salía despedido. La intención era romper la
+         * hilera perfecta. Lo que se vio en pantalla, dicho por Carlos,
+         * fue «solo hay caos desordenado»: sin una figura común, veinte
+         * pétalos con veinte trayectorias distintas se leen como basura
+         * volando, no como algo que gira alrededor de un altar.
+         *
+         * Una corriente es lo contrario de un carril Y lo contrario del
+         * caos: es UNA figura con variación pequeña. Todos orbitan a un
+         * radio parecido y a una velocidad parecida; lo que los separa es
+         * un 18 % de diferencia, no un 200 %. */
+        var suRadio = altar.radio * pt.radio;
 
         /* Hacia su radio, no hacia el centro: lo que los ordena es la
            corriente, no una atracción pareja. */
         var sobra = d - suRadio;
-        pt.vx += (dx / d) * sobra * 0.012 * atraccion;
-        pt.vy += (dy / d) * sobra * 0.012 * atraccion;
+        pt.vx += (dx / d) * sobra * 0.014 * atraccion;
+        pt.vy += (dy / d) * sobra * 0.014 * atraccion;
 
-        /* Y el giro, más lento cuanto más lejos. */
+        /* Y el giro: todos en el MISMO sentido —una corriente tiene un
+           sentido— y a una velocidad parecida, apenas más lenta cuanto más
+           lejos, que es lo que hace que las filas se crucen sin que nadie
+           se salga de la figura. */
         var nx = -dx / d, ny = -dy / d;
-        var vueltas = pt.sentido * pt.prisa * atraccion *
-                      (altar.radio / Math.max(altar.radio * 0.6, d)) * 0.55;
+        var vueltas = pt.prisa * atraccion *
+                      (altar.radio / Math.max(altar.radio * 0.75, d)) * 0.62;
         pt.vx += -ny * vueltas;
         pt.vy +=  nx * vueltas;
 
-        /* REGLA 2: el tope duro. No se cruza, y no hace falta empujarlos
-           parejo hacia afuera para conseguirlo. */
+        /* REGLA 2: el tope duro. No se cruza. */
         if (d < altar.radio) {
           var haciaAdentro = pt.vx * (dx / d) + pt.vy * (dy / d);
           if (haciaAdentro > 0) {
@@ -2894,6 +2947,10 @@
     /* El arranque de la mártir va ACÁ ARRIBA, antes de escribirle un solo
        estilo a una flor en este cuadro. Ver la nota de la función. */
     arrancarALaMartir(t);
+
+    /* En el último nivel de recorte las flores se quedan quietas, pero la
+       mártir sigue: es lo irreductible de la escena. Ver soltarLastre(). */
+    if (recortado('flores')) return;
 
     var enSumision = t >= FRENESI;
     var enShock    = t >= TOTALIDAD && t < SHOCK;
@@ -3084,6 +3141,80 @@
 
   var cuadrosVistos = 0;
 
+  /* ⚡ EL ECLIPSE SE SIMPLIFICA HASTA ENTRAR EN EL CUADRO (2026-09-11)
+   *
+   * Carlos, midiendo en su ProDesk: «159,5 ms - 6 fps, seis tandas». O sea
+   * que el marco ya estaba repartido en el máximo de tandas y el cuadro
+   * seguía sin entrar. A esa altura repartir más no arregla nada: hay que
+   * hacer MENOS COSAS.
+   *
+   * La decisión —suya— es que el eclipse suelte lastre hasta entrar, con
+   * un suelo de 30 fps, en vez de arrastrar la página a 6. En un equipo
+   * flojo se ve una versión más pobre pero fluida; en uno normal, la
+   * completa. Es lo contrario de lo que hacía hasta ahora, que era
+   * intentarlo todo y no hacer nada bien.
+   *
+   * EL ORDEN NO ES CASUAL: se suelta primero lo que menos cuenta la
+   * historia. Las llamas son un detalle de ambiente; los pétalos son
+   * decorado; las ramas son el cuerpo de la planta, que sí importa; y la
+   * cabeza de las flores —el gesto de estirar hacia el nombre— es lo
+   * último que se apaga, porque sin eso no hay ritual.
+   *
+   * En el nivel 4 queda lo irreductible: el velo rojo, el nombre y la
+   * rosa que se ofreció. Sigue siendo la escena, contada en su mínima
+   * expresión.
+   *
+   * ⚠️ SOLO SUBE, NUNCA BAJA dentro de la misma corrida. Si el nivel fuera
+   * y viniera, el espectador vería las llamas apagarse y encenderse solas,
+   * que se lee como un defecto y no como una escena.
+   */
+  var LASTRE = [
+    'las llamas',
+    'la mitad de los pétalos',
+    'las ramas',
+    'todo salvo el velo, el nombre y la mártir'
+  ];
+
+  var nivelDeRecorte = 0;
+
+  /* Apagados a mano por el diagnóstico del panel, para medir cuánto cuesta
+     cada parte EN LA MÁQUINA DE QUIEN MIRA. Nunca se tocan en el eclipse
+     de verdad: solo el panel de ensayo puede escribir acá, y el panel solo
+     existe en PBE. */
+  var recorteDePrueba = { llamas: false, ramas: false, flores: false };
+
+  /** ¿Está apagado este subsistema? Por el recorte o por el diagnóstico. */
+  function recortado(que) {
+    if (que === 'llamas')  return nivelDeRecorte >= 1 || recorteDePrueba.llamas;
+    if (que === 'ramas')   return nivelDeRecorte >= 3 || recorteDePrueba.ramas;
+    if (que === 'flores')  return nivelDeRecorte >= 4 || recorteDePrueba.flores;
+    if (que === 'petalos') return nivelDeRecorte >= 4;
+    return false;
+  }
+
+  function soltarLastre() {
+    if (nivelDeRecorte >= LASTRE.length) return;
+    nivelDeRecorte++;
+
+    /* Lo que se apaga hay que DEVOLVERLO, no solo dejar de tocarlo: si no,
+       las llamas se quedan inclinadas y las ramas dobladas para siempre. */
+    if (nivelDeRecorte === 1) devolverLasLlamas();
+
+    if (nivelDeRecorte === 2) {
+      /* La mitad de los pétalos, de atrás hacia adelante. */
+      petalos.length = Math.max(4, Math.floor(petalos.length * 0.5));
+      cajasDelCuadroAnterior.length = 0;
+    }
+
+    if (nivelDeRecorte === 3) devolverLasRamas();
+
+    if (nivelDeRecorte === 4) {
+      devolverLasFloresReales();
+      petalos.length = 0;
+      cajasDelCuadroAnterior.length = 0;
+    }
+  }
+
   function gobernar(ahora) {
     if (ultimoCuadro) {
       promedio += ((ahora - ultimoCuadro) - promedio) * 0.08;
@@ -3091,21 +3222,16 @@
         marea.length = Math.floor(marea.length * 0.82);
       }
 
-      /* ⚡ Y SI IGUAL NO ENTRA, SE REPARTE EN MÁS TANDAS (2026-09-11)
-       *
-       * Las tandas salen de la calidad, pero la calidad es una estimación
-       * y el eclipse es la carga más alta que esta página tiene en todo el
-       * día. Si el cuadro se sigue yendo de presupuesto, cada planta pasa
-       * a moverse menos seguido hasta que entre.
-       *
-       * ⚠️ SOLO SUBE, NUNCA BAJA — la misma regla que la marea: ir
-       * repartiendo y volviendo a juntar se vería peor que quedarse
-       * repartido. Y se espera medio segundo antes de empezar a juzgar:
-       * los primeros cuadros de cualquier escena son los más lentos y no
-       * dicen nada del equipo. */
+      /* ⚠️ SE ESPERA MEDIO SEGUNDO ANTES DE JUZGAR. Los primeros cuadros de
+         cualquier escena son los más lentos —texturas subiéndose, estilos
+         resolviéndose— y no dicen nada del equipo. */
       cuadrosVistos++;
-      if (cuadrosVistos > 30 && promedio > 21 && TANDAS < 6) {
-        TANDAS++;
+      if (cuadrosVistos > 30 && promedio > 21) {
+        /* Primero se reparte el marco en más tandas, que es barato y no se
+           ve. Recién cuando eso se agota se empieza a soltar lastre. */
+        if (TANDAS < 6) TANDAS++;
+        else soltarLastre();
+
         cuadrosVistos = 0;      // se le da tiempo a que el promedio baje
       }
     }
@@ -3162,7 +3288,25 @@
        ABRE — cuanto más corona, más grande el hueco de luz alrededor del
        nombre. Por eso resta en la apertura en vez de sumar en la opacidad. */
     var color = coloresEn(t);
-    var velo = limitar(color.frio * 0.58 + color.sangre * 0.66, 0, 0.97);
+    /* ⚡ ERA UN TINTE, NO UN ECLIPSE (2026-09-11)
+     *
+     * Estos coeficientes eran 0,58 y 0,66. Hechas las cuentas de
+     * composición normal, donde vive el marco —a un 70 % del radio— el
+     * velo quedaba en un alfa efectivo de 0,30 en el acto III. Carlos,
+     * mirándolo: «el eclipse es inexistente y solo ves pétalos de un lado
+     * a otro». Tenía razón, y el error fue mío: al pasar de `multiply` a
+     * composición normal bajé las opacidades para no aplastar el marco, y
+     * apilé dos márgenes de seguridad sobre el mismo miedo.
+     *
+     * Con 0,85 y 0,95, el mismo punto queda en 0,46 en el esfuerzo y 0,82
+     * en la cripta. Sobre una rosa del marco rgb(126, 27, 44):
+     *
+     *     esfuerzo (t=38 s) …… rgb(88, 27, 30)   se ve, y es roja
+     *     cripta   (t=43 s) …… rgb(48, 14, 17)   silueta
+     *
+     * Casi un factor de dos entre un acto y otro, y el altar sigue siendo
+     * el punto menos velado de la pantalla. */
+    var velo = limitar(color.frio * 0.85 + color.sangre * 0.95, 0, 0.97);
     capaDelEclipse.style.opacity = velo.toFixed(3);
 
     /* ⚡ EL TERCER CONTACTO SE CUENTA CON LA LUZ, NO CON UN FLASH
@@ -3245,6 +3389,7 @@
     turnosPorRaiz.length = 0;
     tandaDeEsteCuadro = 0;
     cuadrosVistos = 0;
+    nivelDeRecorte = 0;
     calibrarLasTandas();
 
     /* La evidencia de la corrida anterior no puede quedar colgada de la
@@ -3310,7 +3455,7 @@
       acomodarLaCopia();
       /* El velo se centra en el relicario, y el relicario se movió. Es el
          único momento en que hace falta repintar el degradado. */
-      ultimoCentroPintado = '';
+      ultimoCentroX = -999;
       pintarElVelo();
     }
 
@@ -3398,7 +3543,8 @@
       if (c.parentNode) c.parentNode.removeChild(c);
     });
     cajaAnteriorDeLaOfrenda = null;
-    ultimoCentroPintado = '';
+    ultimoCentroX = -999;
+    ultimoCentroY = -999;
     ultimaAperturaPintada = -1;
 
     /* Y en el mismo cuadro en que desaparece todo, lo único que no
@@ -3547,8 +3693,30 @@
              60 Hz son 16,7 ms: si `msPorCuadro` se va de ahí, la escena le
              está costando a la página. */
           msPorCuadro: promedio,
-          tandas: TANDAS
+          tandas: TANDAS,
+          /* Cuánto lastre soltó para entrar en el cuadro. 0 = la escena
+             completa. Ver soltarLastre(). */
+          recorte: nivelDeRecorte,
+          queSoltó: nivelDeRecorte ? LASTRE.slice(0, nivelDeRecorte).join(' · ') : ''
         };
+      },
+
+      /* Lo que el panel necesita para medir el coste de cada parte del
+         eclipse: poder apagarlas de a una. Solo existe en PBE. */
+      apagarParaMedir: function (que, apagado) {
+        if (que === 'velo') {
+          capaDelEclipse.style.display = apagado ? 'none' : '';
+        } else if (que === 'lienzo') {
+          lienzo.style.display = apagado ? 'none' : '';
+        } else if (que === 'marco') {
+          recorteDePrueba.flores = !!apagado;
+        } else if (que === 'ramas') {
+          recorteDePrueba.ramas = !!apagado;
+          if (apagado) devolverLasRamas();
+        } else if (que === 'llamas') {
+          recorteDePrueba.llamas = !!apagado;
+          if (apagado) devolverLasLlamas();
+        }
       }
     };
   }

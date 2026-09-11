@@ -197,8 +197,17 @@
     const p90 = lados[Math.floor(lados.length * 0.9)];
     if (!(p90 > 0)) return false;
 
+    /* ⚠️ TOPE ABSOLUTO: NINGÚN PÉTALO MÁS GRANDE QUE LA ROSA MÁS GRANDE.
+       El p90 es una buena referencia, pero el reparto de tamaños de las
+       rosas no es igual en todos los anchos: en alguno el p90 puede quedar
+       lejos del máximo y el pétalo más grande terminar dominando igual.
+       Este tope cierra esa puerta con lo que de verdad se ve en pantalla. */
+    const laMayor = lados[lados.length - 1];
+    const topeAbsoluto = laMayor / (EL_MAS_GRANDE_CONTRA_LA_ROSA *
+                                    FORMA_DE_LOS_PLANOS.frente[1]);
+
     const antes = ladoDeLaRosa;
-    ladoDeLaRosa = p90;
+    ladoDeLaRosa = Math.min(p90, topeAbsoluto);
     const factor = ladoDeLaRosa / antes;
     if (!(factor > 0) || Math.abs(factor - 1) < 0.02) return true;  // ya estaba bien
 
