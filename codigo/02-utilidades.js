@@ -1359,3 +1359,43 @@ function ponerElScript(url, intento) {
 
   document.body.appendChild(etiquetaScript);
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   CUÁNTO MIDE DE VERDAD UNA FLOR DEL MARCO
+   ══════════════════════════════════════════════════════════════════════
+
+   ⚠️ NO SE USA getBoundingClientRect() PARA ESTO, Y LA DIFERENCIA ES
+   GRANDE. Esa caja está alineada a los ejes de la pantalla, y las flores
+   del marco están giradas dentro de su `<use>`: la caja de una rosa girada
+   30° es bastante más grande que la rosa. Medido sobre las 198 flores de
+   PBE, la caja exagera un 18 % en la mediana y hasta un 39 %.
+
+   La matriz de pantalla del `<use>` da los píxeles por unidad de dibujo, y
+   getBBox() da la caja del símbolo SIN girar. El producto es la extensión
+   real. Comprobado contra las cajas reales de las 198 flores: 0,22 % de
+   error en la mediana, 2,6 % en el peor caso.
+
+   Vive acá y no en un módulo porque la usan dos que no se conocen entre
+   sí: 28-eclipse.js —para que la copia de la mártir mida lo mismo que la
+   flor que reemplaza— y 06-petalos-con-fisica.js —para que un pétalo no
+   sea el doble de grande que la rosa que tiene al lado.
+
+   @param {Element} movil - un `.flor-de-enredadera__movil`.
+   @returns {number} píxeles, o 0 si el navegador no contesta.
+   ══════════════════════════════════════════════════════════════════════ */
+function ladoRealDeLaFlor(movil) {
+  try {
+    const uso = movil && movil.querySelector('use');
+    if (!uso || !uso.getScreenCTM || !uso.getBBox) return 0;
+
+    const m = uso.getScreenCTM();
+    const caja = uso.getBBox();
+    if (!m || !caja || !caja.width) return 0;
+
+    /* La raíz del determinante es el factor de escala de la matriz, sin
+       que el giro ni el reflejo lo ensucien. */
+    const k = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c));
+    return Math.max(caja.width, caja.height) * k;
+  } catch (e) { return 0; }
+}

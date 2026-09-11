@@ -96,64 +96,132 @@
      proporciones entre planos en los dos casos. Costo: cero (son las
      mismas constantes de siempre) y hasta BAJA en móvil, porque hay
      menos área de pétalo para pintar por cuadro. */
-  /* ⚡ EL TAMAÑO AHORA ES PROPORCIONAL DE VERDAD, NO EN DOS ESCALONES
-     (2026-09-11)
+  /* ⚡ EL TAMAÑO SALE DE LAS ROSAS, MEDIDAS. NO DEL MARCO. (2026-09-11)
 
-     Acá había dos juegos de tamaños y un `esPantallaChica` decidiendo cuál.
-     Dos escalones contra algo que encoge de forma CONTINUA: la enredadera
-     se achica con `--marco-grosor`, un `clamp(20px, 3.4vw, 72px)` que tiene
-     un valor distinto en cada ancho de pantalla.
+     Acá hubo dos intentos y los dos fallaron, cada uno por su motivo.
 
-     Medido en vivo, con la página abierta:
+     El primero eran dos juegos de tamaños y un `esPantallaChica`
+     eligiendo: dos escalones contra algo que encoge de forma continua.
 
-         ancho    marco    rosa (mediana)   pétalo de frente   razón
-         1440 px   49 px        37,6 px          73 px          1,94
-          514 px   20 px        13,4 px          34 px          2,53
+     El segundo —el mío, de la v276— lo ató a `--marco-grosor`, que es
+     `clamp(20px, 3.4vw, 72px)`. Parecía correcto: es el número que encoge
+     la enredadera. Pero ese `clamp` TOCA SU PISO en 20 px por debajo de
+     unos 588 px de ancho, y las rosas siguen encogiendo por debajo de eso.
+     O sea que justo en los teléfonos —donde Carlos lo estaba mirando— la
+     proporción dejaba de seguir a nada.
 
-     O sea: de escritorio a pantalla chica la rosa se achicó 2,8 veces y el
-     pétalo solo 2,1. El escalón no alcanzaba, y el pétalo terminaba siendo
-     el doble o el triple de la flor que tiene al lado — que es exactamente
-     lo que se reportó mirándolo.
+     Medido en la página abierta, a 390 px, que es el ancho de su teléfono:
 
-     Se ata entonces al MISMO número que encoge a las rosas: el grosor del
-     marco, medido en píxeles reales (no se puede leer del `clamp`, hay que
-     preguntarle al navegador cuánto le dio). La referencia es 49 px, que es
-     lo que vale en un escritorio de 1440 px — la proporción que ya estaba
-     aprobada. Así el pétalo mide, respecto de la rosa, lo mismo en un
-     teléfono que en un monitor.
+         grosor del marco ……………………………… 20 px  ← el clamp en su piso
+         rosa del marco, mediana ……………… 11,9 px
+         pétalo de frente, mediano ………… 30 px
+         razón …………………………………………………………… 2,52 ×
 
-     El tope de 1,15 es para que en un monitor enorme el pétalo no siga
-     creciendo más allá de lo que se vio bien. */
-  function grosorDelMarcoEnPixeles() {
-    try {
-      const sonda = document.createElement('div');
-      sonda.style.cssText = 'position:absolute;left:-9999px;top:0;' +
-                            'width:var(--marco-grosor);height:0';
-      document.body.appendChild(sonda);
-      const px = parseFloat(getComputedStyle(sonda).width) || 0;
-      document.body.removeChild(sonda);
-      return px;
-    } catch (e) { return 0; }
+     Que es exactamente lo que reportó: «cerca del 100-150 % más grandes
+     que una rosa».
+
+     LA LECCIÓN, Y POR ESO ESTE BLOQUE CAMBIA DE RAÍZ: si lo que hay que
+     igualar es el tamaño de las ROSAS, hay que medir las ROSAS. No un
+     número del que se espera que las siga.
+
+     Se mide el percentil 90 del lado real de las flores del marco y el
+     pétalo más grande pasa a medir 1,15 veces eso. Los tres planos
+     conservan sus proporciones entre sí (1 : 0,64 : 0,42), así que la
+     profundidad —que es lo que da riqueza, no la cantidad— no se toca. */
+
+  /** Las proporciones entre planos, que son lo que NO se toca. */
+  const FORMA_DE_LOS_PLANOS = {
+    fondo:  [0.21, 0.42],
+    medio:  [0.36, 0.64],
+    frente: [0.57, 1.00],
+  };
+
+  /** Cuánto mide el pétalo más grande, respecto del p90 de las rosas.
+   *
+   *  Apenas por encima de una rosa grande. Con 1,15 la cuenta daba 1,68
+   *  veces la rosa MEDIANA a 514 px —porque el reparto de tamaños de las
+   *  rosas no es igual en todos los anchos— y eso todavía se lee como un
+   *  pétalo que domina a las flores. Con 1,05 queda en 1,40-1,53 en los
+   *  tres anchos medidos. */
+  const EL_MAS_GRANDE_CONTRA_LA_ROSA = 1.05;
+
+  /* ⚠️ ESTO CORRE ANTES DE QUE EXISTA EL MARCO. 07-marco-y-enredaderas.js
+     construye las plantas cuando se monta la escena, y esto se evalúa al
+     cargar. Así que se arranca con una estimación y se RECALIBRA una sola
+     vez, en cuanto haya flores que medir (ver recalibrarConLasRosas). */
+  function estimarElLadoDeUnaRosa() {
+    /* La misma cuenta que hace el clamp del marco, pero sin su piso: por
+       debajo de 588 px el marco se planta en 20 y las rosas no. */
+    return limitar(window.innerWidth * 0.026, 7, 46);
   }
 
-  const GROSOR_DE_REFERENCIA = 49;   // px, en un escritorio de 1440
-  const grosorAhora = grosorDelMarcoEnPixeles();
+  let ladoDeLaRosa = estimarElLadoDeUnaRosa();
+  let yaSeCalibro = false;
+  let ultimoIntentoDeCalibrar = -1000;
 
-  /* Si el marco no está (la hoja de estilos no cargó, o esto corre antes),
-     se cae al ancho de pantalla, que es de dónde sale el clamp de todos
-     modos. Nunca se queda sin un número. */
-  const proporcion = limitar(
-    (grosorAhora || limitar(window.innerWidth * 0.034, 20, 72)) / GROSOR_DE_REFERENCIA,
-    0.34, 1.15);
-
-  const aEscala = ([chico, grande]) =>
-    [chico * proporcion, grande * proporcion];
+  const tamañosDelPlano = (plano) => {
+    const tope = ladoDeLaRosa * EL_MAS_GRANDE_CONTRA_LA_ROSA;
+    const [chico, grande] = FORMA_DE_LOS_PLANOS[plano];
+    return [chico * tope, grande * tope];
+  };
 
   const RASGOS_DEL_PLANO = {
-    fondo:  { contenedor: '#petalos-fondo',  tamaño: aEscala([18, 35]), opacidad: [.30, .55], caida: [14, 30] },
-    medio:  { contenedor: '#petalos-medio',  tamaño: aEscala([30, 54]), opacidad: [.60, .90], caida: [18, 40] },
-    frente: { contenedor: '#petalos-frente', tamaño: aEscala([48, 84]), opacidad: [.70, 1],   caida: [26, 54] },
+    fondo:  { contenedor: '#petalos-fondo',  tamaño: tamañosDelPlano('fondo'),  opacidad: [.30, .55], caida: [14, 30] },
+    medio:  { contenedor: '#petalos-medio',  tamaño: tamañosDelPlano('medio'),  opacidad: [.60, .90], caida: [18, 40] },
+    frente: { contenedor: '#petalos-frente', tamaño: tamañosDelPlano('frente'), opacidad: [.70, 1],   caida: [26, 54] },
   };
+
+  /**
+   * Vuelve a medir las rosas y reescala los pétalos ya creados.
+   *
+   * Se llama en cuanto el marco existe. Reescalar es multiplicar un número
+   * por pétalo: no los mueve de sitio, no los reinicia, no cuesta nada.
+   *
+   * ⚠️ SE USA EL PERCENTIL 90 Y NO LA MEDIANA. Lo que el ojo compara no es
+   * el pétalo con la rosa promedio: es el pétalo con la rosa GRANDE que
+   * tiene al lado, que son las del relicario y las de los ramilletes.
+   *
+   * @returns {boolean} si pudo medir.
+   */
+  function recalibrarConLasRosas() {
+    const lados = [];
+
+    for (const movil of document.querySelectorAll('.flor-de-enredadera__movil')) {
+      const lado = ladoRealDeLaFlor(movil);
+      if (lado > 0) lados.push(lado);
+    }
+
+    if (lados.length < 8) return false;      // todavía no hay marco de verdad
+
+    lados.sort((a, b) => a - b);
+    const p90 = lados[Math.floor(lados.length * 0.9)];
+    if (!(p90 > 0)) return false;
+
+    const antes = ladoDeLaRosa;
+    ladoDeLaRosa = p90;
+    const factor = ladoDeLaRosa / antes;
+    if (!(factor > 0) || Math.abs(factor - 1) < 0.02) return true;  // ya estaba bien
+
+    for (const plano of Object.keys(RASGOS_DEL_PLANO)) {
+      RASGOS_DEL_PLANO[plano].tamaño = tamañosDelPlano(plano);
+    }
+
+    for (const petalo of petalos) {
+      petalo.tamaño *= factor;
+      if (petalo.elemento) {
+        petalo.elemento.style.width  = petalo.tamaño + 'px';
+        petalo.elemento.style.height = petalo.tamaño + 'px';
+      }
+    }
+
+    /* El recorte por calidad reparte superficie, y la superficie acaba de
+       cambiar: hay que rehacerlo o el presupuesto queda mal contado. */
+    if (typeof ajustarCantidadDePetalos === 'function') {
+      ajustarCantidadDePetalos(nivelDeCalidad());
+    }
+    return true;
+  }
+
 
   /** Cuánto tira la gravedad hacia abajo (píxeles por segundo, al cuadrado). */
   const GRAVEDAD = 55;
@@ -946,6 +1014,18 @@
       return;
     }
     ultimoMovimiento = momentoActual;
+
+    /* ⚠️ EL MARCO NACE DESPUÉS QUE ESTO, ASÍ QUE HAY QUE ESPERARLO.
+       07-marco-y-enredaderas.js construye las plantas cuando se monta la
+       escena —o sea al abrir el sobre—, y este módulo se evalúa al cargar.
+       Hasta que haya flores que medir, los pétalos usan la estimación de
+       arranque; en cuanto las hay, se reescalan una sola vez y esto no
+       vuelve a preguntar nunca más. Preguntar cuesta un querySelectorAll
+       cada medio segundo, y solo mientras no hay marco. */
+    if (!yaSeCalibro && momentoActual - ultimoIntentoDeCalibrar > 500) {
+      ultimoIntentoDeCalibrar = momentoActual;
+      yaSeCalibro = recalibrarConLasRosas();
+    }
 
     // dt en segundos. Se limita a 0,05 (20 cuadros por segundo) porque si
     // la pestaña estuvo minimizada, el salto sería enorme y los pétalos

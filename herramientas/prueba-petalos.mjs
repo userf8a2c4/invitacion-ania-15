@@ -47,87 +47,121 @@ const sinComentarios = (texto) => texto
   .replace(/\/\*[\s\S]*?\*\//g, ' ')
   .replace(/^\s*\/\/.*$/gm, ' ');
 
-const fisica  = sinComentarios(leer('codigo', '06-petalos-con-fisica.js'));
-const eclipse = sinComentarios(leer('codigo', '28-eclipse.js'));
+const fisica     = sinComentarios(leer('codigo', '06-petalos-con-fisica.js'));
+const eclipse    = sinComentarios(leer('codigo', '28-eclipse.js'));
+/* `ladoRealDeLaFlor()` se mudó acá: la necesitan dos módulos que no se
+   conocen entre sí. Ver su nota en 02-utilidades.js. */
+const utilidades = sinComentarios(leer('codigo', '02-utilidades.js'));
 
 
 /* ─── 1. La proporción, EJECUTADA ─────────────────────────────────── */
 
-console.log('\nEl tamaño del pétalo, ejecutando la cuenta\n');
+console.log('\nEl tamaño del pétalo, medido contra las ROSAS\n');
+
+/* ⚡ DOS INTENTOS FALLIDOS ANTES DE ÉSTE, Y LOS DOS ENSEÑAN ALGO
+ *
+ * El primero eran dos juegos de tamaños y un `esPantallaChica` eligiendo:
+ * dos escalones contra algo que encoge de forma continua.
+ *
+ * El segundo lo ató a `--marco-grosor`. Parecía correcto —es el número que
+ * encoge la enredadera— pero ese `clamp(20px, 3.4vw, 72px)` TOCA SU PISO
+ * en 20 px por debajo de unos 588 px de ancho, y las rosas siguen
+ * encogiendo por debajo de eso. Medido en la página a 390 px, que es el
+ * ancho del teléfono de Carlos:
+ *
+ *     grosor del marco …………………… 20 px   ← el clamp en su piso
+ *     rosa del marco, mediana ……… 11,9 px
+ *     pétalo de frente, mediano …… 30 px
+ *     razón ………………………………………………… 2,52 ×
+ *
+ * La lección: si lo que hay que igualar es el tamaño de las ROSAS, hay que
+ * medir las ROSAS. No un número del que se espera que las siga.
+ */
 
 comprobar('el tamaño ya no se decide en dos escalones',
   !/RASGOS_DEL_PLANO = esPantallaChica \?/.test(fisica),
   'dos escalones contra algo que encoge de forma continua deja al pétalo ' +
   'grande justo donde la rosa ya es chica');
 
-comprobar('se ata al grosor real del marco, medido al navegador',
-  /function grosorDelMarcoEnPixeles/.test(fisica) &&
-  /width:var\(--marco-grosor\)/.test(fisica),
-  'el valor de un clamp() no se puede leer de la hoja: hay que preguntarlo');
+comprobar('y ya no se ata al grosor del marco',
+  !/GROSOR_DE_REFERENCIA/.test(fisica) &&
+  !/grosorDelMarcoEnPixeles/.test(fisica),
+  'el clamp del marco se planta en 20 px y las rosas no: por debajo de ' +
+  '588 px de ancho dejaba de seguir a nada');
 
-comprobar('y los tres planos escalan con el mismo factor',
-  (fisica.match(/tamaño: aEscala\(/g) || []).length === 3,
+comprobar('se mide la flor de verdad, con la matriz de pantalla',
+  /ladoRealDeLaFlor\(movil\)/.test(fisica) &&
+  /function ladoRealDeLaFlor\(movil\)/.test(utilidades),
+  'la caja alineada a los ejes exagera hasta un 39 % en una rosa girada');
+
+/* ⚠️ EL PERCENTIL 90 Y NO LA MEDIANA. Lo que el ojo compara no es el
+   pétalo con la rosa promedio: es el pétalo con la rosa GRANDE que tiene
+   al lado, que son las del relicario y las de los ramilletes. */
+comprobar('contra el percentil 90 de las rosas, no contra la mediana',
+  /lados\[Math\.floor\(lados\.length \* 0\.9\)\]/.test(fisica),
+  'la mediana deja al pétalo más grande que las rosas que tiene al lado');
+
+comprobar('y los tres planos salen de la misma referencia',
+  (fisica.match(/tamaño: tamañosDelPlano\('/g) || []).length === 3,
   'si uno solo escala, se rompe la separación entre planos');
 
+/* Se EJECUTA la cuenta con los tres anchos MEDIDOS en la página viva. */
 {
-  /* ⚠️ EL EXTRACTOR NO PIDE LOS NÚMEROS. La primera versión buscaba
-     `0.34, 1.15` literalmente, así que cambiar cualquiera de los dos topes
-     —justo lo que estas comprobaciones existen para cazar— hacía fallar la
-     EXTRACCIÓN en vez de la comprobación. La prueba moría, sí, pero
-     diciendo «no se encontró la cuenta» en lugar de «el pétalo no encoge».
-     Una prueba que muerde por el motivo equivocado no enseña nada. */
-  const fuente = (fisica.match(
-    /const proporcion = limitar\([\s\S]*?\n\s*[\d.]+, [\d.]+\);/) || [''])[0];
+  const forma = (fisica.match(/const FORMA_DE_LOS_PLANOS = \{[\s\S]*?\};/) || [''])[0];
+  const tope  = (fisica.match(/const EL_MAS_GRANDE_CONTRA_LA_ROSA = ([\d.]+);/) || [])[1];
 
-  if (!fuente) {
-    comprobar('se puede ejecutar la proporción', false, 'no se encontró la cuenta');
+  if (!forma || !tope) {
+    comprobar('se puede ejecutar la cuenta del tamaño', false, 'no se encontró');
   } else {
-    const proporcionDe = (grosor, ancho) => new Function(
-      'limitar', 'grosorAhora', 'window', 'GROSOR_DE_REFERENCIA',
-      'let proporcion;' + fuente.replace('const proporcion', 'proporcion') +
-      '\nreturn proporcion;'
-    )(
-      (v, a, b) => Math.min(Math.max(v, a), b),
-      grosor, { innerWidth: ancho }, 49
-    );
+    const FORMA = new Function(forma + '\nreturn FORMA_DE_LOS_PLANOS;')();
+    const TOPE = +tope;
 
-    /* Los dos anchos medidos en vivo. La razón pétalo/rosa de escritorio
-       —1,94— es la que estaba aprobada; la de pantalla chica tiene que
-       quedar en ese mismo número, no en 2,53. */
-    const enEscritorio = proporcionDe(49, 1440);
-    const enChica      = proporcionDe(20, 514);
+    /* Los tres anchos, con el p90 de las rosas medido en cada uno. */
+    const MEDIDO = [
+      { ancho:  390, rosaP90: 16.3, rosaMediana: 11.9 },
+      { ancho:  514, rosaP90: 26.3, rosaMediana: 18.0 },
+      { ancho: 1440, rosaP90: 50.0, rosaMediana: 37.6 },
+    ];
 
-    comprobar('en escritorio no cambia nada',
-      Math.abs(enEscritorio - 1) < 0.001, 'dio ' + enEscritorio.toFixed(3));
+    for (const m of MEDIDO) {
+      const masGrande = m.rosaP90 * TOPE * FORMA.frente[1];
+      const razonContraLaGrande  = masGrande / m.rosaP90;
+      const razonContraLaMediana = masGrande / m.rosaMediana;
 
-    comprobar('en pantalla chica encoge de verdad',
-      enChica > 0.38 && enChica < 0.45, 'dio ' + enChica.toFixed(3));
+      comprobar('a ' + m.ancho + ' px el pétalo más grande no supera a la rosa grande',
+        razonContraLaGrande <= 1.25,
+        'dio ' + razonContraLaGrande.toFixed(2) + '× (' + masGrande.toFixed(0) + ' px)');
 
-    /* La comprobación que de verdad importa: la RAZÓN con la rosa. Se usan
-       las medianas medidas en la página viva. */
-    const petaloEscritorio = 73;                 // medido
-    const rosaEscritorio   = 37.6;               // medido
-    const rosaChica        = 13.4;               // medido
-    const razonAprobada    = petaloEscritorio / rosaEscritorio;   // 1,94
+      comprobar('  …y contra la rosa mediana queda entre 1,0 y 1,6',
+        razonContraLaMediana >= 1.0 && razonContraLaMediana <= 1.6,
+        'dio ' + razonContraLaMediana.toFixed(2) + '× — a 390 px daba 2,52');
+    }
 
-    /* El pétalo de frente mediano sale del rango [48, 84] escalado. */
-    const petaloChico = ((48 + 84) / 2) * enChica;
-    const razonChica  = petaloChico / rosaChica;
-
-    comprobar('el pétalo mide lo mismo respecto de la rosa en las dos pantallas',
-      Math.abs(razonChica - razonAprobada) < 0.25,
-      'escritorio ' + razonAprobada.toFixed(2) + '× · chica ' +
-      razonChica.toFixed(2) + '× (antes era 2,53×)');
-
-    comprobar('y en un monitor enorme el pétalo no sigue creciendo sin freno',
-      proporcionDe(72, 2560) <= 1.15,
-      'dio ' + proporcionDe(72, 2560).toFixed(3));
-
-    comprobar('sin el marco, el respaldo sale del ancho y no de un número fijo',
-      Math.abs(proporcionDe(0, 514) - proporcionDe(20, 514)) < 0.001,
-      'el clamp del marco es 3.4vw entre 20 y 72: el respaldo lo repite');
+    /* La profundidad no se pierde: los tres planos siguen separados. */
+    comprobar('los tres planos siguen a distinta profundidad',
+      FORMA.frente[1] > FORMA.medio[1] * 1.4 &&
+      FORMA.medio[1] > FORMA.fondo[1] * 1.4,
+      'fondo ' + FORMA.fondo[1] + ' · medio ' + FORMA.medio[1] +
+      ' · frente ' + FORMA.frente[1] + ' — lo que da riqueza es la ' +
+      'separación entre planos, no la cantidad');
   }
 }
+
+/* ⚠️ Y SE RECALIBRA CUANDO APARECE EL MARCO. Este módulo se evalúa al
+   cargar y las plantas nacen al abrir el sobre: sin el recalibrado, el
+   tamaño se quedaría para siempre en la estimación de arranque. */
+comprobar('se vuelve a medir cuando el marco existe',
+  /function recalibrarConLasRosas/.test(fisica) &&
+  /yaSeCalibro = recalibrarConLasRosas\(\);/.test(fisica),
+  'el marco nace después que esto: sin reintentar, no se mide nunca');
+
+comprobar('y deja de preguntar en cuanto lo consigue',
+  /if \(!yaSeCalibro && momentoActual - ultimoIntentoDeCalibrar > 500\)/.test(fisica),
+  'un querySelectorAll por cuadro para siempre sería peor que el problema');
+
+comprobar('reescalar no reinicia los pétalos, solo los multiplica',
+  /petalo\.tamaño \*= factor;/.test(fisica),
+  'volver a crearlos los teletransportaría a mitad de la lluvia');
 
 
 /* ─── 2. El recorte por calidad, EJECUTADO ─────────────────────────── */
