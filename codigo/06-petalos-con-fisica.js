@@ -313,7 +313,39 @@
      de antes (eran 22 y 13) porque se liberó mucho margen: los pétalos ya no
      piden capa de GPU en esos niveles y se recuperaron las 24 capas que
      gastaban los SVG de las plantas. */
-  const FRACCION_ACTIVA_POR_CALIDAD = { 0: 1, 1: 0.78, 2: 0.5 };
+  /* ⚡ UNA FRACCIÓN POR PLANO, Y NO UNA SOLA PARA TODOS (2026-09-11)
+   *
+   * LO QUE CUESTA PINTAR UN PÉTALO ES SU SUPERFICIE, NO SU EXISTENCIA. Un
+   * pétalo del plano de adelante mide 66 px de lado contra 26,5 del fondo:
+   * cuesta SEIS VECES más relleno. Contarlos por unidad es contar mal.
+   *
+   * Con una fracción única, arreglar el recorte —que se comía el plano de
+   * adelante entero, ver ajustarCantidadDePetalos— habría subido el relleno
+   * un 33 % en escritorio con calidad media. O sea: arreglar lo que se ve,
+   * rompiendo lo que se siente, y en los equipos que ya venían sufriendo.
+   * Eso no se hace nunca acá.
+   *
+   * Las fracciones de abajo están elegidas para que la SUPERFICIE PINTADA
+   * quede por debajo de la que había antes, en los cuatro casos. Medido con
+   * los tamaños reales de cada plano (lado² × cuántos):
+   *
+   *     escritorio       antes      ahora     pétalos
+   *     media           49 248     47 970     29 → 25
+   *     baja            16 884     16 812     18 →  9
+   *
+   *     pantalla chica   antes      ahora     pétalos
+   *     media            6 917      4 174     15 → 14
+   *     baja             2 738      1 547     10 →  5
+   *
+   * Sale más barato en los cuatro, en relleno Y en física, y los tres
+   * planos siguen vivos en todos los niveles. La profundidad no se paga con
+   * fluidez: se paga apagando los pétalos que menos aportan de cada plano.
+   */
+  const FRACCION_ACTIVA_POR_CALIDAD = {
+    0: { fondo: 1,    medio: 1,   frente: 1    },
+    1: { fondo: 0.78, medio: 0.78, frente: 0.45 },
+    2: { fondo: 0.22, medio: 0.3,  frente: 0.12 },
+  };
 
   /* ⚡ CADA CUÁNTO SE MUEVE Y SE REDIBUJA, SEGÚN CALIDAD (2026-09-02).
      ESTE ERA EL ÚNICO SISTEMA DE DIBUJO DEL SITIO SIN FRENO POR CALIDAD.
@@ -374,29 +406,93 @@
      menos pétalos igual (el ahorro es idéntico), pero los tres planos
      sobreviven y lo que desaparece al bajar de nivel es un pétalo suelto
      de cada profundidad, no una capa entera. */
-  function ajustarCantidadDePetalos(calidad) {
-    const fraccion = FRACCION_ACTIVA_POR_CALIDAD[calidad] ?? 1;
+  /* ⚡ Y EL RECORTE SE MIDE EN SUPERFICIE, NO EN CANTIDAD (2026-09-11)
+   *
+   * La versión de más arriba —recortar la misma FRACCIÓN dentro de cada
+   * plano— arregló que el plano de adelante desapareciera, pero se le pasó
+   * lo que de verdad cuesta pintar. Un pétalo de adelante mide 66 px de
+   * lado y uno del fondo 26: el de adelante cuesta SEIS VECES más relleno.
+   * Recortar «el 22 % de cada plano» conserva las profundidades y a la vez
+   * sube la superficie total, porque deja vivos más de los caros.
+   *
+   * Medido: en un escritorio con calidad media pasaba de 49 248 px² de
+   * pétalo por cuadro a 65 394. Un 33 % más de relleno en los equipos que
+   * ya venían sufriendo — y Carlos lo notó: «los FPS bajan ligeramente».
+   *
+   * Así que el presupuesto ahora es de SUPERFICIE. Se apagan pétalos
+   * —siempre el más grande de los que quedan, que es el que más ahorra—
+   * hasta entrar en el presupuesto, con una sola regla por encima: NINGÚN
+   * PLANO SE PUEDE VACIAR. Los tres sobreviven, el coste no sube, y lo que
+   * se pierde al bajar de nivel es densidad y no profundidad.
+   *
+   * Los presupuestos son la superficie que pintaba el recorte por índice
+   * ORIGINAL, medida: 0,617 en media y 0,211 en baja. O sea que esto cuesta
+   * lo mismo que costaba antes de que yo lo tocara, con los tres planos
+   * vivos en vez de uno.
+   *
+   * ⚠️ SE RECORTA LA MISMA FRACCIÓN EN LOS TRES PLANOS, NO «EL MÁS CARO
+   * PRIMERO». La primera versión de esto apagaba siempre el pétalo más
+   * grande que quedara, que es lo que más ahorra — y en calidad baja
+   * terminaba dejando 14 del fondo, 1 del medio y 1 de adelante. Ahorraba
+   * perfecto y volvía a romper la profundidad, que era justo lo que este
+   * bloque vino a arreglar. Se busca entonces la fracción MÁS ALTA que
+   * entre en el presupuesto y se aplica igual a los tres.
+   */
+  const PRESUPUESTO_DE_AREA_POR_CALIDAD = { 0: 1, 1: 0.617, 2: 0.211 };
 
-    /* Cuántos van quedando activos en cada plano. Se cuenta por plano
-       porque el recorte es por plano. */
-    const activosPorPlano = {};
-    const totalesPorPlano = {};
+  function ajustarCantidadDePetalos(calidad) {
+    const presupuesto = PRESUPUESTO_DE_AREA_POR_CALIDAD[calidad] ?? 1;
+
+    /* Lo que cuesta un pétalo es su superficie: el lado al cuadrado. */
+    const coste = (p) => p.tamaño * p.tamaño;
+
+    const porPlano = {};
+    let todoElArea = 0;
 
     for (const petalo of petalos) {
-      totalesPorPlano[petalo.plano] = (totalesPorPlano[petalo.plano] || 0) + 1;
+      todoElArea += coste(petalo);
+      (porPlano[petalo.plano] = porPlano[petalo.plano] || []).push(petalo);
     }
 
-    for (const petalo of petalos) {
-      const cupo = Math.ceil((totalesPorPlano[petalo.plano] || 0) * fraccion);
-      const yaPuestos = activosPorPlano[petalo.plano] || 0;
-      const activo = yaPuestos < cupo;
+    const techo = todoElArea * presupuesto;
+    const planos = Object.keys(porPlano);
 
-      if (activo) activosPorPlano[petalo.plano] = yaPuestos + 1;
+    /* Cuánta superficie queda si cada plano conserva esta fracción. Los
+       que sobreviven son los PRIMEROS de cada plano, en el orden en que se
+       crearon — que es aleatorio en tamaño, así que el plano conserva su
+       reparto de grandes y chicos y sigue leyéndose como lo que es. */
+    const areaCon = (fraccion) => {
+      let area = 0;
+      for (const plano of planos) {
+        const cuantos = Math.max(1, Math.ceil(porPlano[plano].length * fraccion));
+        for (let i = 0; i < cuantos && i < porPlano[plano].length; i++) {
+          area += coste(porPlano[plano][i]);
+        }
+      }
+      return area;
+    };
 
-      if (petalo.activo !== activo) {
-        petalo.activo = activo;
-        // Con el lienzo alcanza con la marca: el canvas saltea los apagados.
-        if (petalo.elemento) petalo.elemento.style.display = activo ? '' : 'none';
+    /* La fracción más alta que entra. Veinte pasos alcanzan de sobra para
+       una lista de treinta y seis pétalos, y esto corre dos o tres veces
+       en toda la visita. */
+    let fraccion = 1;
+    for (let paso = 0; paso <= 20; paso++) {
+      const f = 1 - paso / 20;
+      if (areaCon(f) <= techo) { fraccion = f; break; }
+      fraccion = f;
+    }
+
+    for (const plano of planos) {
+      const cuantos = Math.max(1, Math.ceil(porPlano[plano].length * fraccion));
+      for (let i = 0; i < porPlano[plano].length; i++) {
+        const petalo = porPlano[plano][i];
+        const activo = i < cuantos;
+        if (petalo.activo !== activo) {
+          petalo.activo = activo;
+          /* Con el lienzo alcanza con la marca: el canvas saltea los
+             apagados. El <div> solo existe en el camino viejo. */
+          if (petalo.elemento) petalo.elemento.style.display = activo ? '' : 'none';
+        }
       }
     }
   }

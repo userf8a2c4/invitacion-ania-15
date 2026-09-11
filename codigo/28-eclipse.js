@@ -191,10 +191,64 @@
      escena sigue leyéndose debajo. */
   var capaFria   = capa('#0a1622', 'multiply');
 
-  /* Rojo sangre seca / ladrillo. SOLO existe en la totalidad: si el rojo
-     apareciera desde el principio dejaría de significar «este es el
-     momento sagrado y terrible» y sería un filtro más. */
-  var capaSangre = capa('#4a0d0d', 'multiply');
+  /* ⚡ EL ROJO ERA UN FILTRO QUE QUITABA LUZ. AHORA TIÑE. (2026-09-11)
+   *
+   * Esto era `#4a0d0d` —un rojo casi negro— al 92 % de opacidad. Con el
+   * frío al 88 % encima, la cuenta da esto:
+   *
+   *     rojo × 0,052 · verde × 0,026 · azul × 0,031
+   *
+   * O sea que la escena quedaba al 5 % de su luz. Una rosa `#7e1b2c`
+   * terminaba en `(7, 1, 1)`: invisible. Y el marco entero con ella.
+   *
+   * Carlos lo dijo con todas las letras mirándolo: «esto no es un eclipse
+   * común, es un eclipse DE SANGRE, ese tono rojizo debe permitir VER el
+   * ritual». Tenía razón y el error era de fotografía, no de código: un
+   * eclipse de sangre no es una habitación a oscuras, es una habitación
+   * ILUMINADA EN COBRE. Lo único que el minuto tiene para contar es
+   * doscientas plantas cobrando conciencia, y no se veían.
+   *
+   * `#8a1f22` es un rojo ladrillo con cuerpo: multiplicado TIÑE en vez de
+   * aplastar. Con los topes nuevos la misma rosa queda en `(57, 9, 15)` —
+   * rojo oscuro, y se le ve el movimiento. */
+  var capaSangre = capa('#8a1f22', 'multiply');
+
+  /* ⚡ LA CORONA: LA ÚNICA CAPA QUE SUMA LUZ (2026-09-11)
+   *
+   * Las otras dos multiplican, y multiplicar solo puede QUITAR luz. Con
+   * dos capas que restan no hay forma de que una escena se vea «iluminada
+   * de rojo»: solo se puede llegar a negro por un camino o por otro.
+   *
+   * Esta es la luz de verdad del acto: la corona del sol eclipsado, que es
+   * lo que ilumina un eclipse total y lo que le da el color. Es un
+   * degradado radial de cobre que ENTRA luz sobre la escena.
+   *
+   * ⚠️ VA EN `plus-lighter` Y NO EN `screen`. Las dos suman, pero `screen`
+   * comprime hacia el blanco —lava los rojos justo donde no se puede— y
+   * `plus-lighter` suma lineal: el cobre se queda cobre. Si el navegador
+   * no la conoce, `screen` es el respaldo y la escena se ve un poco más
+   * lavada, nunca rota.
+   *
+   * ⚠️ EL DEGRADADO ES FIJO. Se animan SOLO la opacidad y la posición, que
+   * las mueve el compositor. Reescribir el `background` por cuadro sería
+   * repintar una superficie del tamaño de la pantalla sesenta veces por
+   * segundo — el mismo motivo por el que las otras dos capas son de color
+   * fijo desde el primer día. */
+  var capaCorona = capa('transparent', 'plus-lighter');
+  capaCorona.style.backgroundImage =
+    'radial-gradient(circle at 50% 38%,' +
+    ' rgba(255,150,92,.95) 0%,' +
+    ' rgba(214,74,44,.55) 26%,' +
+    ' rgba(120,24,18,.22) 52%,' +
+    ' rgba(0,0,0,0) 78%)';
+
+  /* Si `plus-lighter` no existe, el respaldo que sí existe en todas partes. */
+  try {
+    if (!(typeof CSS !== 'undefined' && CSS.supports &&
+          CSS.supports('mix-blend-mode', 'plus-lighter'))) {
+      capaCorona.style.mixBlendMode = 'screen';
+    }
+  } catch (e) { capaCorona.style.mixBlendMode = 'screen'; }
 
   /* ⚡ EL ANILLO DE DIAMANTE (2026-09-10)
    *
@@ -211,16 +265,69 @@
    * ⚠️ VA EN `screen`, NO EN `multiply`. Las otras dos capas oscurecen
    * multiplicando; esta tiene que AÑADIR luz, o sería un velo blanco
    * lavando la escena en vez de un destello. Y dura 150 ms: más que eso
-   * deja de ser un relámpago y pasa a ser un fundido a blanco. */
-  var capaDestello = capa('#fff6e0', 'screen');
+   * deja de ser un relámpago y pasa a ser un fundido a blanco.
+   *
+   * ⚡ Y ES COBRE, NO BLANCO (2026-09-11). Era `#fff6e0`, un blanco cálido,
+   * sobre una escena que estaba casi negra: se leía como un fallo de la
+   * página, no como un acontecimiento. Carlos lo dijo: «ese flash no se
+   * entiende». Dos cosas lo arreglan. Una es que la escena alrededor ya no
+   * es negra, así que hay contra qué leerlo. La otra es el color: la luz
+   * que vuelve en el tercer contacto es la del MISMO sol que se estaba
+   * yendo, o sea la de la corona. Un destello blanco venía de ningún lado.
+   */
+  var capaDestello = capa('#ffb877', 'screen');
 
-  /* El lienzo de la marea. Encima de las dos capas de color: las rosas
-     están DENTRO del eclipse, no debajo. */
+  /* ⚡ EL LIENZO SE MUDÓ DEBAJO DE LOS VELOS (2026-09-11)
+   *
+   * Estaba en `z 2147483001`, o sea POR ENCIMA de las tres capas de color.
+   * Eso quería decir que los pétalos y las rosas del lienzo eran lo único
+   * de la página que la oscuridad no tocaba: se dibujaban al 100 % de
+   * brillo mientras el resto de la escena estaba al 5 %.
+   *
+   * Por eso Carlos los vio «mucho más grandes que los normales» aunque
+   * midieran lo mismo, y por eso «destacan tanto como el bendito nombre».
+   * Destacar es un atributo del nombre y de nada más.
+   *
+   * Ahora va DEBAJO de los velos: los pétalos se oscurecen y se tiñen como
+   * todo lo demás, que es lo que son — parte del mundo, no parte de la
+   * deidad. */
   var lienzo = document.createElement('canvas');
   lienzo.className = 'eclipse-capa';
   lienzo.style.cssText = 'position:fixed;inset:0;pointer-events:none;' +
-                         'z-index:2147483001;';
+                         'z-index:2147482999;';
   var pincel = lienzo.getContext('2d');
+
+  /* ⚡ LA CAPA DE LA OFRENDA (2026-09-11)
+   *
+   * Carlos: «ahora mismo la rosa muerta se posa por detrás del nombre de
+   * Ania». Era cierto y era una consecuencia del orden de capas: la jaula
+   * del nombre está en `z …002` y el lienzo estaba en `…001`.
+   *
+   * Pero corregirlo abre una decisión de dirección, no de z-index. Si el
+   * lienzo entero se sube por encima del nombre, los noventa pétalos
+   * suben con él y volvemos al problema de que todo destaca. Y si se
+   * queda abajo, la mártir —lo único que de verdad le pasó algo en todo el
+   * minuto— queda tapada.
+   *
+   * Así que la mártir se muda a una capa propia, la más alta de todas.
+   * Y de ahí sale la regla de fotografía de la escena entera:
+   *
+   *     En todo el minuto hay exactamente DOS cosas que la oscuridad no
+   *     toca: EL NOMBRE y LA ROSA QUE SE OFRECIÓ.
+   *
+   * Todo lo demás vive debajo del velo. Es «en lugar de un cadáver, una
+   * rosa» dicho con el orden de las capas.
+   *
+   * ⚠️ ESTE LIENZO BORRA SOLO LA CAJA DE LA ROSA, no la pantalla, porque
+   * dibuja un único objeto y no tiene sentido tocar el resto. Y no se ata
+   * al documento hasta el segundo 36,5: hasta entonces no hay nada que
+   * poner en él y una capa de compositor vacía se paga igual. */
+  var lienzoDeLaOfrenda = document.createElement('canvas');
+  lienzoDeLaOfrenda.className = 'eclipse-capa';
+  lienzoDeLaOfrenda.style.cssText = 'position:fixed;inset:0;pointer-events:none;' +
+                                    'z-index:2147483003;';
+  var pincelDeLaOfrenda = lienzoDeLaOfrenda.getContext('2d');
+  var cajaAnteriorDeLaOfrenda = null;
 
   /* Densidad de píxeles: se topa en 2. Un teléfono con 3x pintaría más
      del doble de píxeles por el mismo resultado visible. */
@@ -230,6 +337,11 @@
     lienzo.width  = Math.floor(window.innerWidth  * dpr);
     lienzo.height = Math.floor(window.innerHeight * dpr);
     pincel.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    lienzoDeLaOfrenda.width  = lienzo.width;
+    lienzoDeLaOfrenda.height = lienzo.height;
+    pincelDeLaOfrenda.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cajaAnteriorDeLaOfrenda = null;
   }
   medirElLienzo();
 
@@ -321,7 +433,26 @@
 
     jaula = document.createElement('div');
     jaula.className = 'eclipse-capa';
-    jaula.style.cssText = 'position:fixed;top:0;left:0;pointer-events:none;' +
+    /* ⚡ ABSOLUTA Y EN COORDENADAS DE DOCUMENTO, NO FIJA (2026-09-11)
+     *
+     * Era `position:fixed` recolocada con un `translate3d` en CADA cuadro.
+     * Carlos: «si haces scroll durante la secuencia, el nombre se congela
+     * y queda atrás». Es exactamente lo que tiene que pasar con ese
+     * diseño: el navegador desplaza la página en el COMPOSITOR, sin pasar
+     * por JavaScript, y una capa fija que se recoloca desde el hilo
+     * principal llega siempre un cuadro tarde — y con el cuadro cargado
+     * de plantas, muchos cuadros tarde.
+     *
+     * 19-velas.js ya tenía este mismo síntoma y lo resolvió igual: poner
+     * la capa en coordenadas de DOCUMENTO para que la desplace el mismo
+     * scroll nativo que mueve al original, sin ningún paso de JavaScript
+     * de por medio (ver su nota, «la luz se atrasaba de la llama en scroll
+     * rápido»).
+     *
+     * ⚠️ NO se bloquea el scroll, que sería la otra salida. La premisa
+     * dice que NADA en la escena reacciona al intruso, y bloquearle la
+     * página es la forma más ruidosa posible de reaccionar. */
+    jaula.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;' +
                           'z-index:2147483002;isolation:isolate;';
 
     copiaDelNombre = nombre.cloneNode(true);
@@ -385,16 +516,27 @@
     copiaDelNombre.style.setProperty('--luz-intensidad', '0.62');
   }
 
-  /** Deja la copia justo encima del original. Se llama por cuadro porque
-      la página se puede desplazar mientras dura el eclipse. */
+  /**
+   * Deja la copia justo encima del original, en coordenadas de DOCUMENTO.
+   *
+   * ⚠️ YA NO SE LLAMA POR CUADRO, Y ESE ES EL ARREGLO. Sumarle el scroll
+   * a la caja del original da una posición que NO depende de dónde esté la
+   * página: mientras nadie cambie el tamaño de la ventana, sigue siendo
+   * válida, y del desplazamiento se encarga el navegador solo. Llamarla en
+   * cada cuadro era lo que hacía que el nombre se atrasara.
+   *
+   * Se la sigue llamando en el `resize`, que es lo único que puede mover
+   * al original dentro del documento.
+   *
+   * @returns {void}
+   */
   function acomodarLaCopia() {
     if (!jaula) return;
     var caja = nombre.getBoundingClientRect();
     jaula.style.width  = caja.width + 'px';
     jaula.style.height = caja.height + 'px';
-    // translate3d y no top/left: lo mueve el compositor, sin recalcular
-    // el diseño de la página en cada cuadro.
-    jaula.style.transform = 'translate3d(' + caja.left + 'px,' + caja.top + 'px,0)';
+    jaula.style.left = (caja.left + (window.scrollX || window.pageXOffset || 0)) + 'px';
+    jaula.style.top  = (caja.top  + (window.scrollY || window.pageYOffset || 0)) + 'px';
   }
 
   function devolverElNombre() {
@@ -406,12 +548,16 @@
 
   /* ─── 5. DÓNDE ESTÁ EL ALTAR, Y EL RADIO PROHIBIDO ─────────────── */
 
-  var altar = { x: 0, y: 0, radio: 0 };
+  var altar = { x: 0, y: 0, radio: 0, ancho: 0, alto: 0 };
 
   function medirElAltar() {
     var caja = nombre.getBoundingClientRect();
     altar.x = caja.left + caja.width  / 2;
     altar.y = caja.top  + caja.height / 2;
+    /* La caja de la palabra. La usa la mártir para posarse en el filo de
+       abajo en vez de en el medio. */
+    altar.ancho = caja.width;
+    altar.alto  = caja.height;
 
     /* El radio que nadie cruza (regla 2). Se calcula sobre la caja REAL
        del nombre para que valga igual en un teléfono vertical que en un
@@ -878,43 +1024,107 @@
     return (18 + Math.random() * 26) * escala / 2;
   }
 
+  /**
+   * Un pétalo nuevo del eclipse, con su sitio en la corriente.
+   *
+   * @param {Object} [copiarDe] - un pétalo de la invitación, si lo hay.
+   * @param {number} [naceEn] - en qué milisegundo entra en escena.
+   * @returns {Object}
+   */
+  function unPetalo(copiarDe, naceEn) {
+    return {
+      /* Si hay de dónde copiar, nace EXACTAMENTE donde estaba el pétalo de
+         la invitación al que reemplaza. Ver sembrarLosPetalos(). */
+      x: copiarDe ? copiarDe.x + copiarDe['tamaño'] / 2 : Math.random() * window.innerWidth,
+      y: copiarDe ? copiarDe.y + copiarDe['tamaño'] / 2 : Math.random() * window.innerHeight,
+      vx: 0, vy: 0,
+      tam: copiarDe ? copiarDe['tamaño'] / 2 : tamanoDeUnPetalo(),
+      giro: copiarDe ? (copiarDe.angulo || 0) * Math.PI / 180
+                     : Math.random() * Math.PI * 2,
+      giroVel: (Math.random() - 0.5) * 0.05,
+      cual: (Math.random() * 3) | 0,
+      posada: false,
+
+      /* Cuándo entra. Los heredados, ya; los de más, repartidos a lo largo
+         de los primeros 12 s, cada uno con su propio desvanecido. */
+      nace: naceEn || 0,
+
+      /* ── SU SITIO EN LA CORRIENTE ──
+         Cada pétalo tiene su propio radio, su propia velocidad angular y
+         su propia turbulencia. Ver la nota de la corriente en dibujar(). */
+      radio: 0.75 + Math.random() * 1.45,      // × altar.radio
+      sentido: Math.random() < 0.5 ? -1 : 1,
+      prisa: 0.55 + Math.random() * 0.9,
+      fase: Math.random() * Math.PI * 2,
+      frecuencia: 0.5 + Math.random() * 1.1,
+      /* Uno de cada cinco sale despedido hacia afuera y vuelve: es lo que
+         rompe el anillo y lo convierte en una corriente. */
+      expulsado: Math.random() < 0.2
+    };
+  }
+
+  /* ⚡ LOS PÉTALOS APARECÍAN DE LA NADA (2026-09-11)
+   *
+   * Carlos: «al iniciar la secuencia, de un cuadro a otro aparecen pétalos
+   * de la nada». Era literal. Esto creaba noventa pétalos en posiciones al
+   * azar EN UN SOLO CUADRO, mientras los de la invitación se desvanecían
+   * en 900 ms. Dos poblaciones distintas, sin relevo: una aparecía de
+   * golpe y la otra se iba despacio.
+   *
+   * Ahora el eclipse HEREDA los pétalos que ya están cayendo: se copia la
+   * posición, el tamaño y el giro de cada uno, así que los suyos arrancan
+   * exactamente encima de los de la invitación mientras esos se apagan. Es
+   * el mismo relevo que ya se comprobó con la mártir, donde la copia queda
+   * a 0,9 px de la flor que reemplaza.
+   *
+   * Y los que se suman —hasta unos cincuenta— NO aparecen: entran de a uno
+   * a lo largo de los primeros doce segundos, cada uno con su propio
+   * desvanecido. La tormenta se forma, no se enciende.
+   *
+   * ⚠️ DE PASO CUESTA LA MITAD. Eran 90 en calidad alta; ahora son los que
+   * ya había más los que entran, con tope en 50. Menos objetos y menos
+   * superficie pintada por cuadro, que es la condición que Carlos puso por
+   * encima de todo lo demás.
+   */
   function sembrarLosPetalos() {
     prepararLosPetalos();
-
-    var cuantos = esAlta ? 90 : 40;
     petalos.length = 0;
-    for (var i = 0; i < cuantos; i++) {
-      petalos.push({
-        x: Math.random() * window.innerWidth,
-        y: Math.random() * window.innerHeight,
-        vx: 0, vy: 0,
-        /* ⚡ EL TAMAÑO SALE DE LOS PÉTALOS DE LA INVITACIÓN (2026-09-11)
-         *
-         * Acá había `9 + Math.random() * 13` — píxeles fijos, iguales en un
-         * monitor de 27 pulgadas y en un teléfono. Se dibujan a `tam * 2`,
-         * así que eran de 18 a 44 px SIEMPRE; y en una pantalla angosta la
-         * rosa mediana del marco mide 13 px. Un pétalo tres veces más
-         * grande que la flor de al lado.
-         *
-         * El eclipse ya usa los DIBUJOS de los pétalos de la invitación
-         * —para que el pétalo que cae durante el minuto sea el mismo que
-         * caía un segundo antes—. Con más razón tiene que usar sus
-         * TAMAÑOS, que 06-petalos-con-fisica.js ya calcula en proporción al
-         * marco, en cada ancho de pantalla. Así esto queda proporcionado
-         * sin tener que repetir acá la cuenta ni mantenerla sincronizada.
-         *
-         * El respaldo es para cuando ese módulo se apagó para medir: la
-         * misma cuenta, a ojo, en vez de un número fijo. */
-        tam: tamanoDeUnPetalo(),
-        giro: Math.random() * Math.PI * 2,
-        /* Cada uno gira a su ritmo y en su sentido: noventa pétalos con
-           el mismo `+= 0.03` se movían como un solo objeto. */
-        giroVel: (Math.random() - 0.5) * 0.05,
-        cual: i % 3,
-        posado: false,
-      });
+
+    /* Los que ya están cayendo, tal cual están. */
+    var heredados = [];
+    try {
+      var planos = window.LienzoDePetalos && window.LienzoDePetalos.planos;
+      if (planos) {
+        for (var nombrePlano in planos) {
+          if (!Object.prototype.hasOwnProperty.call(planos, nombrePlano)) continue;
+          var lista = planos[nombrePlano];
+          for (var j = 0; j < lista.length; j++) {
+            if (lista[j] && lista[j].activo && lista[j]['tamaño'] > 0) {
+              heredados.push(lista[j]);
+            }
+          }
+        }
+      }
+    } catch (e) { /* sin invitación de la que heredar */ }
+
+    for (var h = 0; h < heredados.length; h++) {
+      petalos.push(unPetalo(heredados[h], 0));
+    }
+
+    /* Y los que la tormenta va sumando. */
+    var tope = esAlta ? 50 : 28;
+    var cuantosFaltan = Math.max(0, tope - petalos.length);
+    for (var i = 0; i < cuantosFaltan; i++) {
+      petalos.push(unPetalo(null, 1200 + (i / Math.max(1, cuantosFaltan)) * 11000));
+    }
+
+    /* Si no había ni invitación ni sitio para sumar —el ensayo con los
+       pétalos apagados para medir— igual tiene que haber tormenta. */
+    if (!petalos.length) {
+      for (var k = 0; k < 24; k++) petalos.push(unPetalo(null, k * 400));
     }
   }
+
 
   /* ─── 10. LAS ROSAS DE VERDAD, LAS DEL MARCO ────────────────────────
      Se transforman desde afuera, guardando lo que tenían. NO se toca
@@ -1102,6 +1312,15 @@
            para que en PANTALLA se inclinen hacia el nombre. Ver la nota
            grande de sentidoDeLaPantalla(). */
         espejo: sentidoDeLaPantalla(nodo),
+        /* En qué tanda se mueve. Ver la nota de LOS TURNOS: el coste es
+           por SVG invalidado, así que las flores de una misma raíz se
+           mueven juntas y las de otra raíz, en otro cuadro. */
+        turno: turnoDe(nodo),
+        /* Lo último escrito, en centésimas de grado y milésimas de escala.
+           Comparar enteros evita armar una cadena nueva por flor y por
+           cuadro cuando el gesto no cambió. */
+        ultimoGesto: -99999,
+        ultimoCrece: -99999,
         /* Dónde está en pantalla, quieta. Lo usa la mártir para dibujar su
            copia exactamente encima de sí misma. */
         cx: cx,
@@ -1151,6 +1370,79 @@
        mismo momento en que hay de dónde elegir, corra esto al empezar o
        quince segundos después. */
     elegirALaQueMuere();
+  }
+
+  /* ─── LOS TURNOS ────────────────────────────────────────────────────
+
+     ⚡ EL ECLIPSE SE PASABA DEL CUADRO ÉL SOLO (2026-09-11)
+
+     Carlos vio que bajaban los FPS y tenía razón. Medido en la página
+     abierta, con el marco entero montado:
+
+         escribir 161 flores y que el navegador lo resuelva …… 9,08 ms
+         escribir  80 nudos …………………………………………………………………… 8,73 ms
+         escribir  28 llamas ………………………………………………………………… 4,24 ms
+         ───────────────────────────────────────────────────────────
+         total por cuadro ………………………………………………………………… 22,05 ms
+
+     El presupuesto de un cuadro a 60 Hz es 16,7 ms. O sea que la
+     animación del DOM sola ya no entraba, sin contar el lienzo, las capas
+     de mezcla ni el resto de la página. Y 13 de esos 22 ms los agregué yo
+     al sumar las ramas y las llamas.
+
+     ⚠️ EL HALLAZGO QUE DA LA SOLUCIÓN: EL COSTE NO ES POR ELEMENTO, ES
+     POR SVG INVALIDADO. Tocar un solo nudo obliga al navegador a
+     recalcular el `<svg>` entero al que pertenece. Medido:
+
+         todo junto ………………………………………………………… 16,42 ms
+         en 2 tandas repartidas por ÍNDICE …………… 14,14 ms  (−7 %, inútil)
+         en 2 tandas repartidas por RAÍZ SVG ……… 9,42 ms  (−43 %)
+         en 3 tandas repartidas por RAÍZ SVG ……… 7,03 ms  (−57 %)
+
+     Por eso los turnos se reparten por RAÍZ y no por elemento: en un
+     cuadro se tocan solo los SVG que están de turno, y los demás no
+     cuestan absolutamente nada. Cada planta se mueve a 30 Hz en vez de 60,
+     que para un gesto orgánico es invisible — y encima las separa, así que
+     dejan de moverse al unísono, que es lo que uno quiere en un coro.
+
+     ⚠️ Y NO SE REESCRIBE LO QUE NO CAMBIÓ. Con el valor redondeado a
+     centésimas, en los tramos lentos —que son la mitad del minuto— casi
+     ninguna flor cambia de un cuadro al siguiente. Medido: 9,08 ms baja a
+     1,97 ms cuando los valores no cambian. Es el mismo criterio que
+     19-velas.js usa para su titileo, por el mismo motivo. */
+
+  /* En cuántas tandas se reparte el marco. Sale de la calidad y el
+     gobernador puede subirla si el equipo igual sufre. NO baja nunca:
+     ir repartiendo y juntando se vería peor que quedarse repartido. */
+  var TANDAS = 2;
+  var tandaDeEsteCuadro = 0;
+
+  /* Qué turno le tocó a cada raíz SVG. Se reparten en orden de aparición,
+     que mezcla ramilletes y plantas de los dos lados: así ningún cuadro
+     mueve solo la mitad izquierda del marco. */
+  var turnosPorRaiz = [];
+
+  function turnoDe(nodo) {
+    var raiz = nodo.ownerSVGElement || nodo;
+    for (var i = 0; i < turnosPorRaiz.length; i++) {
+      if (turnosPorRaiz[i].raiz === raiz) return turnosPorRaiz[i].turno;
+    }
+    var turno = turnosPorRaiz.length % 8;   // 8 turnos posibles, se usan los primeros TANDAS
+    turnosPorRaiz.push({ raiz: raiz, turno: turno });
+    return turno;
+  }
+
+  /** ¿Le toca a este elemento moverse en este cuadro? */
+  function esSuTurno(cosa) {
+    return (cosa.turno % TANDAS) === tandaDeEsteCuadro;
+  }
+
+  function calibrarLasTandas() {
+    var nivel = (typeof CALIDAD_GRAFICA === 'object' && CALIDAD_GRAFICA)
+      ? calidad() : 1;
+    /* alta 2 · media 3 · baja 4. En alta cada planta va a 30 Hz, que para
+       una flor doblándose no se distingue de 60. */
+    TANDAS = limitar(2 + (Number(nivel) || 0), 2, 4);
   }
 
   /* ─── LAS RAMAS ─────────────────────────────────────────────────────
@@ -1225,6 +1517,10 @@
            al revés: 40 de 80 nudos se retorcían apartándose del nombre.
            Ver sentidoDeLaPantalla(). */
         espejo: sentidoDeLaPantalla(nudo),
+        /* Su tanda y lo último escrito. Ver la nota de LOS TURNOS. */
+        turno: turnoDe(nudo),
+        ultimoDobla: -99999,
+        ultimoCrece: -99999,
         /* El milisegundo en que esta rama perdió su flor, o 0. */
         latigazo: 0,
         distancia: Math.sqrt((altar.x - cx) * (altar.x - cx) +
@@ -1271,6 +1567,12 @@
     for (var i = 0; i < ramas.length; i++) {
       var r = ramas[i];
 
+      /* El latigazo es un acontecimiento de un instante: si le cae fuera
+         de turno se lo pierde. Por eso la rama que acaba de perder su flor
+         se mueve en TODOS los cuadros mientras dura. */
+      var enLatigazo = r.latigazo && (t - r.latigazo) >= 0 && (t - r.latigazo) < 700;
+      if (!enLatigazo && !esSuTurno(r)) continue;
+
       var suTurno = PENUMBRA * 0.25 + (r.distancia / lejaniaMaxima) * UMBRA * 0.6;
       var despierta = suave(limitar((t - suTurno) / 7000, 0, 1));
 
@@ -1311,10 +1613,17 @@
       }
 
       /* ⚠️ Por `r.espejo`, igual que las flores: dentro de un contenedor
-         reflejado los ángulos se invierten. */
-      r.nodo.style.rotate =
-        (r.espejo * (dobla + tiembla + latigazo)).toFixed(2) + 'deg';
-      r.nodo.style.scale  = (1 + fervor * 0.1).toFixed(3);
+         reflejado los ángulos se invierten. Y con el mismo redondeo: si el
+         nudo quedó donde estaba, no se lo vuelve a escribir. */
+      var dobladoEnCentesimas = Math.round(r.espejo * (dobla + tiembla + latigazo) * 100);
+      var creceEnMilesimas    = Math.round((1 + fervor * 0.1) * 1000);
+      if (dobladoEnCentesimas === r.ultimoDobla &&
+          creceEnMilesimas === r.ultimoCrece) continue;
+      r.ultimoDobla = dobladoEnCentesimas;
+      r.ultimoCrece = creceEnMilesimas;
+
+      r.nodo.style.rotate = (dobladoEnCentesimas / 100).toFixed(2) + 'deg';
+      r.nodo.style.scale  = (creceEnMilesimas / 1000).toFixed(3);
     }
   }
 
@@ -1402,6 +1711,38 @@
     for (var i = 0; i < ramas.length; i++) {
       if (ramas[i].nodo === suNudo) { ramas[i].latigazo = t; return; }
     }
+  }
+
+  /**
+   * Dibuja la mártir en su capa, la más alta de todas.
+   *
+   * Borra SOLO la caja que ocupó el cuadro anterior, no la pantalla: acá
+   * hay un objeto y nada más. El margen de la diagonal (×1,45) cubre
+   * cualquier ángulo de giro; quedarse corto deja estelas. Es el mismo
+   * criterio de 24-lienzo-de-petalos.js.
+   *
+   * @returns {void}
+   */
+  function dibujarLaOfrenda() {
+    if (!pincelDeLaOfrenda) return;
+
+    if (!lienzoDeLaOfrenda.parentNode) {
+      document.body.appendChild(lienzoDeLaOfrenda);
+    }
+
+    if (cajaAnteriorDeLaOfrenda) {
+      pincelDeLaOfrenda.clearRect(
+        cajaAnteriorDeLaOfrenda[0], cajaAnteriorDeLaOfrenda[1],
+        cajaAnteriorDeLaOfrenda[2], cajaAnteriorDeLaOfrenda[3]);
+    }
+
+    var radio = LADO * muerte.escala * 0.75;
+    cajaAnteriorDeLaOfrenda = [
+      muerte.x - radio, muerte.y - radio, radio * 2, radio * 2
+    ];
+
+    dibujarUnaRosa(pincelDeLaOfrenda, muerte.x, muerte.y,
+                   muerte.escala, muerte.giro, 1, muerte.espejo);
   }
 
   function devolverLasFloresReales() {
@@ -1676,6 +2017,9 @@
       llamas.push({
         nodo: nodo,
         ladeo: ladeo,
+        /* Su tanda. Los candelabros son SVG como el marco y les cuesta
+           exactamente lo mismo: 4,24 ms por cuadro entre las 28. */
+        turno: turnoDe(nodo),
         /* 16 de las 32 llamas viven en el candelabro reflejado
            (estilos/12-haces-de-luz.css, `.marco__…--derecho`): medido en
            PBE. Sin esto la mitad de la habitación se ladearía al revés. */
@@ -1724,6 +2068,8 @@
 
     for (var i = 0; i < llamas.length; i++) {
       var l = llamas[i];
+
+      if (!esSuTurno(l)) continue;
 
       /* El vaivén propio de cada llama, para que no se ladeen las 32 como
          una sola pieza. En el shock, cero. */
@@ -1833,13 +2179,20 @@
   function moverElMundo(t) {
     if (!mundo) return;
 
-    /* La curva del sol: muere del todo a los 26 s y vuelve entre el 57 y
-       el 59,9. NO vuelve al mismo tiempo que las plantas se calman — las
-       plantas no se calman hasta el frenazo. Ese desacople es el punto:
-       la luz regresa y ellas siguen estirando, con el permiso
-       terminándose. */
+    /* La curva del sol: muere del todo a los 26 s y vuelve a lo largo de
+       los 16 s que siguen al tercer contacto.
+
+       ⚡ ANTES VOLVÍA ENTRE EL 57 Y EL 59,9 (2026-09-11). Eran 2,9 s para
+       deshacer 26 de agonía, y el color se iba por su cuenta en otro
+       momento: el sol y la sangre se retiraban por caminos distintos. Ahora
+       los dos usan la MISMA curva —`loQueYaSeFue`— así que la luz vuelve
+       como un solo acontecimiento, deprisa al principio y despacio después.
+
+       Lo que NO cambia es el desacople, que es el punto del acto VIII: la
+       luz regresa y las plantas siguen estirando, con el permiso
+       terminándose encima. Ellas no se calman hasta el frenazo. */
     var muriendo = limitar(t / 26000, 0, 1);
-    var volviendo = t >= 57000 ? limitar((t - 57000) / 2900, 0, 1) : 0;
+    var volviendo = loQueYaSeFue(t);
     var loQueQueda = (1 - muriendo) + volviendo * muriendo;
 
     try {
@@ -1857,12 +2210,18 @@
       if (window.LienzoDeLuz) {
         /* A los 26 s no queda ni un rayo. Vaciar el array es la forma no
            invasiva de apagarlos: 23 lo relee en cada repintado. */
-        var sinLuz = t >= 26000 && t < 57000;
+        /* ⚡ LOS RAYOS VUELVEN CON LA LUZ, NO AL FINAL (2026-09-11). Esto
+           decía `t < 57000`: el largo del haz crecía desde el tercer
+           contacto pero el array seguía vacío, así que los rayos aparecían
+           de golpe a los 57 s, ya crecidos. Ahora vuelven a los 46, que es
+           cuando la luz ya pegó su salto de vuelta. */
+        var sinLuz = t >= 26000 && t < 46000;
         window.LienzoDeLuz.haces = sinLuz ? [] : mundo.haces;
 
         /* A los 33 s se apaga lo que flota: motas de polvo y luciérnagas.
-           Nada vivo que no sea el culto. */
-        var sinFauna = t >= 33000 && t < 57000;
+           Nada vivo que no sea el culto. Y vuelven DESPUÉS que los rayos:
+           la luz es física, los bichos son vida, y la vida vuelve última. */
+        var sinFauna = t >= 33000 && t < 52000;
         window.LienzoDeLuz.motas = sinFauna ? [] : mundo.motas;
         window.LienzoDeLuz.fauna = sinFauna ? [] : mundo.fauna;
       }
@@ -2098,31 +2457,79 @@
    * @param {number} t Milisegundos desde el arranque.
    * @returns {{frio:number, sangre:number}}
    */
+  /**
+   * Cuánto se ha retirado ya el eclipse, de 0 a 1, después del tercer
+   * contacto.
+   *
+   * ⚠️ SON DOS TRAMOS Y NO UNO, Y ES POR LA ESCENA. Un solo tramo de 16 s
+   * dejaba el segundo 45 tan oscuro como la totalidad — y la histeria
+   * empieza en el 44. El culto se desataba a oscuras: el acto más
+   * importante del minuto no se veía.
+   *
+   * Astronómicamente tampoco era así. Después del tercer contacto la luz
+   * vuelve DEPRISA —es el mismo salto que la hizo desaparecer, al revés— y
+   * después tarda muchísimo en terminar de volver del todo. Por eso el
+   * 45 % de la recuperación pasa en los primeros 3,5 s y el 55 % restante
+   * se estira hasta el segundo 59,99.
+   *
+   * @param {number} t
+   * @returns {number} 0 = el eclipse entero, 1 = no queda nada de él.
+   */
+  function loQueYaSeFue(t) {
+    if (t < SHOCK) return 0;
+    return tramo(t, SHOCK, SHOCK + 3500) * 0.45 +
+           tramo(t, SHOCK, DURACION - 10) * 0.55;
+  }
+
   function coloresEn(t) {
-    var frio = t < FRENESI
-      ? tramo(t, 0, PROFUNDA) * 0.88
-      : 0.88 * (1 - tramo(t, FRENESI, FRENESI + 600));
+    var seFue = loQueYaSeFue(t);
+
+    /* ── EL FRÍO: saca la luz DEL DÍA, no la escena ──
+       Tope 0,42. Antes era 0,88 y eso solo ya dejaba la página al 12 %
+       antes de que el rojo entrara siquiera. */
+    var frio = t < TOTALIDAD
+      ? tramo(t, 0, PROFUNDA) * 0.42
+      : t < SHOCK
+        /* Los dos segundos de cripta: acá sí se cierra. */
+        ? 0.42 + tramo(t, TOTALIDAD, SHOCK) * 0.20
+        : 0.62 * (1 - seFue);
 
     /* ⚠️ EL ROJO ES EXCLUSIVO DE LA TOTALIDAD.
        Si apareciera antes dejaría de significar «este es el momento
        sagrado y terrible» y sería un filtro de color más. Por eso el
        primer tramo es un cero duro y no una rampa que empieza bajito. */
     var sangre = t < PROFUNDA ? 0
-      : t < SHOCK   ? tramo(t, PROFUNDA, TOTALIDAD) * 0.92
-      : t < FRENESI ? 0.92 - tramo(t, SHOCK, FRENESI) * 0.25
-      : 0.67 * (1 - tramo(t, FRENESI, FRENESI + 500));
+      : t < TOTALIDAD ? tramo(t, PROFUNDA, TOTALIDAD) * 0.52
+      : t < SHOCK     ? 0.52 + tramo(t, TOTALIDAD, SHOCK) * 0.18
+      : 0.70 * (1 - seFue);
 
-    return { frio: frio, sangre: sangre };
+    /* ── LA CORONA: la única capa que SUMA luz ──
+       Entra con el sol muriendo, se abre con la sangre, se cierra a un
+       punto en la totalidad —la luz colapsando, que es lo que da sentido
+       al anillo de diamante— y vuelve a abrirse con la histeria. */
+    var corona = t < PENUMBRA ? 0
+      : t < PROFUNDA  ? tramo(t, PENUMBRA, PROFUNDA) * 0.10
+      : t < TOTALIDAD ? 0.10 + tramo(t, PROFUNDA, TOTALIDAD) * 0.06
+      : t < SHOCK     ? 0.16 * (1 - tramo(t, TOTALIDAD, SHOCK) * 0.7)
+      : t < FRENESI   ? 0.05 + tramo(t, SHOCK, SHOCK + 2500) * 0.13
+      : 0.18 * (1 - tramo(t, FRENESI, DURACION - 10));
+
+    return { frio: frio, sangre: sangre, corona: corona };
   }
 
   /**
+   * @param {CanvasRenderingContext2D} pincel - en qué capa se dibuja. La
+   *   marea va en el lienzo del mundo, DEBAJO de los velos; la mártir va
+   *   en el de la ofrenda, por encima de todo. Ver la nota de la capa de
+   *   la ofrenda: son las dos únicas cosas que la oscuridad no toca, y por
+   *   eso no pueden compartir capa.
    * @param {number} [espejo] - -1 para dibujarla reflejada. La mártir sale
    *   de un lado del marco que puede estar en espejo, y la copia tiene que
    *   ser la MISMA imagen que estaba en pantalla, no su reflejo. Se aplica
    *   después del giro para que el orden sea el mismo que en el DOM:
    *   primero se refleja el dibujo, después se lo gira.
    */
-  function dibujarUnaRosa(x, y, escala, giro, alfa, espejo) {
+  function dibujarUnaRosa(pincel, x, y, escala, giro, alfa, espejo) {
     pincel.save();
     pincel.globalAlpha = alfa;
     pincel.translate(x, y);
@@ -2220,7 +2627,7 @@
       if (enFrenesi && !r.rota && Math.random() < 0.0016) r.rota = true;
       if (r.rota) r.caida = Math.min(1, r.caida + 0.02);
 
-      dibujarUnaRosa(x, y,
+      dibujarUnaRosa(pincel, x, y,
         r.escala * brote,
         haciaElAltar + r.giro + r.caida * 1.5,
         brote * (enSumision ? 0.85 : 1));
@@ -2239,11 +2646,21 @@
     if (laQueMuere && muerte.suelta && t >= MUERE_EN) {
 
       /* 36,5 → 42,0: viaja hasta el nombre y se posa. Es la única que
-         cruza el radio, y lo cruza porque se soltó (regla 2). */
+         cruza el radio, y lo cruza porque se soltó (regla 2).
+
+         ⚡ SE POSA EN EL FILO DE ABAJO, NO EN EL CENTRO (2026-09-11).
+         Aterrizaba en `altar.y`, o sea en mitad de la palabra — y encima
+         por detrás, porque el lienzo estaba debajo de la jaula del nombre.
+         Ahora llega al borde inferior de la caja y se corre hacia el lado
+         del que vino: se apoya en la base de las letras, como algo que
+         cayó y quedó ahí, y la palabra se sigue leyendo entera. */
       var viaje = suave(limitar((t - MUERE_EN) / (TOTALIDAD - MUERE_EN), 0, 1));
 
-      muerte.x = muerte.x0 + (altar.x - muerte.x0) * viaje;
-      muerte.y = muerte.y0 + (altar.y - muerte.y0) * viaje
+      var destinoY = altar.y + altar.alto * 0.42;
+      var destinoX = altar.x + (muerte.x0 < altar.x ? -1 : 1) * altar.ancho * 0.26;
+
+      muerte.x = muerte.x0 + (destinoX - muerte.x0) * viaje;
+      muerte.y = muerte.y0 + (destinoY - muerte.y0) * viaje
                  - Math.sin(viaje * Math.PI) * 26;   // un cuerpo describe un arco
       muerte.giro = muerte.giro0 + viaje * 1.1;
 
@@ -2256,8 +2673,7 @@
         muerte.giro += cae * 1.8;
       }
 
-      dibujarUnaRosa(muerte.x, muerte.y, muerte.escala, muerte.giro, 1,
-                     muerte.espejo);
+      dibujarLaOfrenda();
     }
 
     /* ── Los pétalos, arrastrados por la gravedad nueva ── */
@@ -2291,6 +2707,13 @@
         continue;
       }
 
+      /* ⚠️ NINGUNO APARECE: CADA UNO ENTRA. Los heredados nacen en el
+         milisegundo cero, encima de los de la invitación; los que la
+         tormenta suma van entrando a lo largo de los primeros 12 s, cada
+         uno con su propio desvanecido de 1,2 s. Ver sembrarLosPetalos(). */
+      if (t < pt.nace) continue;
+      var entrando = limitar((t - pt.nace) / 1200, 0, 1);
+
       var dx = altar.x - pt.x, dy = altar.y - pt.y;
       var d = Math.sqrt(dx * dx + dy * dy) || 1;
 
@@ -2300,38 +2723,66 @@
       pt.vy += (dy / d) * atraccion * 0.42 + 0.05 + retirada * 0.28;
       pt.vx *= 0.965; pt.vy *= 0.965;
 
-      /* ⚡ SE PEGABAN AL RELICARIO (2026-09-10)
+      /* ⚡ ERAN UNA HILERA PERFECTA ALREDEDOR DEL RELICARIO (2026-09-11)
        *
-       * Acá había un rebote: `pt.vx *= -0.25; pt.vy *= -0.25`. Con la
-       * atracción tirando hacia adentro cuadro tras cuadro y el rebote
-       * devolviéndolos con un cuarto de la velocidad, los pétalos
-       * quedaban vibrando contra el borde del anillo y se amontonaban
-       * ahí, encimados, como una costra alrededor del nombre. El
-       * comentario decía "como ofrenda"; en pantalla se leía como
-       * suciedad pegada.
+       * Carlos: «los pétalos que rodean el relicario quedan básicamente
+       * rotando en una hilera perfecta alrededor; dame algo de caos con el
+       * relicario como centro».
        *
-       * Ahora, al llegar al anillo, la velocidad que apunta hacia adentro
-       * se convierte en velocidad TANGENTE: en vez de rebotar, el pétalo
-       * dobla y sigue de largo bordeando el relicario. Se lee como una
-       * corriente girando alrededor del nombre, que es lo que la escena
-       * quería decir, y ninguno se queda quieto.
-       */
-      if (d < altar.radio * 0.98 && !enSumision) {
-        var nx = -dx / d, ny = -dy / d;              // hacia afuera del altar
-        var haciaAdentro = pt.vx * (dx / d) + pt.vy * (dy / d);
+       * Tenía razón, y la causa era esta misma línea. El arreglo anterior
+       * —convertir la velocidad de entrada en velocidad tangente al llegar
+       * a `altar.radio`— sacó a los pétalos de la costra que formaban
+       * contra el borde, pero los metió a TODOS en la MISMA órbita: un
+       * único radio, todos a la misma altura, todos dando vueltas. Se
+       * arregló el amontonamiento y se inventó un carril.
+       *
+       * Una corriente no es una órbita. Ahora cada pétalo tiene lo suyo:
+       *
+       *   · SU PROPIO RADIO, entre 0,75 y 2,2 veces el del altar. Unos
+       *     rozan el anillo y otros pasan lejos.
+       *   · SU PROPIA VELOCIDAD, y los de afuera van más lentos —como en
+       *     cualquier remolino de verdad—, así que las filas se cruzan en
+       *     vez de mantenerse.
+       *   · SU PROPIA TURBULENCIA, con su fase y su frecuencia, que le
+       *     mueve el radio mientras gira.
+       *   · Y UNO DE CADA CINCO SALE DESPEDIDO hacia afuera y vuelve. Son
+       *     los que rompen cualquier figura que se esté formando.
+       *
+       * ⚠️ LA REGLA 2 SIGUE INTACTA. El radio prohibido deja de ser un
+       * carril y vuelve a ser lo que era: un tope duro. Ningún pétalo cruza
+       * `altar.radio`, y el que lo intenta se frena ahí. */
+      if (!enSumision) {
+        var suRadio = altar.radio * pt.radio *
+          (1 + Math.sin(ahora * pt.frecuencia + pt.fase) * 0.22);
 
-        if (haciaAdentro > 0) {
-          // Se le quita el avance hacia el centro…
-          pt.vx -= (dx / d) * haciaAdentro;
-          pt.vy -= (dy / d) * haciaAdentro;
-          // …y se le devuelve como giro alrededor, conservando el impulso.
-          pt.vx += -ny * haciaAdentro * 0.9;
-          pt.vy +=  nx * haciaAdentro * 0.9;
+        if (pt.expulsado) {
+          /* Los díscolos: su radio respira mucho más y en contra, así que
+             se alejan cuando los demás se acercan. */
+          suRadio *= 1.15 + Math.sin(ahora * 0.6 + pt.fase) * 0.45;
         }
 
-        /* Un empujón suave hacia afuera si igual quedó adentro del anillo:
-           el nombre no se toca, es la regla 2. */
-        if (d < altar.radio * 0.9) { pt.vx += nx * 0.35; pt.vy += ny * 0.35; }
+        /* Hacia su radio, no hacia el centro: lo que los ordena es la
+           corriente, no una atracción pareja. */
+        var sobra = d - suRadio;
+        pt.vx += (dx / d) * sobra * 0.012 * atraccion;
+        pt.vy += (dy / d) * sobra * 0.012 * atraccion;
+
+        /* Y el giro, más lento cuanto más lejos. */
+        var nx = -dx / d, ny = -dy / d;
+        var vueltas = pt.sentido * pt.prisa * atraccion *
+                      (altar.radio / Math.max(altar.radio * 0.6, d)) * 0.55;
+        pt.vx += -ny * vueltas;
+        pt.vy +=  nx * vueltas;
+
+        /* REGLA 2: el tope duro. No se cruza, y no hace falta empujarlos
+           parejo hacia afuera para conseguirlo. */
+        if (d < altar.radio) {
+          var haciaAdentro = pt.vx * (dx / d) + pt.vy * (dy / d);
+          if (haciaAdentro > 0) {
+            pt.vx -= (dx / d) * haciaAdentro;
+            pt.vy -= (dy / d) * haciaAdentro;
+          }
+        }
       }
 
       pt.x += pt.vx; pt.y += pt.vy; pt.giro += pt.giroVel;
@@ -2339,7 +2790,7 @@
       pincel.save();
       pincel.translate(pt.x, pt.y);
       pincel.rotate(pt.giro);
-      pincel.globalAlpha = 0.75;
+      pincel.globalAlpha = 0.75 * entrando;
 
       var mapa = mapasDePetalos[pt.cual];
       if (mapa && mapa.listo) {
@@ -2411,6 +2862,10 @@
       /* La mártir ya no está en su tallo: su hueco no se anima. */
       if (f.martir && muerte.suelta) continue;
 
+      /* Si no es el turno de su planta, este cuadro no la toca. Ver la
+         nota de LOS TURNOS: lo caro es invalidar el SVG, no la flor. */
+      if (!esSuTurno(f)) continue;
+
       /* ── 1. LA CONCIENCIA, QUE LLEGA COMO UNA ONDA ──
          Las flores más cercanas al nombre despiertan primero y las de las
          esquinas van último. No es un detalle: es lo que hace que se lea
@@ -2469,6 +2924,16 @@
       var gesto = inclina + tiembla;
       if (f.martir) { f.gesto = gesto; f.creceAhora = crece; }
 
+      /* ⚠️ NO SE REESCRIBE LO QUE NO CAMBIÓ. Con el valor redondeado, en
+         los tramos lentos casi ninguna flor cambia de un cuadro al
+         siguiente, y armar la cadena y escribirla cuesta lo mismo dé
+         igual o no. Medido: 9,08 ms de cuadro bajan a 1,97. */
+      var enCentesimas = Math.round(f.espejo * gesto * 100);
+      var enMilesimas  = Math.round(crece * 1000);
+      if (enCentesimas === f.ultimoGesto && enMilesimas === f.ultimoCrece) continue;
+      f.ultimoGesto = enCentesimas;
+      f.ultimoCrece = enMilesimas;
+
       /* Se apila sobre lo que 07 tuviera puesto, no se lo reemplaza: si esa
          flor estaba apartándose del mouse, sigue apartándose mientras
          tiembla. Y en unidades de CSS —`deg`—, que es lo que espera la
@@ -2480,8 +2945,8 @@
          nombre en vez de estirar hacia él. Ver sentidoDeLaPantalla(). */
       f.nodo.style.transform =
         (f.antes ? f.antes + ' ' : '') +
-        'rotate(' + (f.espejo * gesto).toFixed(2) + 'deg) ' +
-        'scale(' + crece.toFixed(3) + ')';
+        'rotate(' + (enCentesimas / 100).toFixed(2) + 'deg) ' +
+        'scale(' + (enMilesimas / 1000).toFixed(3) + ')';
     }
 
     moverLasRamas(t, retirada);
@@ -2557,11 +3022,31 @@
      y que vaya fluido, GANA LA FLUIDEZ. */
   var ultimoCuadro = 0, promedio = 16.7;
 
+  var cuadrosVistos = 0;
+
   function gobernar(ahora) {
     if (ultimoCuadro) {
       promedio += ((ahora - ultimoCuadro) - promedio) * 0.08;
       if (promedio > 34 && marea.length > 40) {
         marea.length = Math.floor(marea.length * 0.82);
+      }
+
+      /* ⚡ Y SI IGUAL NO ENTRA, SE REPARTE EN MÁS TANDAS (2026-09-11)
+       *
+       * Las tandas salen de la calidad, pero la calidad es una estimación
+       * y el eclipse es la carga más alta que esta página tiene en todo el
+       * día. Si el cuadro se sigue yendo de presupuesto, cada planta pasa
+       * a moverse menos seguido hasta que entre.
+       *
+       * ⚠️ SOLO SUBE, NUNCA BAJA — la misma regla que la marea: ir
+       * repartiendo y volviendo a juntar se vería peor que quedarse
+       * repartido. Y se espera medio segundo antes de empezar a juzgar:
+       * los primeros cuadros de cualquier escena son los más lentos y no
+       * dicen nada del equipo. */
+      cuadrosVistos++;
+      if (cuadrosVistos > 30 && promedio > 21 && TANDAS < 6) {
+        TANDAS++;
+        cuadrosVistos = 0;      // se le da tiempo a que el promedio baje
       }
     }
     ultimoCuadro = ahora;
@@ -2598,21 +3083,46 @@
 
   function unCuadro(ahora, t) {
     gobernar(ahora);
+
+    /* A quién le toca moverse en este cuadro. Ver la nota de LOS TURNOS. */
+    tandaDeEsteCuadro = (tandaDeEsteCuadro + 1) % TANDAS;
+
     medirElAltar();          // la página puede haberse movido
-    acomodarLaCopia();       // y el nombre con ella
 
     var color = coloresEn(t);
     capaFria.style.opacity   = color.frio.toFixed(3);
     capaSangre.style.opacity = color.sangre.toFixed(3);
+    capaCorona.style.opacity = color.corona.toFixed(3);
+
+    /* La corona se encoge hacia su centro a medida que el sol se tapa —la
+       luz colapsando a un punto— y se vuelve a abrir con la histeria. Es
+       lo que le da causa al anillo de diamante: el destello sale de algo
+       que el espectador vio cerrarse. Se mueve con `scale`, que es trabajo
+       del compositor. */
+    var aperturaDeLaCorona =
+      t < TOTALIDAD ? 1.25 - tramo(t, PROFUNDA, TOTALIDAD) * 0.75
+      : t < SHOCK   ? 0.50 - tramo(t, TOTALIDAD, SHOCK) * 0.28
+      :               0.22 + tramo(t, SHOCK, FRENESI) * 1.10;
+    capaCorona.style.transform = 'scale(' + aperturaDeLaCorona.toFixed(3) + ')';
 
     /* El anillo de diamante: 150 ms centrados en el tercer contacto.
        Sube en 40 ms y baja en 110 — un relámpago tiene ataque rápido y
-       cola, no una campana simétrica. */
+       cola, no una campana simétrica.
+
+       ⚠️ LA CAPA SE ATA Y SE DESATA. Vive 300 ms en vez de los 60 s: una
+       capa de mezcla a pantalla completa obliga al compositor a leer el
+       fondo en cada cuadro, y hasta ahora estaba puesta todo el minuto
+       para usarse en la sexta parte de un segundo. */
     var desdeElAnillo = t - SHOCK;
-    capaDestello.style.opacity =
-      (desdeElAnillo < 0 || desdeElAnillo > 150) ? '0'
-      : desdeElAnillo < 40 ? (desdeElAnillo / 40).toFixed(3)
-      : (1 - (desdeElAnillo - 40) / 110).toFixed(3);
+    if (desdeElAnillo >= -75 && desdeElAnillo <= 225) {
+      if (!capaDestello.parentNode) document.body.appendChild(capaDestello);
+      capaDestello.style.opacity =
+        (desdeElAnillo < 0 || desdeElAnillo > 150) ? '0'
+        : desdeElAnillo < 40 ? (desdeElAnillo / 40).toFixed(3)
+        : (1 - (desdeElAnillo - 40) / 110).toFixed(3);
+    } else if (capaDestello.parentNode) {
+      capaDestello.parentNode.removeChild(capaDestello);
+    }
 
     moverElMundo(t);
     elNombreNoSeEntera(t);
@@ -2667,6 +3177,14 @@
     ultimoIntentoDeFlores = -1000;
     ultimoIntentoDeLlamas = -1000;
 
+    /* Los turnos se reparten de nuevo con el marco que haya ahora, y las
+       tandas vuelven a salir de la calidad: si la corrida anterior las
+       subió, esta no arranca castigada. */
+    turnosPorRaiz.length = 0;
+    tandaDeEsteCuadro = 0;
+    cuadrosVistos = 0;
+    calibrarLasTandas();
+
     /* La evidencia de la corrida anterior no puede quedar colgada de la
        siguiente: en el ensayo se corre la secuencia una y otra vez. */
     limpiarLaReliquia();
@@ -2685,10 +3203,14 @@
     tomarElMundo();
 
     coronarElNombre();
+    /* ⚠️ EL ORDEN DE ESTAS LÍNEAS NO IMPORTA —manda el z-index— pero SÍ
+       importa cuál está y cuál no: la del destello y la de la ofrenda se
+       atan solo cuando hay algo que poner en ellas. Una capa de compositor
+       vacía se paga igual que una llena. */
+    document.body.appendChild(lienzo);
     document.body.appendChild(capaFria);
     document.body.appendChild(capaSangre);
-    document.body.appendChild(capaDestello);
-    document.body.appendChild(lienzo);
+    document.body.appendChild(capaCorona);
 
     medirElAltar();
     sembrarLaMarea();
@@ -2718,9 +3240,16 @@
        necesita LA MISMA función para poder quitarla. Pasarle
        `alCambiarElAncho(medirElLienzo)` de nuevo al terminar crearía una
        envoltura distinta y el escucha quedaría puesto para siempre. */
+    /* Cambiar el ancho reacomoda el marco Y puede mover el nombre dentro
+       del documento: las dos cosas se rehacen juntas. */
+    function alRedimensionar() {
+      medirElLienzo();
+      acomodarLaCopia();
+    }
+
     escuchaDeMedida = (typeof alCambiarElAncho === 'function')
-      ? alCambiarElAncho(medirElLienzo)
-      : medirElLienzo;
+      ? alCambiarElAncho(alRedimensionar)
+      : alRedimensionar;
     window.addEventListener('resize', escuchaDeMedida);
 
     /* Si alguien llegó con el minuto empezado, se entra por donde va: el
@@ -2798,9 +3327,11 @@
        sol. */
     devolverElMundo();
 
-    [capaFria, capaSangre, capaDestello, lienzo].forEach(function (c) {
+    [capaFria, capaSangre, capaCorona, capaDestello,
+     lienzo, lienzoDeLaOfrenda].forEach(function (c) {
       if (c.parentNode) c.parentNode.removeChild(c);
     });
+    cajaAnteriorDeLaOfrenda = null;
 
     /* Y en el mismo cuadro en que desaparece todo, lo único que no
        desaparece. No es una transición: es un objeto que se queda. Ver la
@@ -2939,9 +3470,16 @@
           reflejadas: reflejadas,
           ramas: ramas.length,
           llamas: llamas.length,
+          petalos: petalos.length,
           martir: !!laQueMuere,
           rosaRasterizada: !!mapaDeLaRosa,
-          tinta: tintaDeLaRosa
+          tinta: tintaDeLaRosa,
+          /* Lo que cuesta el cuadro, en milisegundos, y en cuántas tandas
+             se está repartiendo el marco. El presupuesto de un cuadro a
+             60 Hz son 16,7 ms: si `msPorCuadro` se va de ahí, la escena le
+             está costando a la página. */
+          msPorCuadro: promedio,
+          tandas: TANDAS
         };
       }
     };
