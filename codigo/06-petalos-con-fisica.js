@@ -96,14 +96,63 @@
      proporciones entre planos en los dos casos. Costo: cero (son las
      mismas constantes de siempre) y hasta BAJA en móvil, porque hay
      menos área de pétalo para pintar por cuadro. */
-  const RASGOS_DEL_PLANO = esPantallaChica ? {
-    fondo:  { contenedor: '#petalos-fondo',  tamaño: [10, 19], opacidad: [.30, .55], caida: [14, 30] },
-    medio:  { contenedor: '#petalos-medio',  tamaño: [16, 30], opacidad: [.60, .90], caida: [18, 40] },
-    frente: { contenedor: '#petalos-frente', tamaño: [26, 46], opacidad: [.70, 1],   caida: [26, 54] },
-  } : {
-    fondo:  { contenedor: '#petalos-fondo',  tamaño: [18, 35], opacidad: [.30, .55], caida: [14, 30] },
-    medio:  { contenedor: '#petalos-medio',  tamaño: [30, 54], opacidad: [.60, .90], caida: [18, 40] },
-    frente: { contenedor: '#petalos-frente', tamaño: [48, 84], opacidad: [.70, 1],   caida: [26, 54] },
+  /* ⚡ EL TAMAÑO AHORA ES PROPORCIONAL DE VERDAD, NO EN DOS ESCALONES
+     (2026-09-11)
+
+     Acá había dos juegos de tamaños y un `esPantallaChica` decidiendo cuál.
+     Dos escalones contra algo que encoge de forma CONTINUA: la enredadera
+     se achica con `--marco-grosor`, un `clamp(20px, 3.4vw, 72px)` que tiene
+     un valor distinto en cada ancho de pantalla.
+
+     Medido en vivo, con la página abierta:
+
+         ancho    marco    rosa (mediana)   pétalo de frente   razón
+         1440 px   49 px        37,6 px          73 px          1,94
+          514 px   20 px        13,4 px          34 px          2,53
+
+     O sea: de escritorio a pantalla chica la rosa se achicó 2,8 veces y el
+     pétalo solo 2,1. El escalón no alcanzaba, y el pétalo terminaba siendo
+     el doble o el triple de la flor que tiene al lado — que es exactamente
+     lo que se reportó mirándolo.
+
+     Se ata entonces al MISMO número que encoge a las rosas: el grosor del
+     marco, medido en píxeles reales (no se puede leer del `clamp`, hay que
+     preguntarle al navegador cuánto le dio). La referencia es 49 px, que es
+     lo que vale en un escritorio de 1440 px — la proporción que ya estaba
+     aprobada. Así el pétalo mide, respecto de la rosa, lo mismo en un
+     teléfono que en un monitor.
+
+     El tope de 1,15 es para que en un monitor enorme el pétalo no siga
+     creciendo más allá de lo que se vio bien. */
+  function grosorDelMarcoEnPixeles() {
+    try {
+      const sonda = document.createElement('div');
+      sonda.style.cssText = 'position:absolute;left:-9999px;top:0;' +
+                            'width:var(--marco-grosor);height:0';
+      document.body.appendChild(sonda);
+      const px = parseFloat(getComputedStyle(sonda).width) || 0;
+      document.body.removeChild(sonda);
+      return px;
+    } catch (e) { return 0; }
+  }
+
+  const GROSOR_DE_REFERENCIA = 49;   // px, en un escritorio de 1440
+  const grosorAhora = grosorDelMarcoEnPixeles();
+
+  /* Si el marco no está (la hoja de estilos no cargó, o esto corre antes),
+     se cae al ancho de pantalla, que es de dónde sale el clamp de todos
+     modos. Nunca se queda sin un número. */
+  const proporcion = limitar(
+    (grosorAhora || limitar(window.innerWidth * 0.034, 20, 72)) / GROSOR_DE_REFERENCIA,
+    0.34, 1.15);
+
+  const aEscala = ([chico, grande]) =>
+    [chico * proporcion, grande * proporcion];
+
+  const RASGOS_DEL_PLANO = {
+    fondo:  { contenedor: '#petalos-fondo',  tamaño: aEscala([18, 35]), opacidad: [.30, .55], caida: [14, 30] },
+    medio:  { contenedor: '#petalos-medio',  tamaño: aEscala([30, 54]), opacidad: [.60, .90], caida: [18, 40] },
+    frente: { contenedor: '#petalos-frente', tamaño: aEscala([48, 84]), opacidad: [.70, 1],   caida: [26, 54] },
   };
 
   /** Cuánto tira la gravedad hacia abajo (píxeles por segundo, al cuadrado). */
@@ -288,18 +337,68 @@
   let calidadDeLosPetalos = nivelDeCalidad();
   let ultimoMovimiento = 0;
 
+  /* ⚡ EL RECORTE POR CALIDAD SE COMÍA EL PLANO DE ADELANTE ENTERO
+     (2026-09-11)
+
+     Esto apagaba pétalos POR ÍNDICE sobre el array plano: `i < cuantos`.
+     Y el array se llena plano por plano, en orden —fondo, medio, frente—,
+     así que los últimos índices son siempre los del plano de adelante: los
+     grandes.
+
+     En una pantalla chica hay 8 + 5 + 6 = 19 pétalos. Las cuentas, hechas:
+
+         calidad   activos   fondo   medio   frente
+         alta        19        8       5       6
+         media       15        8       5       2     ← se pierden 4 de 6
+         baja        10        8       2       0     ← se pierden los 6
+
+     En escritorio (14 + 10 + 12 = 36) es lo mismo: en media quedan 5 de
+     los 12 de adelante, y en baja, ninguno.
+
+     Dos cosas rotas a la vez:
+
+     · SE VEÍA. Al cargar, la calidad arranca en ALTA por estimación y
+       todos los pétalos están activos, los grandes incluidos. Un instante
+       después el monitor mide el equipo de verdad, baja a media, y cuatro
+       de los seis grandes desaparecen de un cuadro al siguiente. Es
+       exactamente el «aparecen unos pétalos de tamaño que no corresponde y
+       de un frame a otro desaparecen» que se reportó.
+
+     · Y NO SE VEÍA LO OTRO. La nota de arriba de este archivo dice que lo
+       que da riqueza NO es la cantidad sino «la separación entre planos».
+       Con el plano de adelante apagado, la lluvia de pétalos quedaba
+       reducida a puntitos de fondo — en la mayoría de los equipos, que es
+       donde corre calidad media.
+
+     Ahora se recorta la MISMA fracción DENTRO de cada plano. Se mueven
+     menos pétalos igual (el ahorro es idéntico), pero los tres planos
+     sobreviven y lo que desaparece al bajar de nivel es un pétalo suelto
+     de cada profundidad, no una capa entera. */
   function ajustarCantidadDePetalos(calidad) {
     const fraccion = FRACCION_ACTIVA_POR_CALIDAD[calidad] ?? 1;
-    const cuantosActivos = Math.ceil(petalos.length * fraccion);
 
-    petalos.forEach((petalo, i) => {
-      const activo = i < cuantosActivos;
+    /* Cuántos van quedando activos en cada plano. Se cuenta por plano
+       porque el recorte es por plano. */
+    const activosPorPlano = {};
+    const totalesPorPlano = {};
+
+    for (const petalo of petalos) {
+      totalesPorPlano[petalo.plano] = (totalesPorPlano[petalo.plano] || 0) + 1;
+    }
+
+    for (const petalo of petalos) {
+      const cupo = Math.ceil((totalesPorPlano[petalo.plano] || 0) * fraccion);
+      const yaPuestos = activosPorPlano[petalo.plano] || 0;
+      const activo = yaPuestos < cupo;
+
+      if (activo) activosPorPlano[petalo.plano] = yaPuestos + 1;
+
       if (petalo.activo !== activo) {
         petalo.activo = activo;
         // Con el lienzo alcanza con la marca: el canvas saltea los apagados.
         if (petalo.elemento) petalo.elemento.style.display = activo ? '' : 'none';
       }
-    });
+    }
   }
 
   // Se aplica YA, con la estimación de arranque: nada de flash de más.

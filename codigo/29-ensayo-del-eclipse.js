@@ -173,6 +173,9 @@
       '  background:#160f0d;color:#8a7a6c;text-align:center;',
       '  font-variant-numeric:tabular-nums;}',
       '.ensayo__reloj--vivo{background:#2a0f14;color:#e8a0a0;}',
+      '.ensayo__recuento{margin-top:6px;padding:5px 8px;border-radius:5px;',
+      '  background:#120e14;color:#7a8a8a;text-align:center;font-size:10px;',
+      '  line-height:1.35;}',
 
       '.ensayo__aviso{margin-bottom:10px;padding:8px;border-radius:5px;',
       '  background:#2a1a08;border:1px solid #8a6a2c;color:#e8d5a0;font-size:11px;}',
@@ -216,6 +219,7 @@
         '<div class="ensayo__fila" id="ensayo-velocidades"></div>' +
 
         '<div class="ensayo__reloj" id="ensayo-reloj">Detenido</div>' +
+        '<div class="ensayo__recuento" id="ensayo-recuento">—</div>' +
       '</div>';
 
     document.body.appendChild(panel);
@@ -342,6 +346,22 @@
       caja.classList.add('ensayo__reloj--vivo');
       caja.textContent = (t / 1000).toFixed(1) + 's · ' + faseDe(t) +
                          (velocidadElegida !== 1 ? '  (×' + velocidadElegida + ')' : '');
+
+      /* ⚡ EL RECUENTO, QUE ES LO QUE SE MIRA PARA SABER SI HAY ESCENA
+         (2026-09-11)
+         Tres números que, en cero, explican los tres silencios posibles:
+         sin flores no se mueve nada; sin reflejadas, la mitad del marco
+         está estirando al revés (el defecto que estuvo dos versiones sin
+         que nadie lo notara); sin mártir, no hay sacrificio. Verlos escrito
+         es más rápido que deducirlos mirando. */
+      var cuenta = document.getElementById('ensayo-recuento');
+      if (cuenta && window.ECLIPSE.recuento) {
+        var r = window.ECLIPSE.recuento();
+        cuenta.textContent =
+          r.flores + ' flores (' + r.reflejadas + ' en espejo) · ' +
+          r.ramas + ' ramas · ' + r.llamas + ' llamas · ' +
+          (r.martir ? 'mártir ok' : 'SIN MÁRTIR');
+      }
     }, 100);
   }
 
