@@ -170,10 +170,35 @@ const TRAMOS = (() => {
   }));
 })();
 
+/* ⚡ LOS COEFICIENTES SE LEEN DEL ARCHIVO, NO SE COPIAN ACÁ (2026-09-11)
+ *
+ * Estaban escritos a mano —0,58 y 0,66— y cuando el código cambió a 0,85 y
+ * 0,95 esta prueba siguió midiendo los viejos. O sea que comprobaba una
+ * ficción: se podía dejar el eclipse invisible y todo seguía en verde.
+ *
+ * Eso es exactamente lo que dejó salir la v278, que Carlos describió como
+ * «el eclipse es inexistente y solo ves pétalos de un lado a otro». La
+ * prueba de luminancia existía y no lo cazó, porque no estaba mirando el
+ * código: estaba mirando una copia vieja de dos números.
+ *
+ * Una prueba que copia constantes deja de ser una prueba en el momento en
+ * que alguien cambia la constante. */
+const COEFICIENTES = (() => {
+  const m = eclipse.match(
+    /var velo = limitar\(color\.frio \* ([\d.]+) \+ color\.sangre \* ([\d.]+), 0, ([\d.]+)\)/);
+  return m ? { frio: +m[1], sangre: +m[2], tope: +m[3] } : null;
+})();
+
+comprobar('los coeficientes del velo se pueden leer del archivo',
+  !!COEFICIENTES,
+  'sin esto la prueba de luminancia mide una copia y no el código');
+
 /** La opacidad del velo en el milisegundo `t`, tal cual la calcula unCuadro. */
 const veloEn = (t) => {
   const c = curva.coloresEn(t);
-  return Math.min(0.97, Math.max(0, c.frio * 0.58 + c.sangre * 0.66));
+  if (!COEFICIENTES) return 0;
+  return Math.min(COEFICIENTES.tope,
+    Math.max(0, c.frio * COEFICIENTES.frio + c.sangre * COEFICIENTES.sangre));
 };
 
 /**
@@ -287,9 +312,23 @@ comprobar('y el centro del degradado sale del altar, no de la pantalla',
 /* ⚠️ Y EL DEGRADADO NO SE REPINTA POR CUADRO. Reescribir un `background`
    del tamaño de la pantalla sesenta veces por segundo sería cambiar un
    problema de compositor por uno de pintura. */
-comprobar('el degradado solo se repinta cuando cambió algo',
-  /if \(centro === ultimoCentroPintado && apertura === ultimaAperturaPintada\) return;/
-    .test(eclipseCodigo),
+/* ⚡ LA CAPA TIENE QUE ESTAR PROMOVIDA, Y ESTO ES EL ARREGLO DE LOS
+   159 ms (2026-09-11). Quitar `mix-blend-mode` eliminó la mezcla —bien—
+   pero el blend mode era AVEMÁS lo que obligaba al navegador a darle a esta
+   capa su propia textura. Sin él, cada cambio de opacidad REPINTA un
+   degradado radial a pantalla completa. En el ProDesk de Carlos: 159,5 ms
+   por cuadro, 6 fps. */
+comprobar('el velo tiene textura propia',
+  /will-change:opacity/.test(eclipseCodigo),
+  'sin promover, cada cambio de opacidad repinta el degradado entero: ' +
+  'medido en su máquina, 159,5 ms por cuadro');
+
+/* ⚠️ Y CON BANDA MUERTA, NO CON REDONDEO. El redondeo al 1 % lo cruzaba
+   el vaivén de la portada varias veces por segundo, y cada cruce reescribe
+   el `background` de una capa a pantalla completa. */
+comprobar('y el degradado solo se repinta si se movió de verdad',
+  /Math\.abs\(cx - ultimoCentroX\) < 2/.test(eclipseCodigo) &&
+  /Math\.abs\(apertura - ultimaAperturaPintada\) < 0\.08/.test(eclipseCodigo),
   'pintar un degradado a pantalla completa por cuadro es igual de caro');
 
 comprobar('y lo que se anima por cuadro es solo la opacidad',
@@ -323,9 +362,63 @@ comprobar('y el altar es el punto menos velado de la pantalla',
     const l = luzRojaEn(t);
     if (l < peor) { peor = l; cuando = t; }
   }
-  comprobar('fuera de la totalidad NUNCA baja del 40 % de luz roja',
-    peor >= 0.40,
+  comprobar('fuera de la totalidad NUNCA baja del 30 % de luz roja',
+    peor >= 0.30,
     'lo peor fue ' + (peor * 100).toFixed(1) + ' % en el segundo ' + (cuando / 1000));
+}
+
+/* ⚡ Y AHORA LA COMPROBACIÓN QUE FALTABA: QUE EL ECLIPSE OSCUREZCA
+ *   (2026-09-11)
+ *
+ * Todas las comprobaciones de luz miraban el PISO —que no se fuera a
+ * negro— porque ese era el problema de la v276. Ninguna miraba el TECHO.
+ * Así que la v278 pudo dejar el velo en un alfa efectivo de 0,30 donde vive
+ * el marco, y todo siguió en verde. Carlos, mirándolo: «el eclipse es
+ * inexistente», «en serio, eliminaste el eclipse».
+ *
+ * Un eclipse tiene que hacer las dos cosas: dejar ver Y oscurecer. Estas
+ * dos comprobaciones son las que lo encierran por arriba y por abajo.
+ *
+ * El punto que se mira es el 70 % del radio, que es donde vive el marco —o
+ * sea las plantas, o sea lo único que el minuto tiene para contar. */
+{
+  /* El alfa efectivo: la opacidad de la capa por la del tramo que le toca
+     a ese radio. Es el número con el que el navegador compone, sin pasar
+     por ningún color —derivarlo de un píxel blanco lo subestima, porque el
+     propio color del velo tira del resultado hacia arriba. */
+  const alfaEn = (t, radio) => {
+    let a = TRAMOS[TRAMOS.length - 1], b = a;
+    for (let i = 0; i < TRAMOS.length - 1; i++) {
+      if (radio >= TRAMOS[i].r && radio <= TRAMOS[i + 1].r) {
+        a = TRAMOS[i]; b = TRAMOS[i + 1]; break;
+      }
+    }
+    const k = b.r === a.r ? 0 : (radio - a.r) / (b.r - a.r);
+    return veloEn(t) * (a.a + (b.a - a.a) * k);
+  };
+
+  const enElEsfuerzo = alfaEn(38000, 70);
+  const enLaCripta   = alfaEn(43000, 70);
+  const enElAltar    = alfaEn(43000, 0);
+
+  comprobar('en el esfuerzo el velo TAPA de verdad',
+    enElEsfuerzo >= 0.42,
+    'alfa efectivo ' + enElEsfuerzo.toFixed(2) + ' — con 0,30 el eclipse ' +
+    'no se ve, es un tinte');
+
+  comprobar('y en la cripta, mucho más',
+    enLaCripta >= 0.75,
+    'alfa efectivo ' + enLaCripta.toFixed(2));
+
+  comprobar('con un factor de al menos 1,6 entre un acto y otro',
+    enLaCripta / enElEsfuerzo >= 1.6,
+    'esfuerzo ' + enElEsfuerzo.toFixed(2) + ' · cripta ' + enLaCripta.toFixed(2) +
+    ' — sin salto, la totalidad no se nota');
+
+  comprobar('y el altar sigue siendo el punto menos velado',
+    enElAltar <= 0.14,
+    'alfa efectivo en el altar ' + enElAltar.toFixed(2) +
+    ' — si el centro se vela como el borde, deja de ser el centro de gravedad');
 }
 
 /* Y DENTRO de la cripta tampoco puede ser negro: son dos segundos, pero
@@ -1519,8 +1612,51 @@ comprobar('y no se reescribe lo que no cambió',
   'tramos lentos —la mitad del minuto— casi ninguno cambia');
 
 comprobar('el gobernador puede repartir más si el equipo igual sufre',
-  /if \(cuadrosVistos > 30 && promedio > 21 && TANDAS < 6\)/.test(eclipseCodigo),
+  /if \(cuadrosVistos > 30 && promedio > 21\)/.test(eclipseCodigo) &&
+  /if \(TANDAS < 6\) TANDAS\+\+;/.test(eclipseCodigo),
   'la calidad es una estimación; el eclipse es la carga más alta del día');
+
+/* ⚡ Y CUANDO REPARTIR YA NO ALCANZA, SUELTA LASTRE (2026-09-11)
+ *
+ * Carlos, midiendo en su ProDesk: «159,5 ms - 6 fps, seis tandas». El
+ * marco ya estaba repartido en el máximo y el cuadro seguía sin entrar.
+ * A esa altura repartir más no arregla nada: hay que hacer MENOS COSAS.
+ * Decisión suya: que se simplifique hasta entrar, con suelo de 30 fps. */
+comprobar('y cuando eso se agota, suelta lastre',
+  /else soltarLastre\(\);/.test(eclipseCodigo) &&
+  /function soltarLastre/.test(eclipseCodigo),
+  'con el marco ya en seis tandas y el cuadro en 159 ms, repartir más no ' +
+  'arregla nada');
+
+/* El orden importa: se suelta primero lo que menos cuenta la historia. */
+{
+  const lastre = (eclipseCodigo.match(/var LASTRE = \[[\s\S]*?\];/) || [''])[0];
+  comprobar('en el orden acordado: llamas, pétalos, ramas, y al final todo',
+    /llamas[\s\S]*pétalos[\s\S]*ramas/.test(lastre),
+    'las llamas son ambiente; las flores estirando hacia el nombre son el ' +
+    'ritual, y son lo último que se apaga');
+
+  comprobar('y en el último nivel queda el velo, el nombre y la mártir',
+    /todo salvo el velo, el nombre y la mártir/.test(lastre),
+    'sigue siendo la escena, contada en su mínima expresión');
+}
+
+/* ⚠️ Y NUNCA VUELVE ATRÁS dentro de la misma corrida: ver las llamas
+   apagarse y encenderse solas se lee como un defecto, no como una escena. */
+comprobar('el recorte solo sube, nunca baja',
+  !/nivelDeRecorte--/.test(eclipseCodigo) &&
+  !/nivelDeRecorte -= /.test(eclipseCodigo));
+
+comprobar('y se reinicia entre corridas del ensayo',
+  /nivelDeRecorte = 0;/.test(
+    (eclipseCodigo.match(/function reiniciarElEstado[\s\S]*?\n  \}/) || [''])[0]),
+  'si no, la segunda corrida arranca castigada por la primera');
+
+/* Lo que se apaga hay que DEVOLVERLO, no solo dejar de tocarlo. */
+comprobar('lo que se suelta se devuelve a su sitio',
+  /if \(nivelDeRecorte === 1\) devolverLasLlamas\(\);/.test(eclipseCodigo) &&
+  /if \(nivelDeRecorte === 3\) devolverLasRamas\(\);/.test(eclipseCodigo),
+  'dejar de moverlas las deja inclinadas y dobladas para siempre');
 
 /* ⚠️ Y NUNCA BAJA. La misma regla que la marea: ir repartiendo y volviendo
    a juntar se vería peor que quedarse repartido. */
@@ -1665,20 +1801,32 @@ comprobar('y son menos que antes, no más',
 
 console.log('\nUna corriente, no un carril\n');
 
-comprobar('cada pétalo tiene su propio radio',
-  /radio: 0\.75 \+ Math\.random\(\) \* 1\.45/.test(eclipseCodigo),
-  'un solo radio para todos es lo que hacía la hilera perfecta');
+/* ⚡ NI CARRIL NI CAOS (2026-09-11)
+ *
+ * La v277 tenía todos los pétalos en la misma órbita: una hilera perfecta.
+ * La v278 le dio a cada uno su propio radio (0,75 a 2,2 veces el del
+ * altar), turbulencia, y uno de cada cinco salía despedido. Carlos:
+ * «solo hay caos desordenado». Con veinte trayectorias distintas no hay
+ * figura, y sin figura se lee como basura volando.
+ *
+ * Una corriente es lo contrario de las dos cosas: UNA figura con variación
+ * pequeña. Un 34 % de dispersión en el radio, no un 200 %. */
+comprobar('los pétalos forman una corriente, no una hilera ni un caos',
+  /radio: 1\.06 \+ Math\.random\(\) \* 0\.36/.test(eclipseCodigo),
+  'con 0,75 a 2,2 de dispersión no hay figura; con un solo radio hay carril');
 
-comprobar('y su propia velocidad, más lenta cuanto más lejos',
-  /altar\.radio \/ Math\.max\(altar\.radio \* 0\.6, d\)/.test(eclipseCodigo),
-  'con la misma velocidad angular las filas no se cruzan nunca');
+comprobar('y todos giran en el MISMO sentido',
+  !/sentido: Math\.random\(\)/.test(eclipseCodigo) &&
+  !/pt\.sentido/.test(eclipseCodigo),
+  'una corriente tiene un sentido; la mitad girando al revés es un choque');
 
-comprobar('y su propia turbulencia',
-  /Math\.sin\(ahora \* pt\.frecuencia \+ pt\.fase\) \* 0\.22/.test(eclipseCodigo));
+comprobar('con una velocidad parecida, apenas más lenta cuanto más lejos',
+  /altar\.radio \/ Math\.max\(altar\.radio \* 0\.75, d\)/.test(eclipseCodigo),
+  'lo justo para que las filas se crucen sin que nadie se salga de la figura');
 
-comprobar('y uno de cada cinco sale despedido',
-  /expulsado: Math\.random\(\) < 0\.2/.test(eclipseCodigo),
-  'son los que rompen cualquier figura que se esté formando');
+comprobar('y ninguno sale despedido',
+  !/expulsado/.test(eclipseCodigo),
+  'eran los que rompían la figura que la escena quiere que se lea');
 
 /* ⚠️ Y LA REGLA 2 SIGUE INTACTA. El radio prohibido deja de ser un carril
    pero no deja de ser un tope. */
