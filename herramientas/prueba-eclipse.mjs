@@ -151,32 +151,55 @@ const curva = new Function(constantes + '\n' + funciones +
  * queda DESPUÉS de multiplicarlos, que es otra cosa. Estas funciones hacen
  * exactamente la cuenta que hace el navegador.
  */
-const multiplicar = (hex, a) => {
-  const c = [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16),
-             parseInt(hex.slice(5, 7), 16)];
-  return c.map(v => (1 - a) + (v / 255) * a);
-};
+/* ⚡ LA CUENTA CAMBIÓ CON LA CAPA (2026-09-11). Ya no hay dos `multiply`
+   encima de la escena: hay UNA capa compuesta normal (`source-over`), que
+   es otra fórmula. Y es otra fórmula CON OTRO SUELO: multiplicar por un
+   color oscuro tiende a negro, componer sobre un color oscuro tiende a ESE
+   color. Por eso el último tramo del degradado es un rojo muy oscuro y no
+   negro — el marco, que es donde están las plantas, vive ahí. */
 
-const COLOR_FRIO   = '#0a1622';
-const COLOR_SANGRE = '#8a1f22';
-/* El punto más brillante del degradado de la corona, que es el centro de
-   la pantalla: es donde está la escena y donde hay que poder ver. */
-const CORONA_NUCLEO = [255, 150, 92].map(v => v * 0.95);
+/** Los tramos del velo, leídos del propio archivo para no inventarlos. */
+const TRAMOS = (() => {
+  const bloque = (eclipse.match(/var TRAMOS_DEL_VELO = \[[\s\S]*?\];/) || [''])[0];
+  const filas = [...bloque.matchAll(
+    /\{\s*r:\s*(\d+),\s*c:\s*'([^']+)',\s*a:\s*([\d.]+)\s*\}/g)];
+  return filas.map(m => ({
+    r: +m[1],
+    c: m[2].split(',').map(v => +v.trim()),
+    a: +m[3]
+  }));
+})();
 
-/** Qué le queda a un píxel de color `rgb` en el milisegundo `t`. */
-const comoSeVeEn = (t, rgb) => {
+/** La opacidad del velo en el milisegundo `t`, tal cual la calcula unCuadro. */
+const veloEn = (t) => {
   const c = curva.coloresEn(t);
-  const mf = multiplicar(COLOR_FRIO, c.frio);
-  const ms = multiplicar(COLOR_SANGRE, c.sangre);
-  return rgb.map((v, i) =>
-    Math.min(255, v * mf[i] * ms[i] + CORONA_NUCLEO[i] * c.corona));
+  return Math.min(0.97, Math.max(0, c.frio * 0.58 + c.sangre * 0.66));
 };
 
-/** Cuánta luz roja queda, de 0 a 1. */
-const luzRojaEn = (t) => {
-  const c = curva.coloresEn(t);
-  return multiplicar(COLOR_FRIO, c.frio)[0] * multiplicar(COLOR_SANGRE, c.sangre)[0];
+/**
+ * Qué le queda a un píxel de color `rgb` en el milisegundo `t`, a una
+ * distancia `radio` (0 = el altar, 100 = la esquina) del centro del velo.
+ */
+const comoSeVeEn = (t, rgb, radio) => {
+  if (radio === undefined) radio = 70;     // donde vive el marco
+  const velo = veloEn(t);
+
+  /* Se interpola entre los dos tramos que rodean a ese radio, que es lo
+     que hace el navegador con un degradado. */
+  let a = TRAMOS[TRAMOS.length - 1], b = a;
+  for (let i = 0; i < TRAMOS.length - 1; i++) {
+    if (radio >= TRAMOS[i].r && radio <= TRAMOS[i + 1].r) { a = TRAMOS[i]; b = TRAMOS[i + 1]; break; }
+  }
+  const k = b.r === a.r ? 0 : (radio - a.r) / (b.r - a.r);
+  const alfa  = a.a + (b.a - a.a) * k;
+  const color = a.c.map((v, i) => v + (b.c[i] - v) * k);
+
+  const efectiva = velo * alfa;
+  return rgb.map((v, i) => v * (1 - efectiva) + color[i] * efectiva);
 };
+
+/** Cuánta luz roja queda donde vive el marco, de 0 a 1. */
+const luzRojaEn = (t) => comoSeVeEn(t, [255, 0, 0], 70)[0] / 255;
 
 /* La rosa del marco: el objeto que TIENE que verse moverse. */
 const ROSA = [126, 27, 44];
@@ -222,34 +245,71 @@ comprobar('al segundo 60 no queda ni oscuridad ni sangre',
 
 console.log('\nUn eclipse DE SANGRE, no una habitación a oscuras\n');
 
-comprobar('hay una capa que SUMA luz, no solo dos que la quitan',
-  /var capaCorona = capa\('transparent', 'plus-lighter'\)/.test(eclipseCodigo) &&
-  /corona: corona/.test(eclipseCodigo),
-  'con dos capas que multiplican solo se puede llegar a negro por un ' +
-  'camino o por otro: no hay forma de que algo se vea ILUMINADO de rojo');
+/* ⚡ LA COMPROBACIÓN QUE HABRÍA CAZADO LOS 3-4 FPS (2026-09-11)
+ *
+ * Carlos midió la v277 en un i5-4590T con gráficos HD 4600 —la máquina que
+ * eligió a propósito, «si esto se ve bien en esta cosa se verá perfecto
+ * donde sea»— y le daba 3 o 4 FPS en la zona del relicario.
+ *
+ * Medido en la página abierta: las tres capas de color mezclaban 0,871 Mpx
+ * por cuadro contra un viewport de 0,306. Dos pantallas y media leídas y
+ * recombinadas en cada cuadro; en su monitor a 1920×1080, 5,9 Mpx.
+ *
+ * `mix-blend-mode` obliga al compositor a LEER DE VUELTA todo lo que quedó
+ * abajo. En una placa con memoria propia se nota poco; en una integrada,
+ * cada lectura viaja por el mismo bus que usa la CPU.
+ *
+ * Ninguna prueba lo cazaba porque todas miraban el SIGNIFICADO —que el
+ * rojo apareciera a tiempo, que la luz volviera despacio— y ninguna miraba
+ * lo que la escena le COBRA a la máquina. Ésta sí. */
+comprobar('NINGUNA capa del eclipse mezcla',
+  !/mix-blend-mode/.test(eclipseCodigo),
+  'una capa que mezcla obliga a releer la pantalla entera en cada cuadro: ' +
+  'medido, eran 0,871 Mpx por cuadro contra 0,306 de viewport');
 
-/* ⚠️ Y TIENE QUE ESTAR ENCENDIDA DE VERDAD, no solo declarada. Una
-   mordida la dejó en cero durante todo el acto III y ninguna comprobación
-   se enteró: el archivo seguía diciendo `plus-lighter` en su sitio. */
-{
-  let apagada = 0, encendida = 0;
-  for (let t = curva.PROFUNDA; t < curva.FRENESI; t += 250) {
-    if (curva.coloresEn(t).corona > 0.02) encendida++; else apagada++;
-  }
-  comprobar('y está encendida durante todo el acto del rojo',
-    apagada === 0,
-    'estuvo apagada en ' + apagada + ' de ' + (apagada + encendida) +
-    ' momentos entre el esfuerzo y la sumisión');
+comprobar('y es UNA sola capa, no cuatro',
+  /var capaDelEclipse = document\.createElement\('div'\);/.test(eclipseCodigo) &&
+  !/var capaFria/.test(eclipseCodigo) &&
+  !/var capaSangre/.test(eclipseCodigo) &&
+  !/var capaCorona/.test(eclipseCodigo),
+  'cada capa a pantalla completa es una superficie más que componer');
 
-  comprobar('y se abre más cuanto más cerca de la totalidad',
-    curva.coloresEn(41000).corona > curva.coloresEn(20000).corona,
-    'la corona es la luz del eclipse: si no crece con él, no es su luz');
-}
+comprobar('la oscuridad cae en REDONDO desde el relicario',
+  /radial-gradient\(circle farthest-corner at/.test(eclipseCodigo),
+  'con un rectángulo la penumbra se ve como un cuadro cerrándose, y el ' +
+  'centro de gravedad deja de ser el nombre');
 
-comprobar('la sangre tiñe en vez de aplastar',
-  /capa\('#8a1f22', 'multiply'\)/.test(eclipseCodigo) &&
-  !/capa\('#4a0d0d'/.test(eclipseCodigo),
-  '#4a0d0d es un rojo casi negro: multiplicado no tiñe, apaga');
+comprobar('y el centro del degradado sale del altar, no de la pantalla',
+  /var cx = altar\.radio \? \(altar\.x \/ window\.innerWidth\) \* 100 : 50;/
+    .test(eclipseCodigo),
+  'centrado en la pantalla, en un teléfono el nombre no queda en el medio');
+
+/* ⚠️ Y EL DEGRADADO NO SE REPINTA POR CUADRO. Reescribir un `background`
+   del tamaño de la pantalla sesenta veces por segundo sería cambiar un
+   problema de compositor por uno de pintura. */
+comprobar('el degradado solo se repinta cuando cambió algo',
+  /if \(centro === ultimoCentroPintado && apertura === ultimaAperturaPintada\) return;/
+    .test(eclipseCodigo),
+  'pintar un degradado a pantalla completa por cuadro es igual de caro');
+
+comprobar('y lo que se anima por cuadro es solo la opacidad',
+  /capaDelEclipse\.style\.opacity = velo\.toFixed\(3\);/.test(eclipseCodigo),
+  'la opacidad la mueve el compositor sin repintar nada');
+
+/* ⚠️ EL ÚLTIMO TRAMO NO PUEDE SER NEGRO. El marco —las plantas, o sea lo
+   único que el minuto tiene para contar— vive en los BORDES, que es justo
+   donde un velo radial centrado en el nombre oscurece más. Un negro ahí
+   apagaría el acontecimiento. Se comprueba ejecutando los tramos, no
+   leyendo un color. */
+comprobar('el velo tiñe de rojo y no apaga a negro',
+  TRAMOS.length >= 3 &&
+  TRAMOS.every(t => t.c[0] > t.c[1] * 2) &&
+  TRAMOS[TRAMOS.length - 1].c[0] >= 18,
+  'tramos: ' + TRAMOS.map(t => 'rgb(' + t.c.join(',') + ')').join(' · '));
+
+comprobar('y el altar es el punto menos velado de la pantalla',
+  TRAMOS[0].a < TRAMOS[TRAMOS.length - 1].a * 0.35,
+  'si el centro se vela como el borde, deja de ser el centro de gravedad');
 
 /* EL NÚMERO QUE RESPONDE LA NOTA DE CARLOS. Fuera de los dos segundos de
    totalidad, la escena nunca puede bajar del 40 % de su luz roja. Con la
@@ -798,39 +858,67 @@ comprobar('y su intensidad no depende del eclipse',
   /'--luz-intensidad', '0\.62'/.test(eclipseCodigo),
   'fija y alta: esa luz nunca fue del sol');
 
-/* ACTO VI · el anillo de diamante. */
-comprobar('existe el anillo de diamante',
-  /var capaDestello = capa\('#ffb877', 'screen'\)/.test(eclipseCodigo));
-comprobar('en screen, no en multiply',
-  /capa\('#ffb877', 'screen'\)/.test(eclipseCodigo),
-  'las otras capas oscurecen multiplicando; esta tiene que AÑADIR luz');
+/* ⚡ ACTO VI · EL FLASH SE FUE (2026-09-11)
+ *
+ * Carlos, mirando la v277: «quita el flash». Tenía razón por dos motivos a
+ * la vez, y los dos cuentan.
+ *
+ * No se entendía. Era un destello de 150 ms encima de una escena que, con
+ * el diseño anterior, estaba casi negra: se leía como un fallo de la
+ * página, no como un acontecimiento.
+ *
+ * Y era una cuarta superficie a pantalla completa mezclando, puesta para
+ * usarse un sexto de segundo. En la máquina con la que él mide —una HD
+ * 4600, sin memoria propia— eso se paga en FPS.
+ *
+ * El tercer contacto NO se quedó sin marcar: la luz se viene cerrando
+ * sobre el nombre desde el segundo 35 y en el 44 se abre de golpe. Es el
+ * mismo acontecimiento contado con la luz que ya está en escena.
+ */
+comprobar('no queda rastro del flash',
+  !/capaDestello/.test(eclipseCodigo) && !/desdeElAnillo/.test(eclipseCodigo),
+  'era una cuarta capa mezclando a pantalla completa para 150 ms de uso');
 
-/* ⚡ Y ES COBRE, NO BLANCO (2026-09-11). Carlos: «ese flash no se
-   entiende». Un destello blanco sobre una escena casi negra se lee como un
-   fallo de la página. La luz que vuelve en el tercer contacto es la del
-   MISMO sol que se estaba yendo: tiene que tener su color. */
-comprobar('y es del color del sol que vuelve, no un blanco de la nada',
-  !/#fff6e0/.test(eclipseCodigo),
-  'un destello blanco no sale de ningún lado de esta escena');
+comprobar('pero el tercer contacto se sigue marcando, con la luz',
+  /t < SHOCK \+ 180 \? 0\.38 \+ tramo\(t, SHOCK, SHOCK \+ 180\) \* 0\.72/
+    .test(eclipseCodigo),
+  'sin nada en el segundo 44, la histeria arrancaría sin causa');
 
-/* Y tiene causa: la corona se cierra sobre sí misma antes del anillo. */
-comprobar('la corona se cierra a un punto antes del destello',
-  /var aperturaDeLaCorona =/.test(eclipseCodigo),
-  'sin ver la luz colapsar, el destello no es el final de nada');
+/* Se EJECUTA la apertura del velo: lo que importa no es que exista la
+   línea, es que la luz de verdad se cierre antes y se abra después. */
+{
+  /* ⚠️ Anclado en `t < TOTALIDAD`, no solo en el nombre de la variable:
+     `aperturaDelVelo` aparece antes, en su declaración, y sin el ancla el
+     recorte se llevaba medio archivo por delante. */
+  const fuente = (eclipseCodigo.match(
+    /aperturaDelVelo =\s*\n\s*t < TOTALIDAD[\s\S]*?tramo\(t, SHOCK \+ 180, DURACION\) \* 0\.35;/) || [''])[0];
 
-/* ⚠️ Y LA CAPA SOLO EXISTE MIENTRAS SE USA. Una capa de mezcla a
-   pantalla completa obliga al compositor a leer el fondo en cada cuadro:
-   estaba puesta los 60 s para usarse 150 ms. */
-comprobar('y la capa solo vive los 300 ms que la rodean',
-  /if \(!capaDestello\.parentNode\) document\.body\.appendChild\(capaDestello\);/
-    .test(eclipseCodigo) &&
-  /capaDestello\.parentNode\.removeChild\(capaDestello\)/.test(eclipseCodigo),
-  'sesenta segundos de capa de compositor para un sexto de segundo de uso');
-comprobar('dura 150 ms y cae en el tercer contacto',
-  /var desdeElAnillo = t - SHOCK;/.test(eclipseCodigo) &&
-  /desdeElAnillo > 150/.test(eclipseCodigo),
-  'más que eso deja de ser un relámpago y es un fundido a blanco');
+  if (!fuente) {
+    comprobar('se puede ejecutar la apertura del velo', false, 'no se encontró');
+  } else {
+    const aperturaEn = (t) => new Function(
+      'tramo', 'PROFUNDA', 'TOTALIDAD', 'SHOCK', 'DURACION', 't',
+      'let aperturaDelVelo;' + fuente + '\nreturn aperturaDelVelo;'
+    )((tt, a, b) => { const x = Math.min(1, Math.max(0, (tt - a) / (b - a))); return x*x*(3-2*x); },
+      curva.PROFUNDA, curva.TOTALIDAD, curva.SHOCK, curva.D, t);
 
+    const antes   = aperturaEn(curva.SHOCK - 10);
+    const despues = aperturaEn(curva.SHOCK + 180);
+
+    comprobar('la luz se cierra sobre el nombre antes del tercer contacto',
+      aperturaEn(30000) > aperturaEn(41000) && aperturaEn(41000) > antes,
+      'a los 30 s ' + aperturaEn(30000).toFixed(2) + ' · a los 41 s ' +
+      aperturaEn(41000).toFixed(2) + ' · justo antes ' + antes.toFixed(2));
+
+    comprobar('y se abre de golpe en el segundo 44',
+      despues > antes * 2.4,
+      'de ' + antes.toFixed(2) + ' a ' + despues.toFixed(2) + ' en 180 ms');
+
+    comprobar('y sigue abriéndose mientras vuelve la luz',
+      aperturaEn(56000) > despues,
+      'si se quedara quieta, el acto VIII no tendría luz que devolver');
+  }
+}
 /* ACTO II y III · la planta entera, no solo la cabeza. */
 comprobar('las ramas también se retuercen',
   /function moverLasRamas/.test(eclipseCodigo) &&
@@ -1032,9 +1120,13 @@ comprobar('la copia se dibuja del tamaño MEDIDO de la flor',
    giradas dentro de su <use>: medido sobre las 198 flores de PBE, esa caja
    exagera el tamaño un 18 % en la mediana y hasta un 39 %. Con la matriz
    de pantalla y getBBox, el error baja a 0,22 %. */
+/* La función se mudó a 02-utilidades.js: la necesitan dos módulos que no
+   se conocen entre sí —éste para la copia de la mártir, y
+   06-petalos-con-fisica.js para que un pétalo no sea el doble que la rosa
+   de al lado—. Se comprueba donde vive ahora Y que este archivo la use. */
 comprobar('y el tamaño real sale de la matriz, no de la caja de pantalla',
-  /function ladoRealDeLaFlor/.test(eclipseCodigo) &&
-  /Math\.sqrt\(Math\.abs\(m\.a \* m\.d - m\.b \* m\.c\)\)/.test(eclipseCodigo),
+  /function ladoRealDeLaFlor\(movil\)/.test(sinComentarios(leer('codigo', '02-utilidades.js'))) &&
+  /ladoRealDeLaFlor\(nodo\)/.test(eclipseCodigo),
   'la caja de una rosa girada 30° es mucho más grande que la rosa');
 
 comprobar('y la tinta del mapa de bits se MIDE, no se estima',
@@ -1496,7 +1588,7 @@ console.log('\nQué está por encima de la oscuridad\n');
     return bloque ? Number(bloque) : null;
   };
 
-  const zVelos    = z("function capa\\(color, mezcla\\)");
+  const zVelos    = z("capaDelEclipse\\.style\\.cssText");
   const zMundo    = z("var lienzo = document\\.createElement");
   const zNombre   = z("jaula\\.style\\.cssText");
   const zOfrenda  = z("var lienzoDeLaOfrenda");
@@ -1593,6 +1685,79 @@ comprobar('y uno de cada cinco sale despedido',
 comprobar('pero ninguno cruza el radio prohibido',
   /if \(d < altar\.radio\) \{[\s\S]{0,260}haciaAdentro > 0/.test(eclipseCodigo),
   'el caos es en la corriente, no en la regla');
+
+
+/* ─── 14n. LO QUE LA ESCENA LE COBRA A LA MÁQUINA ───────────────────
+   Carlos mide en un i5-4590T con gráficos HD 4600 —a propósito: «si esto
+   se ve bien y fluido en esta cosa, se verá perfecto donde sea»—. En una
+   integrada el cuello de botella no es el JavaScript, es el RELLENO. Estas
+   comprobaciones cuidan los megapíxeles, que es lo que ahí duele. */
+
+console.log('\nLos megapíxeles por cuadro\n');
+
+/* ⚡ EL BORRADO COMPLETO DEL LIENZO (2026-09-11)
+ *
+ * En la ronda anterior medí el `clearRect` de pantalla completa por el
+ * lado de la CPU —0,003 ms, contra 0,043 de hacerlo por rectángulos— y lo
+ * descarté. Era la MITAD de la medición: del lado de la GPU hay que volver
+ * a subir la textura entera, y eso es proporcional al ÁREA.
+ *
+ * Medido después, con el eclipse corriendo: 0,284 Mpx por cuadro solo de
+ * este lienzo, en un viewport de 0,306. Una pantalla entera de textura por
+ * cuadro. Y 24-lienzo-de-petalos.js ya lo había resuelto por su cuenta, con
+ * una nota que lo decía con todas las letras: en la máquina objetivo «era
+ * casi todo el problema: el ancho de banda, no el procesador». */
+comprobar('el lienzo NO se borra entero cada cuadro',
+  !/pincel\.clearRect\(0, 0, window\.innerWidth, window\.innerHeight\)/
+    .test(eclipseCodigo),
+  'una pantalla de textura por cuadro, medida: 0,284 Mpx de 0,306');
+
+comprobar('se borra la caja de lo que se pintó el cuadro anterior',
+  /function anotarLoPintado/.test(eclipseCodigo) &&
+  /cajasDelCuadroAnterior\.length = 0;/.test(eclipseCodigo));
+
+/* Y todo lo que se pinta tiene que anotarse, o deja estela. */
+comprobar('y TODO lo que se dibuja queda anotado',
+  (eclipseCodigo.match(/anotarLoPintado\(/g) || []).length >= 4,
+  'lo que se pinta y no se anota no se borra nunca: queda una estela');
+
+comprobar('el margen del borrado cubre la diagonal de un pétalo girado',
+  /var r = lado \* 0\.725 \+ 2;/.test(eclipseCodigo),
+  'la diagonal de un cuadrado es 1,41 veces su lado; quedarse corto deja rastro');
+
+/* ⚠️ Y AL CAMBIAR DE TAMAÑO SE OLVIDAN. Asignar el ancho de un canvas lo
+   borra entero: las cajas viejas ya no apuntan a nada. */
+comprobar('y las cajas se olvidan al redimensionar',
+  /cajasDelCuadroAnterior\.length = 0;/.test(
+    (eclipseCodigo.match(/function medirElLienzo[\s\S]*?\n  \}/) || [''])[0]),
+  'asignar canvas.width borra el lienzo: las cajas viejas quedan mintiendo');
+
+
+/* ─── 14o. EL SOBRE SE VA DEL DOCUMENTO ─────────────────────────────── */
+
+console.log('\nEl sobre, después de abrirse\n');
+
+/* ⚡ Medido con la página abierta y el sobre ya abierto: seguía en el DOM
+   con `visibility:hidden`, y con él seguían vivos 1,30 Mpx de filtros SVG
+   —#sob-sombra y #sob-fibra, turbulencias y desenfoques— dentro de una capa
+   `fixed` a z-index 2000, por encima de toda la escena, para siempre.
+   Carlos: «la web se siente pesada desde antes de siquiera empezar el
+   eclipse». */
+{
+  const sobre = sinComentarios(leer('codigo', '03-sobre-de-apertura.js'));
+
+  comprobar('el sobre se saca del documento al terminar de abrirse',
+    /if \(sobre\.parentNode\) sobre\.parentNode\.removeChild\(sobre\);/.test(sobre),
+    'un sobre abierto no se vuelve a cerrar: no hay motivo para que siga ahí');
+
+  comprobar('y se espera a que la transición termine',
+    /\}, 1200\);/.test(sobre),
+    'sacarlo en el mismo cuadro cortaría el desvanecido a la mitad');
+
+  comprobar('se saca, no se pone en display:none',
+    !/sobre\.style\.display = 'none'/.test(sobre),
+    'con display:none el elemento sigue en el árbol y sus recursos con él');
+}
 
 
 /* ─── 15. Quien llega tarde entra igual ────────────────────────────── */

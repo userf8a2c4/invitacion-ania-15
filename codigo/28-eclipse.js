@@ -159,123 +159,149 @@
    */
   var CUANTAS = 0;
 
-  /* ─── 3. LAS CAPAS ──────────────────────────────────────────────────
+  /* ─── 3. LA CAPA ────────────────────────────────────────────────────
 
-     ⚠️ POR QUÉ DOS CAPAS DE COLOR Y NO UNA QUE CAMBIA DE COLOR
+     ⚡ ERAN CUATRO CAPAS QUE MEZCLABAN. AHORA ES UNA QUE NO. (2026-09-11)
 
-     Reescribir `background-color` en cada cuadro obliga al navegador a
-     REPINTAR una superficie del tamaño de la pantalla, sesenta veces por
-     segundo. En un teléfono eso solo ya se come el cuadro.
+     Carlos midió la v277 en un HP ProDesk 600 G1 DM —un i5-4590T con
+     gráficos HD 4600 y VBS encendido— y reportó 3 o 4 FPS en la zona del
+     relicario. Eligió esa máquina a propósito: «si esto se ve bien y
+     fluido en esta cosa, se verá perfecto donde sea».
 
-     Con dos capas de color fijo y solo la OPACIDAD animada, el trabajo
-     lo hace el compositor y no el hilo principal: es casi gratis. Por eso
-     hay una capa fría (la penumbra y la umbra) y una capa de sangre (la
-     totalidad), y lo único que se toca es cuánto se ve cada una.
+     Medido en la página abierta, con el eclipse corriendo en el segundo 38
+     y un viewport de 0,306 Mpx:
+
+         superficie que MEZCLA, por cuadro ………… 0,871 Mpx
+         relleno de lienzos, por cuadro ………………… 0,638 Mpx
+
+     0,871 contra 0,306 son DOS PANTALLAS Y MEDIA leídas y recombinadas en
+     cada cuadro. En el monitor de Carlos, a 1920×1080, son 5,9 Mpx por
+     cuadro solo de mezcla. Y una HD 4600 no tiene memoria propia: comparte
+     el bus con la CPU. Ahí estaban los 3-4 FPS — no en el JavaScript, que
+     esta ronda ya había bajado de 22 ms a 4,7.
+
+     ⚠️ POR QUÉ `mix-blend-mode` ES TAN CARO, QUE ES LO QUE NO ENTENDÍ
+     ANTES. Una capa normal se compone con `source-over`: el compositor
+     apila dos texturas y listo, es lo que hace toda la vida. Una capa que
+     MEZCLA lo obliga a LEER DE VUELTA todo lo que quedó abajo, combinarlo
+     píxel a píxel y volver a escribirlo. En una placa con memoria propia
+     se nota poco; en una integrada, cada lectura viaja por el mismo bus
+     que está usando la CPU.
+
+     ⚠️ Y LA SOLUCIÓN NO ES BAJAR LA CALIDAD, ES NO NECESITAR LA MEZCLA.
+     Un `rgba` oscuro compuesto normal sobre la escena la oscurece igual —
+     con otra curva, no con la misma, pero la diferencia es de matiz y se
+     compensa eligiendo los colores—. Y un `rgba` ROJO compuesto normal
+     hace algo que el `multiply` no puede: sobre un negro da rojo oscuro en
+     vez de dar negro. O sea que tiñe hacia el rojo en vez de apagar, que
+     es exactamente lo que hace la luz ambiente de una totalidad y
+     exactamente lo que Carlos venía pidiendo desde el principio.
+
+     LAS CUATRO CAPAS DE ANTES Y QUÉ PASÓ CON CADA UNA
+
+       · `capaFria`   (multiply #0a1622) ─┐
+       · `capaSangre` (multiply #8a1f22) ─┼─→ las tres se funden en el
+       · `capaCorona` (plus-lighter)     ─┘   degradado de ESTA capa
+       · `capaDestello` (screen #ffb877) ───→ eliminada: «quita el flash»
+
+     EL DEGRADADO ESTÁ CENTRADO EN EL RELICARIO, Y ESO ARREGLA DOS NOTAS
+     MÁS. Carlos, mirándolo en el teléfono: «el centro de gravedad no es el
+     relicario y la penumbra se ve como un cuadro cerrándose». Las dos
+     cosas eran ciertas y venían del mismo sitio: la oscuridad se aplicaba
+     pareja sobre un rectángulo. Un radial centrado en `altar` hace que la
+     escena esté iluminada DESDE EL NOMBRE y que la caída sea redonda.
+
+     ⚠️ EL DEGRADADO NO SE REESCRIBE POR CUADRO. Reescribir `background`
+     obliga a repintar una superficie del tamaño de la pantalla, que era el
+     motivo original de tener capas de color fijo. Se reescribe solo cuando
+     el relicario se mueve de verdad —al arrancar y en `resize`— y lo que
+     se anima por cuadro es únicamente la OPACIDAD, que la mueve el
+     compositor sin repintar nada.
 
      ⚠️ Y POR QUÉ NO SE USA `filter` NI `backdrop-filter`
      Porque un filtro sobre un ANCESTRO del <h1> tiñe también al <h1>, y
      desde el hijo no hay forma de escaparse. Sería la manera silenciosa
-     de romper la regla 1. Estas capas son HERMANAS, nunca ancestros. */
+     de romper la regla 1. Esta capa es HERMANA, nunca ancestro. */
 
-  function capa(color, mezcla) {
-    var d = document.createElement('div');
-    d.className = 'eclipse-capa';
-    d.style.cssText = 'position:fixed;inset:0;pointer-events:none;opacity:0;' +
-                      'background:' + color + ';z-index:2147483000;' +
-                      (mezcla ? 'mix-blend-mode:' + mezcla + ';' : '');
-    return d;
+  var capaDelEclipse = document.createElement('div');
+  capaDelEclipse.className = 'eclipse-capa';
+  capaDelEclipse.style.cssText =
+    'position:fixed;inset:0;pointer-events:none;opacity:0;' +
+    'z-index:2147483000;';
+
+  /* Los cuatro tramos del degradado, del altar hacia afuera.
+
+     ⚠️ EL ÚLTIMO TRAMO NO ES NEGRO, Y ESO NO ES UN DESCUIDO. El marco —o
+     sea LAS PLANTAS, o sea lo único que este minuto tiene para contar—
+     vive en los BORDES de la pantalla, que es justo donde un velo radial
+     centrado en el nombre oscurece más. Un último tramo negro apagaría
+     exactamente el acontecimiento.
+
+     Así que las esquinas se van a un rojo muy oscuro y no a negro. Lo que
+     hace la cripta no es que los bordes desaparezcan: es que la luz
+     alrededor del nombre COLAPSA (ver `aperturaDelVelo`, que encoge el
+     degradado y deja casi toda la pantalla en el último tramo).
+
+     Hechas las cuentas de composición normal sobre una rosa del marco
+     —rgb(126, 27, 44)—, que es la comprobación que importa:
+
+         en el esfuerzo (t=38 s) ……… rgb(102, 23, 28)   se ve y es roja
+         en la cripta   (t=43 s) ……… rgb( 49, 13, 17)   silueta roja
+
+     Un factor de dos entre uno y otro: se lee como un golpe de oscuridad
+     sin que nada llegue a desaparecer. */
+  var TRAMOS_DEL_VELO = [
+    { r:   0, c: '140, 38, 30', a: 0.14 },   // el altar: teñido, casi sin velo
+    { r:  30, c: '112, 28, 24', a: 0.44 },
+    { r:  62, c: ' 54, 14, 16', a: 0.74 },
+    { r: 100, c: ' 24,  8, 12', a: 0.92 }    // las esquinas: rojo muy oscuro
+  ];
+
+  /* Cuánto se abre el velo. 1 es su tamaño natural; más chico cierra la
+     luz sobre el nombre, más grande la abre. Lo mueve la secuencia. */
+  var aperturaDelVelo = 1;
+  var ultimaAperturaPintada = -1;
+  var ultimoCentroPintado = '';
+
+  /**
+   * Reescribe el degradado del velo.
+   *
+   * ⚠️ SOLO CUANDO HACE FALTA. Pintar un degradado del tamaño de la
+   * pantalla es caro, y llamarlo por cuadro sería volver al problema que
+   * esta capa vino a resolver. Se compara contra lo último pintado y se
+   * sale si no cambió nada que se note.
+   *
+   * @returns {void}
+   */
+  function pintarElVelo() {
+    var cx = altar.radio ? (altar.x / window.innerWidth) * 100 : 50;
+    var cy = altar.radio ? (altar.y / window.innerHeight) * 100 : 42;
+
+    /* Redondeado al 1 %: el relicario se mueve fracciones de pixel con el
+       vaivén de la portada y no hay que repintar por eso. */
+    var centro = Math.round(cx) + '% ' + Math.round(cy) + '%';
+    var apertura = Math.round(aperturaDelVelo * 20) / 20;   // pasos de 5 %
+
+    if (centro === ultimoCentroPintado && apertura === ultimaAperturaPintada) return;
+    ultimoCentroPintado = centro;
+    ultimaAperturaPintada = apertura;
+
+    /* El radio del degradado se mide contra la esquina más lejana, que es
+       lo que hace que la caída sea igual de redonda en un monitor ancho y
+       en un teléfono vertical. `farthest-corner` es el valor por defecto,
+       pero se escribe explícito porque de eso depende la paridad. */
+    var paradas = [];
+    for (var i = 0; i < TRAMOS_DEL_VELO.length; i++) {
+      var t = TRAMOS_DEL_VELO[i];
+      paradas.push('rgba(' + t.c + ',' + t.a + ') ' +
+                   Math.round(t.r * apertura) + '%');
+    }
+
+    capaDelEclipse.style.backgroundImage =
+      'radial-gradient(circle farthest-corner at ' + centro + ',' +
+      paradas.join(',') + ')';
   }
 
-  /* Frío y desaturado: la penumbra de un eclipse real, que NO es negra
-     sino metálica y fría. `multiply` oscurece sin tapar, así que la
-     escena sigue leyéndose debajo. */
-  var capaFria   = capa('#0a1622', 'multiply');
-
-  /* ⚡ EL ROJO ERA UN FILTRO QUE QUITABA LUZ. AHORA TIÑE. (2026-09-11)
-   *
-   * Esto era `#4a0d0d` —un rojo casi negro— al 92 % de opacidad. Con el
-   * frío al 88 % encima, la cuenta da esto:
-   *
-   *     rojo × 0,052 · verde × 0,026 · azul × 0,031
-   *
-   * O sea que la escena quedaba al 5 % de su luz. Una rosa `#7e1b2c`
-   * terminaba en `(7, 1, 1)`: invisible. Y el marco entero con ella.
-   *
-   * Carlos lo dijo con todas las letras mirándolo: «esto no es un eclipse
-   * común, es un eclipse DE SANGRE, ese tono rojizo debe permitir VER el
-   * ritual». Tenía razón y el error era de fotografía, no de código: un
-   * eclipse de sangre no es una habitación a oscuras, es una habitación
-   * ILUMINADA EN COBRE. Lo único que el minuto tiene para contar es
-   * doscientas plantas cobrando conciencia, y no se veían.
-   *
-   * `#8a1f22` es un rojo ladrillo con cuerpo: multiplicado TIÑE en vez de
-   * aplastar. Con los topes nuevos la misma rosa queda en `(57, 9, 15)` —
-   * rojo oscuro, y se le ve el movimiento. */
-  var capaSangre = capa('#8a1f22', 'multiply');
-
-  /* ⚡ LA CORONA: LA ÚNICA CAPA QUE SUMA LUZ (2026-09-11)
-   *
-   * Las otras dos multiplican, y multiplicar solo puede QUITAR luz. Con
-   * dos capas que restan no hay forma de que una escena se vea «iluminada
-   * de rojo»: solo se puede llegar a negro por un camino o por otro.
-   *
-   * Esta es la luz de verdad del acto: la corona del sol eclipsado, que es
-   * lo que ilumina un eclipse total y lo que le da el color. Es un
-   * degradado radial de cobre que ENTRA luz sobre la escena.
-   *
-   * ⚠️ VA EN `plus-lighter` Y NO EN `screen`. Las dos suman, pero `screen`
-   * comprime hacia el blanco —lava los rojos justo donde no se puede— y
-   * `plus-lighter` suma lineal: el cobre se queda cobre. Si el navegador
-   * no la conoce, `screen` es el respaldo y la escena se ve un poco más
-   * lavada, nunca rota.
-   *
-   * ⚠️ EL DEGRADADO ES FIJO. Se animan SOLO la opacidad y la posición, que
-   * las mueve el compositor. Reescribir el `background` por cuadro sería
-   * repintar una superficie del tamaño de la pantalla sesenta veces por
-   * segundo — el mismo motivo por el que las otras dos capas son de color
-   * fijo desde el primer día. */
-  var capaCorona = capa('transparent', 'plus-lighter');
-  capaCorona.style.backgroundImage =
-    'radial-gradient(circle at 50% 38%,' +
-    ' rgba(255,150,92,.95) 0%,' +
-    ' rgba(214,74,44,.55) 26%,' +
-    ' rgba(120,24,18,.22) 52%,' +
-    ' rgba(0,0,0,0) 78%)';
-
-  /* Si `plus-lighter` no existe, el respaldo que sí existe en todas partes. */
-  try {
-    if (!(typeof CSS !== 'undefined' && CSS.supports &&
-          CSS.supports('mix-blend-mode', 'plus-lighter'))) {
-      capaCorona.style.mixBlendMode = 'screen';
-    }
-  } catch (e) { capaCorona.style.mixBlendMode = 'screen'; }
-
-  /* ⚡ EL ANILLO DE DIAMANTE (2026-09-10)
-   *
-   * En un eclipse real, el instante en que la luna empieza a descubrir el
-   * sol produce un destello único y cegador: un punto de luz sobre el
-   * anillo de la corona. Dura menos de un segundo y es lo que todo el
-   * mundo espera cuando va a ver un eclipse.
-   *
-   * Acá cae en el segundo 44,0 —el tercer contacto, astronómicamente
-   * correcto— y hace doble trabajo: rompe los dos segundos de vacío del
-   * shock y es LA SEÑAL que el culto estaba esperando. Antes del anillo
-   * las plantas contienen el aliento; después, se desatan.
-   *
-   * ⚠️ VA EN `screen`, NO EN `multiply`. Las otras dos capas oscurecen
-   * multiplicando; esta tiene que AÑADIR luz, o sería un velo blanco
-   * lavando la escena en vez de un destello. Y dura 150 ms: más que eso
-   * deja de ser un relámpago y pasa a ser un fundido a blanco.
-   *
-   * ⚡ Y ES COBRE, NO BLANCO (2026-09-11). Era `#fff6e0`, un blanco cálido,
-   * sobre una escena que estaba casi negra: se leía como un fallo de la
-   * página, no como un acontecimiento. Carlos lo dijo: «ese flash no se
-   * entiende». Dos cosas lo arreglan. Una es que la escena alrededor ya no
-   * es negra, así que hay contra qué leerlo. La otra es el color: la luz
-   * que vuelve en el tercer contacto es la del MISMO sol que se estaba
-   * yendo, o sea la de la corona. Un destello blanco venía de ningún lado.
-   */
-  var capaDestello = capa('#ffb877', 'screen');
 
   /* ⚡ EL LIENZO SE MUDÓ DEBAJO DE LOS VELOS (2026-09-11)
    *
@@ -296,6 +322,19 @@
   lienzo.style.cssText = 'position:fixed;inset:0;pointer-events:none;' +
                          'z-index:2147482999;';
   var pincel = lienzo.getContext('2d');
+
+  /* Qué zonas ocupó el dibujo el cuadro anterior, para borrar solo eso.
+     Ver la nota del `clearRect` en dibujar(). */
+  var cajasDelCuadroAnterior = [];
+
+  /** Anota que en este cuadro se pintó algo centrado en (x, y) de `lado`. */
+  function anotarLoPintado(x, y, lado) {
+    /* La diagonal de un cuadrado es 1,41 veces su lado: un pétalo girado
+       ocupa más que su tamaño. Se usa 1,45 y se centra, que cubre
+       cualquier ángulo. Los 2 px de más son por el suavizado del borde. */
+    var r = lado * 0.725 + 2;
+    cajasDelCuadroAnterior.push([x - r, y - r, r * 2, r * 2]);
+  }
 
   /* ⚡ LA CAPA DE LA OFRENDA (2026-09-11)
    *
@@ -342,6 +381,11 @@
     lienzoDeLaOfrenda.height = lienzo.height;
     pincelDeLaOfrenda.setTransform(dpr, 0, 0, dpr, 0, 0);
     cajaAnteriorDeLaOfrenda = null;
+
+    /* Asignar el ancho de un canvas lo BORRA entero, así que las cajas del
+       cuadro anterior ya no apuntan a nada. Dejarlas haría que el primer
+       cuadro después del resize borrara zonas al azar. */
+    cajasDelCuadroAnterior.length = 0;
   }
   medirElLienzo();
 
@@ -638,40 +682,12 @@
     return null;
   }
 
-  /**
-   * Cuánto mide DE VERDAD una flor del marco en pantalla, en píxeles.
-   *
-   * ⚠️ NO se usa getBoundingClientRect() para esto, y la diferencia es
-   * grande. Esa caja está alineada a los ejes de la pantalla, y las flores
-   * están giradas dentro de su `<use>`: la caja de una rosa girada 30° es
-   * bastante más grande que la rosa. Medido sobre las 198 flores de PBE, la
-   * caja exagera un 18 % en la mediana y hasta un 39 %. Una copia un 39 %
-   * más grande que la flor que reemplaza no releva a nadie: se ve.
-   *
-   * La matriz de pantalla del `<use>` da los píxeles por unidad de dibujo,
-   * y getBBox() da la caja del símbolo SIN girar. El producto es la
-   * extensión real de la flor. Comprobado contra las cajas reales de las
-   * 198 flores: 0,22 % de error en la mediana, 2,6 % en el peor caso.
-   *
-   * @param {Element} movil
-   * @returns {number} píxeles, o 0 si el navegador no contesta.
-   */
-  function ladoRealDeLaFlor(movil) {
-    try {
-      var uso = movil.querySelector('use');
-      if (!uso || !uso.getScreenCTM || !uso.getBBox) return 0;
-
-      var m = uso.getScreenCTM();
-      var caja = uso.getBBox();
-      if (!m || !caja || !caja.width) return 0;
-
-      /* La raíz del determinante es el factor de escala de la matriz, sin
-         que el giro ni el reflejo lo ensucien. */
-      var k = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c));
-      return Math.max(caja.width, caja.height) * k;
-    } catch (e) { return 0; }
-  }
-
+  /* (`ladoRealDeLaFlor()` vivía acá. Se mudó a 02-utilidades.js porque la
+     necesitan dos módulos que no se conocen entre sí: este, para que la
+     copia de la mártir mida lo mismo que la flor que reemplaza, y
+     06-petalos-con-fisica.js, para que un pétalo no sea el doble de
+     grande que la rosa que tiene al lado. La nota de por qué NO se usa
+     getBoundingClientRect está allá, con la función.) */
   function medirLaTintaDeLaRosa(mapa) {
     try {
       var datos = mapa.getContext('2d').getImageData(0, 0, LADO, LADO).data;
@@ -2226,13 +2242,29 @@
         window.LienzoDeLuz.fauna = sinFauna ? [] : mundo.fauna;
       }
 
-      /* El velo de profundidad se cierra: las esquinas dejan de existir.
-         Entra a los 30 s y se retira con la luz. */
+      /* ⚡ EL VELO RECTANGULAR SE APARTA, NO SE CIERRA (2026-09-11)
+       *
+       * Acá se subía `--profundidad-de-sombra` hasta 0,9 para que «las
+       * esquinas dejaran de existir». Carlos, mirándolo en el teléfono:
+       * «la penumbra se ve como un cuadro cerrándose». Era literal y era
+       * culpa de esto: `#penumbra-profunda` son degradados LINEALES a
+       * pantalla completa (estilos/12-haces-de-luz.css:79-108), así que
+       * subirlos oscurece en forma de marco rectangular.
+       *
+       * Desde que el eclipse tiene su propio velo —radial y centrado en el
+       * relicario— ese trabajo ya está hecho, y mejor. Los dos juntos se
+       * estorban: uno dice que la luz cae en redondo desde el nombre y el
+       * otro dibuja un rectángulo encima.
+       *
+       * Así que el eclipse lo BAJA en vez de subirlo. La oscuridad de la
+       * escena pasa a tener una sola forma, y es la del altar. */
       if (mundo.velo) {
         var cierre = limitar((t - 30000) / 5000, 0, 1) * (1 - volviendo);
         if (cierre > 0.001) {
+          var deAntes = parseFloat(mundo.velo.prof);
+          if (!(deAntes > 0)) deAntes = 1;
           mundo.velo.nodo.style.setProperty('--profundidad-de-sombra',
-            (0.2 + cierre * 0.7).toFixed(3));
+            (deAntes * (1 - cierre * 0.75)).toFixed(3));
         } else if (mundo.velo.prof) {
           mundo.velo.nodo.style.setProperty('--profundidad-de-sombra', mundo.velo.prof);
         } else {
@@ -2557,7 +2589,32 @@
   }
 
   function dibujar(t) {
-    pincel.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    /* ⚡ SE BORRA SOLO DONDE HUBO ALGO (2026-09-11)
+     *
+     * Acá había un `clearRect` de la pantalla entera. En la ronda pasada
+     * lo medí por el lado de la CPU —0,003 ms, contra 0,043 de hacerlo por
+     * rectángulos— y lo descarté. Era la MITAD de la medición.
+     *
+     * El coste de verdad está del lado de la GPU: un lienzo borrado y
+     * redibujado hay que volver a subirlo entero, y eso es proporcional al
+     * ÁREA. Medido después, con el eclipse corriendo: 0,284 Mpx por cuadro
+     * solo de este lienzo, en un viewport de 0,306. Una pantalla entera de
+     * textura por cuadro, en una HD 4600 que comparte el bus con la CPU.
+     *
+     * Es exactamente lo que 24-lienzo-de-petalos.js ya había resuelto por
+     * su cuenta, y su nota lo decía con todas las letras: en la máquina
+     * objetivo «era casi todo el problema: el ancho de banda, no el
+     * procesador». Debí haberle hecho caso a esa nota en vez de a mi
+     * microbenchmark.
+     *
+     * Ahora se borra la caja que ocupó cada pétalo el cuadro anterior. El
+     * margen del 45 % cubre la diagonal de un pétalo girado: quedarse
+     * corto deja estelas. */
+    for (var b = 0; b < cajasDelCuadroAnterior.length; b++) {
+      var caja = cajasDelCuadroAnterior[b];
+      pincel.clearRect(caja[0], caja[1], caja[2], caja[3]);
+    }
+    cajasDelCuadroAnterior.length = 0;
 
     var enFrenesi  = t >= SHOCK && t < FRENESI;
     var enShock    = t >= TOTALIDAD && t < SHOCK;
@@ -2631,6 +2688,7 @@
         r.escala * brote,
         haciaElAltar + r.giro + r.caida * 1.5,
         brote * (enSumision ? 0.85 : 1));
+      anotarLoPintado(x, y, LADO * r.escala * brote);
     }
 
     /* ── La mártir: ya no se estira, es un cuerpo ──
@@ -2704,6 +2762,7 @@
           pincel.fill();
         }
         pincel.restore();
+        anotarLoPintado(pt.x, pt.y, pt.tam * 2);
         continue;
       }
 
@@ -2803,6 +2862,7 @@
         pincel.fill();
       }
       pincel.restore();
+      anotarLoPintado(pt.x, pt.y, pt.tam * 2);
     }
   }
 
@@ -3089,40 +3149,42 @@
 
     medirElAltar();          // la página puede haberse movido
 
+    /* ── LA LUZ DEL MINUTO, EN UN SOLO NÚMERO ──
+
+       `coloresEn()` sigue devolviendo las tres curvas que definen la
+       dramaturgia —la penumbra fría, la sangre y la corona— porque son tres
+       cosas distintas que pasan en tres momentos distintos, y las
+       comprobaciones que las cuidan siguen sirviendo. Lo que cambió es que
+       ya no hay tres CAPAS: se combinan acá, en una opacidad y una
+       apertura, y las pinta una sola superficie sin mezcla.
+
+       La opacidad la manda el velo (frío + sangre); la corona no oscurece,
+       ABRE — cuanto más corona, más grande el hueco de luz alrededor del
+       nombre. Por eso resta en la apertura en vez de sumar en la opacidad. */
     var color = coloresEn(t);
-    capaFria.style.opacity   = color.frio.toFixed(3);
-    capaSangre.style.opacity = color.sangre.toFixed(3);
-    capaCorona.style.opacity = color.corona.toFixed(3);
+    var velo = limitar(color.frio * 0.58 + color.sangre * 0.66, 0, 0.97);
+    capaDelEclipse.style.opacity = velo.toFixed(3);
 
-    /* La corona se encoge hacia su centro a medida que el sol se tapa —la
-       luz colapsando a un punto— y se vuelve a abrir con la histeria. Es
-       lo que le da causa al anillo de diamante: el destello sale de algo
-       que el espectador vio cerrarse. Se mueve con `scale`, que es trabajo
-       del compositor. */
-    var aperturaDeLaCorona =
-      t < TOTALIDAD ? 1.25 - tramo(t, PROFUNDA, TOTALIDAD) * 0.75
-      : t < SHOCK   ? 0.50 - tramo(t, TOTALIDAD, SHOCK) * 0.28
-      :               0.22 + tramo(t, SHOCK, FRENESI) * 1.10;
-    capaCorona.style.transform = 'scale(' + aperturaDeLaCorona.toFixed(3) + ')';
+    /* ⚡ EL TERCER CONTACTO SE CUENTA CON LA LUZ, NO CON UN FLASH
+     *   (2026-09-11)
+     *
+     * Acá había una capa blanca —después cobre— que se encendía 150 ms en
+     * el segundo 44. Carlos: «quita el flash». Tenía razón por dos motivos
+     * a la vez: no se entendía, y era una cuarta superficie mezclando a
+     * pantalla completa para usarse un sexto de segundo.
+     *
+     * El acontecimiento no se pierde. La luz se viene cerrando sobre el
+     * nombre desde el segundo 35 —el hueco del degradado encogiendo— y en
+     * el 44 se ABRE de golpe: de su punto más cerrado a su apertura máxima
+     * en 180 ms. Es el mismo tercer contacto, contado con la luz que ya
+     * está en escena en vez de con un parche encima. */
+    aperturaDelVelo =
+        t < TOTALIDAD ? 1.30 - tramo(t, PROFUNDA, TOTALIDAD) * 0.62
+      : t < SHOCK     ? 0.68 - tramo(t, TOTALIDAD, SHOCK) * 0.30
+      : t < SHOCK + 180 ? 0.38 + tramo(t, SHOCK, SHOCK + 180) * 0.72
+      :                 1.10 + tramo(t, SHOCK + 180, DURACION) * 0.35;
 
-    /* El anillo de diamante: 150 ms centrados en el tercer contacto.
-       Sube en 40 ms y baja en 110 — un relámpago tiene ataque rápido y
-       cola, no una campana simétrica.
-
-       ⚠️ LA CAPA SE ATA Y SE DESATA. Vive 300 ms en vez de los 60 s: una
-       capa de mezcla a pantalla completa obliga al compositor a leer el
-       fondo en cada cuadro, y hasta ahora estaba puesta todo el minuto
-       para usarse en la sexta parte de un segundo. */
-    var desdeElAnillo = t - SHOCK;
-    if (desdeElAnillo >= -75 && desdeElAnillo <= 225) {
-      if (!capaDestello.parentNode) document.body.appendChild(capaDestello);
-      capaDestello.style.opacity =
-        (desdeElAnillo < 0 || desdeElAnillo > 150) ? '0'
-        : desdeElAnillo < 40 ? (desdeElAnillo / 40).toFixed(3)
-        : (1 - (desdeElAnillo - 40) / 110).toFixed(3);
-    } else if (capaDestello.parentNode) {
-      capaDestello.parentNode.removeChild(capaDestello);
-    }
+    pintarElVelo();
 
     moverElMundo(t);
     elNombreNoSeEntera(t);
@@ -3208,11 +3270,12 @@
        atan solo cuando hay algo que poner en ellas. Una capa de compositor
        vacía se paga igual que una llena. */
     document.body.appendChild(lienzo);
-    document.body.appendChild(capaFria);
-    document.body.appendChild(capaSangre);
-    document.body.appendChild(capaCorona);
+    document.body.appendChild(capaDelEclipse);
 
     medirElAltar();
+    /* El velo tiene que tener su degradado ANTES del primer cuadro: si se
+       pintara recién en unCuadro(), el cuadro cero se vería sin él. */
+    pintarElVelo();
     sembrarLaMarea();
     sembrarLosPetalos();
     /* ⚠️ La mártir se elige DENTRO de esto, no acá: es una flor del marco
@@ -3245,6 +3308,10 @@
     function alRedimensionar() {
       medirElLienzo();
       acomodarLaCopia();
+      /* El velo se centra en el relicario, y el relicario se movió. Es el
+         único momento en que hace falta repintar el degradado. */
+      ultimoCentroPintado = '';
+      pintarElVelo();
     }
 
     escuchaDeMedida = (typeof alCambiarElAncho === 'function')
@@ -3327,11 +3394,12 @@
        sol. */
     devolverElMundo();
 
-    [capaFria, capaSangre, capaCorona, capaDestello,
-     lienzo, lienzoDeLaOfrenda].forEach(function (c) {
+    [capaDelEclipse, lienzo, lienzoDeLaOfrenda].forEach(function (c) {
       if (c.parentNode) c.parentNode.removeChild(c);
     });
     cajaAnteriorDeLaOfrenda = null;
+    ultimoCentroPintado = '';
+    ultimaAperturaPintada = -1;
 
     /* Y en el mismo cuadro en que desaparece todo, lo único que no
        desaparece. No es una transición: es un objeto que se queda. Ver la
