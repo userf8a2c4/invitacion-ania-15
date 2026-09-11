@@ -139,26 +139,40 @@ comprobar('ya no se apaga por índice sobre el array plano',
   'el array se llena plano por plano: cortar por índice se come el de adelante');
 
 {
+  /* ⚠️ SE EXTRAE DESDE LA TABLA DE PRESUPUESTOS, NO SOLO LA FUNCIÓN. Los
+     números del presupuesto son la mitad del comportamiento: ejecutarla
+     con una tabla inventada acá comprobaría un recorte que la página no
+     hace. Van los de verdad. */
   const fuente = (fisica.match(
-    /function ajustarCantidadDePetalos\(calidad\) \{[\s\S]*?\n  \}/) || [''])[0];
+    /const PRESUPUESTO_DE_AREA_POR_CALIDAD[\s\S]*?function ajustarCantidadDePetalos\(calidad\) \{[\s\S]*?\n  \}/) || [''])[0];
 
   if (!fuente) {
     comprobar('se puede ejecutar ajustarCantidadDePetalos()', false, 'no se encontró');
   } else {
+    /* Los tamaños medianos de cada plano, de RASGOS_DEL_PLANO. Lo que
+       cuesta pintar un pétalo es su superficie: el lado al cuadrado. */
+    const LADO = { fondo: (18 + 35) / 2, medio: (30 + 54) / 2, frente: (48 + 84) / 2 };
+
     const repartir = (reparto, calidad) => {
       const petalos = [];
       for (const plano of Object.keys(reparto)) {
         for (let i = 0; i < reparto[plano]; i++) {
-          petalos.push({ plano, activo: true, elemento: null });
+          petalos.push({ plano, activo: true, elemento: null, 'tamaño': LADO[plano] });
         }
       }
 
-      new Function('FRACCION_ACTIVA_POR_CALIDAD', 'petalos', 'calidad',
+      new Function('petalos', 'calidad',
         fuente + '\najustarCantidadDePetalos(calidad);'
-      )({ 0: 1, 1: 0.78, 2: 0.5 }, petalos, calidad);
+      )(petalos, calidad);
 
       const vivos = {};
-      for (const p of petalos) if (p.activo) vivos[p.plano] = (vivos[p.plano] || 0) + 1;
+      let area = 0;
+      for (const p of petalos) {
+        if (!p.activo) continue;
+        vivos[p.plano] = (vivos[p.plano] || 0) + 1;
+        area += p['tamaño'] * p['tamaño'];
+      }
+      vivos.__area = area;
       return vivos;
     };
 
@@ -177,22 +191,59 @@ comprobar('ya no se apaga por índice sobre el array plano',
       }
     }
 
-    /* Y que siga AHORRANDO: el recorte tiene que seguir recortando, o se
-       arregló la estética rompiendo el rendimiento. */
     const enAlta  = repartir(GRANDE, 0);
     const enMedia = repartir(GRANDE, 1);
     const enBaja  = repartir(GRANDE, 2);
-    const total = (v) => Object.values(v).reduce((a, b) => a + b, 0);
+    const total = (v) => ['fondo', 'medio', 'frente']
+      .reduce((a, p) => a + (v[p] || 0), 0);
 
     comprobar('en calidad alta están todos',
       total(enAlta) === 36, 'quedaron ' + total(enAlta));
-    comprobar('en media se mueven bastantes menos',
-      total(enMedia) < 32 && total(enMedia) >= 26, 'quedaron ' + total(enMedia));
-    comprobar('y en baja, la mitad',
-      total(enBaja) <= 20, 'quedaron ' + total(enBaja));
 
-    /* Los tres planos tienen que perder algo: si uno queda intacto y otro
-       se vacía, volvimos al problema con otra forma. */
+    /* ⚡ EL PRESUPUESTO ES DE SUPERFICIE, NO DE CANTIDAD (2026-09-11)
+     *
+     * Es la comprobación que responde la condición que Carlos puso por
+     * encima de todo: «quiero calidad, pero no a costa de la experiencia
+     * misma». Un pétalo de adelante cuesta SEIS VECES lo que uno del
+     * fondo, así que contar pétalos no dice nada del coste. Estos son los
+     * números que pintaba el recorte por índice ORIGINAL, medidos: si esta
+     * comprobación se pone en rojo, es que la escena se puso más cara. */
+    const AREA_DE_ANTES = { media: 49248, baja: 16884 };
+
+    comprobar('en calidad media NO se pinta más que antes',
+      enMedia.__area <= AREA_DE_ANTES.media,
+      'ahora ' + Math.round(enMedia.__area) + ' px² contra ' +
+      AREA_DE_ANTES.media + ' de antes');
+
+    comprobar('y en baja tampoco',
+      enBaja.__area <= AREA_DE_ANTES.baja * 1.02,
+      'ahora ' + Math.round(enBaja.__area) + ' px² contra ' +
+      AREA_DE_ANTES.baja + ' de antes');
+
+    /* ⚠️ Y EL COSTE SE MIDE EN SUPERFICIE. Una mordida cambió
+       `p.tamaño * p.tamaño` por `1` —o sea, volver a contar pétalos— y
+       todo lo demás seguía pasando: los presupuestos daban parecido con
+       estos repartos. Lo que lo caza es una pantalla donde los planos
+       tengan tamaños MUY distintos, que es justo el caso real. */
+    {
+      const DESPAREJO = { fondo: 20, medio: 4, frente: 4 };
+      const vivos = repartir(DESPAREJO, 1);
+      const areaTotal = 20 * LADO.fondo ** 2 + 4 * LADO.medio ** 2 + 4 * LADO.frente ** 2;
+      comprobar('el recorte mide superficie, no cantidad de pétalos',
+        vivos.__area <= areaTotal * 0.63,
+        'quedó en ' + Math.round(vivos.__area) + ' px² de ' +
+        Math.round(areaTotal) + ' — contando pétalos el presupuesto se ' +
+        'cumple en número y se incumple en relleno');
+    }
+
+    comprobar('el recorte sigue recortando de verdad',
+      enMedia.__area < enAlta.__area * 0.7 &&
+      enBaja.__area < enAlta.__area * 0.3,
+      'alta ' + Math.round(enAlta.__area) + ' · media ' +
+      Math.round(enMedia.__area) + ' · baja ' + Math.round(enBaja.__area));
+
+    /* Los tres planos tienen que sobrevivir: si uno se vacía, volvimos al
+       problema con otra forma. */
     const proporcional = ['fondo', 'medio', 'frente'].every(
       (p) => enBaja[p] > 0 && enBaja[p] < GRANDE[p]);
     comprobar('en baja los TRES planos pierden algo, y ninguno se vacía',

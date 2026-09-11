@@ -173,6 +173,10 @@
       '  background:#160f0d;color:#8a7a6c;text-align:center;',
       '  font-variant-numeric:tabular-nums;}',
       '.ensayo__reloj--vivo{background:#2a0f14;color:#e8a0a0;}',
+      '.ensayo__coste{font-size:12px;letter-spacing:.02em;}',
+      '.ensayo__coste--bien{color:#8fd6a4;}',
+      '.ensayo__coste--justo{color:#e8c46a;}',
+      '.ensayo__coste--mal{color:#e88a95;}',
       '.ensayo__recuento{margin-top:6px;padding:5px 8px;border-radius:5px;',
       '  background:#120e14;color:#7a8a8a;text-align:center;font-size:10px;',
       '  line-height:1.35;}',
@@ -357,9 +361,24 @@
       var cuenta = document.getElementById('ensayo-recuento');
       if (cuenta && window.ECLIPSE.recuento) {
         var r = window.ECLIPSE.recuento();
-        cuenta.textContent =
+
+        /* ⚡ EL COSTE, ARRIBA DE TODO (2026-09-11)
+           Carlos preguntó lo que había que preguntar: «¿esto no empeora la
+           experiencia con la página más lenta?». La respuesta no puede ser
+           una promesa, tiene que ser un número visible mientras se mira la
+           secuencia. 16,7 ms es el cuadro a 60 Hz: por encima de eso, la
+           escena le está costando a la página. */
+        var ms = r.msPorCuadro || 0;
+        var fps = ms > 0 ? Math.round(1000 / ms) : 0;
+        var comoVa = ms <= 17 ? 'bien' : ms <= 22 ? 'justo' : 'mal';
+
+        cuenta.innerHTML =
+          '<b class="ensayo__coste ensayo__coste--' + comoVa + '">' +
+          ms.toFixed(1) + ' ms · ' + fps + ' fps</b>' +
+          ' (' + r.tandas + ' tandas)<br>' +
           r.flores + ' flores (' + r.reflejadas + ' en espejo) · ' +
-          r.ramas + ' ramas · ' + r.llamas + ' llamas · ' +
+          r.ramas + ' ramas · ' + r.llamas + ' llamas<br>' +
+          r.petalos + ' pétalos · ' +
           (r.martir ? 'mártir ok' : 'SIN MÁRTIR');
       }
     }, 100);
