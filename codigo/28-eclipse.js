@@ -191,6 +191,24 @@
      momento sagrado y terrible» y sería un filtro más. */
   var capaSangre = capa('#4a0d0d', 'multiply');
 
+  /* ⚡ EL ANILLO DE DIAMANTE (2026-09-10)
+   *
+   * En un eclipse real, el instante en que la luna empieza a descubrir el
+   * sol produce un destello único y cegador: un punto de luz sobre el
+   * anillo de la corona. Dura menos de un segundo y es lo que todo el
+   * mundo espera cuando va a ver un eclipse.
+   *
+   * Acá cae en el segundo 44,0 —el tercer contacto, astronómicamente
+   * correcto— y hace doble trabajo: rompe los dos segundos de vacío del
+   * shock y es LA SEÑAL que el culto estaba esperando. Antes del anillo
+   * las plantas contienen el aliento; después, se desatan.
+   *
+   * ⚠️ VA EN `screen`, NO EN `multiply`. Las otras dos capas oscurecen
+   * multiplicando; esta tiene que AÑADIR luz, o sería un velo blanco
+   * lavando la escena en vez de un destello. Y dura 150 ms: más que eso
+   * deja de ser un relámpago y pasa a ser un fundido a blanco. */
+  var capaDestello = capa('#fff6e0', 'screen');
+
   /* El lienzo de la marea. Encima de las dos capas de color: las rosas
      están DENTRO del eclipse, no debajo. */
   var lienzo = document.createElement('canvas');
@@ -316,6 +334,50 @@
 
     nombre.style.visibility = 'hidden';
     acomodarLaCopia();
+  }
+
+  /**
+   * El nombre sigue brillando como si nada.
+   *
+   * ⚡ ESTE ES EL PLANO MÁS IMPORTANTE DEL MINUTO (2026-09-10)
+   *
+   * El oro del nombre no es un color plano: es un degradado de pan de oro
+   * recortado sobre las letras, y la posición de ese degradado la manda
+   * `--luz-x` — o sea, DÓNDE ESTÁ EL SOL. 14-haces-de-luz.js se la escribe
+   * inline a `.portada__nombre` cada 32-90 ms, junto con
+   * `--luz-intensidad`, que es cuánta luz hay.
+   *
+   * Durante el eclipse el sol muere: `--luz-intensidad` se desploma y el
+   * destello del nombre se apagaría con todo lo demás. Y eso sería
+   * exactamente al revés de lo que la escena significa.
+   *
+   * La deidad no depende del sol. No se apaga cuando el mundo se apaga,
+   * no se enciende más porque la adoren, no mira a nadie. Su oro sigue
+   * recorriendo las letras al mismo ritmo de un día cualquiera, mientras
+   * afuera se acaba la luz y doscientas plantas se retuercen por ella.
+   * Es indiferencia hecha de luz.
+   *
+   * ⚠️ POR QUÉ SE PUEDE. La copia del nombre vive dentro de la jaula del
+   * eclipse y NADIE MÁS LA TOCA: 14 le escribe al original, no al clon.
+   * O sea que el clon es el único lugar de la página donde podemos poner
+   * un sol propio sin pelearnos con el módulo que manda la luz. Al
+   * terminar, la jaula se va entera y no queda rastro.
+   *
+   * El ritmo (11,5 s por recorrido) es el mismo orden que el de la deriva
+   * real del sol, para que quien mire dos veces no note que el de adentro
+   * y el de afuera dejaron de ser el mismo.
+   *
+   * @param {number} t - Milisegundo de la secuencia.
+   * @returns {void}
+   */
+  function elNombreNoSeEntera(t) {
+    if (!copiaDelNombre) return;
+
+    var recorrido = (t % 11500) / 11500;      // 0 → 1, en bucle, sin pausas
+    copiaDelNombre.style.setProperty('--luz-x', recorrido.toFixed(4));
+
+    /* Fija, y alta. El mundo pierde su luz; esta no era del mundo. */
+    copiaDelNombre.style.setProperty('--luz-intensidad', '0.62');
   }
 
   /** Deja la copia justo encima del original. Se llama por cuadro porque
@@ -706,7 +768,10 @@
         /* Que no despierten todas exactamente igual, ni tiemblen al
            unísono: un coro, no un metrónomo. */
         fase: Math.random() * Math.PI * 2,
-        ansia: 0.7 + Math.random() * 0.3
+        ansia: 0.7 + Math.random() * 0.3,
+        /* El tamaño en pantalla, para calibrar el gesto: ver
+           calibrarParaLaPantalla(). */
+        tamano: Math.max(caja.width, caja.height)
       });
     }
 
@@ -718,6 +783,151 @@
         lejaniaMaxima = floresReales[j].distancia;
       }
     }
+
+    calibrarParaLaPantalla();
+    tomarLasRamas();
+  }
+
+  /* ─── LAS RAMAS ─────────────────────────────────────────────────────
+
+     ⚡ LA PLANTA ENTERA, NO SOLO LA CABEZA (2026-09-10)
+
+     Hasta acá se movían las cabezas de las flores. Una flor que se
+     inclina es un gesto; una planta que se retuerce desde el tallo es un
+     cuerpo. La diferencia entre «las rosas se inclinan» y «algo vivo
+     repta hacia el nombre» está en esto.
+
+     Los nudos del tallo (`.nudo-del-tallo`) son las articulaciones: las
+     hojas y las flores viven DENTRO de ellos (ver la nota de
+     07-marco-y-enredaderas.js:2394), así que mover un nudo mueve su rama
+     completa, con todo lo que cuelga.
+
+     ⚠️ NO SE ESCRIBE `style.transform`, Y ESTO ES LA TRAMPA DEL BLOQUE.
+     La POSICIÓN de cada nudo dentro del dibujo vive en su atributo
+     `transform` (un `translate(x y)` que le puso 07 al generarlo). La
+     propiedad CSS `transform` PISA a ese atributo: escribirla mandaría
+     todas las ramas al origen del SVG, o sea a la esquina, y el marco se
+     desarmaría en pantalla.
+
+     Se usan las propiedades independientes `rotate` y `scale`, que NO
+     pisan al atributo: se COMPONEN con él. La rama conserva su sitio y
+     además se retuerce. Si el navegador no las soporta, no se toman las
+     ramas y el eclipse ocurre igual con las flores — se comprueba una
+     vez, no por nudo. */
+
+  var ramas = [];
+
+  function tomarLasRamas() {
+    if (ramas.length) return;
+
+    /* ¿Este navegador entiende las propiedades independientes? Se pregunta
+       una sola vez. Sin ellas no hay forma segura de mover un nudo. */
+    var sePuede = false;
+    try {
+      sePuede = typeof CSS !== 'undefined' && CSS.supports &&
+                CSS.supports('rotate', '1deg') && CSS.supports('scale', '1.1');
+    } catch (e) { sePuede = false; }
+    if (!sePuede) return;
+
+    var nudos = document.querySelectorAll('.nudo-del-tallo');
+
+    for (var i = 0; i < nudos.length; i++) {
+      var nudo = nudos[i];
+
+      var caja;
+      try { caja = nudo.getBoundingClientRect(); } catch (e) { continue; }
+      if (!caja || (!caja.width && !caja.height)) continue;
+
+      var cx = caja.left + caja.width / 2;
+      var cy = caja.top + caja.height / 2;
+
+      var haciaElNombre = Math.atan2(altar.y - cy, altar.x - cx) * 180 / Math.PI + 90;
+      while (haciaElNombre > 180) haciaElNombre -= 360;
+      while (haciaElNombre < -180) haciaElNombre += 360;
+
+      /* El pivote va en la BASE del nudo —abajo, al centro—, que es por
+         donde la rama se une al tallo. Girarlo desde su centro haría que
+         la rama flotara; desde la base, se dobla. */
+      try {
+        nudo.style.transformBox = 'fill-box';
+        nudo.style.transformOrigin = '50% 100%';
+      } catch (e) { continue; }
+
+      ramas.push({
+        nodo: nudo,
+        haciaElNombre: haciaElNombre,
+        distancia: Math.sqrt((altar.x - cx) * (altar.x - cx) +
+                             (altar.y - cy) * (altar.y - cy)),
+        fase: Math.random() * Math.PI * 2,
+        ansia: 0.6 + Math.random() * 0.4
+      });
+    }
+  }
+
+  function devolverLasRamas() {
+    for (var i = 0; i < ramas.length; i++) {
+      var r = ramas[i];
+      try {
+        r.nodo.style.removeProperty('rotate');
+        r.nodo.style.removeProperty('scale');
+        r.nodo.style.removeProperty('transform-box');
+        r.nodo.style.removeProperty('transform-origin');
+      } catch (e) { /* nada */ }
+    }
+    ramas.length = 0;
+  }
+
+  /**
+   * El cuerpo de la planta: las ramas se retuercen hacia el nombre.
+   *
+   * Van SIEMPRE por detrás de las flores en intensidad —la mitad del
+   * ángulo— porque un tallo que se dobla tanto como su flor parece de
+   * goma. El tallo sugiere el esfuerzo; la flor lo consuma.
+   *
+   * Y empiezan ANTES: a los 10 s, cuando las flores todavía casi no se
+   * movieron. La planta se entera con el cuerpo antes que con la cabeza.
+   *
+   * @param {number} t
+   * @param {number} retirada - 0 a 1, cuánto se está retirando todo.
+   * @returns {void}
+   */
+  function moverLasRamas(t, retirada) {
+    if (!ramas.length) return;
+
+    var enShock = t >= TOTALIDAD && t < SHOCK;
+    var ahora = t / 1000;
+
+    for (var i = 0; i < ramas.length; i++) {
+      var r = ramas[i];
+
+      var suTurno = PENUMBRA * 0.25 + (r.distancia / lejaniaMaxima) * UMBRA * 0.6;
+      var despierta = suave(limitar((t - suTurno) / 7000, 0, 1));
+
+      var fervor = despierta * (1 - retirada) *
+        (t >= SHOCK ? 0.6 + tramo(t, SHOCK, SHOCK + 2500) * 0.4
+         : enShock   ? 0.6
+         :             tramo(t, PENUMBRA * 0.25, PROFUNDA) * 0.6);
+
+      if (fervor <= 0.001) {
+        if (r.tocada) {
+          r.nodo.style.removeProperty('rotate');
+          r.nodo.style.removeProperty('scale');
+          r.tocada = false;
+        }
+        continue;
+      }
+      r.tocada = true;
+
+      var dobla = r.haciaElNombre * fervor * r.ansia * 0.26;
+      if (dobla >  26) dobla =  26;
+      if (dobla < -26) dobla = -26;
+
+      var tiembla = enShock ? 0
+        : Math.sin(ahora * (1.1 + fervor * 6) + r.fase) * fervor * fervor * 4;
+
+      r.nodo.style.rotate = (dobla + tiembla).toFixed(2) + 'deg';
+      r.nodo.style.scale  = (1 + fervor * 0.1).toFixed(3);
+    }
   }
 
   function devolverLasFloresReales() {
@@ -728,6 +938,155 @@
     }
     floresReales.length = 0;
   }
+
+  /* ─── 10b. EL MUNDO ALREDEDOR ───────────────────────────────────────
+
+     Un eclipse de verdad no oscurece una pantalla: apaga EL SOL. Y esta
+     web tiene un sol — 14-haces-de-luz.js dibuja cinco rayos con el
+     ángulo que le dicta 22-luz-de-la-hora.js según la hora real de quien
+     abre. Hasta ahora el eclipse ignoraba todo eso y se limitaba a poner
+     dos velos de color encima, que es pintar sobre la ventana en vez de
+     bajar la persiana.
+
+     Acá se toman prestadas las perillas públicas de los otros módulos,
+     se las mueve durante el minuto y se las devuelve exactas. NO se
+     modifica ni un archivo ajeno: el eclipse actúa desde afuera y se
+     retira sin dejar rastro, que es la regla de este archivo.
+
+     LO QUE SE TOMA PRESTADO
+       · window.LuzDeLaHora.largoDelHaz / .anguloDelSol — los relee
+         14-haces-de-luz.js EN CADA CUADRO, así que alcanza con escribirlos.
+       · window.LienzoDeLuz.haces / .motas / .fauna — arrays que
+         23-lienzo-de-luz.js relee en cada repintado. Vaciarlos apaga su
+         subsistema sin tocar nada más.
+
+     ⚠️ 22-luz-de-la-hora.js REESCRIBE `window.LuzDeLaHora` ENTERO cada
+     10 minutos, en visibilitychange y con invitacion-visible. Por eso el
+     valor se reaplica en cada cuadro y no una sola vez: si justo cae una
+     reescritura a mitad del eclipse, el sol volvería solo.
+
+     ⚠️ LAS VELAS NO SE TOCAN. Son la luz votiva del culto: lo que hace
+     que la sala pase de habitación a cripta no es que ellas suban, es que
+     todo lo demás se apague. Y `LuzDeLaHora.fuerzaDeVelas` es además una
+     perilla muerta —se aplica sobre LienzoDeLuz.fuentes, que quedó
+     permanentemente vacío (ver 19-velas.js)—, así que ni siquiera
+     serviría. */
+
+  var mundo = null;          // lo prestado, para poder devolverlo
+
+  function tomarElMundo() {
+    mundo = {
+      largoDelHaz:  null,
+      anguloDelSol: null,
+      haces: null,
+      motas: null,
+      fauna: null,
+      velo:  null
+    };
+
+    try {
+      if (window.LuzDeLaHora) {
+        mundo.largoDelHaz  = window.LuzDeLaHora.largoDelHaz;
+        mundo.anguloDelSol = window.LuzDeLaHora.anguloDelSol;
+      }
+      if (window.LienzoDeLuz) {
+        mundo.haces = window.LienzoDeLuz.haces;
+        mundo.motas = window.LienzoDeLuz.motas;
+        mundo.fauna = window.LienzoDeLuz.fauna;
+      }
+      var penumbra = document.getElementById('penumbra-profunda');
+      if (penumbra) {
+        mundo.velo = {
+          nodo: penumbra,
+          tinte: penumbra.style.getPropertyValue('--tinte-del-velo'),
+          prof:  penumbra.style.getPropertyValue('--profundidad-de-sombra')
+        };
+      }
+    } catch (e) { /* si algún módulo no está, el eclipse ocurre igual */ }
+  }
+
+  /**
+   * Mueve el sol según el momento del eclipse.
+   *
+   * @param {number} t - Milisegundo de la secuencia.
+   * @returns {void}
+   */
+  function moverElMundo(t) {
+    if (!mundo) return;
+
+    /* La curva del sol: muere del todo a los 26 s y vuelve entre el 57 y
+       el 59,9. NO vuelve al mismo tiempo que las plantas se calman — las
+       plantas no se calman hasta el frenazo. Ese desacople es el punto:
+       la luz regresa y ellas siguen estirando, con el permiso
+       terminándose. */
+    var muriendo = limitar(t / 26000, 0, 1);
+    var volviendo = t >= 57000 ? limitar((t - 57000) / 2900, 0, 1) : 0;
+    var loQueQueda = (1 - muriendo) + volviendo * muriendo;
+
+    try {
+      if (window.LuzDeLaHora && mundo.largoDelHaz !== null) {
+        /* Se reaplica en CADA cuadro, no una vez: 22-luz-de-la-hora.js
+           puede reescribir el objeto entero a mitad del minuto. */
+        window.LuzDeLaHora.largoDelHaz = mundo.largoDelHaz * loQueQueda;
+
+        /* El sol también se corre, como se corre de verdad en un eclipse:
+           la sombra entra por un lado. 14 lo relee cada cuadro. */
+        window.LuzDeLaHora.anguloDelSol =
+          mundo.anguloDelSol + (1 - loQueQueda) * 18;
+      }
+
+      if (window.LienzoDeLuz) {
+        /* A los 26 s no queda ni un rayo. Vaciar el array es la forma no
+           invasiva de apagarlos: 23 lo relee en cada repintado. */
+        var sinLuz = t >= 26000 && t < 57000;
+        window.LienzoDeLuz.haces = sinLuz ? [] : mundo.haces;
+
+        /* A los 33 s se apaga lo que flota: motas de polvo y luciérnagas.
+           Nada vivo que no sea el culto. */
+        var sinFauna = t >= 33000 && t < 57000;
+        window.LienzoDeLuz.motas = sinFauna ? [] : mundo.motas;
+        window.LienzoDeLuz.fauna = sinFauna ? [] : mundo.fauna;
+      }
+
+      /* El velo de profundidad se cierra: las esquinas dejan de existir.
+         Entra a los 30 s y se retira con la luz. */
+      if (mundo.velo) {
+        var cierre = limitar((t - 30000) / 5000, 0, 1) * (1 - volviendo);
+        if (cierre > 0.001) {
+          mundo.velo.nodo.style.setProperty('--profundidad-de-sombra',
+            (0.2 + cierre * 0.7).toFixed(3));
+        } else if (mundo.velo.prof) {
+          mundo.velo.nodo.style.setProperty('--profundidad-de-sombra', mundo.velo.prof);
+        } else {
+          mundo.velo.nodo.style.removeProperty('--profundidad-de-sombra');
+        }
+      }
+    } catch (e) { /* un módulo que no está no puede romper el homenaje */ }
+  }
+
+  function devolverElMundo() {
+    if (!mundo) return;
+    try {
+      if (window.LuzDeLaHora) {
+        if (mundo.largoDelHaz !== null)  window.LuzDeLaHora.largoDelHaz  = mundo.largoDelHaz;
+        if (mundo.anguloDelSol !== null) window.LuzDeLaHora.anguloDelSol = mundo.anguloDelSol;
+      }
+      if (window.LienzoDeLuz) {
+        if (mundo.haces) window.LienzoDeLuz.haces = mundo.haces;
+        if (mundo.motas) window.LienzoDeLuz.motas = mundo.motas;
+        if (mundo.fauna) window.LienzoDeLuz.fauna = mundo.fauna;
+      }
+      if (mundo.velo) {
+        if (mundo.velo.prof) {
+          mundo.velo.nodo.style.setProperty('--profundidad-de-sombra', mundo.velo.prof);
+        } else {
+          mundo.velo.nodo.style.removeProperty('--profundidad-de-sombra');
+        }
+      }
+    } catch (e) { /* nada */ }
+    mundo = null;
+  }
+
 
   /* ─── 11. LA MÚSICA ─────────────────────────────────────────────────
 
@@ -1166,9 +1525,22 @@
     var enShock    = t >= TOTALIDAD && t < SHOCK;
     var ahora = t / 1000;
 
-    /* Cuánto se retira todo al final, por la misma rampa que la marea y
-       los pétalos: las tres se van juntas. */
-    var retirada = enSumision ? tramo(t, FRENESI, FRENESI + 900) : 0;
+    /* ⚡ EL FRENAZO ES EL FINAL, NO LA SUMISIÓN (2026-09-10)
+     *
+     * Antes las plantas se calmaban a partir del segundo 54, bajando por
+     * una rampa. Eso contaba la historia equivocada: las plantas
+     * aceptando que se acabó.
+     *
+     * No se calman. La luz vuelve entre el 57 y el 59,9 —el mundo se
+     * reilumina— y ellas SIGUEN estirando, con el permiso terminándose
+     * encima. Ese desacople es el momento más perturbador del minuto.
+     * Después, en el segundo 60, terminar() las devuelve a su sitio en UN
+     * SOLO CUADRO: no es un final, es una orden obedecida con violencia.
+     *
+     * Por eso `retirada` queda en cero hasta el final. La rampa se
+     * conserva en la firma por si algún día hace falta un final suave,
+     * pero hoy no se usa: el frenazo ES el efecto. */
+    var retirada = 0;
 
     for (var i = 0; i < floresReales.length; i++) {
       var f = floresReales[i];
@@ -1185,8 +1557,7 @@
          De dócil a histérica. En el shock se congela —dos segundos de
          vacío, igual que la marea— y en el frenesí se desata. */
       var fervor =
-          enSumision ? despierta * (1 - retirada)
-        : enShock    ? despierta * 0.55
+          enShock    ? despierta * 0.55
         : t >= SHOCK ? despierta * (0.55 + tramo(t, SHOCK, SHOCK + 2500) * 0.45)
         :              despierta * tramo(t, PENUMBRA * 0.3, PROFUNDA) * 0.55;
 
@@ -1202,9 +1573,9 @@
          más que eso deja de leerse como una planta estirando y empieza a
          parecer una flor rota. El `ansia` de cada una lo desordena un
          poco, que es lo que separa un coro de un pelotón. */
-      var inclina = f.haciaElNombre * fervor * f.ansia * 0.58;
-      if (inclina >  52) inclina =  52;
-      if (inclina < -52) inclina = -52;
+      var inclina = f.haciaElNombre * fervor * f.ansia * 0.58 * compensacion;
+      if (inclina >  TOPE_DE_INCLINACION) inclina =  TOPE_DE_INCLINACION;
+      if (inclina < -TOPE_DE_INCLINACION) inclina = -TOPE_DE_INCLINACION;
 
       /* ── 4. EL TEMBLOR ──
          Lento y mínimo cuando recién despierta; rápido y amplio en la
@@ -1226,6 +1597,53 @@
         'rotate(' + (inclina + tiembla).toFixed(2) + 'deg) ' +
         'scale(' + crece.toFixed(3) + ')';
     }
+
+    moverLasRamas(t, retirada);
+  }
+
+  /* ⚡ QUE SE VEA IGUAL EN UN TELÉFONO (2026-09-10)
+   *
+   * 07-marco-y-enredaderas.js construye MENOS planta en pantalla chica, y
+   * es correcto que lo haga: bajo 720 px no arma los dos ramilletes
+   * intermedios (`:1329`) y la densidad cae de 1,15 a 0,55
+   * (`densidad = limitar(innerWidth / 1250, 0.55, 1.9)`, `:1311`). En un
+   * teléfono hay alrededor de un cuarto de las flores de un escritorio.
+   *
+   * La escena no puede depender de CUÁNTAS flores hay. Un culto de
+   * cuarenta tiene que dar el mismo miedo que uno de doscientas, y la
+   * forma de conseguirlo no es dibujar más: es que cada una se entregue
+   * más. Menos fieles, más fervor por fiel.
+   *
+   * El factor se calcula UNA vez, al tomar las flores, contra la
+   * referencia de escritorio. Va topado a 1,45 para que en un teléfono no
+   * se convierta en un espasmo.
+   *
+   * ⚠️ Y EL TOPE DE INCLINACIÓN ESCALA CON EL TAMAÑO DE LA FLOR. Una
+   * cabeza de 20 px inclinada 52° se lee como un tic; una de 72 px, como
+   * una reverencia. Se mide la flor mediana y se ajusta, para que el
+   * GESTO sea el mismo aunque el dibujo mida un tercio. */
+  var FLORES_DE_REFERENCIA = 200;
+  var compensacion = 1;
+  var TOPE_DE_INCLINACION = 52;
+
+  function calibrarParaLaPantalla() {
+    if (!floresReales.length) return;
+
+    compensacion = limitar(
+      Math.sqrt(FLORES_DE_REFERENCIA / floresReales.length), 1, 1.45);
+
+    /* La mediana del tamaño de las cabezas, que es lo que de verdad
+       cambia entre un teléfono y un monitor. */
+    var tamanos = [];
+    for (var i = 0; i < floresReales.length; i++) {
+      tamanos.push(floresReales[i].tamano || 40);
+    }
+    tamanos.sort(function (a, b) { return a - b; });
+    var mediana = tamanos[Math.floor(tamanos.length / 2)] || 40;
+
+    /* Flor chica, gesto más amplio; flor grande, más contenido. Entre 44°
+       y 62°, que es el rango donde sigue leyéndose como deseo. */
+    TOPE_DE_INCLINACION = limitar(52 * (44 / mediana), 44, 62);
   }
 
   /* ─── 15. EL BUCLE ──────────────────────────────────────────────── */
@@ -1298,6 +1716,18 @@
     capaFria.style.opacity   = color.frio.toFixed(3);
     capaSangre.style.opacity = color.sangre.toFixed(3);
 
+    /* El anillo de diamante: 150 ms centrados en el tercer contacto.
+       Sube en 40 ms y baja en 110 — un relámpago tiene ataque rápido y
+       cola, no una campana simétrica. */
+    var desdeElAnillo = t - SHOCK;
+    capaDestello.style.opacity =
+      (desdeElAnillo < 0 || desdeElAnillo > 150) ? '0'
+      : desdeElAnillo < 40 ? (desdeElAnillo / 40).toFixed(3)
+      : (1 - (desdeElAnillo - 40) / 110).toFixed(3);
+
+    moverElMundo(t);
+    elNombreNoSeEntera(t);
+
     dibujar(t);
     moverLasFloresReales(t);
     ajustarElSonido(t);
@@ -1344,9 +1774,12 @@
     vivo = true;
     reiniciarElEstado();
 
+    tomarElMundo();
+
     coronarElNombre();
     document.body.appendChild(capaFria);
     document.body.appendChild(capaSangre);
+    document.body.appendChild(capaDestello);
     document.body.appendChild(lienzo);
 
     medirElAltar();
@@ -1436,11 +1869,19 @@
     escuchaDeMedida = null;
 
     devolverLasFloresReales();
+    devolverLasRamas();
     devolverLosPetalosDeSiempre();
     devolverElNombre();
     soltarElSonido();
 
-    [capaFria, capaSangre, lienzo].forEach(function (c) {
+    /* El sol vuelve a estar donde estaba, los rayos y las motas vuelven a
+       su array, el velo a su valor. Va ANTES de sacar las capas para que
+       el primer cuadro sin eclipse ya tenga la luz de siempre: si se
+       devolviera después, habría un parpadeo de una pantalla iluminada sin
+       sol. */
+    devolverElMundo();
+
+    [capaFria, capaSangre, capaDestello, lienzo].forEach(function (c) {
       if (c.parentNode) c.parentNode.removeChild(c);
     });
 

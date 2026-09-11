@@ -364,8 +364,16 @@ comprobar('el deseo crece en vez de encenderse',
   /var fervor =/.test(eclipseCodigo) && /despierta \* tramo\(/.test(eclipseCodigo));
 
 comprobar('hay un tope de inclinación',
-  /if \(inclina >  52\) inclina =  52;/.test(eclipseCodigo),
+  /if \(inclina >  TOPE_DE_INCLINACION\)/.test(eclipseCodigo),
   'más de eso deja de leerse como estirar y parece una flor rota');
+
+/* ⚡ EL TOPE DEJÓ DE SER UN NÚMERO FIJO (2026-09-10). Una cabeza de 20 px
+   inclinada 52° se lee como un tic; una de 72 px, como una reverencia. El
+   tope escala con el tamaño de la flor para que el GESTO sea el mismo en
+   un teléfono y en un monitor. */
+comprobar('y ese tope se calcula con el tamaño de la flor',
+  /TOPE_DE_INCLINACION = limitar\(52 \* \(44 \/ mediana\)/.test(eclipseCodigo),
+  'el mismo ángulo se lee distinto en una flor de 20 px que en una de 72');
 
 comprobar('el temblor crece con el fervor',
   /fervor \* fervor \* 9/.test(eclipseCodigo));
@@ -561,6 +569,128 @@ if (formulaDelHundimiento) {
      con la pantalla todavía roja, sería el error simétrico. */
   comprobar('no sale antes que el color', hundir(53500) > 0.9,
     'el color se va a los 54,6: el sonido lo acompaña, no se le adelanta');
+}
+
+
+/* ─── 14c. EL GUION: que cada acto esté rodado ─────────────────────── */
+
+console.log('\nEl guion, acto por acto\n');
+
+/* ACTO III · el sol muere de verdad. No es un velo encima: es la fuente
+   de luz de la web apagándose. */
+comprobar('el eclipse toma prestado el sol',
+  /window\.LuzDeLaHora\.largoDelHaz = mundo\.largoDelHaz \* loQueQueda/.test(eclipseCodigo),
+  'sin esto el eclipse solo pinta encima, que es tapar la ventana en vez ' +
+  'de bajar la persiana');
+comprobar('y lo reaplica en cada cuadro',
+  /function moverElMundo/.test(eclipseCodigo) &&
+  /moverElMundo\(t\)/.test(eclipseCodigo),
+  '22-luz-de-la-hora.js reescribe el objeto entero cada 10 min: si se ' +
+  'escribiera una sola vez, el sol volvería solo a mitad del ritual');
+comprobar('los rayos se apagan del todo a los 26 s',
+  /t >= 26000 && t < 57000/.test(eclipseCodigo) &&
+  /window\.LienzoDeLuz\.haces = sinLuz \? \[\]/.test(eclipseCodigo));
+comprobar('y lo que flota se apaga a los 33 s',
+  /window\.LienzoDeLuz\.motas = sinFauna \? \[\]/.test(eclipseCodigo),
+  'nada vivo que no sea el culto');
+comprobar('todo lo prestado se devuelve',
+  /function devolverElMundo/.test(eclipseCodigo) &&
+  /devolverElMundo\(\);/.test(eclipseCodigo),
+  'el eclipse actúa desde afuera y se retira sin dejar rastro');
+comprobar('y se devuelve ANTES de sacar las capas',
+  eclipseCodigo.indexOf('devolverElMundo();') <
+  eclipseCodigo.indexOf('capaDestello, lienzo].forEach'),
+  'al revés habría un cuadro de pantalla iluminada sin sol');
+
+/* ⚠️ LAS VELAS NO SE TOCAN: son la luz votiva del culto. Lo que las vuelve
+   protagonistas no es que suban, es que todo lo demás se apague. */
+comprobar('las velas no se tocan',
+  !/lienzo-de-velas/.test(eclipseCodigo) && !/fuerzaDeVelas/.test(eclipseCodigo),
+  'la sala pasa a cripta por contraste, no por aumento');
+
+/* ACTO V · el nombre no se entera. El plano más importante del minuto. */
+comprobar('el nombre tiene su propia luz',
+  /function elNombreNoSeEntera/.test(eclipseCodigo) &&
+  /elNombreNoSeEntera\(t\)/.test(eclipseCodigo));
+comprobar('y se la escribe al CLON, no al original',
+  /copiaDelNombre\.style\.setProperty\('--luz-x'/.test(eclipseCodigo),
+  '14-haces-de-luz.js le escribe al original cada 32-90 ms: pelearse con ' +
+  'él sería perder. El clon es nuestro');
+comprobar('su oro no se detiene nunca',
+  /t % 11500/.test(eclipseCodigo),
+  'un bucle sin pausas: el mundo se apaga y el nombre sigue igual');
+comprobar('y su intensidad no depende del eclipse',
+  /'--luz-intensidad', '0\.62'/.test(eclipseCodigo),
+  'fija y alta: esa luz nunca fue del sol');
+
+/* ACTO VI · el anillo de diamante. */
+comprobar('existe el anillo de diamante',
+  /var capaDestello = capa\('#fff6e0', 'screen'\)/.test(eclipseCodigo));
+comprobar('en screen, no en multiply',
+  /capa\('#fff6e0', 'screen'\)/.test(eclipseCodigo),
+  'las otras capas oscurecen multiplicando; esta tiene que AÑADIR luz');
+comprobar('dura 150 ms y cae en el tercer contacto',
+  /var desdeElAnillo = t - SHOCK;/.test(eclipseCodigo) &&
+  /desdeElAnillo > 150/.test(eclipseCodigo),
+  'más que eso deja de ser un relámpago y es un fundido a blanco');
+
+/* ACTO II y III · la planta entera, no solo la cabeza. */
+comprobar('las ramas también se retuercen',
+  /function moverLasRamas/.test(eclipseCodigo) &&
+  /nudo-del-tallo/.test(eclipseCodigo));
+comprobar('y se mueven con rotate/scale, NO con transform',
+  /r\.nodo\.style\.rotate =/.test(eclipseCodigo) &&
+  !/nudo\.style\.transform =/.test(eclipseCodigo),
+  'la posición del nudo vive en su ATRIBUTO transform: la propiedad CSS ' +
+  'lo pisaría y mandaría todas las ramas a la esquina del SVG');
+comprobar('se comprueba que el navegador las soporte',
+  /CSS\.supports\('rotate', '1deg'\)/.test(eclipseCodigo),
+  'sin ellas no hay forma segura de mover un nudo');
+comprobar('el tallo se dobla MENOS que su flor',
+  /r\.haciaElNombre \* fervor \* r\.ansia \* 0\.26/.test(eclipseCodigo) &&
+  /f\.haciaElNombre \* fervor \* f\.ansia \* 0\.58/.test(eclipseCodigo),
+  'un tallo que se dobla tanto como su flor parece de goma');
+comprobar('y despierta ANTES que ella',
+  /PENUMBRA \* 0\.25/.test(eclipseCodigo) && /PENUMBRA \* 0\.3/.test(eclipseCodigo),
+  'la planta se entera con el cuerpo antes que con la cabeza');
+comprobar('las ramas se devuelven',
+  /function devolverLasRamas/.test(eclipseCodigo) &&
+  /devolverLasRamas\(\);/.test(eclipseCodigo));
+
+/* ACTO VIII · no se calman: las obliga el frenazo. */
+comprobar('las plantas NO se calman solas al final',
+  /var retirada = 0;/.test(eclipseCodigo),
+  'la luz vuelve y ellas siguen estirando: ese desacople es el efecto');
+
+/* PARIDAD MÓVIL · requisito explícito. */
+comprobar('hay compensación por cantidad de flores',
+  /Math\.sqrt\(FLORES_DE_REFERENCIA \/ floresReales\.length\)/.test(eclipseCodigo),
+  'en un teléfono hay ~1/4 de las flores: un culto de cuarenta tiene que ' +
+  'dar el mismo miedo que uno de doscientas');
+comprobar('y está topada para no volverse un espasmo',
+  /, 1, 1\.45\)/.test(eclipseCodigo));
+
+if (typeof calibrar === 'undefined') {
+  /* Se EJECUTA la compensación con números de teléfono y de escritorio:
+     leerla no dice si el gesto queda comparable. */
+  const fuenteCalibrar = (eclipseCodigo.match(
+    /compensacion = limitar\([\s\S]*?1\.45\);/) || [''])[0];
+
+  if (fuenteCalibrar) {
+    const compensar = (cuantas) => new Function(
+      'const limitar = (v,a,b) => Math.min(Math.max(v,a),b);' +
+      'const FLORES_DE_REFERENCIA = 200;' +
+      'const floresReales = { length: ' + cuantas + ' };' +
+      'let compensacion;' + fuenteCalibrar + '\nreturn compensacion;'
+    )();
+
+    comprobar('en escritorio (200 flores) no compensa',
+      Math.abs(compensar(200) - 1) < 0.01, 'dio ' + compensar(200).toFixed(3));
+    comprobar('en teléfono (47 flores) compensa de verdad',
+      compensar(47) > 1.35, 'dio ' + compensar(47).toFixed(3));
+    comprobar('y con muy pocas no se dispara',
+      compensar(5) <= 1.45, 'dio ' + compensar(5).toFixed(3));
+  }
 }
 
 
