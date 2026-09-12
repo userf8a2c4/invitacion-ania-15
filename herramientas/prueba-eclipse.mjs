@@ -746,10 +746,23 @@ comprobar('en el esfuerzo el velo ya se nota',
    * de luz en el día: allí rojo. Abajo, donde están los candelabros:
    * oscuro.» Si las dos zonas terminan con el mismo alfa, volvimos al
    * tinte plano que él rechazó todo el día. */
-  comprobar('abajo se oscurece MÁS que arriba',
-    abajoEnLaCripta > enLaCripta * 1.3,
-    'arriba ' + enLaCripta.toFixed(2) + ' · abajo ' +
-    abajoEnLaCripta.toFixed(2) + ' — sin diferencia es un lavado parejo');
+  /* ⚠️ SE MIDE LA LUZ QUE PIERDE CADA ZONA, NO EL ALFA. La diferencia
+     entre arriba y abajo ya no está solo en cuánto se carga cada
+     degradado: está sobre todo en el COLOR —arriba rgb(48,5,14), abajo
+     rgb(18,3,8)— así que comparar alfas dejaba fuera la mitad del efecto.
+     Lo que el ojo ve es cuánta luz le queda al oro en cada mitad. */
+  {
+    const ORO = [198, 158, 92];
+    const luz = (x) => 0.2126 * x[0] + 0.7152 * x[1] + 0.0722 * x[2];
+    const arriba = luz(comoSeVeEn(43000, ORO, 'arriba'));
+    const abajo  = luz(comoSeVeEn(43000, ORO, 'abajo'));
+
+    comprobar('abajo se oscurece MÁS que arriba',
+      arriba > abajo * 1.5,
+      'al oro le queda ' + (100 * arriba / luz(ORO)).toFixed(0) + ' % arriba y ' +
+      (100 * abajo / luz(ORO)).toFixed(0) + ' % abajo — sin diferencia es un ' +
+      'lavado parejo, y Carlos pidió dos sitios distintos');
+  }
 }
 
 /* Y DENTRO de la cripta tampoco puede ser negro: son dos segundos, pero

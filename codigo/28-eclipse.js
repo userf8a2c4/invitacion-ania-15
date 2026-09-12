@@ -486,8 +486,29 @@
    * La oscuridad no la tiene que poner esta capa: ya la ponen el sol
    * muriendo, los haces vaciándose y `#penumbra-profunda`. El trabajo de
    * acá es el COLOR. */
-  var ALFA_DE_ARRIBA = 0.44;
-  var ALFA_DE_ABAJO  = 0.62;
+  /* ⚡ ROJO OSCURO, NO ROJO VIVO (2026-09-11)
+   *
+   * Carlos: «aún hay mucho color, oscurece y que el tono sea rojizo pero
+   * oscuro, no vivo, sino oscuro».
+   *
+   * El barro de las rondas anteriores no venía de la opacidad alta: venía
+   * de un rojo con DEMASIADO VERDE (104,28,40 tiene R/G 3,7) puesto a
+   * opacidad alta. Rojo + verde = marrón, y cuanto más se carga, más
+   * marrón. Un rojo MUY oscuro y MUY saturado —R/G alto— se puede cargar
+   * hasta donde haga falta y sigue siendo rojo.
+   *
+   * Medido sobre el oro del relicario rgb(198,158,92):
+   *
+   *   104, 28, 40 @ 0,51 → luz 63 %, fondo R/G 2,6   marrón
+   *   150, 16, 28 @ 0,26 → luz 81 %, fondo R/G 2,8   rojo pero vivo
+   *    48,  5, 14 @ 0,60 → luz 41 %, fondo R/G 3,5   oscuro y rojo
+   */
+  var ALFA_DE_ARRIBA = 1.00;
+  /* ⚠️ 0,88 APLASTABA LA ZONA DE ABAJO. Con el velo al tope el marco de
+     esa mitad quedaba a 14 unidades de rojo de su fondo —por debajo del
+     piso de 18— y dejaba de tener interior. 0,80 la deja igual de oscura
+     y con el detalle vivo. */
+  var ALFA_DE_ABAJO  = 0.80;
 
   /* Los colores. Índice 0 = la luz de arriba, índice 1 = la oscuridad de
      abajo. Se mezclan entre las dos paletas según `mezclaDelVelo`.
@@ -496,8 +517,8 @@
      rojo que Carlos rechazó —«un rojo vivo»— tenía G por encima de B, que
      es naranja quemado. Acá los cuatro cumplen: 46>32, 26>16, 40>28,
      14>8. */
-  var PALETA_FRIA    = ['18, 34, 62', '8, 12, 24'];
-  var PALETA_BORGONA = ['150, 16, 28', '26, 6, 16'];
+  var PALETA_FRIA    = ['12, 20, 38', '5, 8, 16'];
+  var PALETA_BORGONA = ['48, 5, 14', '18, 3, 8'];
 
   /**
    * Interpola las dos paletas.
