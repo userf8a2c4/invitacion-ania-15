@@ -375,13 +375,6 @@
    * Se ve el interior del marco casi el doble mejor, y la escena igual se
    * oscurece: la luminancia de la rosa cae de 45 en el esfuerzo a 28 en la
    * cripta. Eso es una sombra cayendo encima, no un filtro puesto delante. */
-  var TRAMOS_DEL_VELO = [
-    { ancla: 'centro',  a: 0.22 },   // detrás de las letras
-    { ancla: 'letras',  a: 0.32 },   // el filo de la palabra
-    { ancla: 'broche',  a: 0.44 },   // el óvalo dorado
-    { ancla: 'broche2', a: 0.54 },   // el marco y las plantas
-    { ancla: 'esquina', a: 0.62 }    // el borde de la pantalla
-  ];
 
   /* ⚡ EL VELO ERA ROJO DESDE EL SEGUNDO 1. (2026-09-11)
    *
@@ -422,45 +415,107 @@
    *   cripta 43 s ……… ídem, R/G 4,6 y los separan 30 unidades
    */
 
-  /* Azul medianoche: la penumbra y la umbra. Ni una gota de rojo.
-     #16202e → #0a101a
+  /* ⚡ EL ECLIPSE ES LUZ, Y ENTRA POR DONDE ENTRA LA LUZ (2026-09-11)
+   *
+   * Carlos: «¿de dónde vienen los rayos de sol y de luna durante el día?
+   * DEL SOL Y LA LUNA QUE NO SE VEN EN ESCENA. Entonces… ¿de dónde viene
+   * la luz roja del eclipse? De la luna que no se ve en escena. ES
+   * EXACTAMENTE LA MISMA LÓGICA.»
+   *
+   * Y antes: «arriba, con el relicario y las rosas, donde se ven los rayos
+   * de luz en el día: allí rojo. Abajo, donde están los candelabros:
+   * oscuro.»
+   *
+   * ⛔ LO QUE HABÍA ACÁ ESTABA MAL DE RAÍZ. Era un radial centrado en el
+   * nombre cuya opacidad subía. El propio proyecto tiene escrita esa
+   * lección desde hace rondas, en 22-luz-de-la-hora.js:429:
+   *
+   *     «EL PRIMER INTENTO FUE UN TINTE PLANO —el mismo color con la misma
+   *      opacidad sobre toda la pantalla— y quedó fatal, con razón: eso no
+   *      es luz, es un filtro de color pegado encima, y se lee exactamente
+   *      como lo que es.»
+   *
+   * Construí justo lo que ese comentario advierte.
+   *
+   * ⚠️ LA GEOMETRÍA NO SE INVENTA: SE COPIA DE `veloDeLaSala()`.
+   * Esa función (22-luz-de-la-hora.js:450) enumera las tres propiedades
+   * que tiene la luz de verdad y que un tinte plano no tiene:
+   *
+   *   1. VIENE DE UN SITIO — la elipse nace FUERA del borde (-8 %), como
+   *      si la fuente estuviera más allá de la ventana.
+   *   2. SE APAGA CON LA DISTANCIA — muere antes de la mitad de la
+   *      pantalla, así que abajo mandan los candelabros.
+   *   3. NO MANDA SOBRE LO QUE YA ESTÁ ILUMINADO — las velas se dibujan
+   *      por encima con suma aditiva y atraviesan el frío.
+   *
+   * El eclipse usa esa misma elipse, con otro color, y le suma su espejo
+   * desde abajo para la zona de los candelabros. Dos degradados, UNA capa.
+   */
 
-     ⚡ ERA GRIS APAGADO Y AHORA ES AZUL PROFUNDO (2026-09-11)
+  /** La elipse de la luz, copiada de veloDeLaSala(): ancha y baja. */
+  var FORMA_DE_LA_LUZ = 'ellipse 130% 65%';
 
-     Carlos trajo una referencia —cielo de sangre arriba, medianoche
-     abajo, el oro y las rosas intactos— y dijo: «es interesante, porque
-     es casi macabro». Lo es, y el motivo es preciso: lo macabro no está
-     en el objeto, está en el AIRE. Ahí nada está podrido; lo que está
-     enfermo es la luz que lo baña. Degradar el objeto da una ruina;
-     degradar solo la luz da un velorio elegante.
+  /** Nace fuera del borde superior: la fuente está más allá de la ventana. */
+  var FUENTE_DE_ARRIBA = '50% -8%';
+  /** Y su espejo, para la oscuridad que sube desde los candelabros. */
+  var FUENTE_DE_ABAJO  = '50% 108%';
 
-     ⚠️ Y LO CONSIGUEN DOS HUES A LA VEZ, no uno. Un tinte único se lee
-     como un filtro puesto encima. Rojo en el centro y azul medianoche en
-     el borde se lee como luz ENFERMA, porque ninguna fuente natural hace
-     eso: el ojo sabe que algo está mal sin poder decir qué. Es el mismo
-     recurso que los Addams —todo en su sitio, todo correcto, y aun así
-     nadie debería estar cómodo—.
+  /* La caída, en fracciones del alfa máximo. Los mismos cortes que usa la
+     luz del día: fuerte en la fuente, muerta antes de la mitad. */
+  var CAIDA_DE_ARRIBA = [[1, 0], [0.62, 26], [0.28, 46], [0.08, 60], [0, 74]];
+  var CAIDA_DE_ABAJO  = [[0, 26], [0.08, 40], [0.28, 54], [0.62, 74], [1, 100]];
 
-     El gris de antes no hacía eso: desaturaba y ya. El azul sí tiene hue
-     propio, así que pelea con el borgoña en vez de diluirse en él. */
-  var PALETA_FRIA = [
-    '22, 32, 46', '19, 28, 41', '16, 24, 36', '13, 20, 31', '10, 16, 26'
-  ];
+  /** Alfa máximo de cada uno de los dos degradados. */
+  var ALFA_DE_ARRIBA = 0.85;
+  var ALFA_DE_ABAJO  = 0.80;
 
-  /* Borgoña: exclusivo de la totalidad. Los dos tramos de afuera son los
-     colores que eligió Carlos, exactos:
+  /* Los colores. Índice 0 = la luz de arriba, índice 1 = la oscuridad de
+     abajo. Se mezclan entre las dos paletas según `mezclaDelVelo`.
 
-       rustic red  #39141b  rgb(56, 20, 26)   → el marco y las plantas
-       belladona   #28050B  rgb(41,  5, 11)   → las esquinas
+     ⚠️ LA REGLA QUE SEPARA EL VINO DEL LADRILLO: B POR ENCIMA DE G. El
+     rojo que Carlos rechazó —«un rojo vivo»— tenía G por encima de B, que
+     es naranja quemado. Acá los cuatro cumplen: 46>32, 26>16, 40>28,
+     14>8. */
+  var PALETA_FRIA    = ['22, 32, 46', '10, 16, 26'];
+  var PALETA_BORGONA = ['104, 28, 40', '28, 8, 14'];
 
-     ⚠️ LA REGLA DE TODOS: B POR ENCIMA DE G. Es lo que separa el vino del
-     ladrillo, y es un número, no un gusto. El rojo que Carlos vio y
-     rechazó —«un rojo vivo»— eran `176,58,40` y `150,44,32`, con G por
-     encima de B: eso es naranja quemado. Acá los cinco cumplen la regla:
-     38>30, 34>26, 30>22, 26>20, 11>5. */
-  var PALETA_BORGONA = [
-    '92, 30, 38', '78, 26, 33', '66, 22, 29', '56, 20, 26', '41, 5, 11'
-  ];
+  /**
+   * Interpola las dos paletas.
+   *
+   * @param {number} i - 0 la luz de arriba, 1 la oscuridad de abajo.
+   * @param {number} k - 0 = acero frío, 1 = borgoña.
+   * @returns {string} Los tres canales, listos para un `rgba(...)`.
+   */
+  function colorDelTramo(i, k) {
+    var frio = PALETA_FRIA[i].split(',');
+    var borg = PALETA_BORGONA[i].split(',');
+    var canales = [];
+    for (var c = 0; c < 3; c++) {
+      var a = parseFloat(frio[c]), b = parseFloat(borg[c]);
+      canales.push(Math.round(a + (b - a) * k));
+    }
+    return canales.join(', ');
+  }
+
+  /**
+   * Arma uno de los dos degradados.
+   *
+   * @param {string} fuente - Dónde nace, fuera del borde.
+   * @param {Array} caida   - Los cortes, en fracciones del alfa máximo.
+   * @param {string} color  - Los tres canales.
+   * @param {number} alfa   - El alfa máximo.
+   * @returns {string}
+   */
+  function unDegradadoDeLuz(fuente, caida, color, alfa) {
+    var paradas = [];
+    for (var i = 0; i < caida.length; i++) {
+      var fuerza = caida[i][0], pct = caida[i][1];
+      paradas.push('rgba(' + color + ',' + (alfa * fuerza).toFixed(3) +
+                   ') ' + pct + '%');
+    }
+    return 'radial-gradient(' + FORMA_DE_LA_LUZ + ' at ' + fuente + ', ' +
+           paradas.join(', ') + ')';
+  }
 
   /** El techo de `sangre`, para normalizar la mezcla. Sale de coloresEn. */
   var SANGRE_MAXIMA = 0.70;
@@ -494,167 +549,45 @@
      luz sobre el nombre, más grande la abre. Lo mueve la secuencia. */
   var aperturaDelVelo = 1;
   var ultimaAperturaPintada = -1;
-  var ultimaHuellaDeRadios = -1;
 
-  /**
-   * Distancia del centro del degradado a la esquina más lejana, en píxeles.
-   *
-   * Es el 100 % de un `radial-gradient(circle farthest-corner …)`, y hace
-   * falta para traducir los anclajes —que están en píxeles medidos— al
-   * porcentaje que entiende el CSS.
-   *
-   * @returns {number}
-   */
-  function radioHastaLaEsquina() {
-    var w = window.innerWidth  || 1;
-    var h = window.innerHeight || 1;
-    var dx = Math.max(altar.x, w - altar.x);
-    var dy = Math.max(altar.y, h - altar.y);
-    return Math.sqrt(dx * dx + dy * dy) || 1;
-  }
+  /** El milisegundo de la secuencia, para que el velo sepa dónde va la sombra. */
+  var tDelVelo = 0;
 
-  /**
-   * Traduce el anclaje de un tramo a porcentaje del degradado.
-   *
-   * @param {string} ancla  'centro' | 'letras' | 'broche' | 'broche2' | 'esquina'
-   * @param {number} hastaLaEsquina  Lo que devuelve radioHastaLaEsquina().
-   * @returns {number} De 0 a 100.
-   */
-  function porcentajeDelAncla(ancla, hastaLaEsquina) {
-    if (ancla === 'centro')  return 0;
-    if (ancla === 'esquina') return 100;
+  /* ⚠️ ACÁ VIVÍAN `desvioDelVelo`, `radioHastaLaEsquina` y
+     `porcentajeDelAncla`. Las tres servían a un radial centrado en el
+     nombre con las paradas ancladas a cajas medidas — un diseño que era
+     mío y que no respetaba de dónde viene la luz en esta página. Se fueron
+     con él. Ver la nota grande de FORMA_DE_LA_LUZ. */
 
-    var px = ancla === 'letras'  ? altar.radioLetras
-           : ancla === 'broche'  ? altar.radioBroche
-           : ancla === 'broche2' ? altar.radioBroche * 2
-           : 0;
-
-    /* ⚡ SIN ESTO EL VELO SE VEÍA PLANO LOS PRIMEROS SEGUNDOS (2026-09-11)
-     *
-     * Carlos: «la penumbra muy roja y plana». Lo de plana era esto, y se
-     * puede ver en el degradado que pintaba en el segundo 3:
-     *
-     *     0%, 0%, 0%, 0%, 100%
-     *
-     * o sea TODA la pantalla del color del último tramo: un lavado
-     * uniforme, sin caída, sin centro de gravedad.
-     *
-     * La causa: mientras el layout se asienta —y con el sobre todavía
-     * puesto— `getBoundingClientRect()` del nombre y del óvalo devuelve
-     * cajas de cero, así que los tres anclajes de en medio resolvían a
-     * 0 % y se apilaban todos contra el origen.
-     *
-     * Devolver cero era la respuesta obediente y equivocada: mejor un
-     * degradado con proporciones razonables que uno colapsado. Estos tres
-     * números son los que la propia página mide una vez asentada (13,2 %,
-     * 43,4 % y 86,7 % en 1280x720), redondeados. En cuanto las cajas
-     * miden de verdad, mandan ellas. */
-    if (!px) {
-      return ancla === 'letras'  ? 12
-           : ancla === 'broche'  ? 34
-           : ancla === 'broche2' ? 68
-           : 0;
-    }
-
-    var pct = (px / hastaLaEsquina) * 100;
-
-    /* ⚠️ NINGUN ANCLAJE INTERMEDIO PUEDE LLEGAR AL 100 %. Si `broche2` se
-       pasa de la esquina —pasa en pantallas anchas, donde el ovalo es
-       grande respecto del alto— quedaba topado en 100 y se pisaba con la
-       parada de la esquina: la caida perdia su ultimo escalon y el borde
-       se veia de un solo tono. Medido en 1280x720: 0 / 15,7 / 51,8 / 100 /
-       100. Se lo topa en 92 para que siempre queden los cinco. */
-    if (pct > 92) pct = 92;
-    return pct;
-  }
-  var ultimoCentroX = -999;
-  var ultimoCentroY = -999;
-
-  /**
-   * Reescribe el degradado del velo.
-   *
-   * ⚠️ SOLO CUANDO HACE FALTA. Pintar un degradado del tamaño de la
-   * pantalla es caro, y llamarlo por cuadro sería volver al problema que
-   * esta capa vino a resolver. Se compara contra lo último pintado y se
-   * sale si no cambió nada que se note.
-   *
-   * @returns {void}
-   */
   function pintarElVelo() {
-    /* ⚠️ SIN LAYOUT, EL CENTRO SE IBA A LA ESQUINA. Mientras la portada no
-       tiene caja —el sobre todavia puesto, o el marco sin montar—
-       `altar.x/y` valen cero y el degradado salia en `circle at 0% 0%`:
-       plano Y descentrado. El respaldo del 50/42 es el sitio donde vive el
-       relicario en la portada, que es de donde sale la luz. */
-    var hayCaja = altar.radio > 0 && (altar.x > 0 || altar.y > 0);
-    var cx = hayCaja ? (altar.x / window.innerWidth) * 100 : 50;
-    var cy = hayCaja ? (altar.y / window.innerHeight) * 100 : 42;
+    /* ⚠️ LA GEOMETRÍA ES FIJA, Y ESO ES EL PUNTO. La luz entra siempre por
+       el mismo sitio —una fuente fuera del borde superior, la misma por la
+       que entran los haces del día— así que el degradado no se mueve. Lo
+       único que cambia con la secuencia es el COLOR y la opacidad de la
+       capa. Ver la nota de FORMA_DE_LA_LUZ.
 
-    /* ⚡ PEGAJOSO, NO REDONDEADO (2026-09-11)
-     *
-     * Acá se redondeaba al 1 %. El relicario se mueve con el vaivén de la
-     * portada, y un 1 % son cuatro píxeles en un teléfono: cruzaba el
-     * borde del redondeo varias veces por segundo, y CADA cruce es
-     * reescribir el `background` de una capa a pantalla completa, o sea
-     * rasterizar el degradado entero otra vez.
-     *
-     * Ahora se compara contra lo último pintado con una banda muerta: el
-     * centro tiene que haberse movido más de un 2 % y la apertura más de
-     * un 8 % para justificar un repintado. Por debajo de eso no se nota en
-     * pantalla y sí se nota en el cuadro. */
-    var apertura = aperturaDelVelo;
+       Antes acá se recalculaba un centro a partir de la caja del nombre y
+       se le sumaba un desvío que viajaba. Eso hacía que la luz cambiara de
+       origen a mitad del minuto, que es justo lo que la luz no hace. */
 
-    /* Los anclajes en píxeles cambian con el tamaño de la ventana, así que
-       entran en la banda muerta como un número más. */
-    var huella = Math.round(altar.radioLetras) * 4096 + Math.round(altar.radioBroche);
-
-    /* El color también entra en la banda muerta, cuantizado: doce
-       escalones en el minuto entero. Ver la nota de las dos paletas. */
+    /* El color entra en la banda muerta cuantizado: doce escalones en el
+       minuto entero, o sea doce rasterizaciones y no sesenta por segundo. */
     var escalonDeMezcla = Math.round(mezclaDelVelo * ESCALONES_DE_MEZCLA);
-
-    if (ultimaAperturaPintada >= 0 &&
-        huella === ultimaHuellaDeRadios &&
-        escalonDeMezcla === ultimoEscalonDeMezcla &&
-        Math.abs(cx - ultimoCentroX) < 2 &&
-        Math.abs(cy - ultimoCentroY) < 2 &&
-        Math.abs(apertura - ultimaAperturaPintada) < 0.08) return;
-
-    ultimoCentroX = cx;
-    ultimoCentroY = cy;
-    ultimaAperturaPintada = apertura;
-    ultimaHuellaDeRadios = huella;
+    if (escalonDeMezcla === ultimoEscalonDeMezcla) return;
     ultimoEscalonDeMezcla = escalonDeMezcla;
 
-    var centro = cx.toFixed(1) + '% ' + cy.toFixed(1) + '%';
+    var k = escalonDeMezcla / ESCALONES_DE_MEZCLA;
 
-    /* El radio del degradado se mide contra la esquina más lejana, que es
-       lo que hace que la caída sea igual de redonda en un monitor ancho y
-       en un teléfono vertical. `farthest-corner` es el valor por defecto,
-       pero se escribe explícito porque de eso depende la paridad. */
-    var hastaLaEsquina = radioHastaLaEsquina();
-    var paradas = [];
-    var anterior = 0;
-
-    for (var i = 0; i < TRAMOS_DEL_VELO.length; i++) {
-      var t = TRAMOS_DEL_VELO[i];
-      var color = colorDelTramo(i, escalonDeMezcla / ESCALONES_DE_MEZCLA);
-      var pct = porcentajeDelAncla(t.ancla, hastaLaEsquina) * apertura;
-
-      /* Las paradas de un degradado tienen que ir en orden: si una queda
-         por detrás de la anterior —porque la ventana es muy angosta y dos
-         anclajes se cruzan— el navegador la aplasta contra ella y el tramo
-         desaparece. Se fuerza acá y no se deja al azar del viewport. */
-      if (pct < anterior) pct = anterior;
-      if (pct > 100) pct = 100;
-      anterior = pct;
-
-      paradas.push('rgba(' + color + ',' + t.a + ') ' + pct.toFixed(1) + '%');
-    }
-
+    /* El orden importa: el primero de la lista se pinta ENCIMA. La luz de
+       arriba va primera para que su rojo mande sobre la zona del
+       relicario, y la oscuridad de abajo queda por debajo. */
     capaDelEclipse.style.backgroundImage =
-      'radial-gradient(circle farthest-corner at ' + centro + ',' +
-      paradas.join(',') + ')';
+      unDegradadoDeLuz(FUENTE_DE_ARRIBA, CAIDA_DE_ARRIBA,
+                       colorDelTramo(0, k), ALFA_DE_ARRIBA) + ', ' +
+      unDegradadoDeLuz(FUENTE_DE_ABAJO, CAIDA_DE_ABAJO,
+                       colorDelTramo(1, k), ALFA_DE_ABAJO);
   }
+
 
 
   /* ⚡ EL LIENZO SE MUDÓ DEBAJO DE LOS VELOS (2026-09-11)
@@ -793,14 +726,65 @@
     }
     var trama = dpr * ESCALA_DEL_LIENZO;
 
-    lienzo.width  = Math.floor(window.innerWidth  * trama);
-    lienzo.height = Math.floor(window.innerHeight * trama);
+    /* ⚡ EL TAMAÑO CSS FALTABA, Y POR ESO SE CORTABAN LOS PÉTALOS
+     *   (2026-09-11)
+     *
+     * Carlos, mirando la página real a 2560 px: «los pétalos tienen un
+     * límite donde EVIDENTEMENTE se cortan y desaparecen». Y además: «el
+     * centro de gravedad no está en el relicario». Las dos cosas eran EL
+     * MISMO FALLO.
+     *
+     * ⚠️ UN <canvas> ES UN ELEMENTO REEMPLAZADO. Con `position:fixed;
+     * inset:0` pero SIN `width` declarado, CSS 2.1 §10.3.8 resuelve el
+     * ancho usado a la dimensión INTRÍNSECA —el atributo `width`, o sea el
+     * bitmap— y descarta `right`. La caja en pantalla queda del tamaño del
+     * bitmap, pegada arriba-izquierda.
+     *
+     * Mientras el factor fue exactamente 1 (dpr 1, sin escala), bitmap y
+     * viewport coincidían POR CASUALIDAD y el fallo estuvo latente desde
+     * siempre sin que nadie lo viera. Al introducir ESCALA_DEL_LIENZO en
+     * 0,72 la casualidad se terminó:
+     *
+     *     lienzo.width  = floor(2560 × 0,72) = 1843
+     *     lienzo.height = floor(1277 × 0,72) =  919
+     *
+     * La caja medía 1843×919 arriba-izquierda: pasada esa línea no hay
+     * elemento, y por lo tanto no hay pétalo. Y como todo el dibujo queda
+     * encogido al 72 % contra el origen, el remolino caía en
+     * 0,72 × (altar.x, altar.y) — arriba y a la izquierda del relicario.
+     *
+     * ⚠️ LOS DOS LIENZOS HERMANOS YA LO HACÍAN BIEN, y son el patrón:
+     * 24-lienzo-de-petalos.js y 23-lienzo-de-luz.js asignan el bitmap Y
+     * `style.width`/`style.height` en píxeles CSS. Éste era el único de los
+     * tres que no.
+     */
+    var anchoCss = window.innerWidth;
+    var altoCss  = window.innerHeight;
+
+    lienzo.width  = Math.floor(anchoCss * trama);
+    lienzo.height = Math.floor(altoCss  * trama);
+    lienzo.style.width  = anchoCss + 'px';
+    lienzo.style.height = altoCss  + 'px';
     pincel.setTransform(trama, 0, 0, trama, 0, 0);
 
     lienzoDeLaOfrenda.width  = lienzo.width;
     lienzoDeLaOfrenda.height = lienzo.height;
+    lienzoDeLaOfrenda.style.width  = anchoCss + 'px';
+    lienzoDeLaOfrenda.style.height = altoCss  + 'px';
     pincelDeLaOfrenda.setTransform(trama, 0, 0, trama, 0, 0);
     cajaAnteriorDeLaOfrenda = null;
+
+    /* La reliquia nace en el segundo 42, después de esta función, así que
+       puede no existir todavía. Cuando existe, se la re-mide acá con todo
+       lo demás: si no, un escalón del gobernador o un resize la dejaban a
+       otra escala que el lienzo del mundo y la rosa saltaba de tamaño. */
+    if (lienzoDeLaReliquia && pincelDeLaReliquia) {
+      lienzoDeLaReliquia.width  = lienzo.width;
+      lienzoDeLaReliquia.height = lienzo.height;
+      lienzoDeLaReliquia.style.width  = anchoCss + 'px';
+      lienzoDeLaReliquia.style.height = altoCss  + 'px';
+      pincelDeLaReliquia.setTransform(trama, 0, 0, trama, 0, 0);
+    }
 
     /* Asignar el ancho de un canvas lo BORRA entero, así que las cajas del
        cuadro anterior ya no apuntan a nada. Dejarlas haría que el primer
@@ -2398,6 +2382,9 @@
       var tramaDeLaReliquia = dpr * ESCALA_DEL_LIENZO;
       lienzoDeLaReliquia.width  = Math.floor(window.innerWidth  * tramaDeLaReliquia);
       lienzoDeLaReliquia.height = Math.floor(window.innerHeight * tramaDeLaReliquia);
+      /* El tamaño CSS, que es lo que faltaba en los tres. Ver medirElLienzo. */
+      lienzoDeLaReliquia.style.width  = window.innerWidth  + 'px';
+      lienzoDeLaReliquia.style.height = window.innerHeight + 'px';
       pincelDeLaReliquia = lienzoDeLaReliquia.getContext('2d');
       pincelDeLaReliquia.setTransform(tramaDeLaReliquia, 0, 0, tramaDeLaReliquia, 0, 0);
     } catch (e) {
@@ -4163,6 +4150,10 @@
      * cuadro: son doce en todo el minuto. */
     mezclaDelVelo = limitar(color.sangre / SANGRE_MAXIMA, 0, 1);
 
+    /* Dónde va la sombra en este milisegundo. Lo lee pintarElVelo(), que
+       decide solo si eso justifica reescribir el degradado. */
+    tDelVelo = t;
+
     /* ⚡ EL TERCER CONTACTO SE CUENTA CON LA LUZ, NO CON UN FLASH
      *   (2026-09-11)
      *
@@ -4280,8 +4271,12 @@
 
     mezclaDelVelo = 0;
     ultimoEscalonDeMezcla = -1;
+
+    /* Y dónde va la sombra: sin esto la corrida siguiente del panel de
+       ensayo arrancaría con el desvío final de la anterior, o sea con la
+       luz ya del lado equivocado. */
+    tDelVelo = 0;
     ultimaAperturaPintada = -1;
-    ultimaHuellaDeRadios = -1;
 
     /* La base se vuelve a medir en cada corrida: la ventana puede haber
        cambiado de tamano entre una y otra, y con ella el costo del cuadro. */
@@ -4351,9 +4346,11 @@
     function alRedimensionar() {
       medirElLienzo();
       acomodarLaCopia();
-      /* El velo se centra en el relicario, y el relicario se movió. Es el
-         único momento en que hace falta repintar el degradado. */
-      ultimoCentroX = -999;
+      /* ⚠️ EL VELO YA NO SE ENTERA DEL RESIZE, y es correcto: su geometría
+         está en porcentajes de pantalla, no en píxeles, así que el mismo
+         degradado vale para cualquier tamaño. Se fuerza el repintado solo
+         por si la capa nació antes de que hubiera nada. */
+      ultimoEscalonDeMezcla = -1;
       pintarElVelo();
     }
 
@@ -4441,9 +4438,8 @@
       if (c.parentNode) c.parentNode.removeChild(c);
     });
     cajaAnteriorDeLaOfrenda = null;
-    ultimoCentroX = -999;
-    ultimoCentroY = -999;
     ultimaAperturaPintada = -1;
+    ultimoEscalonDeMezcla = -1;
 
     /* Y en el mismo cuadro en que desaparece todo, lo único que no
        desaparece. No es una transición: es un objeto que se queda. Ver la
