@@ -468,15 +468,35 @@
     motaCentro: [248, 168, 156, 0.74],
     motaBorde:  [198, 110, 104, 0.42],
 
-    /* El halo de arriba y la cúpula de la sala: rojo oscuro, no vivo. */
-    ambienteAlto: [104, 12, 20, 0.44],
-    tinteDeSala:  [ 30,  4, 10, 0.62],
-    tinteDelVelo: [ 18,  3,  8, 0.58],
+    /* ⚡ PROFUNDIDAD: EL FONDO SE VA HACIA ATRÁS (2026-09-12)
+     *
+     * Carlos: «¿podrías darle profundidad a la luz? Algo así como un tono
+     * más oscuro, como desde atrás del marco, una especie de sombra para
+     * que el color no sea tan vivo».
+     *
+     * ⚠️ Y HAY UN SITIO EXACTO PARA HACERLO. `tinteDeSala` y
+     * `oscurecidoFijo` se escriben en `#capa-fondo`, que vive en
+     * `z-index: -1` — detrás de absolutamente todo (estilos/
+     * 01-fundamentos.css:257). El marco victoriano está en z-index 60.
+     *
+     * O sea que hundir estos dos empuja el FONDO hacia atrás sin tocar ni
+     * un píxel del marco, del oro ni del relicario. El rojo deja de estar
+     * plano contra la pantalla y pasa a tener dos planos: la sala en
+     * sombra, y el marco delante todavía iluminado.
+     *
+     * `ambienteAlto` baja porque es el halo de la parte de arriba: era lo
+     * que más subía el rojo a la vista. Menos halo y más sombra de fondo
+     * es la misma cantidad de eclipse, repartida con profundidad. */
+    ambienteAlto: [ 88, 10, 18, 0.34],
+    tinteDeSala:  [ 16,  3,  8, 0.78],
+    tinteDelVelo: [ 12,  2,  6, 0.64],
 
     /* ⚠️ ACÁ ESTÁ LA OSCURIDAD DE VERDAD, y no en ninguna capa de color.
        La noche cerrada va en 0,20 y 1,00; el eclipse se hunde bastante
        más abajo. Es lo que hace que sea el momento más oscuro del día. */
-    oscurecidoFijo:      0.34,
+    /* La sombra del fondo. Ver la nota de arriba: acá es donde se gana la
+       profundidad, porque esta variable solo toca la capa de z-index -1. */
+    oscurecidoFijo:      0.44,
     profundidadDeSombra: 1.55,
 
     /* El sol está tapado: el haz se acorta y baja. */
