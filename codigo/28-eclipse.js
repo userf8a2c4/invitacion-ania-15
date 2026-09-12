@@ -466,8 +466,28 @@
   var CAIDA_DE_ABAJO  = [[0, 26], [0.08, 40], [0.28, 54], [0.62, 74], [1, 100]];
 
   /** Alfa máximo de cada uno de los dos degradados. */
-  var ALFA_DE_ARRIBA = 0.85;
-  var ALFA_DE_ABAJO  = 0.80;
+  /* ⚡ MENOS CARGA, MÁS SATURACIÓN (2026-09-11)
+   *
+   * Carlos: «hazlo más NATURAL… pero deja de cargarla».
+   *
+   * La luz de una totalidad lunar es LUZ REFRACTADA por la atmósfera de la
+   * Tierra: la suma de todos los amaneceres y atardeceres del planeta a la
+   * vez. Es MUY saturada y POCO intensa. Un rojo apagado a mucha opacidad
+   * da barro; un rojo saturado a poca opacidad da luz.
+   *
+   * Medido sobre el oro del relicario rgb(198,158,92):
+   *
+   *   antes  104,28,40 @ 0,51 → rgb(150, 92,65)  luz 63 %  sat 0,57
+   *   ahora  150,16,28 @ 0,26 → rgb(186,121,75)  luz 81 %  sat 0,60
+   *
+   * El oro sigue siendo oro. Y el fondo oscuro pasa a R/G 2,8 —rojo de
+   * verdad— con las rosas MÁS saturadas que antes, no menos.
+   *
+   * La oscuridad no la tiene que poner esta capa: ya la ponen el sol
+   * muriendo, los haces vaciándose y `#penumbra-profunda`. El trabajo de
+   * acá es el COLOR. */
+  var ALFA_DE_ARRIBA = 0.44;
+  var ALFA_DE_ABAJO  = 0.62;
 
   /* Los colores. Índice 0 = la luz de arriba, índice 1 = la oscuridad de
      abajo. Se mezclan entre las dos paletas según `mezclaDelVelo`.
@@ -476,8 +496,8 @@
      rojo que Carlos rechazó —«un rojo vivo»— tenía G por encima de B, que
      es naranja quemado. Acá los cuatro cumplen: 46>32, 26>16, 40>28,
      14>8. */
-  var PALETA_FRIA    = ['22, 32, 46', '10, 16, 26'];
-  var PALETA_BORGONA = ['104, 28, 40', '28, 8, 14'];
+  var PALETA_FRIA    = ['18, 34, 62', '8, 12, 24'];
+  var PALETA_BORGONA = ['150, 16, 28', '26, 6, 16'];
 
   /**
    * Interpola las dos paletas.

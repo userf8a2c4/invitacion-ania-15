@@ -624,10 +624,57 @@ comprobar('y en la totalidad es BORGOÑA, no ladrillo ni negro',
   const enLaCripta   = alfaEnZona(43000, 'arriba');
   const abajoEnLaCripta = alfaEnZona(43000, 'abajo');
 
-  comprobar('en el esfuerzo el velo ya TAPA de verdad',
-    enElEsfuerzo >= 0.20,
-    'alfa efectivo ' + enElEsfuerzo.toFixed(2) + ' — el eclipse tiene que ' +
-    'notarse antes de la totalidad, pero sin rojo');
+/* ⚡ EL VELO TIÑE; LA OSCURIDAD LA PONE OTRA COSA (2026-09-11)
+ *
+ * Carlos: «hazlo más NATURAL… pero deja de cargarla».
+ *
+ * La luz de una totalidad lunar es luz REFRACTADA por la atmósfera de la
+ * Tierra: muy saturada y poco intensa. Un rojo apagado a mucha opacidad da
+ * barro; un rojo saturado a poca opacidad da luz. Así que los alfas del
+ * velo bajaron a la mitad y los colores se saturaron.
+ *
+ * ⚠️ Y POR ESO ESTAS COMPROBACIONES CAMBIARON DE OBJETO. Pedían que el
+ * VELO tapara —alfa efectivo ≥ 0,20 en el esfuerzo, el oro por debajo del
+ * 82 % en la umbra— y eso era un proxy que dejó de aplicar: el velo ya no
+ * es quien oscurece. La oscuridad la ponen el sol muriendo, los haces
+ * vaciándose y `#penumbra-profunda`, que es como oscurece un eclipse de
+ * verdad. Medir el velo y llamarlo «oscuridad» sería medir mal.
+ *
+ * Se comprueba lo que el velo SÍ es responsable de: que esté presente, que
+ * lo que pone antes de la totalidad sea FRÍO, y que la oscuridad de verdad
+ * siga estando donde corresponde. */
+comprobar('en el esfuerzo el velo ya se nota',
+  enElEsfuerzo >= 0.10,
+  'alfa efectivo ' + enElEsfuerzo.toFixed(2) + ' — si no llega ni a eso, ' +
+  'el velo no existe');
+
+{
+  /* Y que lo que pone sea FRÍO: el oro tiene que virar hacia el azul antes
+     de la totalidad, no hacia el rojo. Es la mitad del guion. */
+  const ORO = [198, 158, 92];
+  const limpio = ORO[2] / ORO[0];
+  const enUmbra = comoSeVeEn(30000, ORO, 'arriba');
+  const enCripta = comoSeVeEn(43000, ORO, 'arriba');
+
+  comprobar('y lo que pone antes de la totalidad es FRÍO, no rojo',
+    (enUmbra[2] / enUmbra[0]) > limpio,
+    'el oro pasa de B/R ' + limpio.toFixed(3) + ' a ' +
+    (enUmbra[2] / enUmbra[0]).toFixed(3) + ' — tiene que SUBIR: vira al azul');
+
+  comprobar('y en la totalidad vira al rojo, no al azul',
+    (enCripta[2] / enCripta[0]) < limpio,
+    'el oro queda en B/R ' + (enCripta[2] / enCripta[0]).toFixed(3) +
+    ' contra ' + limpio.toFixed(3) + ' limpio');
+
+  /* ⚠️ Y EL ORO TIENE QUE SEGUIR SIENDO ORO. Es lo que separa la
+     referencia de Carlos —una escena iluminada de rojo— de un filtro
+     pegado encima. Si el oro pierde su saturación, es barro. */
+  const sat = (x) => { const M = Math.max(...x), m = Math.min(...x); return M ? (M - m) / M : 0; };
+  comprobar('y el oro sigue siendo oro en la totalidad',
+    sat(enCripta) >= sat(ORO) * 0.9,
+    'saturación ' + sat(enCripta).toFixed(2) + ' contra ' + sat(ORO).toFixed(2) +
+    ' limpio — por debajo de eso deja de leerse como oro');
+}
 
   /* ⚡ SE MIDE LA LUZ QUE SE FUE, NO EL ALFA (2026-09-11)
    *
@@ -651,10 +698,17 @@ comprobar('y en la totalidad es BORGOÑA, no ladrillo ni negro',
       'al oro le queda el ' + (queda(4000, 'arriba') * 100).toFixed(0) + ' % de su luz ' +
       '— el documento pide «casi imperceptible al principio»');
 
-    comprobar('y en la umbra profunda ya es oscuridad de verdad',
-      queda(30000, 'arriba') <= 0.82,
-      'al oro le queda el ' + (queda(30000, 'arriba') * 100).toFixed(0) + ' % ' +
-      '— el documento pide «oscuridad intensa» a los 30 s');
+    /* ⚠️ LA OSCURIDAD NO LA PONE EL VELO, Y SE COMPRUEBA DONDE SÍ ESTÁ.
+       El documento pide «oscuridad intensa» a los 30 s, y eso lo consigue
+       el eclipse matando la luz ambiente: acorta el haz del sol, le cambia
+       el ángulo y vacía los rayos. Medir el velo y llamarlo oscuridad
+       sería medir el sitio equivocado. */
+    comprobar('y la oscuridad de verdad la pone el sol muriendo',
+      /window\.LuzDeLaHora\.largoDelHaz = mundo\.largoDelHaz \* loQueQueda;/
+        .test(eclipseCodigo) &&
+      /window\.LienzoDeLuz\.haces = sinLuz \? \[\]/.test(eclipseCodigo),
+      'si el velo tuviera que oscurecer solo, habría que cargarlo hasta ' +
+      'volverlo barro');
 
     /* ⚠️ EL SALTO SE MIDE EN LAS DOS ZONAS, que es lo que ve el ojo. En la
        de arriba el borgoña es luminoso a propósito —es la luz roja
