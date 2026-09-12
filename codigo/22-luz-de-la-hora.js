@@ -326,7 +326,39 @@
     const ahora = new Date();
     const hora = ahora.getHours() + ahora.getMinutes() / 60;
     const { desde, hasta, t } = tramoDeLaHora(hora);
+    aplicarMomento(desde, hasta, t);
+  }
 
+  /**
+   * Aplica un momento de luz: escribe las siete cosas que definen cómo se
+   * ve la sala.
+   *
+   * ⚡ ESTO SE SEPARÓ DE `ponerLaLuzDeLaHora` PARA EL ECLIPSE (2026-09-11)
+   *
+   * Carlos, sobre el minuto del eclipse: «estudia cómo se comporta la luz
+   * del día y de la noche en la web, es la misma mierda, solo que rojo
+   * OSCURO». Y: «la única diferencia es que esto dura un minuto».
+   *
+   * Tenía razón, y es la corrección de fondo de toda la ronda. El eclipse
+   * estaba pintando un degradado ENCIMA de la escena —un tinte— cuando lo
+   * que tenía que hacer era ser OTRA HORA de este mismo sistema. La luz de
+   * esta página no es una capa: son catorce perillas que mueven los haces,
+   * las motas, el ambiente, el velo de la sala, la profundidad y las dos
+   * capas que RESTAN luminancia.
+   *
+   * Un tinte encima no puede parecerse a eso por más que se le afine el
+   * color, porque no toca ninguna de esas perillas.
+   *
+   * Partir la función en dos no cambia nada de lo que hacía: el camino del
+   * reloj sigue siendo idéntico. Solo deja que 28-eclipse.js pase su
+   * propio momento por la misma puerta.
+   *
+   * @param {Object} desde - Momento de partida.
+   * @param {Object} hasta - Momento de destino.
+   * @param {number} t     - 0 = `desde`, 1 = `hasta`.
+   * @returns {void}
+   */
+  function aplicarMomento(desde, hasta, t) {
     const color = clave => mezclar(desde[clave], hasta[clave], t);
     // Mezcla NÚMEROS simples (no colores) entre los dos momentos — se usa
     // para anguloDelSol/largoDelHaz/etc. más abajo, y para las dos capas
@@ -418,6 +450,19 @@
       largoDelHaz:   mezclarNumero('largoDelHaz'),
       fuerzaDeVelas: mezclarNumero('fuerzaDeVelas'),
       deNoche:       mezclarNumero('deNoche'),
+
+      /* ── LA PUERTA DEL ECLIPSE ──
+         `aplicarMomento` deja pasar un momento cualquiera por el mismo
+         camino que usa el reloj; `momentoDeAhora` devuelve el momento ya
+         mezclado de esta hora, que es desde donde el eclipse arranca y a
+         donde vuelve. `devolverLaHora` restaura el reloj.
+
+         ⚠️ Van acá y no en un objeto aparte porque el eclipse ya lee
+         `window.LuzDeLaHora` y porque 22 REESCRIBE este objeto entero en
+         cada pasada: colgarlas de otro sitio las dejaría desincronizadas. */
+      aplicarMomento:  aplicarMomento,
+      momentoDeAhora:  momentoDeAhora,
+      devolverLaHora:  ponerLaLuzDeLaHora,
     };
 
     document.dispatchEvent(new CustomEvent('hora-cambio'));
@@ -465,6 +510,31 @@
            tono(0.28) + ' 46%, '  +
            tono(0.08) + ' 60%, '  +
            `rgba(${r}, ${g}, ${b}, 0) 74%)`;
+  }
+
+  /**
+   * El momento de luz de ESTA hora, ya mezclado y aplanado.
+   *
+   * Lo usa el eclipse como punto de partida: entra desde la luz que
+   * realmente había y vuelve a ella, en vez de saltar desde un valor
+   * inventado. A las 6:30 de la mañana —que es cuando se dispara— eso es
+   * el azul que queda antes del alba.
+   *
+   * @returns {Object} Un momento con las mismas claves que MOMENTOS.
+   */
+  function momentoDeAhora() {
+    const ahora = new Date();
+    const hora = ahora.getHours() + ahora.getMinutes() / 60;
+    const { desde, hasta, t } = tramoDeLaHora(hora);
+
+    const plano = {};
+    for (const clave of Object.keys(desde)) {
+      const a = desde[clave], b = hasta[clave];
+      plano[clave] = Array.isArray(a)
+        ? a.map((v, i) => v + (b[i] - v) * t)
+        : a + (b - a) * t;
+    }
+    return plano;
   }
 
   ponerLaLuzDeLaHora();
