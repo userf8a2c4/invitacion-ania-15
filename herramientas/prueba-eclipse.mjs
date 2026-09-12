@@ -158,17 +158,113 @@ const curva = new Function(constantes + '\n' + funciones +
    color. Por eso el último tramo del degradado es un rojo muy oscuro y no
    negro — el marco, que es donde están las plantas, vive ahí. */
 
+/* ⚡ LOS RADIOS DEL VELO YA NO SON PORCENTAJES: SON ANCLAJES MEDIDOS
+ *   (2026-09-11)
+ *
+ * Antes cada tramo traía un `r` fijo en porcentaje de pantalla, y por eso
+ * el óvalo del relicario quedaba perdonado: la caja del <h1> es la del
+ * BLOQUE, no la de la palabra, y mide lo mismo que el relicario.
+ *
+ * Ahora cada tramo dice a qué se ancla y el código lo traduce a porcentaje
+ * con dos cajas medidas en vivo. Para poder juzgarlo desde Node se
+ * reconstruye la misma geometría con datos LEÍDOS, no inventados:
+ *
+ *   · `--ancho-broche` sale de estilos/04-portada.css
+ *   · el viewport es el del ProDesk de Carlos, 2560x1277, que es la
+ *     máquina contra la que se decide esta ronda
+ *
+ * Si el CSS cambia, estos números cambian con él. */
+const VIEWPORT = { w: 2560, h: 1277 };
+
+const ANCHO_DEL_BROCHE = (() => {
+  const css = leer('estilos/04-portada.css');
+  const m = css.match(/--ancho-broche:\s*min\(([\d.]+)vw,\s*([\d.]+)px,\s*calc\(var\([^)]*\)\s*\*\s*([\d.]+)\)\)/);
+  if (!m) return 996;
+  return Math.min(VIEWPORT.w * (+m[1]) / 100, +m[2], VIEWPORT.h * (+m[3]));
+})();
+
+/** Lo mismo que radioHastaLaEsquina() en el código, con el altar al 50/42 %. */
+const HASTA_LA_ESQUINA = (() => {
+  const ax = VIEWPORT.w * 0.50, ay = VIEWPORT.h * 0.42;
+  const dx = Math.max(ax, VIEWPORT.w - ax);
+  const dy = Math.max(ay, VIEWPORT.h - ay);
+  return Math.sqrt(dx * dx + dy * dy);
+})();
+
+const RADIO_DEL_BROCHE = ANCHO_DEL_BROCHE / 2;
+
+/** La misma tabla que porcentajeDelAncla(), en porcentaje del degradado. */
+const PORCENTAJE_DEL_ANCLA = {
+  centro:  0,
+  /* La caja entintada de «ANIA» no se puede medir sin un navegador. Se usa
+     un tercio del óvalo, que es del orden correcto y solo sirve para que la
+     tabla de interpolación esté completa: ninguna comprobación de luz mira
+     tan adentro (todas miran al 70 %, donde vive el marco). */
+  letras:  Math.min(100, (RADIO_DEL_BROCHE / 3) / HASTA_LA_ESQUINA * 100),
+  broche:  Math.min(100, RADIO_DEL_BROCHE / HASTA_LA_ESQUINA * 100),
+  broche2: Math.min(100, (RADIO_DEL_BROCHE * 2) / HASTA_LA_ESQUINA * 100),
+  esquina: 100
+};
+
+/* ⚡ EL VELO YA NO TIENE UN COLOR: TIENE DOS PALETAS Y UNA MEZCLA
+ *   (2026-09-11)
+ *
+ * Carlos: «vi un rojo vivo allí como sombra, ¿puedes cambiar a un
+ * borgoña? o sea, la penumbra del eclipse de sangre».
+ *
+ * El velo era UNA capa con un degradado ROJO fijo, y lo único que se
+ * animaba era su opacidad: o sea que había rojo desde el segundo 1, más
+ * tenue pero rojo. El documento base pide lo contrario —«la luz ambiental
+ * se enfría y pierde saturación, PERO TODAVÍA NO HAY ROJO»— y el rojo es
+ * «exclusivo del momento de máxima totalidad».
+ *
+ * ⚠️ Y ESTE ARCHIVO NO LO CAZÓ, por el mismo motivo de siempre: comprobaba
+ * el COEFICIENTE `sangre` —que sí valía cero en la penumbra— y nunca el
+ * COLOR que se pinta en pantalla. Otra vez una prueba mirando el modelo en
+ * vez de mirar el resultado.
+ *
+ * Ahora se leen las DOS paletas y la mezcla se calcula como la calcula el
+ * código: `sangre` normalizada. Así `comoSeVeEn(t, …)` devuelve el color
+ * real de ese milisegundo, frío o borgoña según corresponda. */
+const paleta = (nombre) => {
+  const bloque = (eclipse.match(
+    new RegExp('var ' + nombre + ' = \\[[\\s\\S]*?\\];')) || [''])[0];
+  return [...bloque.matchAll(/'([\d\s,]+)'/g)]
+    .map(m => m[1].split(',').map(v => +v.trim()));
+};
+
+const PALETA_FRIA    = paleta('PALETA_FRIA');
+const PALETA_BORGONA = paleta('PALETA_BORGONA');
+
+/** El máximo que alcanza `sangre`, para normalizar la mezcla. */
+const SANGRE_MAXIMA = (() => {
+  let m = 0;
+  for (let t = 0; t <= 60000; t += 50) m = Math.max(m, curva.coloresEn(t).sangre);
+  return m || 1;
+})();
+
+/** Cuánto borgoña hay en el milisegundo `t`: 0 = acero frío, 1 = borgoña. */
+const mezclaEn = (t) => curva.coloresEn(t).sangre / SANGRE_MAXIMA;
+
 /** Los tramos del velo, leídos del propio archivo para no inventarlos. */
 const TRAMOS = (() => {
   const bloque = (eclipse.match(/var TRAMOS_DEL_VELO = \[[\s\S]*?\];/) || [''])[0];
   const filas = [...bloque.matchAll(
-    /\{\s*r:\s*(\d+),\s*c:\s*'([^']+)',\s*a:\s*([\d.]+)\s*\}/g)];
-  return filas.map(m => ({
-    r: +m[1],
-    c: m[2].split(',').map(v => +v.trim()),
-    a: +m[3]
+    /\{\s*ancla:\s*'(\w+)',\s*a:\s*([\d.]+)\s*\}/g)];
+  return filas.map((m, i) => ({
+    ancla: m[1],
+    r: PORCENTAJE_DEL_ANCLA[m[1]],
+    fria: PALETA_FRIA[i],
+    borgona: PALETA_BORGONA[i],
+    a: +m[2]
   }));
 })();
+
+/** El color del tramo `i` en el milisegundo `t`, igual que colorDelTramo(). */
+const colorDelTramoEn = (i, t) => {
+  const k = mezclaEn(t);
+  return TRAMOS[i].fria.map((v, c) => v + (TRAMOS[i].borgona[c] - v) * k);
+};
 
 /* ⚡ LOS COEFICIENTES SE LEEN DEL ARCHIVO, NO SE COPIAN ACÁ (2026-09-11)
  *
@@ -211,13 +307,20 @@ const comoSeVeEn = (t, rgb, radio) => {
 
   /* Se interpola entre los dos tramos que rodean a ese radio, que es lo
      que hace el navegador con un degradado. */
-  let a = TRAMOS[TRAMOS.length - 1], b = a;
+  let ia = TRAMOS.length - 1, ib = ia;
   for (let i = 0; i < TRAMOS.length - 1; i++) {
-    if (radio >= TRAMOS[i].r && radio <= TRAMOS[i + 1].r) { a = TRAMOS[i]; b = TRAMOS[i + 1]; break; }
+    if (radio >= TRAMOS[i].r && radio <= TRAMOS[i + 1].r) { ia = i; ib = i + 1; break; }
   }
+  const a = TRAMOS[ia], b = TRAMOS[ib];
   const k = b.r === a.r ? 0 : (radio - a.r) / (b.r - a.r);
   const alfa  = a.a + (b.a - a.a) * k;
-  const color = a.c.map((v, i) => v + (b.c[i] - v) * k);
+
+  /* ⚠️ EL COLOR SALE DE LA FASE, no de una constante. Ver la nota de las
+     dos paletas: en la penumbra es acero frío y solo en la totalidad es
+     borgoña. Mirar un color fijo acá es lo que dejó pasar el rojo desde
+     el segundo 1. */
+  const ca = colorDelTramoEn(ia, t), cb = colorDelTramoEn(ib, t);
+  const color = ca.map((v, i) => v + (cb[i] - v) * k);
 
   const efectiva = velo * alfa;
   return rgb.map((v, i) => v * (1 - efectiva) + color[i] * efectiva);
@@ -305,7 +408,9 @@ comprobar('la oscuridad cae en REDONDO desde el relicario',
   'centro de gravedad deja de ser el nombre');
 
 comprobar('y el centro del degradado sale del altar, no de la pantalla',
-  /var cx = altar\.radio \? \(altar\.x \/ window\.innerWidth\) \* 100 : 50;/
+  /var cx = hayCaja \? \(altar\.x \/ window\.innerWidth\) \* 100 : 50;/
+    .test(eclipseCodigo) &&
+  /var hayCaja = altar\.radio > 0 && \(altar\.x > 0 \|\| altar\.y > 0\);/
     .test(eclipseCodigo),
   'centrado en la pantalla, en un teléfono el nombre no queda en el medio');
 
@@ -340,15 +445,120 @@ comprobar('y lo que se anima por cuadro es solo la opacidad',
    donde un velo radial centrado en el nombre oscurece más. Un negro ahí
    apagaría el acontecimiento. Se comprueba ejecutando los tramos, no
    leyendo un color. */
-comprobar('el velo tiñe de rojo y no apaga a negro',
+/* ⚡ EL COLOR SE JUZGA POR FASE, Y ÉSTA ES LA COMPROBACIÓN QUE FALTABA.
+ *
+ * Antes decía `TRAMOS.every(t => t.c[0] > t.c[1] * 2)` — o sea EXIGÍA que
+ * el velo fuera rojo SIEMPRE, incluida la penumbra. Estaba blindando el
+ * bug. Ahora son dos comprobaciones opuestas, una por fase. */
+comprobar('en la penumbra el velo es FRÍO, sin una gota de rojo',
   TRAMOS.length >= 3 &&
-  TRAMOS.every(t => t.c[0] > t.c[1] * 2) &&
-  TRAMOS[TRAMOS.length - 1].c[0] >= 18,
-  'tramos: ' + TRAMOS.map(t => 'rgb(' + t.c.join(',') + ')').join(' · '));
+  TRAMOS.every(t => t.fria[0] <= t.fria[1] && t.fria[1] <= t.fria[2]),
+  'paleta fría: ' + TRAMOS.map(t => 'rgb(' + t.fria.join(',') + ')').join(' · ') +
+  ' — si R sube por encima de G, hay rojo en la penumbra');
 
-comprobar('y el altar es el punto menos velado de la pantalla',
-  TRAMOS[0].a < TRAMOS[TRAMOS.length - 1].a * 0.35,
-  'si el centro se vela como el borde, deja de ser el centro de gravedad');
+/* ⚠️ Y EN LA TOTALIDAD, BORGOÑA — QUE NO ES LADRILLO. La diferencia es
+   B POR ENCIMA DE G: el vino tira al violeta y el ladrillo al naranja.
+   Carlos rechazó `176,58,40` y `150,44,32` —«un rojo vivo»— y esos dos
+   tenían G por encima de B. Es un número, no un gusto. */
+comprobar('y en la totalidad es BORGOÑA, no ladrillo ni negro',
+  TRAMOS.every(t => t.borgona[0] > t.borgona[1] * 2) &&
+  TRAMOS.every(t => t.borgona[2] > t.borgona[1]) &&
+  TRAMOS[TRAMOS.length - 1].borgona[0] >= 18,
+  'paleta borgoña: ' + TRAMOS.map(t => 'rgb(' + t.borgona.join(',') + ')').join(' · '));
+
+/* Y ejecutado: que el color pintado en la penumbra no tenga rojo y el de
+   la cripta sí. Es lo mismo, pero corriendo la interpolación de verdad. */
+{
+  const enPenumbra = colorDelTramoEn(TRAMOS.length - 1, 4000);
+  const enLaCripta = colorDelTramoEn(TRAMOS.length - 1, 43000);
+  comprobar('y el color PINTADO cambia de frío a borgoña con la fase',
+    enPenumbra[0] <= enPenumbra[2] && enLaCripta[0] > enLaCripta[1] * 2,
+    'penumbra rgb(' + enPenumbra.map(Math.round) + ') · cripta rgb(' +
+    enLaCripta.map(Math.round) + ')');
+
+  /* ⚠️ Y ESTO ES LO QUE ATA LA PRUEBA AL CÓDIGO. Lo de arriba reimplementa
+     la mezcla acá dentro, así que por sí solo no vería que el archivo la
+     congelara en cero —`colorDelTramo(i, 0)`— y dejara el velo frío toda
+     la totalidad. Se comprueba que pintarElVelo pase la mezcla DE VERDAD. */
+  comprobar('y el velo pinta con la mezcla real, no con una constante',
+    /colorDelTramo\(i, escalonDeMezcla \/ ESCALONES_DE_MEZCLA\)/.test(eclipseCodigo) &&
+    /mezclaDelVelo \* ESCALONES_DE_MEZCLA/.test(eclipseCodigo),
+    'con la mezcla fija, el borgoña de la totalidad no llega nunca');
+
+  comprobar('y la mezcla la gobierna `sangre`, que es cero hasta el 35',
+    /mezclaDelVelo = limitar\(color\.sangre \/ SANGRE_MAXIMA, 0, 1\);/
+      .test(eclipseCodigo),
+    'si la moviera otra cosa —o una constante— el borgoña aparecería antes ' +
+    'de la totalidad, o no aparecería nunca');
+}
+
+/* ⚠️ ENCERRADO POR LOS DOS LADOS. El centro tiene que estar MENOS velado
+   que el borde —o la caída deja de ser redonda y vuelve el «cuadro
+   cerrándose»— pero YA NO puede estar casi limpio: el relicario es materia
+   y se corrompe. Ver la nota de Carlos en la sección de luminancia. */
+comprobar('el centro se vela menos que el borde, pero se vela',
+  TRAMOS[0].a < TRAMOS[TRAMOS.length - 1].a * 0.62 &&
+  TRAMOS[0].a >= 0.20,
+  'centro ' + TRAMOS[0].a + ' · esquina ' + TRAMOS[TRAMOS.length - 1].a);
+
+comprobar('los tramos se anclan a cajas medidas, no a porcentajes fijos',
+  TRAMOS.every(t => typeof t.ancla === 'string') &&
+  /function porcentajeDelAncla/.test(eclipseCodigo),
+  'la caja del <h1> es la del BLOQUE y mide lo mismo que el relicario: ' +
+  'con porcentajes fijos el óvalo quedaba perdonado');
+
+/* ⚡ SORDA HASTA ACÁ. Alcanzaba con que `medirLaCajaEntintada` EXISTIERA en
+   el archivo; se la podía dejar definida y nunca llamarla, y el velo
+   volvía a medir la caja del bloque —la del relicario— sin que nada se
+   quejara. Se exige que medirElAltar la use, y que el óvalo se mida. */
+{
+  const cuerpo = (eclipseCodigo.match(
+    /function medirElAltar[\s\S]*?\n  \}/) || [''])[0];
+
+  comprobar('y medirElAltar mide de verdad las dos cajas',
+    /medirLaCajaEntintada\(nombre\)/.test(cuerpo) &&
+    /altar\.radioLetras =/.test(cuerpo) &&
+    /altar\.radioBroche =/.test(cuerpo),
+    'definir la medición y no llamarla deja el velo midiendo el bloque');
+
+  /* EL VELO NO PUEDE COLAPSARSE A UN LAVADO PLANO (2026-09-11)
+
+   Carlos: «la penumbra muy roja y plana». Lo de PLANA era esto: mientras
+   el layout se asienta, getBoundingClientRect del nombre y del óvalo
+   devuelven cajas de cero, y los tres anclajes de en medio resolvían a
+   0 %. El degradado que se pintaba en el segundo 3 era literalmente
+
+       0%, 0%, 0%, 0%, 100%
+
+   o sea toda la pantalla del mismo color: sin caída y sin centro de
+   gravedad. Devolver cero era la respuesta obediente y equivocada. */
+comprobar('el degradado nunca colapsa a un lavado plano',
+  /if \(!px\) \{/.test(eclipseCodigo) &&
+  /ancla === 'letras'  \? 12/.test(eclipseCodigo) &&
+  /ancla === 'broche'  \? 34/.test(eclipseCodigo) &&
+  /ancla === 'broche2' \? 68/.test(eclipseCodigo),
+  'sin respaldo, los primeros segundos se ven como una mano de pintura');
+
+{
+  /* Y ejecutado: con las cajas en cero, las paradas tienen que seguir
+     separadas. Se corre la función de verdad, no se lee el archivo. */
+  const cuerpo = (eclipse.match(
+    new RegExp('function porcentajeDelAncla[\\s\\S]*?\\n  \\}')) || [''])[0];
+  const fn = new Function('altar', cuerpo + '; return porcentajeDelAncla;')(
+    { radioLetras: 0, radioBroche: 0 });
+  const pcts = ['centro', 'letras', 'broche', 'broche2', 'esquina']
+    .map(a => fn(a, 1000));
+
+  comprobar('y con las cajas todavía en cero sigue habiendo caída',
+    new Set(pcts).size === pcts.length &&
+    pcts.every((v, i) => i === 0 || v > pcts[i - 1]),
+    'paradas: ' + pcts.join('%, ') + '% — si se repiten, es un lavado');
+}
+
+comprobar('y el óvalo se busca por su clase, no se estima',
+    /\.portada__broche/.test(eclipseCodigo),
+    'sin el nodo real no hay forma de saber dónde termina el relicario');
+}
 
 /* EL NÚMERO QUE RESPONDE LA NOTA DE CARLOS. Fuera de los dos segundos de
    totalidad, la escena nunca puede bajar del 40 % de su luz roja. Con la
@@ -397,28 +607,81 @@ comprobar('y el altar es el punto menos velado de la pantalla',
     return veloEn(t) * (a.a + (b.a - a.a) * k);
   };
 
-  const enElEsfuerzo = alfaEn(38000, 70);
+  /* ⚡ EL ESFUERZO SE MIDE EN EL SEGUNDO 30, NO EN EL 38 (2026-09-11)
+   *
+   * El 38 dejó de ser «el esfuerzo»: con la muerte corrida al 38,5 para
+   * que coincida con el máximo de rojo, el segundo 38 ya está DENTRO de la
+   * totalidad. Medir ahí y llamarlo esfuerzo comparaba la totalidad
+   * consigo misma.
+   *
+   * El acto del esfuerzo es la umbra profunda, 22-35. Se mide en el 30. */
+  const enElEsfuerzo = alfaEn(30000, 70);
   const enLaCripta   = alfaEn(43000, 70);
   const enElAltar    = alfaEn(43000, 0);
 
-  comprobar('en el esfuerzo el velo TAPA de verdad',
-    enElEsfuerzo >= 0.42,
-    'alfa efectivo ' + enElEsfuerzo.toFixed(2) + ' — con 0,30 el eclipse ' +
-    'no se ve, es un tinte');
+  comprobar('en el esfuerzo el velo ya TAPA de verdad',
+    enElEsfuerzo >= 0.20,
+    'alfa efectivo ' + enElEsfuerzo.toFixed(2) + ' — el eclipse tiene que ' +
+    'notarse antes de la totalidad, pero sin rojo');
 
-  comprobar('y en la cripta, mucho más',
-    enLaCripta >= 0.75,
-    'alfa efectivo ' + enLaCripta.toFixed(2));
+  /* ⚡ SE MIDE LA LUZ QUE SE FUE, NO EL ALFA (2026-09-11)
+   *
+   * Esto pedía «alfa efectivo >= 0,60», y ese umbral estaba calibrado para
+   * un velo PLANO —color claro con alfa alto—. Carlos pidió lo contrario:
+   * «pero no plano, sino como sombra», que es color oscuro con alfa bajo.
+   * Con la paleta nueva el alfa cae a 0,53 y la escena está MÁS oscura que
+   * antes, porque el color hace el trabajo que antes hacía la opacidad.
+   *
+   * O sea que el alfa nunca fue lo que importaba: era un proxy. Lo que se
+   * ve es cuánta luz PIERDE la escena, y eso se mide sobre algo brillante
+   * —el oro del relicario, rgb(198,158,92)— y no sobre una rosa del marco,
+   * que ya es oscura de nacimiento y casi no puede oscurecerse más. */
+  {
+    const ORO = [198, 158, 92];
+    const luz = (x) => 0.2126 * x[0] + 0.7152 * x[1] + 0.0722 * x[2];
+    const queda = (t, radio) => luz(comoSeVeEn(t, ORO, radio)) / luz(ORO);
+
+    comprobar('en la penumbra el oscurecimiento es casi imperceptible',
+      queda(4000, 70) >= 0.93,
+      'al oro le queda el ' + (queda(4000, 70) * 100).toFixed(0) + ' % de su luz ' +
+      '— el documento pide «casi imperceptible al principio»');
+
+    comprobar('y en la umbra profunda ya es oscuridad de verdad',
+      queda(30000, 70) <= 0.82,
+      'al oro le queda el ' + (queda(30000, 70) * 100).toFixed(0) + ' % ' +
+      '— el documento pide «oscuridad intensa» a los 30 s');
+
+    comprobar('y la cripta es un salto, no una continuación',
+      queda(43000, 70) <= queda(30000, 70) - 0.15,
+      'umbra ' + (queda(30000, 70) * 100).toFixed(0) + ' % → cripta ' +
+      (queda(43000, 70) * 100).toFixed(0) + ' % — sin salto, la totalidad ' +
+      'no se nota como acontecimiento');
+  }
 
   comprobar('con un factor de al menos 1,6 entre un acto y otro',
     enLaCripta / enElEsfuerzo >= 1.6,
     'esfuerzo ' + enElEsfuerzo.toFixed(2) + ' · cripta ' + enLaCripta.toFixed(2) +
     ' — sin salto, la totalidad no se nota');
 
-  comprobar('y el altar sigue siendo el punto menos velado',
-    enElAltar <= 0.14,
+  /* ⚡ EL ALTAR YA NO ESTÁ PERDONADO, Y ES A PROPÓSITO (2026-09-11)
+   *
+   * Carlos: «la deidad no es el relicario, la deidad es el nombre de Ania,
+   * todo es corruptible por el eclipse, incluso el relicario». Antes esto
+   * exigía <= 0,14 en el centro, o sea que el óvalo dorado quedaba casi
+   * limpio. Ahora tiene que velarse como todo lo demás.
+   *
+   * Lo que SÍ se conserva es que la caída siga siendo redonda: el centro
+   * más claro que el borde, o vuelve el «se ve como un cuadro cerrándose»
+   * que Carlos reportó en el teléfono. Se lo encierra por los dos lados. */
+  comprobar('el relicario SÍ se corrompe con el eclipse',
+    enElAltar >= 0.20,
     'alfa efectivo en el altar ' + enElAltar.toFixed(2) +
-    ' — si el centro se vela como el borde, deja de ser el centro de gravedad');
+    ' — el óvalo es materia y tiene que sangrar como el resto');
+
+  comprobar('pero la caída sigue siendo redonda, no un cuadro cerrándose',
+    enElAltar <= alfaEn(43000, 100) * 0.62,
+    'centro ' + enElAltar.toFixed(2) + ' vs esquina ' +
+    alfaEn(43000, 100).toFixed(2) + ' — sin diferencia no hay centro de gravedad');
 }
 
 /* Y DENTRO de la cripta tampoco puede ser negro: son dos segundos, pero
@@ -628,12 +891,59 @@ comprobar('sin AudioContext el eclipse sigue igual',
 console.log('\nLos módulos cerrados siguen cerrados\n');
 
 for (const archivo of ['06-petalos-con-fisica.js', '07-marco-y-enredaderas.js',
-                       '10-reproductor-de-musica.js', '24-lienzo-de-petalos.js']) {
+                       '10-reproductor-de-musica.js']) {
   const texto = leer('codigo', archivo);
   comprobar(archivo + ' no sabe que el eclipse existe',
     !/eclipse/i.test(texto),
     'el eclipse actúa DESDE AFUERA; tocar estos archivos afecta a las otras 23:59');
 }
+
+/* ⚡ LOS TRES LIENZOS AHORA SE PUEDEN PAUSAR, Y ESO NO ES ACOPLARSE
+ *   (2026-09-11)
+ *
+ * El eclipse ponía el lienzo de pétalos en `opacity: 0` y lo dejaba
+ * pintándose sesenta veces por segundo, invisible, el minuto entero: 0,817
+ * Mpx por cuadro tirados en el monitor de Carlos. Lo mismo `#lienzo-de-luz`
+ * con los arrays ya vaciados.
+ *
+ * La bandera `pausado` es GENÉRICA: dice «no pintes», no dice «hay un
+ * eclipse». Cualquiera puede levantarla y ninguno de los tres archivos
+ * nombra al eclipse. Es la misma disciplina que ya se usaba con
+ * `LienzoDeLuz.haces/motas/fauna`. */
+/* ⚠️ SE JUZGA EL CÓDIGO, NO LOS COMENTARIOS. Los comentarios SÍ nombran al
+   eclipse —y tienen que hacerlo: explican por qué existe la bandera y de
+   dónde salió el número—. Lo que no puede pasar es que el CÓDIGO de estos
+   archivos dependa de que haya un eclipse. Por eso `sinComentarios`: es la
+   misma razón por la que existe ese ayudante. */
+for (const archivo of ['24-lienzo-de-petalos.js', '23-lienzo-de-luz.js',
+                       '19-velas.js']) {
+  const texto = leer('codigo', archivo);
+  const codigo = sinComentarios(texto);
+  comprobar(archivo + ' se puede pausar sin saber quien lo pausa',
+    /pausado/.test(codigo) && !/eclipse/i.test(codigo),
+    'la bandera dice «no pintes», no «hay un eclipse»');
+
+  /* ⚡ SORDA HASTA ACÁ. Bastaba con que la palabra `pausado` apareciera en
+     el archivo —y aparece en el objeto público— para pasar. Se podía
+     cambiar el guard por `if (false)` y el lienzo seguía pintando el
+     minuto entero con la prueba en verde. Ahora se exige que el guard
+     MIRE la bandera. */
+  comprobar('y su guard mira la bandera de verdad',
+    /if\s*\([^)]*pausado[^)]*\)/i.test(codigo) ||
+    /pausado\(\)/i.test(codigo),
+    'sin un `if` que la lea, la bandera es decorativa');
+}
+
+comprobar('y el eclipse los pausa a los tres, y los devuelve',
+  /LienzoDePetalos\.pausado = \(t >= 1000\)/.test(eclipseCodigo) &&
+  /LienzoDeLuz\.pausado = \(t >= 26000 && t < 52000\)/.test(eclipseCodigo) &&
+  /EstadoDelLienzoDeVelas\.pausado = \(t >= 26000 && t < 52000\)/.test(eclipseCodigo) &&
+  /function soltarLosLienzos/.test(eclipseCodigo),
+  'una pausa que no se suelta deja la pagina sin luz hasta que alguien recargue');
+
+comprobar('y se sueltan ANTES de cualquier guard, por si el eclipse revienta',
+  /soltarLosLienzos\(\);\s*\n\s*if \(!mundo\) return;/.test(eclipseCodigo),
+  'si `mundo` nunca se capturo, una pausa puesta se quedaria puesta para siempre');
 
 /* ⚡ ESTA COMPROBACIÓN CAMBIÓ DE SENTIDO (2026-09-10)
    Pedía `var CUANTAS = esAlta ? 220`, o sea que la calidad decidiera
@@ -652,9 +962,16 @@ comprobar('y la que muere se elige entre las flores REALES',
   /cerca\.sort\(function \(a, b\) \{ return a\.distancia - b\.distancia; \}\);/
     .test(eclipseCodigo),
   'si se elige de la marea, se sacrifica algo que nunca estuvo sujeto a nada');
-comprobar('el gobernador sigue puesto',
-  /marea\.length = Math\.floor/.test(eclipse),
-  'entre más rosas y que vaya fluido, gana la fluidez');
+/* ⚡ Y LA MAREA TAMPOCO SE RECORTA (2026-09-11)
+ *
+ * Acá había `if (promedio > 34 && marea.length > 40) marea.length *= 0.82`.
+ * La marea son ROSAS, y la decisión de Carlos para esta ronda es explícita:
+ * la escalera cede suavidad, nunca reparto. Nadie desaparece de la escena.
+ * Lo que cede es cuántos píxeles hay detrás, no cuántas cosas hay. */
+comprobar('la marea no se recorta: son rosas, no lastre',
+  !/marea\.length = Math\.floor/.test(eclipse),
+  'quitar rosas para que entre el cuadro es quitar la obra para que entre ' +
+  'el telón');
 
 
 /* ─── 16. Las plantas del marco son las protagonistas ──────────────── */
@@ -681,10 +998,21 @@ comprobar('el deseo crece en vez de encenderse',
   /var fervor =/.test(eclipseCodigo) && /despierta \* tramo\(/.test(eclipseCodigo));
 
 comprobar('hay un tope de inclinación',
-  /var tope = TOPE_DE_INCLINACION \* \(1 \+ esfuerzo \* 0\.45\);/
-    .test(eclipseCodigo) &&
+  /var tope = TOPE_DE_INCLINACION \* topeExtra;/.test(eclipseCodigo) &&
+  /var topeExtra = 1 \+ esfuerzo \* 0\.45;/.test(eclipseCodigo) &&
   /if \(inclina >  tope\) inclina =  tope;/.test(eclipseCodigo),
   'más de eso deja de leerse como estirar y parece una flor rota');
+
+/* ⚡ Y EN EL FRENESÍ SE PASAN TODAS, CADA VEZ MÁS (2026-09-11)
+ *
+ * Carlos: «cada planta ha entendido que la forma de rozar lo divino es
+ * literalmente dando su vida, suicidándose, arrancando su propio tallo».
+ * Fuera del frenesí el único que pasa el tope es el de la mártir; dentro,
+ * lo pasan todas, y cada intento llega más lejos que el anterior. */
+comprobar('y en el frenesí lo pasan todas, cada vez más lejos',
+  /var topeDelTiron = 1 \+ tiron\.empuje \* \(0\.2 \+ tiron\.u \* 0\.7\);/
+    .test(eclipseCodigo),
+  'si el tope no cediera, el frenesí sería el mismo gesto más rápido');
 
 /* ⚠️ Y LO PASA UNA SOLA, A PROPÓSITO. `esfuerzo` solo es distinto de cero
    para la mártir (`f.martir ? ... : 0`), del segundo 35 al 36,5: parece
@@ -936,20 +1264,60 @@ comprobar('las velas no se tocan',
   !/lienzo-de-velas/.test(eclipseCodigo) && !/fuerzaDeVelas/.test(eclipseCodigo),
   'la sala pasa a cripta por contraste, no por aumento');
 
-/* ACTO V · el nombre no se entera. El plano más importante del minuto. */
-comprobar('el nombre tiene su propia luz',
-  /function elNombreNoSeEntera/.test(eclipseCodigo) &&
-  /elNombreNoSeEntera\(t\)/.test(eclipseCodigo));
-comprobar('y se la escribe al CLON, no al original',
-  /copiaDelNombre\.style\.setProperty\('--luz-x'/.test(eclipseCodigo),
-  '14-haces-de-luz.js le escribe al original cada 32-90 ms: pelearse con ' +
-  'él sería perder. El clon es nuestro');
-comprobar('su oro no se detiene nunca',
-  /t % 11500/.test(eclipseCodigo),
-  'un bucle sin pausas: el mundo se apaga y el nombre sigue igual');
-comprobar('y su intensidad no depende del eclipse',
-  /'--luz-intensidad', '0\.62'/.test(eclipseCodigo),
-  'fija y alta: esa luz nunca fue del sol');
+/* ⚡ ACTO V · EL NOMBRE SIMPLEMENTE ES. LA EXIGENCIA SE DIO VUELTA ENTERA.
+ *   (2026-09-11)
+ *
+ * Estas cuatro comprobaciones pedían justo lo contrario de lo que ahora
+ * hace falta: exigían que existiera `elNombreNoSeEntera(t)`, que le
+ * escribiera `--luz-x` al clon EN CADA CUADRO y que el oro «no se detenga
+ * nunca». O sea que el destello dorado recorría las letras los sesenta
+ * segundos, movido por el eclipse.
+ *
+ * Carlos, textual: «el nombre no brilla, no se inmuta, no pulsa, no se
+ * oscurece por el eclipse, no reacciona a la muerte, no reacciona a la
+ * locura, no reacciona al eclipse… simplemente ES».
+ *
+ * La justificación que tenía era además FALSA. Decía que sin eso el nombre
+ * se apagaría con el sol, porque 14-haces-de-luz.js desploma
+ * `--luz-intensidad`. Pero la regla `.portada__nombre` usa `--luz-x` y
+ * nada más —`--luz-intensidad` no aparece en ella— y el clon es un <h1>
+ * con solo texto adentro, sin descendientes a los que esa variable pudiera
+ * llegar. Era una escritura sin efecto.
+ *
+ * Ahora se comprueba lo contrario, y por los dos lados: que la función no
+ * exista, y que después de crear el clon NADIE le escriba nunca más. */
+comprobar('el nombre ya no tiene una luz que el eclipse le mueva',
+  !/function elNombreNoSeEntera/.test(eclipseCodigo),
+  'esa función le recorría el pan de oro sobre las letras en cada cuadro');
+
+{
+  /* Todas las escrituras a la copia, en todo el archivo, sin comentarios. */
+  const escrituras = [...sinComentarios(eclipseCodigo)
+    .matchAll(/copiaDelNombre\.style[.[][^\n]*/g)].map(m => m[0]);
+
+  comprobar('al clon se le escribe UNA sola vez, al crearlo',
+    escrituras.length === 2 &&
+    escrituras.some(e => /margin/.test(e)) &&
+    escrituras.some(e => /--luz-x/.test(e)),
+    'escrituras encontradas: ' + (escrituras.join(' | ') || 'ninguna'));
+
+  comprobar('y ninguna es una animación por cuadro',
+    !escrituras.some(e => /\bt\b|recorrido|toFixed\(4\)/.test(e)),
+    'si el valor depende de t, el nombre está reaccionando al eclipse');
+}
+
+comprobar('su oro queda congelado donde estaba al empezar',
+  /getComputedStyle\(nombre\)\.getPropertyValue\('--luz-x'\)/.test(eclipseCodigo),
+  'congelarlo en el valor que ya tenía evita un salto al arrancar el minuto');
+
+comprobar('y ninguna fase del minuto lo nombra',
+  ['arrancarALaMartir', 'dibujarLaOfrenda', 'moverLasFloresReales',
+   'tironDelFrenesi', 'coloresEn'].every(fn => {
+    const cuerpo = (eclipseCodigo.match(
+      new RegExp('function ' + fn + '[\\s\\S]*?\\n  \\}')) || [''])[0];
+    return !/copiaDelNombre|jaula/.test(cuerpo);
+  }),
+  'ni la muerte, ni el shock, ni el frenesí, ni el frenazo pueden tocarlo');
 
 /* ⚡ ACTO VI · EL FLASH SE FUE (2026-09-11)
  *
@@ -1035,10 +1403,61 @@ comprobar('las ramas se devuelven',
   /function devolverLasRamas/.test(eclipseCodigo) &&
   /devolverLasRamas\(\);/.test(eclipseCodigo));
 
-/* ACTO VIII · no se calman: las obliga el frenazo. */
-comprobar('las plantas NO se calman solas al final',
-  /var retirada = 0;/.test(eclipseCodigo),
-  'la luz vuelve y ellas siguen estirando: ese desacople es el efecto');
+/* ⚡ ACTO VIII · EL EMPUJÓN DEL 54, QUE NO EXISTÍA (2026-09-11)
+ *
+ * Acá decía «las plantas NO se calman solas al final» y exigía
+ * `var retirada = 0;`. O sea que esta prueba estaba BLINDANDO la versión
+ * contraria a la instrucción de Carlos, que es literal: «el final es
+ * abrupto porque una fuerza superior las empuja violentamente de vuelta a
+ * la normalidad». Y el guion pone el retorno forzado en la franja 54-60.
+ *
+ * Con `retirada = 0` las plantas seguían estirando hasta el 60, así que el
+ * scratch del 54 sonaba sin que pasara nada en pantalla: un sonido
+ * huérfano durante seis segundos.
+ *
+ * Ahora se comprueba lo contrario, y las tres cosas que lo hacen un
+ * empujón y no una frenada: que empiece en el 54, que dure poco, y que se
+ * PASE de la postura de reposo. */
+comprobar('el empujón existe y empieza en el segundo 54',
+  /var retirada = t >= FRENESI/.test(eclipseCodigo) &&
+  /1 - elEmpujon\(limitar\(\(t - FRENESI\) \/ DURA_EL_EMPUJON, 0, 1\)\)/
+    .test(eclipseCodigo),
+  'sin esto el scratch suena y en pantalla no pasa nada');
+
+comprobar('y las flores lo obedecen, no solo las ramas',
+  /t >= FRENESI \? despierta \* 0\.55 \* \(1 - retirada\)/.test(eclipseCodigo),
+  'si solo se calman las ramas, las cabezas quedan estiradas solas');
+
+comprobar('y dura 200 ms, no una rampa',
+  /var DURA_EL_EMPUJON = 200;/.test(eclipseCodigo),
+  'una rampa larga se lee como las plantas aceptando que se acabó');
+
+{
+  /* Y ejecutada: la curva tiene que PASARSE de cero. Es la diferencia
+     entre «la empujaron» y «se detuvo sola». */
+  const cuerpo = (eclipse.match(/function elEmpujon\(x\)[\s\S]*?\n  \}/) || [''])[0];
+  const suave = (x) => { x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); };
+  const fn = new Function('suave', cuerpo + '; return elEmpujon;')(suave);
+
+  let minimo = 9;
+  for (let x = 0; x <= 1.0001; x += 0.005) minimo = Math.min(minimo, fn(x));
+
+  comprobar('y se PASA de la postura de reposo: es retroceso, no frenada',
+    minimo <= -0.05,
+    'lo más lejos que cruzó fue ' + minimo.toFixed(3) +
+    ' — sin sobrepaso, un cuerpo empujado no se distingue de uno que frenó');
+
+  comprobar('y empieza en 1 y termina exactamente en 0',
+    fn(0) === 1 && fn(1) === 0,
+    'fn(0)=' + fn(0) + ' fn(1)=' + fn(1));
+}
+
+/* La mártir no se va con las demás: el guion dice que permanece «un
+   instante más» sobre el nombre y LUEGO se desliza. */
+comprobar('y la rosa muerta se queda 2,2 s más que el resto',
+  /var CAE_LA_MARTIR = 56200;/.test(eclipseCodigo) &&
+  /if \(t >= CAE_LA_MARTIR\)/.test(eclipseCodigo),
+  'si cae con el empujón, se lee como una cosa más que la fuerza barrió');
 
 /* PARIDAD MÓVIL · requisito explícito. */
 comprobar('hay compensación por cantidad de flores',
@@ -1169,19 +1588,49 @@ comprobar('la mártir es una flor DEL MARCO, no una rosa inventada',
     (eclipseCodigo.match(/function elegirALaQueMuere[\s\S]*?\n  \}/) || [''])[0]),
   'una rosa que nunca estuvo sujeta a un tallo no puede arrancarse de él');
 
-comprobar('se elige entre las más cercanas al nombre',
-  /cerca\.length = Math\.max\(1, Math\.floor\(cerca\.length \* 0\.2\)\);/
+/* ⚡ LA MÁRTIR YA NO SE ELIGE: SE LA GANA (2026-09-11)
+ *
+ * Antes esto elegía la más grande del quinto más cercano, AL MONTARSE LA
+ * ESCENA —o sea antes de que ninguna se hubiera esforzado— y después
+ * `moverLasFloresReales` le pintaba el esfuerzo encima con
+ * `var esfuerzo = f.martir ? tramo(…) : 0`. El esfuerzo era consecuencia
+ * de ser la mártir, no su causa.
+ *
+ * El documento base pide lo contrario con todas las letras: «El algoritmo
+ * de esfuerzo lleva ranking en tiempo real» y «La rosa que ha acumulado el
+ * MAYOR ESFUERZO alcanza el punto de ruptura». */
+comprobar('cada flor acumula su propio esfuerzo, en tiempo real',
+  /f\.esfuerzoAcumulado = \(f\.esfuerzoAcumulado \|\| 0\) \+ Math\.abs\(inclina\);/
     .test(eclipseCodigo),
-  'quien se ofrece es quien ya estaba tocando el altar');
+  'sin ranking no hay mérito: la muerte sería un sorteo');
 
-comprobar('y entre ésas, la más grande',
-  /cerca\[i\]\.tamano > mejor\.tamano/.test(eclipseCodigo),
-  'una cabeza de 14 px arrancándose no se ve, y el sacrificio hay que verlo');
+comprobar('y deja de contar en el 35, cuando se cierra la votación',
+  /if \(t < PROFUNDA\) \{\s*\n\s*f\.esfuerzoAcumulado/.test(eclipseCodigo),
+  'seguir sumando después de elegida es gastar sin cambiar nada');
 
-comprobar('se la elige cuando el marco existe, no al empezar',
-  /elegirALaQueMuere\(\);/.test(
+comprobar('gana la que MÁS se esforzó',
+  /\(f\.esfuerzoAcumulado \|\| 0\) > \(mejor\.esfuerzoAcumulado \|\| 0\)/
+    .test(eclipseCodigo),
+  'es la idea entera del documento: muere la que más lo intentó');
+
+comprobar('con un piso de tamaño, porque el sacrificio hay que verlo',
+  /if \(f\.tamano < medianaDeTamano\) continue;/.test(eclipseCodigo),
+  'una cabeza de 14 px arrancándose no se ve');
+
+comprobar('y la cercanía ya no se impone: emerge de la onda',
+  /f\.distancia \/ lejaniaMaxima/.test(eclipseCodigo),
+  'las cercanas despiertan antes, acumulan más tiempo y ganan solas');
+
+comprobar('se la elige en el segundo 35, no al montar la escena',
+  /if \(!laQueMuere && t >= PROFUNDA\) elegirALaQueMuere\(\);/
+    .test(eclipseCodigo) &&
+  !/elegirALaQueMuere\(\);/.test(
     (eclipseCodigo.match(/function tomarLasFloresReales[\s\S]*?\n  \}/) || [''])[0]),
-  'el marco nace después que el eclipse: elegirla en empezar() la dejaría en null');
+  'elegirla al montar la escena era elegirla antes de que nadie se esforzara');
+
+comprobar('y hay respaldo si el marco nació tarde y nadie acumuló nada',
+  /if \(!mejor \|\| !\(mejor\.esfuerzoAcumulado > 0\)\)/.test(eclipseCodigo),
+  'nunca se puede salir de ahí sin mártir: sin ella no hay minuto');
 
 /* ⚠️ EL RELEVO TIENE QUE PASAR DENTRO DE UN MISMO CUADRO. Si la flor se
    apaga en un cuadro y la copia aparece en el siguiente, hay 16 ms con el
@@ -1611,52 +2060,150 @@ comprobar('y no se reescribe lo que no cambió',
   'medido: 9,08 ms bajan a 1,97 cuando los valores no cambian, y en los ' +
   'tramos lentos —la mitad del minuto— casi ninguno cambia');
 
-comprobar('el gobernador puede repartir más si el equipo igual sufre',
-  /if \(cuadrosVistos > 30 && promedio > 21\)/.test(eclipseCodigo) &&
-  /if \(TANDAS < 6\) TANDAS\+\+;/.test(eclipseCodigo),
-  'la calidad es una estimación; el eclipse es la carga más alta del día');
-
-/* ⚡ Y CUANDO REPARTIR YA NO ALCANZA, SUELTA LASTRE (2026-09-11)
+/* ⚡ EL GOBERNADOR ANTERIOR NO SALVÓ EL ECLIPSE: LO APAGÓ (2026-09-11)
  *
- * Carlos, midiendo en su ProDesk: «159,5 ms - 6 fps, seis tandas». El
- * marco ya estaba repartido en el máximo y el cuadro seguía sin entrar.
- * A esa altura repartir más no arregla nada: hay que hacer MENOS COSAS.
- * Decisión suya: que se simplifique hasta entrar, con suelo de 30 fps. */
-comprobar('y cuando eso se agota, suelta lastre',
-  /else soltarLastre\(\);/.test(eclipseCodigo) &&
-  /function soltarLastre/.test(eclipseCodigo),
-  'con el marco ya en seis tandas y el cuadro en 159 ms, repartir más no ' +
-  'arregla nada');
+ * Estas comprobaciones exigían `promedio > 21` y una escalera que soltaba
+ * llamas, pétalos, ramas y flores. Ese 21 se calibró contra un viewport de
+ * 0,306 Mpx. La máquina de Carlos corre a 2560x1277 = 3,269 Mpx y su
+ * cuadro honesto son ~50 ms, así que la condición se cumplía SIEMPRE:
+ *
+ *     30 cuadros x 50 ms .................... 1,5 s por escalón
+ *     escalones (TANDAS 2->6 y recorte 1->4) . 8
+ *     ---------------------------------------------------------
+ *     12 SEGUNDOS hasta apagar todo salvo velo, nombre y mártir
+ *
+ * Carlos lo reportó tal cual: «todo se congela, desde el s10 hasta el 35
+ * solo flota una rosa». Su diagnóstico decía `recorte: 4`.
+ *
+ * Decisión suya para esta ronda: la escalera cede SUAVIDAD, nunca reparto.
+ * Y cuando se acaba la suavidad, el gobernador se calla. */
+comprobar('el umbral del gobernador se MIDE, no es una constante',
+  /objetivoDeCuadro = Math\.max\(28, \(medianaDe\(muestrasDeLaBase\)/
+    .test(eclipseCodigo) &&
+  !/promedio > 21/.test(eclipseCodigo),
+  'un número fijo no puede servir a un teléfono de 0,8 Mpx y a un monitor de 3,3');
 
-/* El orden importa: se suelta primero lo que menos cuenta la historia. */
+comprobar('y tira los primeros cuadros antes de creerle nada al equipo',
+  /cuadrosVistos > CALENTAMIENTO && cuadrosVistos <= CUADROS_PARA_JUZGAR/
+    .test(eclipseCodigo),
+  'los cuadros del arranque son los caros y no dicen nada del equipo');
+
+comprobar('y no juzga antes del segundo 6',
+  /var NO_JUZGAR_ANTES_DE = 6000;/.test(eclipseCodigo) &&
+  /t >= NO_JUZGAR_ANTES_DE/.test(eclipseCodigo),
+  'juzgar durante el arranque es lo que produjo la cascada');
+
+comprobar('la degradación por recorte ya NO EXISTE',
+  !/var LASTRE/.test(eclipseCodigo) &&
+  !/function soltarLastre/.test(eclipseCodigo) &&
+  !/nivelDeRecorte/.test(sinComentarios(eclipseCodigo)),
+  'apagar llamas, pétalos, ramas y flores es quitar la obra para que entre ' +
+  'el telón: eso ya se probó y fue la peor versión');
+
+comprobar('la escalera cede TANDAS y después resolución, y nada más',
+  /if \(TANDAS < 6\) \{ TANDAS\+\+; return true; \}/.test(eclipseCodigo) &&
+  /return bajarLaEscalaDelLienzo\(\);/.test(eclipseCodigo),
+  'nunca rosas, nunca ramas, nunca llamas, nunca el velo, nunca la mártir');
+
 {
-  const lastre = (eclipseCodigo.match(/var LASTRE = \[[\s\S]*?\];/) || [''])[0];
-  comprobar('en el orden acordado: llamas, pétalos, ramas, y al final todo',
-    /llamas[\s\S]*pétalos[\s\S]*ramas/.test(lastre),
-    'las llamas son ambiente; las flores estirando hacia el nombre son el ' +
-    'ritual, y son lo último que se apaga');
+  const escalones = (eclipseCodigo.match(
+    /var ESCALONES_DE_ESCALA = \[([^\]]*)\]/) || ['', ''])[1]
+    .split(',').map(v => parseFloat(v)).filter(v => !isNaN(v));
+  const piso = parseFloat((eclipseCodigo.match(
+    /var ESCALA_MINIMA_DEL_LIENZO = ([\d.]+);/) || ['', '0'])[1]);
 
-  comprobar('y en el último nivel queda el velo, el nombre y la mártir',
-    /todo salvo el velo, el nombre y la mártir/.test(lastre),
-    'sigue siendo la escena, contada en su mínima expresión');
+  comprobar('los escalones de resolución van hacia abajo y paran en el piso',
+    escalones.length >= 2 &&
+    escalones.every((v, i) => i === 0 || v < escalones[i - 1]) &&
+    Math.min(...escalones) >= piso,
+    'escalones ' + escalones.join(' -> ') + ' · piso ' + piso);
+
+  comprobar('y el piso es DURO: medirElLienzo lo vuelve a imponer',
+    /if \(ESCALA_DEL_LIENZO < ESCALA_MINIMA_DEL_LIENZO\)/.test(eclipseCodigo),
+    'sin esto, cualquier ruta futura podría dejar la trama por debajo');
+
+  comprobar('después del piso el gobernador se calla',
+    /return false;\s*\n  \}/.test(
+      (eclipseCodigo.match(/function bajarLaEscalaDelLienzo[\s\S]*?\n  \}/) || [''])[0]),
+    'un minuto a 24 fps con el rito entero es mejor que 30 con la escena ' +
+    'desarmada');
 }
 
-/* ⚠️ Y NUNCA VUELVE ATRÁS dentro de la misma corrida: ver las llamas
-   apagarse y encenderse solas se lee como un defecto, no como una escena. */
-comprobar('el recorte solo sube, nunca baja',
-  !/nivelDeRecorte--/.test(eclipseCodigo) &&
-  !/nivelDeRecorte -= /.test(eclipseCodigo));
+comprobar('el lienzo del eclipse ya lee la perilla de calidad',
+  /var ESCALA_DEL_LIENZO = esBaja \? 0\.72 : 1;/.test(eclipseCodigo) &&
+  /var trama = dpr \* ESCALA_DEL_LIENZO;/.test(eclipseCodigo),
+  'era el único lienzo de la página a densidad plena: 3,269 Mpx contra los ' +
+  '0,817 de los otros tres, que ya usan FACTOR_POR_CALIDAD');
 
-comprobar('y se reinicia entre corridas del ensayo',
-  /nivelDeRecorte = 0;/.test(
+comprobar('y el de la reliquia usa la misma trama',
+  /var tramaDeLaReliquia = dpr \* ESCALA_DEL_LIENZO;/.test(eclipseCodigo),
+  'si uno escala y el otro no, la ofrenda se ve de otra nitidez que el mundo');
+
+/* ⚡ Y EL VELO TAMBIÉN, QUE ES LO QUE CARLOS VIO (2026-09-11)
+ *
+ * «la penumbra muy roja y plana». `mezclaDelVelo` no se reiniciaba, así
+ * que la segunda corrida del panel de ensayo arrancaba con el degradado
+ * ya pintado en borgoña —el de la totalidad anterior— y como el repintado
+ * solo ocurre cuando el escalón CAMBIA, la penumbra entera salía roja. */
+{
+  const reinicio = (eclipseCodigo.match(
+    /function reiniciarElEstado[\s\S]*?\n  \}/) || [''])[0];
+
+  comprobar('el color del velo se reinicia entre corridas',
+    /mezclaDelVelo = 0;/.test(reinicio) &&
+    /ultimoEscalonDeMezcla = -1;/.test(reinicio),
+    'sin esto, la segunda corrida empieza con el borgoña de la primera');
+
+  comprobar('y la banda muerta del degradado también',
+    /ultimaAperturaPintada = -1;/.test(reinicio),
+    'si no, el primer cuadro de la corrida nueva no repinta nada');
+
+  /* ⚡ LA TRAMA DEL LIENZO TAMBIÉN SOBREVIVÍA (2026-09-11)
+   *
+   * `ESCALA_DEL_LIENZO` se calcula una vez al evaluar el archivo y el
+   * gobernador la baja a 0,60 y a 0,50. Nadie la devolvía: en el panel de
+   * ensayo, la primera corrida que activara el gobernador dejaba TODAS las
+   * siguientes a 0,50 hasta recargar. O sea que lo que se mirara después
+   * ya no era lo que el código hace. */
+  comprobar('la trama del lienzo se reinicia entre corridas',
+    /ESCALA_DEL_LIENZO = esBaja \? 0\.72 : 1;/.test(reinicio) &&
+    /medirElLienzo\(\);/.test(reinicio),
+    'una corrida degradada envenenaba todas las siguientes del panel');
+
+  comprobar('y la apertura del velo también',
+    /aperturaDelVelo = 1;/.test(reinicio),
+    'empezar() pinta el velo antes del primer cuadro: sin esto nace con ' +
+    'la apertura final de la corrida anterior');
+}
+
+/* ⚡ Y NINGÚN ANCLAJE INTERMEDIO PUEDE LLEGAR AL 100 %
+ *
+ * Si `broche2` se pasa de la esquina —pasa en pantallas anchas— quedaba
+ * topado en 100 y se pisaba con la parada de la esquina: la caída perdía
+ * su último escalón y el borde se veía de un solo tono. Medido en el
+ * navegador a 1280x720: 0 / 15,7 / 51,8 / 100 / 100. */
+{
+  const cuerpo = (eclipse.match(/function porcentajeDelAncla[\s\S]*?\n  \}/) || [''])[0];
+  const fn = new Function('altar', cuerpo + '; return porcentajeDelAncla;')(
+    { radioLetras: 300, radioBroche: 900 });     // óvalo enorme a propósito
+
+  const pcts = ['centro', 'letras', 'broche', 'broche2', 'esquina']
+    .map(a => fn(a, 1000));
+
+  comprobar('los cinco escalones sobreviven a un óvalo enorme',
+    new Set(pcts).size === 5,
+    'paradas: ' + pcts.map(v => v.toFixed(1)).join('%, ') +
+    '% — si dos coinciden, ese tramo del degradado desaparece');
+
+  comprobar('y ningún anclaje intermedio llega al 100 %',
+    pcts.slice(1, 4).every(v => v <= 92) && pcts[4] === 100,
+    'el borde se vería de un solo tono');
+}
+
+comprobar('la medición de la base se reinicia entre corridas',
+  /objetivoDeCuadro = 0;/.test(
     (eclipseCodigo.match(/function reiniciarElEstado[\s\S]*?\n  \}/) || [''])[0]),
-  'si no, la segunda corrida arranca castigada por la primera');
-
-/* Lo que se apaga hay que DEVOLVERLO, no solo dejar de tocarlo. */
-comprobar('lo que se suelta se devuelve a su sitio',
-  /if \(nivelDeRecorte === 1\) devolverLasLlamas\(\);/.test(eclipseCodigo) &&
-  /if \(nivelDeRecorte === 3\) devolverLasRamas\(\);/.test(eclipseCodigo),
-  'dejar de moverlas las deja inclinadas y dobladas para siempre');
+  'la ventana puede haber cambiado de tamaño entre una corrida y la otra');
 
 /* ⚠️ Y NUNCA BAJA. La misma regla que la marea: ir repartiendo y volviendo
    a juntar se vería peor que quedarse repartido. */
@@ -1916,6 +2463,323 @@ const vigiaEntero = sinComentarios(leer('index.html'));
 comprobar('al cargar se pregunta si el eclipse ya va corriendo',
   /yaVaEmpezado < 0 && yaVaEmpezado > -DURA/.test(vigiaEntero),
   'el sondeo duerme hasta 60 s: quien llegaba tarde se lo perdía entero');
+
+/* ─── 16. LA MITOLOGÍA, QUE ES LO QUE NINGUNA RONDA PUEDE ROMPER ─────
+
+   Carlos, 2026-09-11: «el eclipse pasa, no le importa el caos, el nombre
+   no reacciona, son las rosas que se vuelven locas con ese PERMISO que
+   tienen durante el eclipse, todas lo intentan, una lo logra, el resto
+   entra en un frenesí por seguirla pero no lo logran… lo peor es que
+   fallaron, y volverán a intentarlo mañana, de nuevo… como siempre».
+
+   Hay tres indiferencias apiladas y son tres cosas distintas: el NOMBRE no
+   reacciona porque es divino; el ECLIPSE no reacciona porque es
+   astronómico —no es un personaje, es una ventana que se abre y se cierra
+   sola—; y el UNIVERSO no reacciona porque mañana vuelve a pasar lo mismo.
+
+   ⚠️ DOS DE LAS TRES YA ESTABAN ESCRITAS SIN QUE NADIE SUPIERA QUE ERAN LA
+   MITOLOGÍA. Estas comprobaciones no las construyen: las BLINDAN. Son
+   justo el tipo de propiedad que una ronda futura «mejora» sin darse
+   cuenta de lo que rompe — que es exactamente cómo se degradaron las
+   cuatro rondas anteriores. */
+
+console.log('\nLa mitología: tres indiferencias\n');
+
+{
+  /* ── 1. El eclipse no se entera del caos porque no TIENE cómo ──
+     `coloresEn(t)` recibe un milisegundo y devuelve tres números. Si
+     alguna vez leyera estado de la escena —quién murió, cuántos pétalos
+     quedan, si el equipo va lento— el eclipse dejaría de ser astronómico y
+     pasaría a ser un personaje más. */
+  const cuerpo = sinComentarios(
+    (eclipseCodigo.match(/function coloresEn\(t\)[\s\S]*?\n  \}/) || [''])[0]);
+
+  const prohibidos = ['laQueMuere', 'muerte', 'floresReales', 'petalos',
+                      'marea', 'TANDAS', 'promedio', 'ESCALA_DEL_LIENZO',
+                      'altar', 'ramas', 'llamas'];
+  const intrusos = prohibidos.filter(v => new RegExp('\\b' + v + '\\b').test(cuerpo));
+
+  comprobar('el eclipse es una función PURA del tiempo',
+    !!cuerpo && intrusos.length === 0,
+    intrusos.length ? 'lee estado de la escena: ' + intrusos.join(', ')
+                    : 'no se encontró coloresEn');
+
+  /* Y ejecutada: el mismo milisegundo tiene que dar siempre lo mismo. */
+  let deterministica = true;
+  for (let t = 0; t <= curva.D; t += 137) {
+    const a = curva.coloresEn(t), b = curva.coloresEn(t);
+    if (a.frio !== b.frio || a.sangre !== b.sangre || a.corona !== b.corona) {
+      deterministica = false; break;
+    }
+  }
+  comprobar('y el mismo milisegundo da siempre lo mismo',
+    deterministica,
+    'si dos llamadas con el mismo t difieren, algo de afuera se está colando');
+}
+
+{
+  /* ── 2. El eterno retorno: la que murió vuelve a estar de pie ──
+     No es un bug que el hueco se rellene: es la tragedia. Fallaron, y
+     mañana vuelven a intentarlo sin recordar que ya fallaron. */
+  const cuerpo = (eclipseCodigo.match(
+    /function devolverLasFloresReales[\s\S]*?\n  \}/) || [''])[0];
+
+  /* ⚡ SORDA HASTA ACÁ. Bastaba con que `removeProperty('opacity')`
+     apareciera; se le podía poner delante un `if (!f.martir)` y el hueco de
+     la mártir quedaba vacío para siempre —justo el único caso que importa—
+     con la prueba en verde. Se exige que sea INCONDICIONAL. */
+  comprobar('la rosa que dio la vida vuelve a su tallo al terminar',
+    /removeProperty\('opacity'\)/.test(cuerpo),
+    'si el hueco quedara vacío, mañana habría una rosa menos y el minuto ' +
+    'dejaría de poder repetirse igual');
+
+  comprobar('y vuelve SIN condiciones: también la mártir',
+    /\n      f\.nodo\.style\.removeProperty\('opacity'\);/.test(cuerpo) &&
+    !/martir[^\n]*removeProperty\('opacity'\)/.test(sinComentarios(cuerpo)),
+    'un `if (!f.martir)` delante deja vacío justo el hueco que importa');
+
+  comprobar('y la mártir del día siguiente puede ser otra',
+    /laQueMuere = null;/.test(
+      (eclipseCodigo.match(/function reiniciarElEstado[\s\S]*?\n  \}/) || [''])[0]),
+    'la elige el esfuerzo de esa corrida, no una lista guardada');
+}
+
+{
+  /* ── 3. La amnesia ──
+     Nada sobrevive a la corrida. Mañana es el primer día para ellas. La
+     única excepción permitida es el grafo de audio, que no recuerda NADA
+     de lo que pasó: existe porque createMediaElementSource() solo se puede
+     llamar una vez por elemento (ver su advertencia en el archivo). */
+  comprobar('el eclipse no guarda nada de una corrida a la otra',
+    !/localStorage|sessionStorage|indexedDB/i.test(eclipseCodigo),
+    'recordar quién murió ayer mataría la crueldad del mito');
+
+  const enWindow = [...sinComentarios(eclipseCodigo)
+    .matchAll(/window\.(__[A-Za-z_]+)\s*=/g)].map(m => m[1]);
+  comprobar('y lo único que sobrevive es el grafo de audio',
+    enWindow.every(v => v === '__ECLIPSE_GRAFO_DE_SONIDO'),
+    'sobrevive además: ' + enWindow.filter(v => v !== '__ECLIPSE_GRAFO_DE_SONIDO').join(', '));
+}
+
+{
+  /* ── 4. UNA SOLA SE SUELTA. NUNCA MÁS DE UNA. ──
+     Carlos: «si otras murieran arrancándose, la muerte de esa única no
+     tendría valor, no tendría peso. Todas lo intentan, solo una lo
+     descubre y lo logra, el resto desea y envidia».
+
+     Esta comprobación es la que protege el peso de la muerte de la mártir.
+     Sin ella, cualquier ronda futura puede agregar una segunda rosa
+     suelta «para que se vea más» y diluirla sin que nadie lo note. */
+  const codigo = sinComentarios(eclipseCodigo);
+  const llamadas = (codigo.match(/arrancarALaMartir\(/g) || []).length;
+
+  comprobar('se suelta UNA SOLA flor en todo el minuto',
+    llamadas === 2 &&                       // la definición y su única llamada
+    !/muertes\s*=\s*\[|muertes\.push/.test(codigo) &&
+    /var muerte = \{/.test(codigo),
+    '`muerte` tiene que seguir siendo un singleton, no una lista');
+
+  comprobar('y ninguna otra llega a soltarse',
+    (codigo.match(/\.suelta = true/g) || []).length === 1,
+    'la única que se suelta es la que ganó el ranking');
+}
+
+/* ─── 17. EL FRENESÍ ES UNA CUENTA REGRESIVA, NO UN RITMO ──────────── */
+
+console.log('\nEl frenesí, ejecutado\n');
+
+{
+  const fuente = eclipseCodigo.slice(
+    eclipseCodigo.indexOf('var PERIODO_INICIAL_DEL_TIRON'),
+    eclipseCodigo.indexOf('function moverLasFloresReales'));
+
+  const limitar = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const suave = (x) => { x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); };
+  const tiron = new Function('SHOCK', 'FRENESI', 'limitar', 'suave',
+    fuente + '; return tironDelFrenesi;')(curva.SHOCK, curva.FRENESI, limitar, suave);
+
+  /* Los bordes de ciclo: donde la fase vuelve a empezar. */
+  const ciclos = [];
+  let fase = 0;
+  for (let t = curva.SHOCK + 1; t < curva.FRENESI; t++) {
+    const x = tiron(t);
+    if (x.fase < fase) ciclos.push(t);
+    fase = x.fase;
+  }
+
+  const intervalos = ciclos.slice(1).map((t, i) => t - ciclos[i]);
+
+  comprobar('hay tirones de sobra para leerse como frenesí',
+    ciclos.length >= 8,
+    'solo ' + ciclos.length + ' tirones en diez segundos');
+
+  /* ⚠️ ESTA ES LA QUE SEPARA «CUENTA REGRESIVA» DE «RITMO». Sin ella, el
+     frenesí se degrada a ráfagas parejas sin que nadie lo note, y con eso
+     se pierde el sentido entero del acto: lo que aprieta es el reloj. */
+  comprobar('los intervalos son ESTRICTAMENTE decrecientes',
+    intervalos.every((v, i) => i === 0 || v < intervalos[i - 1]),
+    'primero ' + intervalos[0] + ' ms, último ' +
+    intervalos[intervalos.length - 1] + ' ms');
+
+  /* Y cada intento llega más lejos que el anterior: la desesperación. */
+  const topes = [];
+  for (let i = 0; i < ciclos.length - 1; i++) {
+    let maximo = 0;
+    for (let t = ciclos[i]; t < ciclos[i + 1]; t++) {
+      const x = tiron(t);
+      maximo = Math.max(maximo, 1 + Math.max(0, x.empuje) * (0.2 + x.u * 0.7));
+    }
+    topes.push(maximo);
+  }
+  comprobar('y cada tirón llega más lejos que el anterior',
+    topes.every((v, i) => i === 0 || v > topes[i - 1]),
+    'tope x' + topes[0].toFixed(2) + ' → x' + topes[topes.length - 1].toFixed(2));
+
+  /* ⚠️ Y EL GESTO ES CONTRA LA RAÍZ, NO HACIA EL NOMBRE. En los actos II y
+     III las flores SE ESTIRAN HACIA el nombre. Acá tiran contra su propia
+     raíz: por eso cada ciclo empieza comprimiéndose hacia la base antes de
+     lanzarse. Es la diferencia entre «arrancarse» y «estirarse», y es lo
+     que el acto significa. */
+  const compresiones = [];
+  for (let i = 0; i < ciclos.length - 1; i++) {
+    let minimo = 9;
+    for (let t = ciclos[i]; t < ciclos[i + 1]; t++) minimo = Math.min(minimo, tiron(t).empuje);
+    compresiones.push(minimo);
+  }
+  comprobar('cada ciclo tira CONTRA la raíz antes de lanzarse',
+    compresiones.length > 0 && compresiones.every(m => m <= -0.6),
+    'la peor compresión fue ' + Math.max(...compresiones).toFixed(2) +
+    ' — sin envión hacia atrás es estirarse, no arrancarse');
+
+  comprobar('y fuera de los diez segundos no existe',
+    tiron(curva.SHOCK - 1).empuje === 0 && tiron(curva.FRENESI).empuje === 0,
+    'el frenesí no puede desbordarse ni al shock ni al frenazo');
+}
+
+/* ─── 18. EL FRENAZO LO IMPONE ALGO DE AFUERA ──────────────────────── */
+
+console.log('\nEl empujón del segundo 54\n');
+
+/* ⚡ Y SE DISPARA CON RELOJ PROPIO, NO POR CUADRO (2026-09-11)
+ *
+ * La primera versión interpolaba el ritmo dentro de una ventana de 260 ms
+ * leída una vez por cuadro. Medido en el navegador, sondeando cada 15 ms
+ * durante los sesenta segundos: `playbackRate` se quedó en 1,000 el minuto
+ * entero. En calidad baja la mediana entre cuadros en esa fase es de
+ * 646 ms, así que ningún cuadro caía dentro de la ventana.
+ *
+ * Un efecto de 260 ms no puede depender de que un cuadro caiga justo ahí.
+ * Se comprueba que el disparo sea de una sola vez y que la vuelta la
+ * maneje un temporizador. */
+comprobar('hay un scratch de disco rayado, y es de verdad',
+  /audio\.playbackRate = 0\.35;/.test(eclipseCodigo) &&
+  /function elScratchDelFrenazo/.test(eclipseCodigo),
+  'el documento base lo pide y `playbackRate` no aparecía NI UNA VEZ en ' +
+  'todo el proyecto: lo que había era el filtro soltándose, que es otra cosa');
+
+comprobar('y cae exactamente en el 54, no antes ni después',
+  /if \(yaSonoElScratch \|\| !audio \|\| t < FRENESI\) return;/.test(eclipseCodigo) &&
+  /var FRENAZO_BAJA = 140;/.test(eclipseCodigo) &&
+  /var FRENAZO_SUBE = 120;/.test(eclipseCodigo),
+  'es el sonido de la fuerza que las empuja de vuelta: si no cae con el ' +
+  'gesto, es un efecto suelto');
+
+comprobar('y NO depende de que un cuadro caiga dentro de la ventana',
+  /yaSonoElScratch = true;/.test(eclipseCodigo) &&
+  /setTimeout\(function \(\) \{[\s\S]{0,120}playbackRate = 1;/.test(eclipseCodigo),
+  'con 646 ms entre cuadros en calidad baja, una ventana de 260 ms se ' +
+  'saltea entera: medido, el scratch no sonaba NUNCA');
+
+comprobar('y el pestillo se suelta entre corridas',
+  /yaSonoElScratch = false;/.test(
+    (eclipseCodigo.match(/function reiniciarElEstado[\s\S]*?\n  \}/) || [''])[0]),
+  'si no, la segunda corrida del ensayo pasa muda');
+
+comprobar('y el ritmo vuelve a 1 pase lo que pase',
+  /audio\.playbackRate = 1;/.test(
+    (eclipseCodigo.match(/function soltarElSonido[\s\S]*?\n  \}/) || [''])[0]),
+  'si el eclipse muere en mitad del scratch, la canción quedaría al 35 % ' +
+  'para siempre');
+
+/* ─── 19. EL PISO DE VISIBILIDAD ───────────────────────────────────── */
+
+console.log('\nQue el borgoña pervierta, y que deje ver\n');
+
+/* ⚡ LA COMPROBACIÓN QUE FALTÓ SIEMPRE (2026-09-11)
+ *
+ * Carlos pidió «un rojo ladrillo o sangre borgoña que lo pervierta todo,
+ * pero que aún sea visible». Las dos mitades, y nunca hubo prueba de la
+ * segunda.
+ *
+ * Con alfa casi opaco TODO converge al mismo valor y la escena se vuelve
+ * una silueta sin interior. Medido sobre el último tramo anterior
+ * —24,8,12 a alfa 0,922— una rosa del marco quedaba en rgb(32,9,15) y el
+ * fondo de al lado en rgb(24,9,13): LOS SEPARABAN 8. Eso es «pervertir» a
+ * costa de «visible».
+ *
+ * Esta comprobación mide lo que separa a dos colores DISTINTOS de la
+ * escena después del velo. Si alguna ronda vuelve a subir el alfa para
+ * «oscurecer más», muerde. */
+{
+  const ROSA  = [126, 27, 44];   // una rosa del marco
+  const FONDO = [ 30, 24, 28];   // el granate oscuro de al lado
+
+  /* ⚠️ SE MIDE A DOS RADIOS, Y ESO NO ES REDUNDANTE. Antes solo se miraba
+     el 70 %, y por ahí se colaba apagar las ESQUINAS a negro: a ese radio
+     la interpolación todavía está dominada por el tramo de adentro. Las
+     esquinas son donde vive el marco en una pantalla ancha. */
+  let peor = 999, cuando = 0, donde = 0;
+  for (const radio of [70, 100]) {
+    for (let t = 0; t <= curva.D; t += 250) {
+      const a = comoSeVeEn(t, ROSA, radio);
+      const b = comoSeVeEn(t, FONDO, radio);
+      const separa = Math.abs(a[0] - b[0]);
+      if (separa < peor) { peor = separa; cuando = t; donde = radio; }
+    }
+  }
+
+  comprobar('la escena nunca se aplasta en una silueta plana',
+    peor >= 18,
+    'lo peor fue ' + peor.toFixed(1) + ' unidades de rojo en el segundo ' +
+    (cuando / 1000) + ', al ' + donde + ' % del radio — con 8 el marco ' +
+    'deja de tener interior');
+
+  /* Y del otro lado: que en la cripta el borgoña DOMINE de verdad. */
+  const enLaCripta = comoSeVeEn(43000, ROSA, 100);
+  /* ⚡ SORDA HASTA ACÁ. Se podía correr MUERE_EN a donde fuera y ninguna
+     comprobación se enteraba, aunque el documento base lo pida con todas
+     las letras: «El rojo sangre seca está en su punto más intenso
+     EXACTAMENTE mientras la rosa muere y cae». */
+  {
+    let maximo = 0;
+    for (let t = 0; t <= curva.D; t += 50) {
+      maximo = Math.max(maximo, curva.coloresEn(t).sangre);
+    }
+    const enLaMuerte = curva.coloresEn(curva.MUERE_EN).sangre;
+
+    comprobar('el rojo está en su máximo EXACTAMENTE cuando la rosa muere',
+      maximo > 0 && enLaMuerte >= maximo - 1e-9,
+      'en el segundo ' + (curva.MUERE_EN / 1000) + ' el rojo va en ' +
+      enLaMuerte.toFixed(3) + ' y el máximo del minuto es ' + maximo.toFixed(3));
+
+    /* ⚠️ Y LA DE ARRIBA SOLA NO ALCANZA, PORQUE ES TAUTOLÓGICA: la rampa
+       del rojo TERMINA en MUERE_EN, así que mover la constante mueve las
+       dos cosas juntas y la comparación siempre da verdadera.
+       Lo que de verdad hay que blindar es que estén ATADAS — que es
+       exactamente lo que se había soltado: la muerte en el 36,5 y el rojo
+       subiendo hasta el 44, las dos cosas más importantes del minuto en
+       momentos distintos. Si alguien vuelve a separarlas, esto muerde. */
+    comprobar('y las dos cosas están atadas a la MISMA constante',
+      /t < MUERE_EN \? tramo\(t, PROFUNDA, MUERE_EN\) \* [\d.]+/.test(eclipseCodigo),
+      'la rampa del rojo tiene que terminar en MUERE_EN y en ningún otro ' +
+      'número, o las dos vuelven a separarse sin que nadie lo note');
+  }
+
+  comprobar('y en la cripta el borgoña domina el tono',
+    enLaCripta[0] >= enLaCripta[1] * 3,
+    'rgb(' + enLaCripta.map(v => Math.round(v)).join(',') + ') — razón R/G ' +
+    (enLaCripta[0] / enLaCripta[1]).toFixed(2) + ', hace falta 3');
+}
 
 console.log('');
 if (fallos) {

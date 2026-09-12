@@ -179,10 +179,19 @@
 
     /* Para el cartel de ?fps=1: sin este dato no hay forma de confirmar que
        el recorte de la franja hizo lo que dice que hace. */
+    /* ⚠️ SE CONSERVA `pausado`, NO SE PISA. Esta función corre en cada
+       `acomodarTodo`, así que reconstruir el objeto entero borraba la
+       bandera que levanta quien esté pausando el halo. Se autocuraba
+       —quien la levanta la reescribe por cuadro— pero durante un cuadro
+       el lienzo volvía a pintar, y el contrato quedaba a merced de eso. */
+    var pausadoAntes = !!(window.EstadoDelLienzoDeVelas &&
+                          window.EstadoDelLienzoDeVelas.pausado);
+
     window.EstadoDelLienzoDeVelas = {
       ancho: anchoLienzoVelas,
       alto:  altoLienzoVelas,
       top:   topLienzoVelas,
+      pausado: pausadoAntes,
     };
   }
 
@@ -1110,7 +1119,32 @@
      hay JavaScript restando el scroll que pueda desincronizarse. `true`
      solo si crearLienzoDeVelas() consiguió sellos prestados y armó el
      canvas; si no, sigue el camino de los divs (mismo que ?luz=dom). */
+  /* ⚡ SOLO EL HALO SE DETIENE. LAS LLAMAS NO. (2026-09-11)
+   *
+   * 28-eclipse.js levanta `EstadoDelLienzoDeVelas.pausado` durante sus
+   * sesenta segundos. Lo que se detiene es ESTE LIENZO —el resplandor
+   * suave alrededor de cada luz, a pantalla completa y debajo del velo,
+   * donde no aporta nada—. Las llamas son SVG (`.llama`) y siguen vivas,
+   * titilando e inclinándose el minuto entero: son parte del rito.
+   *
+   * Gatearlo acá y no en dibujarCuadro() es justamente lo que separa una
+   * cosa de la otra: el cuadro sigue corriendo, el canvas no. */
+  function lienzoDeVelasPausado() {
+    return !!(window.EstadoDelLienzoDeVelas && window.EstadoDelLienzoDeVelas.pausado);
+  }
+
+  let yaSeLimpioElHalo = false;
+
   function usaElLienzoAhora() {
+    if (lienzoDeVelasPausado()) {
+      if (!yaSeLimpioElHalo && pincelDeVelas && lienzoDeVelas) {
+        yaSeLimpioElHalo = true;
+        pincelDeVelas.setTransform(1, 0, 0, 1, 0, 0);
+        pincelDeVelas.clearRect(0, 0, lienzoDeVelas.width, lienzoDeVelas.height);
+      }
+      return false;
+    }
+    yaSeLimpioElHalo = false;
     return !!lienzoDeVelas;
   }
 

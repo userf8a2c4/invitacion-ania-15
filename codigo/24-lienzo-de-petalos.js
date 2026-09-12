@@ -46,7 +46,23 @@
 
   /* Registro público: 06-petalos-con-fisica.js pregunta acá si tiene que
      crear divs o solo mantener números. */
-  window.LienzoDePetalos = { activo: USAR_LIENZO, planos: {} };
+  /* ⚡ `pausado` — EL ECLIPSE LO DESVANECÍA PERO NO LO DETENÍA (2026-09-11)
+   *
+   * 28-eclipse.js le pone `opacity: 0` a este lienzo durante sus sesenta
+   * segundos. Pero opacidad cero no detiene nada: el canvas se seguía
+   * borrando y llenando sesenta veces por segundo, invisible, el minuto
+   * entero. En el monitor de Carlos —2560×1277, densidad 0,5— son 0,817
+   * megapíxeles por cuadro tirados a la basura.
+   *
+   * Y no es un lienzo cualquiera: la nota de más abajo, sobre un perfil
+   * real, dice que estos lienzos a pantalla completa eran «el bloque más
+   * caro de toda la escena, más que el resto junto».
+   *
+   * Ahora el eclipse levanta esta bandera y el pintado sale temprano. La
+   * FÍSICA de 06-petalos-con-fisica.js sigue corriendo a propósito: si se
+   * detuviera, los pétalos quedarían congelados en el aire y al volver
+   * saltarían de golpe a donde deberían estar. */
+  window.LienzoDePetalos = { activo: USAR_LIENZO, planos: {}, pausado: false };
 
   if (!USAR_LIENZO) return;
 
@@ -297,7 +313,24 @@
    *
    * @returns {void}
    */
+  let yaSeLimpioAlPausar = false;
+
   function pintarLosPetalos() {
+    /* Detenido por el eclipse. Se limpia UNA vez —para no dejar la última
+       lluvia congelada debajo del velo— y después no se toca más nada. */
+    if (window.LienzoDePetalos.pausado) {
+      if (!yaSeLimpioAlPausar) {
+        yaSeLimpioAlPausar = true;
+        for (let p = 0; p < planos.length; p++) {
+          const plano = planos[p];
+          plano.pincel.setTransform(1, 0, 0, 1, 0, 0);
+          plano.pincel.clearRect(0, 0, plano.lienzo.width, plano.lienzo.height);
+        }
+      }
+      return;
+    }
+    yaSeLimpioAlPausar = false;
+
     for (let p = 0; p < planos.length; p++) {
       const plano = planos[p];
       const pincel = plano.pincel;

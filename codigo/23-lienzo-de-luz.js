@@ -74,7 +74,11 @@
      `fauna` (luciérnagas y termitas, codigo/27-fauna-nocturna.js) va en
      coordenadas de DOCUMENTO, como las fuentes: están ancladas a
      elementos de la página, no pegadas a la ventana. */
-  window.LienzoDeLuz = { activo: USAR_LIENZO, fuentes: [], haces: [], motas: [], fauna: [] };
+  /* `pausado`: lo levanta 28-eclipse.js durante sus sesenta segundos. Para
+     entonces ya le vació `haces`, `motas` y `fauna`, así que este lienzo
+     seguía repintándose a pantalla completa con casi nada adentro —y
+     debajo de un velo que lo tapa—. Ver la nota en 28-eclipse.js. */
+  window.LienzoDeLuz = { activo: USAR_LIENZO, fuentes: [], haces: [], motas: [], fauna: [], pausado: false };
 
   if (!USAR_LIENZO) return;
 
@@ -541,7 +545,28 @@
    * @param {number} ahora - Marca de tiempo del navegador.
    * @returns {void}
    */
+  let yaSeLimpioAlPausar = false;
+
   function pintarLaLuz(ahora) {
+    /* Detenido por el eclipse: se limpia una vez y se sigue pidiendo cuadro
+       —el bucle no muere— pero no se pinta nada. */
+    if (window.LienzoDeLuz.pausado) {
+      if (!yaSeLimpioAlPausar && lienzo && pincel) {
+        yaSeLimpioAlPausar = true;
+        pincel.setTransform(1, 0, 0, 1, 0, 0);
+        pincel.clearRect(0, 0, lienzo.width, lienzo.height);
+      }
+      requestAnimationFrame(pintarLaLuz);
+      return;
+    }
+    if (yaSeLimpioAlPausar) {
+      /* Al volver, el throttle no puede hacernos esperar hasta 90 ms con el
+         lienzo en blanco: se fuerza un repintado en este mismo cuadro. */
+      yaSeLimpioAlPausar = false;
+      ultimoRepintado = 0;
+      yaSeDibujoElEstadoQuieto = false;
+    }
+
     if (!hayAlgoQueMirar()) {
       /* Con las animaciones apagadas (a diferencia de sobre cerrado o
          pestaña de fondo) SÍ vale la pena una pasada: deja la luz en el
