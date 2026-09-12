@@ -432,13 +432,40 @@
    * @param {number} cuantos - cuadros a mirar.
    * @returns {Promise<number>}
    */
+  /* ⚡ EL DIAGNÓSTICO LE MINTIÓ A CARLOS, Y ASÍ FUE (2026-09-11)
+   *
+   * Su primer informe reportó una línea base de 183,6 ms. Era falsa, y se
+   * podía demostrar desde el propio informe: «flores marco 150,2 ms» y
+   * «llamas 150,2 ms» daban EXACTAMENTE lo mismo, con las llamas ya
+   * apagadas por el recorte. Dos subsistemas no cuestan lo mismo al
+   * milisegundo salvo que no se esté midiendo ninguno de los dos.
+   *
+   * La causa: se medía de inmediato después de `ECLIPSE.correr(36000)`, o
+   * sea durante los cuadros de arranque —mapas de bits rasterizándose,
+   * estilos resolviéndose, capas subiendo a la GPU—, que son los más caros
+   * de toda la corrida y no dicen nada del equipo.
+   *
+   * Ahora se descartan los primeros `CUADROS_DE_CALENTAMIENTO` de CADA
+   * medición. Es el mismo criterio que usa el gobernador del eclipse, y
+   * por el mismo motivo.
+   *
+   * Un diagnóstico que miente es peor que no tener diagnóstico: Carlos
+   * tomó decisiones con esos números.
+   */
+  var CUADROS_DE_CALENTAMIENTO = 45;
+
   function medirElCuadro(cuantos) {
     return new Promise(function (listo) {
       var tiempos = [];
       var anterior = 0;
+      var vistos = 0;
 
       function unCuadro(ahora) {
-        if (anterior) tiempos.push(ahora - anterior);
+        if (anterior) {
+          vistos++;
+          /* Los de calentamiento se cuentan pero no se guardan. */
+          if (vistos > CUADROS_DE_CALENTAMIENTO) tiempos.push(ahora - anterior);
+        }
         anterior = ahora;
         if (tiempos.length < cuantos) { requestAnimationFrame(unCuadro); return; }
         tiempos.sort(function (a, b) { return a - b; });
@@ -447,6 +474,27 @@
 
       requestAnimationFrame(unCuadro);
     });
+  }
+
+  /**
+   * Los números del equipo que faltaban en el informe anterior.
+   *
+   * Sin el viewport real no hay forma de interpretar nada: el mismo código
+   * cuesta diez veces más en 2560x1277 que en 0,306 Mpx, y esa diferencia
+   * fue la causa de toda la ronda pasada.
+   *
+   * @returns {string}
+   */
+  function laPantalla() {
+    var w = window.innerWidth, h = window.innerHeight;
+    var dpr = window.devicePixelRatio || 1;
+    var mpx = (w * h * Math.min(dpr, 2) * Math.min(dpr, 2)) / 1e6;
+    var r = (window.ECLIPSE && window.ECLIPSE.recuento) ? window.ECLIPSE.recuento() : {};
+    return 'pantalla ' + w + 'x' + h + ' · dpr ' + dpr +
+           ' · trama del eclipse x' + (r.escalaDelLienzo || '?') +
+           ' · ' + mpx.toFixed(2) + ' Mpx de viewport' +
+           ' · objetivo del gobernador ' +
+           (r.objetivo ? r.objetivo.toFixed(1) + ' ms' : 'todavía sin medir');
   }
 
   /** Apaga un elemento de la página un rato, mide, y lo devuelve. */
@@ -607,14 +655,17 @@
       var texto = [
         'DIAGNÓSTICO DEL ECLIPSE',
         '───────────────────────────────────────',
-        'pantalla ..... ' + window.innerWidth + '×' + window.innerHeight +
-          '  (dpr ' + (window.devicePixelRatio || 1) + ')',
+        laPantalla(),
         'calidad ...... ' + document.documentElement.className,
         'cuadro ....... ' + base.toFixed(1) + ' ms  (' +
           Math.round(1000 / Math.max(1, base)) + ' fps)',
         'control ...... ' + control.toFixed(1) + ' ms',
+        /* ⚠️ `recorte` ya no existe: la degradación por apagado se eliminó
+           en la v280 (era la que congelaba la escena del s10 al s35). Lo
+           único que el gobernador puede haber cedido es reparto y trama. */
         'tandas ....... ' + (r.tandas || '?') +
-          '   recorte: ' + (r.recorte || 0),
+          '   trama x' + (r.escalaDelLienzo || '?') +
+          '   objetivo ' + (r.objetivo ? r.objetivo.toFixed(1) + ' ms' : '—'),
         '',
         'CUÁNTO CUESTA CADA PARTE',
         '(apagándola y volviendo a medir)'

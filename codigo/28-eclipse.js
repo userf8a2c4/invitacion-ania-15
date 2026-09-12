@@ -74,8 +74,18 @@
   var FRENESI    = 54000;   // la revelación desatada
   /* de FRENESI a DURACION: la sumisión forzada */
 
-  /** Cuándo muere la rosa: dentro de la totalidad, no antes. */
-  var MUERE_EN   = 36500;
+  /* ⚡ LA MUERTE SE CORRIÓ AL 38,5 PARA QUE COINCIDA CON EL ROJO (2026-09-11)
+   *
+   * El documento base es explícito: «El rojo sangre seca está en su punto
+   * más intenso EXACTAMENTE mientras la rosa muere y cae». Con la muerte
+   * en 36,5 y el rojo subiendo hasta el 44, las dos cosas más importantes
+   * del minuto pasaban en momentos distintos.
+   *
+   * Ahora `sangre` llega a su máximo en 38,5 y se queda ahí (ver
+   * coloresEn), y la rosa se arranca en ese mismo milisegundo. Lo que
+   * distingue a la cripta ya no es más rojo —no hay más— sino que la
+   * APERTURA colapsa: la luz se cierra alrededor del nombre. */
+  var MUERE_EN   = 38500;
 
   /* ─── 2. LO QUE HACE FALTA ANTES DE EMPEZAR ─────────────────────── */
 
@@ -275,17 +285,288 @@
 
      Un factor de dos entre uno y otro: se lee como un golpe de oscuridad
      sin que nada llegue a desaparecer. */
+  /* ⚡ BORGOÑA QUE PERVIERTE TODO Y QUE DEJA VERLO TODO (2026-09-11)
+   *
+   * Carlos pidió «un rojo ladrillo o sangre borgoña que lo pervierta todo,
+   * pero que aún sea visible». Haciendo las cuentas apareció un error en
+   * lo que había.
+   *
+   * ⚠️ LA OSCURIDAD TIENE QUE VENIR DEL COLOR, NO DEL ALFA. Composición
+   * normal (`fondo × (1−α) + color × α`) del último tramo sobre una rosa
+   * del marco rgb(126, 27, 44) y sobre un fondo oscuro rgb(30, 24, 28):
+   *
+   *   antes  24, 8, 12 @ α 0,922 → rosa rgb(32, 9, 15) · fondo rgb(24, 9, 13)
+   *                                LOS SEPARAN 8 → una mancha plana
+   *   ahora  74,18, 28 @ α 0,757 → rosa rgb(87,20, 32) · fondo rgb(63,19, 28)
+   *                                LOS SEPARAN 24 → se ve el detalle
+   *
+   * Con alfa casi opaco TODO converge al mismo valor y el marco se vuelve
+   * una silueta sin interior: eso es «pervertir» a costa de «visible».
+   * Bajando el alfa y saturando el color se consiguen las dos cosas.
+   *
+   * Y hay un argumento físico que lo respalda: una luna totalmente
+   * eclipsada NO se pone negra, se pone cobre-rojo y perfectamente
+   * visible. Por eso se llama luna de sangre. El drama de la totalidad no
+   * viene del colapso de luminancia sino del colapso de la APERTURA, que
+   * es lo que `aperturaDelVelo` ya hace.
+   *
+   * ⚠️ Y LOS RADIOS SE MIDEN, NO SE ESTIMAN. Antes eran porcentajes fijos
+   * de la pantalla, y por eso el óvalo quedaba perdonado (ver la nota de
+   * medirElAltar). Ahora cada tramo se ancla a una caja REAL:
+   *
+   *   'centro'   el punto del degradado
+   *   'letras'   la caja entintada de la palabra «ANIA»
+   *   'broche'   el óvalo dorado, `.portada__broche`
+   *   'broche2'  el doble: el marco y las plantas
+   *   'esquina'  la esquina más lejana
+   *
+   * Así el mismo código da la misma lectura en un monitor de 2560 y en un
+   * teléfono vertical, que es justo lo que Carlos pide que sea igual.
+   *
+   * CÓMO QUEDA CADA COSA. Todos estos números salen de ejecutar las
+   * constantes de este archivo, no de estimarlos, y se rehicieron el
+   * 2026-09-11 cuando cambiaron las paletas y los alfas:
+   *
+   *   fase            velo   rosa del marco      separa   oro
+   *   penumbra  4 s   0,068  rgb(122, 27, 44)      93     97 %
+   *   umbra    15 s   0,255  rgb(110, 26, 42)      82     88 %
+   *   esfuerzo 30 s   0,510  rgb( 95, 25, 40)      70     76 %
+   *   muerte 38,5 s   0,970  rgb( 89, 23, 35)      45     57 %
+   *   cripta   43 s   0,970  rgb( 89, 23, 35)      45     57 %
+   *
+   * «separa» es cuántas unidades de rojo quedan entre esa rosa y el fondo
+   * oscuro de al lado: es la medida de que la escena NO se aplasta en una
+   * silueta. Nunca baja de 45, contra un piso exigido de 18.
+   *
+   * «oro» es cuánta luz conserva el oro del relicario, rgb(198,158,92).
+   * Ahí se lee el arco entero del eclipse: casi imperceptible al empezar,
+   * oscuridad de verdad a los 30, y un salto a la mitad en la totalidad.
+   *
+   * ⚠️ EL ÓVALO SE CORROMPE MENOS DE LO QUE ESTE COMENTARIO DECÍA ANTES.
+   * Acá figuraba «R/G 1,88». Es falso: con la paleta oscura de Carlos y
+   * los alfas de sombra, el oro pasa de R/G 1,25 a 1,42 —queda en
+   * rgb(142,100,65), un bronce deslucido—. Llegar a 1,8 exigiría subir el
+   * alfa de ese tramo a 0,64, por ENCIMA del tramo de afuera (0,54), y el
+   * degradado dejaría de crecer hacia el borde. El 1,88 venía de la
+   * paleta anterior, más clara y con alfas más altos: era otro cálculo.
+   *
+   * Se deja dicho acá para que nadie vuelva a perseguir ese número sin
+   * saber qué rompe.
+   */
+  /* ⚡ SOMBRA, NO MANO DE PINTURA. LOS ALFAS BAJARON. (2026-09-11)
+   *
+   * Carlos: «pero no plano, sino como sombra». Es una distinción técnica,
+   * no de gusto, y decide estos cinco números.
+   *
+   * PLANO es lo que pasa con el alfa alto: todo lo que hay debajo converge
+   * al color del velo y el marco se vuelve una silueta sin interior.
+   * SOMBRA es color oscuro con alfa BAJO: lo de abajo sobrevive, apagado.
+   * Una rosa en sombra sigue siendo reconociblemente una rosa.
+   *
+   * Con la paleta de abajo el COLOR ya hace el trabajo de oscurecer, así
+   * que el alfa no tiene que hacerlo también. Medido sobre una rosa del
+   * marco rgb(126,27,44) contra el fondo de al lado rgb(30,24,28):
+   *
+   *                        alfas de antes    alfas de sombra
+   *   cripta, marco ……… separa 30          separa 45
+   *   cripta, esquina … separa 24          separa 38
+   *   luminancia ………… 35 / 22            38 / 28
+   *
+   * Se ve el interior del marco casi el doble mejor, y la escena igual se
+   * oscurece: la luminancia de la rosa cae de 45 en el esfuerzo a 28 en la
+   * cripta. Eso es una sombra cayendo encima, no un filtro puesto delante. */
   var TRAMOS_DEL_VELO = [
-    { r:   0, c: '140, 38, 30', a: 0.10 },   // el altar: teñido, casi sin velo
-    { r:  30, c: '112, 28, 24', a: 0.45 },
-    { r:  62, c: ' 54, 14, 16', a: 0.80 },
-    { r: 100, c: ' 24,  8, 12', a: 0.95 }    // las esquinas: rojo muy oscuro
+    { ancla: 'centro',  a: 0.22 },   // detrás de las letras
+    { ancla: 'letras',  a: 0.32 },   // el filo de la palabra
+    { ancla: 'broche',  a: 0.44 },   // el óvalo dorado
+    { ancla: 'broche2', a: 0.54 },   // el marco y las plantas
+    { ancla: 'esquina', a: 0.62 }    // el borde de la pantalla
   ];
+
+  /* ⚡ EL VELO ERA ROJO DESDE EL SEGUNDO 1. (2026-09-11)
+   *
+   * Carlos, mirándolo: «vi un rojo vivo allí como sombra, ¿puedes cambiar
+   * a un borgoña? o sea, la penumbra del eclipse de sangre».
+   *
+   * Tenía razón dos veces, y las dos son errores distintos.
+   *
+   * ⚠️ ERROR 1: EL COLOR NO CAMBIABA NUNCA. Esta capa es UNA sola con un
+   * degradado fijo, y lo único que se anima es su opacidad. O sea que el
+   * degradado rojo ya estaba puesto en el segundo 1 —más tenue, pero
+   * rojo—. El documento base dice lo contrario con todas las letras: en la
+   * penumbra «la luz ambiental se enfría y pierde un poco de saturación,
+   * PERO TODAVÍA NO HAY ROJO», y el rojo «es exclusivo del momento de
+   * máxima totalidad».
+   *
+   * Y la prueba no lo cazaba porque comprobaba el COEFICIENTE `sangre`
+   * —que sí valía cero— y no el color que se pinta en pantalla.
+   *
+   * ⚠️ ERROR 2: NO ERA BORGOÑA, ERA LADRILLO. Los tramos de adentro eran
+   * `176,58,40` y `150,44,32`: con G POR ENCIMA de B, que es naranja
+   * quemado. El borgoña es al revés —B por encima de G— porque el vino
+   * tira al violeta y el ladrillo al naranja. Es un número, no un gusto.
+   *
+   * LA SOLUCIÓN, sin volver a los 159 ms: dos paletas fijas y una mezcla
+   * entre ellas gobernada por `sangre`. En penumbra y umbra la mezcla vale
+   * CERO y el velo es acero frío puro; en la totalidad vale uno y es
+   * borgoña. El degradado se reescribe solo cuando la mezcla cambia de
+   * ESCALÓN —doce en todo el minuto— así que son doce rasterizaciones en
+   * sesenta segundos en vez de tres mil seiscientas.
+   *
+   * Comprobado con la misma cuenta que hace la prueba, sobre una rosa del
+   * marco rgb(126,27,44) y el fondo de al lado rgb(30,24,28):
+   *
+   *   penumbra 4 s ….. velo 0,041 · mezcla 0,00 · frío puro, sin rojo
+   *   esfuerzo 30 s … velo 0,306 · mezcla 0,00 · sigue frío
+   *   muerte 38,5 s … velo 0,970 · mezcla 1,00 · rgb(86,19,34), B>G ✓
+   *   cripta 43 s ……… ídem, R/G 4,6 y los separan 30 unidades
+   */
+
+  /* Azul medianoche: la penumbra y la umbra. Ni una gota de rojo.
+     #16202e → #0a101a
+
+     ⚡ ERA GRIS APAGADO Y AHORA ES AZUL PROFUNDO (2026-09-11)
+
+     Carlos trajo una referencia —cielo de sangre arriba, medianoche
+     abajo, el oro y las rosas intactos— y dijo: «es interesante, porque
+     es casi macabro». Lo es, y el motivo es preciso: lo macabro no está
+     en el objeto, está en el AIRE. Ahí nada está podrido; lo que está
+     enfermo es la luz que lo baña. Degradar el objeto da una ruina;
+     degradar solo la luz da un velorio elegante.
+
+     ⚠️ Y LO CONSIGUEN DOS HUES A LA VEZ, no uno. Un tinte único se lee
+     como un filtro puesto encima. Rojo en el centro y azul medianoche en
+     el borde se lee como luz ENFERMA, porque ninguna fuente natural hace
+     eso: el ojo sabe que algo está mal sin poder decir qué. Es el mismo
+     recurso que los Addams —todo en su sitio, todo correcto, y aun así
+     nadie debería estar cómodo—.
+
+     El gris de antes no hacía eso: desaturaba y ya. El azul sí tiene hue
+     propio, así que pelea con el borgoña en vez de diluirse en él. */
+  var PALETA_FRIA = [
+    '22, 32, 46', '19, 28, 41', '16, 24, 36', '13, 20, 31', '10, 16, 26'
+  ];
+
+  /* Borgoña: exclusivo de la totalidad. Los dos tramos de afuera son los
+     colores que eligió Carlos, exactos:
+
+       rustic red  #39141b  rgb(56, 20, 26)   → el marco y las plantas
+       belladona   #28050B  rgb(41,  5, 11)   → las esquinas
+
+     ⚠️ LA REGLA DE TODOS: B POR ENCIMA DE G. Es lo que separa el vino del
+     ladrillo, y es un número, no un gusto. El rojo que Carlos vio y
+     rechazó —«un rojo vivo»— eran `176,58,40` y `150,44,32`, con G por
+     encima de B: eso es naranja quemado. Acá los cinco cumplen la regla:
+     38>30, 34>26, 30>22, 26>20, 11>5. */
+  var PALETA_BORGONA = [
+    '92, 30, 38', '78, 26, 33', '66, 22, 29', '56, 20, 26', '41, 5, 11'
+  ];
+
+  /** El techo de `sangre`, para normalizar la mezcla. Sale de coloresEn. */
+  var SANGRE_MAXIMA = 0.70;
+
+  /** Cuánto borgoña hay ahora mismo, de 0 a 1. La mueve la secuencia. */
+  var mezclaDelVelo = 0;
+  var ultimoEscalonDeMezcla = -1;
+
+  /** Doce escalones en el minuto: suficientes para que no se vea el salto. */
+  var ESCALONES_DE_MEZCLA = 12;
+
+  /**
+   * Interpola las dos paletas en el tramo `i`.
+   *
+   * @param {number} i - Índice del tramo.
+   * @param {number} k - 0 = acero frío, 1 = borgoña.
+   * @returns {string} Los tres canales, listos para un `rgba(...)`.
+   */
+  function colorDelTramo(i, k) {
+    var frio = PALETA_FRIA[i].split(',');
+    var borg = PALETA_BORGONA[i].split(',');
+    var canales = [];
+    for (var c = 0; c < 3; c++) {
+      var a = parseFloat(frio[c]), b = parseFloat(borg[c]);
+      canales.push(Math.round(a + (b - a) * k));
+    }
+    return canales.join(', ');
+  }
 
   /* Cuánto se abre el velo. 1 es su tamaño natural; más chico cierra la
      luz sobre el nombre, más grande la abre. Lo mueve la secuencia. */
   var aperturaDelVelo = 1;
   var ultimaAperturaPintada = -1;
+  var ultimaHuellaDeRadios = -1;
+
+  /**
+   * Distancia del centro del degradado a la esquina más lejana, en píxeles.
+   *
+   * Es el 100 % de un `radial-gradient(circle farthest-corner …)`, y hace
+   * falta para traducir los anclajes —que están en píxeles medidos— al
+   * porcentaje que entiende el CSS.
+   *
+   * @returns {number}
+   */
+  function radioHastaLaEsquina() {
+    var w = window.innerWidth  || 1;
+    var h = window.innerHeight || 1;
+    var dx = Math.max(altar.x, w - altar.x);
+    var dy = Math.max(altar.y, h - altar.y);
+    return Math.sqrt(dx * dx + dy * dy) || 1;
+  }
+
+  /**
+   * Traduce el anclaje de un tramo a porcentaje del degradado.
+   *
+   * @param {string} ancla  'centro' | 'letras' | 'broche' | 'broche2' | 'esquina'
+   * @param {number} hastaLaEsquina  Lo que devuelve radioHastaLaEsquina().
+   * @returns {number} De 0 a 100.
+   */
+  function porcentajeDelAncla(ancla, hastaLaEsquina) {
+    if (ancla === 'centro')  return 0;
+    if (ancla === 'esquina') return 100;
+
+    var px = ancla === 'letras'  ? altar.radioLetras
+           : ancla === 'broche'  ? altar.radioBroche
+           : ancla === 'broche2' ? altar.radioBroche * 2
+           : 0;
+
+    /* ⚡ SIN ESTO EL VELO SE VEÍA PLANO LOS PRIMEROS SEGUNDOS (2026-09-11)
+     *
+     * Carlos: «la penumbra muy roja y plana». Lo de plana era esto, y se
+     * puede ver en el degradado que pintaba en el segundo 3:
+     *
+     *     0%, 0%, 0%, 0%, 100%
+     *
+     * o sea TODA la pantalla del color del último tramo: un lavado
+     * uniforme, sin caída, sin centro de gravedad.
+     *
+     * La causa: mientras el layout se asienta —y con el sobre todavía
+     * puesto— `getBoundingClientRect()` del nombre y del óvalo devuelve
+     * cajas de cero, así que los tres anclajes de en medio resolvían a
+     * 0 % y se apilaban todos contra el origen.
+     *
+     * Devolver cero era la respuesta obediente y equivocada: mejor un
+     * degradado con proporciones razonables que uno colapsado. Estos tres
+     * números son los que la propia página mide una vez asentada (13,2 %,
+     * 43,4 % y 86,7 % en 1280x720), redondeados. En cuanto las cajas
+     * miden de verdad, mandan ellas. */
+    if (!px) {
+      return ancla === 'letras'  ? 12
+           : ancla === 'broche'  ? 34
+           : ancla === 'broche2' ? 68
+           : 0;
+    }
+
+    var pct = (px / hastaLaEsquina) * 100;
+
+    /* ⚠️ NINGUN ANCLAJE INTERMEDIO PUEDE LLEGAR AL 100 %. Si `broche2` se
+       pasa de la esquina —pasa en pantallas anchas, donde el ovalo es
+       grande respecto del alto— quedaba topado en 100 y se pisaba con la
+       parada de la esquina: la caida perdia su ultimo escalon y el borde
+       se veia de un solo tono. Medido en 1280x720: 0 / 15,7 / 51,8 / 100 /
+       100. Se lo topa en 92 para que siempre queden los cinco. */
+    if (pct > 92) pct = 92;
+    return pct;
+  }
   var ultimoCentroX = -999;
   var ultimoCentroY = -999;
 
@@ -300,8 +581,14 @@
    * @returns {void}
    */
   function pintarElVelo() {
-    var cx = altar.radio ? (altar.x / window.innerWidth) * 100 : 50;
-    var cy = altar.radio ? (altar.y / window.innerHeight) * 100 : 42;
+    /* ⚠️ SIN LAYOUT, EL CENTRO SE IBA A LA ESQUINA. Mientras la portada no
+       tiene caja —el sobre todavia puesto, o el marco sin montar—
+       `altar.x/y` valen cero y el degradado salia en `circle at 0% 0%`:
+       plano Y descentrado. El respaldo del 50/42 es el sitio donde vive el
+       relicario en la portada, que es de donde sale la luz. */
+    var hayCaja = altar.radio > 0 && (altar.x > 0 || altar.y > 0);
+    var cx = hayCaja ? (altar.x / window.innerWidth) * 100 : 50;
+    var cy = hayCaja ? (altar.y / window.innerHeight) * 100 : 42;
 
     /* ⚡ PEGAJOSO, NO REDONDEADO (2026-09-11)
      *
@@ -317,7 +604,17 @@
      * pantalla y sí se nota en el cuadro. */
     var apertura = aperturaDelVelo;
 
+    /* Los anclajes en píxeles cambian con el tamaño de la ventana, así que
+       entran en la banda muerta como un número más. */
+    var huella = Math.round(altar.radioLetras) * 4096 + Math.round(altar.radioBroche);
+
+    /* El color también entra en la banda muerta, cuantizado: doce
+       escalones en el minuto entero. Ver la nota de las dos paletas. */
+    var escalonDeMezcla = Math.round(mezclaDelVelo * ESCALONES_DE_MEZCLA);
+
     if (ultimaAperturaPintada >= 0 &&
+        huella === ultimaHuellaDeRadios &&
+        escalonDeMezcla === ultimoEscalonDeMezcla &&
         Math.abs(cx - ultimoCentroX) < 2 &&
         Math.abs(cy - ultimoCentroY) < 2 &&
         Math.abs(apertura - ultimaAperturaPintada) < 0.08) return;
@@ -325,6 +622,8 @@
     ultimoCentroX = cx;
     ultimoCentroY = cy;
     ultimaAperturaPintada = apertura;
+    ultimaHuellaDeRadios = huella;
+    ultimoEscalonDeMezcla = escalonDeMezcla;
 
     var centro = cx.toFixed(1) + '% ' + cy.toFixed(1) + '%';
 
@@ -332,11 +631,24 @@
        lo que hace que la caída sea igual de redonda en un monitor ancho y
        en un teléfono vertical. `farthest-corner` es el valor por defecto,
        pero se escribe explícito porque de eso depende la paridad. */
+    var hastaLaEsquina = radioHastaLaEsquina();
     var paradas = [];
+    var anterior = 0;
+
     for (var i = 0; i < TRAMOS_DEL_VELO.length; i++) {
       var t = TRAMOS_DEL_VELO[i];
-      paradas.push('rgba(' + t.c + ',' + t.a + ') ' +
-                   Math.round(t.r * apertura) + '%');
+      var color = colorDelTramo(i, escalonDeMezcla / ESCALONES_DE_MEZCLA);
+      var pct = porcentajeDelAncla(t.ancla, hastaLaEsquina) * apertura;
+
+      /* Las paradas de un degradado tienen que ir en orden: si una queda
+         por detrás de la anterior —porque la ventana es muy angosta y dos
+         anclajes se cruzan— el navegador la aplasta contra ella y el tramo
+         desaparece. Se fuerza acá y no se deja al azar del viewport. */
+      if (pct < anterior) pct = anterior;
+      if (pct > 100) pct = 100;
+      anterior = pct;
+
+      paradas.push('rgba(' + color + ',' + t.a + ') ' + pct.toFixed(1) + '%');
     }
 
     capaDelEclipse.style.backgroundImage =
@@ -401,7 +713,7 @@
    *
    * ⚠️ ESTE LIENZO BORRA SOLO LA CAJA DE LA ROSA, no la pantalla, porque
    * dibuja un único objeto y no tiene sentido tocar el resto. Y no se ata
-   * al documento hasta el segundo 36,5: hasta entonces no hay nada que
+   * al documento hasta el segundo 38,5: hasta entonces no hay nada que
    * poner en él y una capa de compositor vacía se paga igual. */
   var lienzoDeLaOfrenda = document.createElement('canvas');
   lienzoDeLaOfrenda.className = 'eclipse-capa';
@@ -414,14 +726,80 @@
      del doble de píxeles por el mismo resultado visible. */
   var dpr = Math.min(window.devicePixelRatio || 1, 2);
 
+  /* ⚡ ESTE ARCHIVO ERA EL ÚNICO DE LA PÁGINA A DENSIDAD PLENA (2026-09-11)
+   *
+   * Dato leído, no estimado. Estos tres archivos declaran, los tres, el
+   * mismo `FACTOR_POR_CALIDAD = { 0: 0.75, 1: 0.6, 2: 0.5 }` con
+   * `MAXIMA_DENSIDAD = 1`:
+   *
+   *     24-lienzo-de-petalos.js:209
+   *     23-lienzo-de-luz.js:99
+   *     19-velas.js:120
+   *
+   * O sea que en calidad baja TODA la página dibuja a 0,5× lineal — un
+   * cuarto de los píxeles. Este archivo no leía esa perilla: hacía
+   * `innerWidth × dpr` y nada más, o sea 1,0×.
+   *
+   * En el monitor de Carlos —2560×1277, dpr 1— eso son 3,269 Mpx de trama
+   * por cuadro contra los 0,817 de todos los demás lienzos. CUATRO VECES
+   * la densidad de píxeles del resto de la escena, en la misma pantalla.
+   * Nadie lo decidió: es que este archivo nunca se enteró de la perilla.
+   *
+   * ⚠️ POR QUÉ 0,72 Y NO 0,50. Podría usarse el mismo 0,50 del resto y
+   * sería consistente. Se elige 0,72 porque le da al eclipse MÁS
+   * resolución de la que el proyecto ya considera aceptable para todo lo
+   * demás, y el piso de 0,50 —al que solo se llega si el equipo lo pide—
+   * no baja de ese estándar ya probado. Carlos viene mirando la página a
+   * 0,50 desde siempre sin una sola queja de nitidez.
+   *
+   * ⚠️ Y POR QUÉ SE PUEDE. Acá no hay texto ni bordes finos: son pétalos,
+   * formas suaves y borrosas en movimiento. El tamaño CSS no cambia, así
+   * que el compositor amplía y no se nota. Bajarle la resolución a
+   * cualquier otra cosa de esta web se vería al instante.
+   */
+  var ESCALA_MINIMA_DEL_LIENZO = 0.50;
+
+  var esBaja = (typeof CALIDAD_GRAFICA === 'object' && CALIDAD_GRAFICA)
+    ? calidad() === CALIDAD_GRAFICA.BAJA
+    : String(calidad()).toLowerCase().indexOf('baja') !== -1;
+
+  var ESCALA_DEL_LIENZO = esBaja ? 0.72 : 1;
+
+  /** Los escalones que el gobernador puede pedir, en orden. */
+  var ESCALONES_DE_ESCALA = [0.60, 0.50];
+
+  /**
+   * Baja un escalón la trama del lienzo. Devuelve true si de verdad bajó.
+   *
+   * Cuando ya está en el piso devuelve false, y ahí el gobernador se calla
+   * para el resto de la corrida: no hay nada más que ceder, y NUNCA se
+   * cede reparto. Ver la nota grande del gobernador.
+   */
+  function bajarLaEscalaDelLienzo() {
+    for (var i = 0; i < ESCALONES_DE_ESCALA.length; i++) {
+      if (ESCALA_DEL_LIENZO > ESCALONES_DE_ESCALA[i] + 0.001) {
+        ESCALA_DEL_LIENZO = ESCALONES_DE_ESCALA[i];
+        medirElLienzo();
+        return true;
+      }
+    }
+    return false;
+  }
+
   function medirElLienzo() {
-    lienzo.width  = Math.floor(window.innerWidth  * dpr);
-    lienzo.height = Math.floor(window.innerHeight * dpr);
-    pincel.setTransform(dpr, 0, 0, dpr, 0, 0);
+    /* El piso es duro: ninguna ruta puede dejar la trama por debajo. */
+    if (ESCALA_DEL_LIENZO < ESCALA_MINIMA_DEL_LIENZO) {
+      ESCALA_DEL_LIENZO = ESCALA_MINIMA_DEL_LIENZO;
+    }
+    var trama = dpr * ESCALA_DEL_LIENZO;
+
+    lienzo.width  = Math.floor(window.innerWidth  * trama);
+    lienzo.height = Math.floor(window.innerHeight * trama);
+    pincel.setTransform(trama, 0, 0, trama, 0, 0);
 
     lienzoDeLaOfrenda.width  = lienzo.width;
     lienzoDeLaOfrenda.height = lienzo.height;
-    pincelDeLaOfrenda.setTransform(dpr, 0, 0, dpr, 0, 0);
+    pincelDeLaOfrenda.setTransform(trama, 0, 0, trama, 0, 0);
     cajaAnteriorDeLaOfrenda = null;
 
     /* Asignar el ancho de un canvas lo BORRA entero, así que las cajas del
@@ -551,6 +929,23 @@
     copiarLosEstilosResueltos(nombre, copiaDelNombre);
 
     copiaDelNombre.style.margin = '0';
+
+    /* ⚠️ LA ÚNICA ESCRITURA QUE EL NOMBRE RECIBE EN TODO EL MINUTO.
+     *
+     * Se congela el pan de oro donde estaba en el instante de arrancar. Se
+     * fija EXPLÍCITAMENTE en vez de confiar en que el clon herede el valor
+     * por defecto: 14-haces-de-luz.js escribe `--luz-x` a varios destinos
+     * y no hay que depender de dónde caiga el clon en el árbol.
+     *
+     * Después de esta línea, NADA vuelve a escribir sobre `copiaDelNombre`
+     * ni sobre la jaula. Ni el velo, ni la muerte, ni el shock, ni el
+     * frenesí, ni el frenazo. Simplemente es. */
+    var luzCongelada = '';
+    try {
+      luzCongelada = getComputedStyle(nombre).getPropertyValue('--luz-x').trim();
+    } catch (e) { luzCongelada = ''; }
+    copiaDelNombre.style.setProperty('--luz-x', luzCongelada || '0.5');
+
     jaula.appendChild(copiaDelNombre);
     document.body.appendChild(jaula);
 
@@ -558,49 +953,47 @@
     acomodarLaCopia();
   }
 
-  /**
-   * El nombre sigue brillando como si nada.
+  /* ⚡ ACÁ VIVÍA `elNombreNoSeEntera(t)`, Y HACÍA LO CONTRARIO DE SU NOMBRE
    *
-   * ⚡ ESTE ES EL PLANO MÁS IMPORTANTE DEL MINUTO (2026-09-10)
+   * Carlos, 2026-09-11: «el nombre no brilla, no se inmuta, no pulsa, no
+   * se oscurece por el eclipse, no reacciona a la muerte, no reacciona a
+   * la locura, no reacciona al eclipse… simplemente ES».
    *
-   * El oro del nombre no es un color plano: es un degradado de pan de oro
-   * recortado sobre las letras, y la posición de ese degradado la manda
-   * `--luz-x` — o sea, DÓNDE ESTÁ EL SOL. 14-haces-de-luz.js se la escribe
-   * inline a `.portada__nombre` cada 32-90 ms, junto con
-   * `--luz-intensidad`, que es cuánta luz hay.
+   * La función escribía, EN CADA CUADRO:
    *
-   * Durante el eclipse el sol muere: `--luz-intensidad` se desploma y el
-   * destello del nombre se apagaría con todo lo demás. Y eso sería
-   * exactamente al revés de lo que la escena significa.
+   *     var recorrido = (t % 11500) / 11500;
+   *     copiaDelNombre.style.setProperty('--luz-x', recorrido.toFixed(4));
+   *     copiaDelNombre.style.setProperty('--luz-intensidad', '0.62');
    *
-   * La deidad no depende del sol. No se apaga cuando el mundo se apaga,
-   * no se enciende más porque la adoren, no mira a nadie. Su oro sigue
-   * recorriendo las letras al mismo ritmo de un día cualquiera, mientras
-   * afuera se acaba la luz y doscientas plantas se retuercen por ella.
-   * Es indiferencia hecha de luz.
+   * `--luz-x` es la posición del pan de oro sobre las letras
+   * (`background-position` en estilos/04-portada.css:478). O sea que el
+   * destello recorría el nombre los sesenta segundos enteros, movido por
+   * el eclipse. El nombre brillaba y pulsaba.
    *
-   * ⚠️ POR QUÉ SE PUEDE. La copia del nombre vive dentro de la jaula del
-   * eclipse y NADIE MÁS LA TOCA: 14 le escribe al original, no al clon.
-   * O sea que el clon es el único lugar de la página donde podemos poner
-   * un sol propio sin pelearnos con el módulo que manda la luz. Al
-   * terminar, la jaula se va entera y no queda rastro.
+   * ⚠️ Y LA JUSTIFICACIÓN QUE TENÍA ERA FALSA. Decía que sin esto el
+   * nombre se apagaría con el sol, porque 14-haces-de-luz.js desploma
+   * `--luz-intensidad` durante el eclipse. Los archivos dicen otra cosa:
    *
-   * El ritmo (11,5 s por recorrido) es el mismo orden que el de la deriva
-   * real del sol, para que quien mire dos veces no note que el de adentro
-   * y el de afuera dejaron de ser el mismo.
+   *   · la regla `.portada__nombre` (estilos/04-portada.css:465-495) usa
+   *     `--luz-x` y NADA MÁS. `--luz-intensidad` no aparece en ella —quien
+   *     la usa es otra regla (04-portada.css:213) y las capas de luz
+   *     (12-haces-de-luz.css:502), que no son el nombre.
+   *   · el clon es un cloneNode de un <h1> que contiene SOLO TEXTO: no
+   *     tiene descendientes a los que esa variable pudiera llegar.
    *
-   * @param {number} t - Milisegundo de la secuencia.
-   * @returns {void}
+   * O sea que `setProperty('--luz-intensidad', …)` era una escritura sin
+   * efecto. El nombre nunca iba a apagarse. Lo único que la función
+   * lograba era lo que estaba prohibido.
+   *
+   * QUÉ HACE AHORA: nada. `--luz-x` se fija UNA vez al crear el clon, con
+   * el valor que el original tenía en ese instante —así no hay un salto al
+   * arrancar el minuto— y no se vuelve a tocar. El nombre se ve igual a
+   * las 12:30:00.000 que a las 12:29:59.999, y sigue igual hasta el final.
+   *
+   * Es además el estado que el proyecto ya define para un nombre quieto:
+   * estilos/04-portada.css:500 hace `background-position: 50% 0` bajo
+   * `prefers-reduced-motion`. No se inventó nada.
    */
-  function elNombreNoSeEntera(t) {
-    if (!copiaDelNombre) return;
-
-    var recorrido = (t % 11500) / 11500;      // 0 → 1, en bucle, sin pausas
-    copiaDelNombre.style.setProperty('--luz-x', recorrido.toFixed(4));
-
-    /* Fija, y alta. El mundo pierde su luz; esta no era del mundo. */
-    copiaDelNombre.style.setProperty('--luz-intensidad', '0.62');
-  }
 
   /**
    * Deja la copia justo encima del original, en coordenadas de DOCUMENTO.
@@ -634,7 +1027,7 @@
 
   /* ─── 5. DÓNDE ESTÁ EL ALTAR, Y EL RADIO PROHIBIDO ─────────────── */
 
-  var altar = { x: 0, y: 0, radio: 0, ancho: 0, alto: 0 };
+  var altar = { x: 0, y: 0, radio: 0, ancho: 0, alto: 0, radioLetras: 0, radioBroche: 0 };
 
   function medirElAltar() {
     var caja = nombre.getBoundingClientRect();
@@ -650,6 +1043,63 @@
        monitor ancho: siempre queda un anillo proporcionado alrededor de
        la palabra, ni pegado ni perdido a media pantalla. */
     altar.radio = Math.max(caja.width, caja.height) * 0.95 + 26;
+
+    /* ⚡ LA CAJA DEL <h1> NO ES LA CAJA DE LA PALABRA (2026-09-11)
+     *
+     * `<h1>` es un elemento de BLOQUE: su getBoundingClientRect devuelve el
+     * ancho del CONTENEDOR, no el de las letras. Con los números reales de
+     * la hoja de estilos —`--ancho-broche: min(94vw, 1120px, alto * 0.78)`
+     * (estilos/04-portada.css:162), que en 2560×1277 da min(2406, 1120,
+     * 996) = 996 px— la caja del nombre mide lo mismo que el relicario.
+     *
+     * Por eso el velo PERDONABA AL RELICARIO: su primer tramo, el de alfa
+     * bajo, cubría el óvalo entero. Y por eso en el teléfono «el centro de
+     * gravedad no es el relicario»: el degradado nunca se cerraba sobre la
+     * palabra, se cerraba sobre el marco.
+     *
+     * Carlos: «la deidad no es el relicario, la deidad es el nombre de
+     * Ania, todo es corruptible por el eclipse, incluso el relicario».
+     *
+     * Así que se miden DOS cajas más, y ninguna se estima:
+     *   · la ENTINTADA de la palabra, con un Range sobre el contenido;
+     *   · la del óvalo, `.portada__broche`.
+     * Los tramos del velo se anclan a esas dos. Ver pintarElVelo(). */
+    var entintada = medirLaCajaEntintada(nombre);
+    altar.radioLetras = entintada
+      ? Math.max(entintada.width, entintada.height) / 2
+      : Math.max(caja.width, caja.height) * 0.22;
+
+    var elBroche = broche || (broche = document.querySelector('.portada__broche'));
+    var cajaDelBroche = null;
+    if (elBroche) {
+      try { cajaDelBroche = elBroche.getBoundingClientRect(); } catch (e) { cajaDelBroche = null; }
+    }
+    altar.radioBroche = (cajaDelBroche && cajaDelBroche.width > 1)
+      ? Math.max(cajaDelBroche.width, cajaDelBroche.height) / 2
+      : altar.radioLetras * 3;
+  }
+
+  var broche = null;
+
+  /**
+   * La caja ENTINTADA del contenido de un nodo, no la de su bloque.
+   *
+   * Un Range sobre el contenido devuelve la unión de los rectángulos del
+   * texto, que para una palabra centrada es el ancho real de las letras.
+   * Es la medición que faltaba: ver la nota de medirElAltar().
+   *
+   * @param {Element} nodo
+   * @returns {DOMRect|null} La caja, o null si no se pudo medir.
+   */
+  function medirLaCajaEntintada(nodo) {
+    try {
+      var rango = document.createRange();
+      rango.selectNodeContents(nodo);
+      var caja = rango.getBoundingClientRect();
+      if (rango.detach) rango.detach();
+      if (caja && caja.width > 1 && caja.height > 1) return caja;
+    } catch (e) { /* nada */ }
+    return null;
   }
   medirElAltar();
 
@@ -946,7 +1396,7 @@
      rompiendo, y eso es lo que hace que el ojo esté mirándola cuando se
      arranca.
 
-     A los 36,5 s se le pone `opacity: 0` a la flor y se dibuja en el
+     A los 38,5 s se le pone `opacity: 0` a la flor y se dibuja en el
      lienzo una copia en su posición exacta, con su tamaño y su giro
      exactos. Es la misma flor, en otro dibujo: no hay salto. Y en ese
      mismo cuadro su rama da un latigazo hacia atrás —la tensión contra la
@@ -962,22 +1412,67 @@
     escala: 0.5
   };
 
+  /**
+   * Elige a la mártir por ESFUERZO ACUMULADO, no por posición.
+   *
+   * ⚡ ANTES NO HABÍA RANKING NINGUNO (2026-09-11)
+   *
+   * Esto elegía la más grande del quinto más cercano, al montarse la
+   * escena — o sea ANTES de que ninguna se hubiera esforzado— y después
+   * `moverLasFloresReales` le pintaba el esfuerzo encima con
+   * `var esfuerzo = f.martir ? tramo(…) : 0`. El esfuerzo era una
+   * consecuencia de ser la mártir, no su causa.
+   *
+   * El documento base pide lo contrario, y con todas las letras: «El
+   * algoritmo de esfuerzo lleva ranking en tiempo real» y «La rosa que ha
+   * acumulado el MAYOR ESFUERZO alcanza el punto de ruptura». Es la idea
+   * entera: muere la que más lo intentó.
+   *
+   * Ahora cada flor suma `Math.abs(inclina)` cada vez que le toca turno
+   * (ver moverLasFloresReales). Todas reciben turno con la misma
+   * frecuencia —es un round-robin por `turno % TANDAS`— así que las sumas
+   * son comparables entre sí sin normalizar por nada.
+   *
+   * ⚠️ Y LA CERCANÍA YA NO SE IMPONE: EMERGE. La onda de conciencia hace
+   * que las flores cercanas al nombre despierten antes (`suTurno` sale de
+   * `f.distancia / lejaniaMaxima`), así que acumulan esfuerzo durante más
+   * tiempo y ganan solas. No hace falta filtrarlas: el diseño ya las
+   * favorece, y ahora eso se lee como mérito en vez de como decreto.
+   *
+   * Lo único que se conserva como condición dura es el TAMAÑO, y por el
+   * motivo de siempre: una cabeza de 14 px arrancándose no se ve, y el
+   * sacrificio tiene que poder mirarse. Se exige estar de la mediana para
+   * arriba, que deja compitiendo a la mitad del marco.
+   *
+   * @returns {void}
+   */
   function elegirALaQueMuere() {
     laQueMuere = null;
     if (!floresReales.length) return;
 
-    /* Las que ya están al lado del nombre: la quinta parte más cercana.
-       Que se arranque una de la esquina no significaría nada — quien se
-       ofrece es quien ya estaba tocando el altar. */
-    var cerca = floresReales.slice();
-    cerca.sort(function (a, b) { return a.distancia - b.distancia; });
-    cerca.length = Math.max(1, Math.floor(cerca.length * 0.2));
+    var tamanos = [];
+    for (var k = 0; k < floresReales.length; k++) tamanos.push(floresReales[k].tamano);
+    tamanos.sort(function (a, b) { return a - b; });
+    var medianaDeTamano = tamanos[Math.floor(tamanos.length / 2)] || 0;
 
-    /* Y de ésas, la más grande. Una cabeza de 14 px arrancándose no se ve;
-       el sacrificio tiene que poder mirarse. */
     var mejor = null;
-    for (var i = 0; i < cerca.length; i++) {
-      if (!mejor || cerca[i].tamano > mejor.tamano) mejor = cerca[i];
+    for (var i = 0; i < floresReales.length; i++) {
+      var f = floresReales[i];
+      if (f.tamano < medianaDeTamano) continue;
+      if (!mejor || (f.esfuerzoAcumulado || 0) > (mejor.esfuerzoAcumulado || 0)) mejor = f;
+    }
+
+    /* Respaldo: si por lo que sea nadie acumuló nada —el marco nació tarde
+       y el ranking no tuvo tiempo— gana la más grande y cercana, que es lo
+       que hacía antes. Nunca se sale de acá sin mártir. */
+    if (!mejor || !(mejor.esfuerzoAcumulado > 0)) {
+      var cerca = floresReales.slice();
+      cerca.sort(function (a, b) { return a.distancia - b.distancia; });
+      cerca.length = Math.max(1, Math.floor(cerca.length * 0.2));
+      mejor = null;
+      for (var j = 0; j < cerca.length; j++) {
+        if (!mejor || cerca[j].tamano > mejor.tamano) mejor = cerca[j];
+      }
     }
 
     laQueMuere = mejor;
@@ -1377,6 +1872,10 @@
            cuadro cuando el gesto no cambió. */
         ultimoGesto: -99999,
         ultimoCrece: -99999,
+        /* Cuánto lleva esforzándose. Es el ranking en tiempo real del
+           documento base: la que más acumule al segundo 35 es la que se
+           arranca. Ver elegirALaQueMuere(). */
+        esfuerzoAcumulado: 0,
         /* Dónde está en pantalla, quieta. Lo usa la mártir para dibujar su
            copia exactamente encima de sí misma. */
         cx: cx,
@@ -1401,7 +1900,7 @@
         /* Y el tamaño REAL de la rosa, que no es lo mismo: ver
            ladoRealDeLaFlor(). Solo lo usa la mártir, pero se mide acá
            porque acá la maquetación ya está resuelta y preguntar es
-           gratis; en el segundo 36,5 costaría un recálculo entero. */
+           gratis; en el segundo 38,5 costaría un recálculo entero. */
         ladoReal: ladoRealDeLaFlor(nodo)
       });
     }
@@ -1419,13 +1918,10 @@
     tomarLasRamas();
     tomarLasLlamas();
 
-    /* ⚠️ ACÁ Y NO EN empezar(). La mártir es una flor DEL MARCO, así que
-       no se la puede elegir antes de que el marco exista — y puede no
-       existir todavía cuando el eclipse arranca (ver la nota de
-       moverLasFloresReales). Elegirla acá significa que se elige en el
-       mismo momento en que hay de dónde elegir, corra esto al empezar o
-       quince segundos después. */
-    elegirALaQueMuere();
+    /* ⚠️ ACÁ YA NO SE ELIGE A LA MÁRTIR. Se elige en el segundo 35, cuando
+       el ranking de esfuerzo tiene trece segundos de datos: ver
+       elegirALaQueMuere() y su llamada en moverLasFloresReales(). Elegirla
+       en este punto era elegirla antes de que nadie se hubiera esforzado. */
   }
 
   /* ─── LOS TURNOS ────────────────────────────────────────────────────
@@ -1685,7 +2181,7 @@
   }
 
   /**
-   * El segundo 36,5: la mártir se arranca de su tallo, a la vista.
+   * El segundo 38,5: la mártir se arranca de su tallo, a la vista.
    *
    * ⚠️ SE LLAMA ANTES DE ESCRIBIRLE UN SOLO ESTILO A UNA FLOR EN ESTE
    * CUADRO, y eso no es un detalle de orden. Acá adentro hay un
@@ -1897,10 +2393,13 @@
       lienzoDeLaReliquia.className = 'eclipse-capa';
       lienzoDeLaReliquia.style.cssText =
         'position:fixed;inset:0;pointer-events:none;z-index:2147483001;';
-      lienzoDeLaReliquia.width  = Math.floor(window.innerWidth  * dpr);
-      lienzoDeLaReliquia.height = Math.floor(window.innerHeight * dpr);
+      /* Misma trama que el lienzo del mundo: es la misma decisión y por el
+         mismo motivo. Ver la nota de ESCALA_DEL_LIENZO. */
+      var tramaDeLaReliquia = dpr * ESCALA_DEL_LIENZO;
+      lienzoDeLaReliquia.width  = Math.floor(window.innerWidth  * tramaDeLaReliquia);
+      lienzoDeLaReliquia.height = Math.floor(window.innerHeight * tramaDeLaReliquia);
       pincelDeLaReliquia = lienzoDeLaReliquia.getContext('2d');
-      pincelDeLaReliquia.setTransform(dpr, 0, 0, dpr, 0, 0);
+      pincelDeLaReliquia.setTransform(tramaDeLaReliquia, 0, 0, tramaDeLaReliquia, 0, 0);
     } catch (e) {
       lienzoDeLaReliquia = null;
       pincelDeLaReliquia = null;
@@ -2100,7 +2599,8 @@
   var ultimoIntentoDeLlamas = -1000;
 
   function moverLasLlamas(t) {
-    /* Apagadas por el recorte: ver soltarLastre(). */
+    /* Solo el diagnostico del panel puede apagarlas. El eclipse de verdad
+       nunca lo hace: ver recortado(). */
     if (recortado('llamas')) return;
 
     /* Los candelabros los arma 19-velas.js cuando se monta la escena, y no
@@ -2284,6 +2784,35 @@
         var sinFauna = t >= 33000 && t < 52000;
         window.LienzoDeLuz.motas = sinFauna ? [] : mundo.motas;
         window.LienzoDeLuz.fauna = sinFauna ? [] : mundo.fauna;
+
+        /* ⚡ Y EL LIENZO ENTERO SE DETIENE, NO SOLO SE VACÍA (2026-09-11)
+         *
+         * Vaciar los arrays deja este canvas repintándose a pantalla
+         * completa con casi nada adentro, debajo de un velo que ya lo
+         * tapa. En el monitor de Carlos son 0,817 Mpx por repintado.
+         *
+         * ⚠️ LA VENTANA NO ES ARBITRARIA: es exactamente la unión de las
+         * dos de arriba, [26000, 52000). Se eligió así para no inventar
+         * una transición nueva — en esos dos instantes el contenido ya se
+         * vacía y ya se vuelve a llenar, y eso está visto y aceptado.
+         * Detenerlo antes sí se notaría: a los 8 s el velo va en alfa
+         * 0,08 y apagar la luz ambiente ahí sería un salto. */
+        window.LienzoDeLuz.pausado = (t >= 26000 && t < 52000);
+      }
+
+      /* El halo de las velas, en la misma ventana y por el mismo motivo.
+         Las llamas NO se detienen: son SVG y siguen titilando el minuto
+         entero. Ver la nota en 19-velas.js. */
+      if (window.EstadoDelLienzoDeVelas) {
+        window.EstadoDelLienzoDeVelas.pausado = (t >= 26000 && t < 52000);
+      }
+
+      /* Los pétalos de la invitación ya están en opacidad 0 con una
+         transición de 0,9 s (ver apagarLosPetalosDeSiempre). Al segundo
+         ya no se ven, y recién ahí se detiene el pintado: antes se
+         cortaría el desvanecido a la mitad. */
+      if (window.LienzoDePetalos) {
+        window.LienzoDePetalos.pausado = (t >= 1000);
       }
 
       /* ⚡ EL VELO RECTANGULAR SE APARTA, NO SE CIERRA (2026-09-11)
@@ -2318,7 +2847,42 @@
     } catch (e) { /* un módulo que no está no puede romper el homenaje */ }
   }
 
+  /**
+   * Suelta las tres pausas de lienzo y repinta lo que haga falta.
+   *
+   * Es idempotente a propósito: se la puede llamar dos veces sin que pase
+   * nada raro, que es lo que ocurre cuando terminar() corre por el camino
+   * normal y por el de error.
+   *
+   * @returns {void}
+   */
+  function soltarLosLienzos() {
+    try {
+      if (window.LienzoDeLuz) window.LienzoDeLuz.pausado = false;
+      if (window.EstadoDelLienzoDeVelas) window.EstadoDelLienzoDeVelas.pausado = false;
+      if (window.LienzoDePetalos) {
+        window.LienzoDePetalos.pausado = false;
+        /* Un repintado ya mismo: si no, el throttle puede dejar el lienzo
+           en blanco hasta 90 ms después de que el eclipse ya se fue. */
+        if (window.LienzoDePetalos.pintarUnCuadro) {
+          window.LienzoDePetalos.pintarUnCuadro();
+        }
+      }
+    } catch (e) { /* nada: soltar una pausa nunca puede tumbar la salida */ }
+  }
+
   function devolverElMundo() {
+    /* ⚠️ LAS PAUSAS SE SUELTAN PRIMERO, ANTES DE CUALQUIER GUARD.
+     *
+     * Si el eclipse termina por una excepción a mitad del minuto (ver el
+     * try del bucle), o si `mundo` nunca llegó a capturarse, una bandera
+     * de pausa que quedara puesta dejaría la página SIN luz ambiente, SIN
+     * halo de velas y SIN lluvia de pétalos hasta que alguien recargara.
+     * Un homenaje no puede romper la invitación: por eso esto va acá
+     * arriba, fuera del `if (!mundo)` y fuera del try.
+     */
+    soltarLosLienzos();
+
     if (!mundo) return;
     try {
       if (window.LuzDeLaHora) {
@@ -2440,7 +3004,81 @@
     return curva;
   }
 
+  /* ⚡ EL SCRATCH DE DISCO RAYADO NO EXISTÍA (2026-09-11)
+   *
+   * El documento base lo pide con todas las letras para el segundo 54:
+   * «Esto es acompañado de un scratch de la música, como disco rayado que
+   * vuelve a sonar con normalidad». Buscado en todo el proyecto,
+   * `playbackRate` aparecía CERO veces. Lo que había era el filtro
+   * soltándose en 600 ms, que es otra cosa: eso es salir de debajo del
+   * agua, no un disco frenado con el dedo.
+   *
+   * Y es exactamente el sonido que le falta al gesto: Carlos, sobre el
+   * final, «un parón brusco, violento, como forzando a las plantas a
+   * fingir ser dóciles», «una fuerza superior las empuja violentamente de
+   * vuelta a la normalidad». El scratch ES esa fuerza. Las plantas no
+   * deciden parar: las paran.
+   *
+   * ⚠️ VA POR FUERA DEL GRAFO A PROPÓSITO. `playbackRate` es una propiedad
+   * del <audio>, no un nodo de Web Audio, así que no toca el grafo de
+   * filtro/saturación/ganancia —que no se puede desarmar sin dejar la
+   * canción muda para siempre, ver la advertencia de arriba— y funciona
+   * igual aunque el AudioContext no haya podido crearse.
+   *
+   * 140 ms para frenar y 120 para soltar: son 260 en total. Más largo se
+   * oye como una cinta estirándose; más corto no se alcanza a oír.
+   */
+  var FRENAZO_BAJA = 140;
+  var FRENAZO_SUBE = 120;
+  var yaSonoElScratch = false;
+
+  /**
+   * El scratch de disco rayado del segundo 54.
+   *
+   * ⚡ NO SONABA NUNCA, Y LA CAUSA ERA EL RITMO DE CUADROS (2026-09-11)
+   *
+   * La primera versión interpolaba el ritmo dentro de una ventana de
+   * 260 ms leída UNA VEZ POR CUADRO. Medido en el navegador, sondeando
+   * cada 15 ms durante los sesenta segundos: `playbackRate` se quedó en
+   * 1,000 el minuto entero. En calidad baja, con 226 flores en escena, la
+   * mediana entre cuadros en esta fase es de 646 ms —máximo 1098— así que
+   * NINGÚN cuadro caía dentro de la ventana y el efecto se salteaba.
+   *
+   * Es un error de diseño: un efecto de 260 ms no puede depender de que
+   * un cuadro caiga justo ahí. Ahora se dispara UNA sola vez, en el primer
+   * cuadro que cruza el segundo 54, y desde ahí lo maneja su propio reloj
+   * con `setTimeout`. La escena puede ir a 1,5 fps y el scratch suena
+   * igual, porque el audio no corre en el hilo de la animación.
+   *
+   * ⚠️ Y ES LO QUE EL GESTO SIGNIFICA. Carlos: «una fuerza superior las
+   * empuja violentamente de vuelta a la normalidad». El scratch ES esa
+   * fuerza. Si no suena, el frenazo se queda mudo.
+   *
+   * @param {number} t - Milisegundo de la secuencia.
+   * @returns {void}
+   */
+  function elScratchDelFrenazo(t) {
+    if (yaSonoElScratch || !audio || t < FRENESI) return;
+    yaSonoElScratch = true;
+
+    /* El disco se frena de golpe: no hay rampa por cuadros, hay un valor
+       puesto y otro puesto después. */
+    try { audio.playbackRate = 0.35; } catch (e) { return; }
+
+    /* Y vuelve solo, con su propio reloj. Si el eclipse se corta antes,
+       soltarElSonido() lo devuelve igual — por eso esto no puede ser la
+       única ruta de vuelta. */
+    setTimeout(function () {
+      try { audio.playbackRate = 0.62; } catch (e) { /* nada */ }
+    }, FRENAZO_BAJA);
+
+    setTimeout(function () {
+      try { audio.playbackRate = 1; } catch (e) { /* nada */ }
+    }, FRENAZO_BAJA + FRENAZO_SUBE);
+  }
+
   function ajustarElSonido(t) {
+    elScratchDelFrenazo(t);
     if (!sonido) return;
 
     /* ⚡ EL SONIDO SALÍA DEL POZO CINCO SEGUNDOS TARDE (2026-09-10)
@@ -2458,7 +3096,7 @@
      *
      * Ahora sale del pozo CON el color: empieza a soltarse en FRENESI y
      * llega a limpio alrededor del 54,6, siguiendo la misma forma que usan
-     * las capas. El scratch de disco rayado sigue estando —son 600 ms, no
+     * las capas. El scratch de disco rayado sigue estando —son 260 ms, no
      * un fundido largo— pero cae donde la imagen lo acompaña.
      *
      * Los últimos ~5 s quedan de vuelta a la normalidad completa: la marea
@@ -2481,6 +3119,13 @@
   }
 
   function soltarElSonido() {
+    /* Primero el ritmo, y fuera del guard: si el eclipse muere por una
+       excepción en mitad del scratch, la canción quedaría sonando al 35 %
+       para siempre. */
+    if (audio) {
+      audio.__ritmoDelEclipse = 1;
+      try { audio.playbackRate = 1; } catch (e) { /* nada */ }
+    }
     if (!sonido) return;
     // Neutro, NO desconectado. Ver la advertencia de arriba.
     sonido.filtro.frequency.value = 20000;
@@ -2563,20 +3208,41 @@
     /* ── EL FRÍO: saca la luz DEL DÍA, no la escena ──
        Tope 0,42. Antes era 0,88 y eso solo ya dejaba la página al 12 %
        antes de que el rojo entrara siquiera. */
+    /* ⚡ EL TECHO DEL FRÍO SUBIÓ DE 0,42 A 0,70 (2026-09-11)
+     *
+     * Con 0,42 el oro de la escena conservaba el 86 % de su luz en el
+     * segundo 30 — o sea que la «umbra profunda · oscuridad intensa» del
+     * documento base era una penumbra tibia. Con 0,70 baja al 77 %, y el
+     * salto a 57 % al entrar en totalidad queda como EL acontecimiento.
+     *
+     * ⚠️ Y ESTO NO METE ROJO. El oscurecimiento de esta fase lo pinta la
+     * PALETA_FRIA —acero azulado— porque la mezcla del velo sigue a
+     * `sangre`, que vale cero hasta el segundo 35. Antes de la totalidad
+     * la pantalla se enfría y se dessatura, exactamente como pide el
+     * documento, sin una gota de sangre.
+     *
+     * Y no es el único oscurecimiento: el sol muere (largoDelHaz), los
+     * rayos se vacían a los 26 s y `#penumbra-profunda` se cierra. Esto es
+     * una de las tres cosas que oscurecen, no la única. */
     var frio = t < TOTALIDAD
-      ? tramo(t, 0, PROFUNDA) * 0.42
+      ? tramo(t, 0, PROFUNDA) * 0.70
       : t < SHOCK
         /* Los dos segundos de cripta: acá sí se cierra. */
-        ? 0.42 + tramo(t, TOTALIDAD, SHOCK) * 0.20
-        : 0.62 * (1 - seFue);
+        ? 0.70 + tramo(t, TOTALIDAD, SHOCK) * 0.20
+        : 0.90 * (1 - seFue);
 
     /* ⚠️ EL ROJO ES EXCLUSIVO DE LA TOTALIDAD.
        Si apareciera antes dejaría de significar «este es el momento
        sagrado y terrible» y sería un filtro de color más. Por eso el
        primer tramo es un cero duro y no una rampa que empieza bajito. */
     var sangre = t < PROFUNDA ? 0
-      : t < TOTALIDAD ? tramo(t, PROFUNDA, TOTALIDAD) * 0.52
-      : t < SHOCK     ? 0.52 + tramo(t, TOTALIDAD, SHOCK) * 0.18
+      : t < MUERE_EN ? tramo(t, PROFUNDA, MUERE_EN) * 0.70
+      /* Del 38,5 al 44 NO sigue subiendo: ya está en el máximo absoluto y
+         se queda. El documento pide las dos cosas —máximo en la muerte y
+         máximo en el shock— y sostenerlo es la única forma de cumplir las
+         dos. Lo que hace terrible a la cripta es la apertura cerrándose,
+         no un rojo que ya no tiene a dónde subir. */
+      : t < SHOCK     ? 0.70
       : 0.70 * (1 - seFue);
 
     /* ── LA CORONA: la única capa que SUMA luz ──
@@ -2747,7 +3413,7 @@
        medio, el segundo 42 es el segundo 42 en cualquier equipo. */
     if (laQueMuere && muerte.suelta && t >= MUERE_EN) {
 
-      /* 36,5 → 42,0: viaja hasta el nombre y se posa. Es la única que
+      /* 38,5 → 42,0: viaja hasta el nombre y se posa. Es la única que
          cruza el radio, y lo cruza porque se soltó (regla 2).
 
          ⚡ SE POSA EN EL FILO DE ABAJO, NO EN EL CENTRO (2026-09-11).
@@ -2769,8 +3435,13 @@
       /* 54,0 en adelante: resbala del nombre y cae. Se le acabó el
          permiso, como a todas. 900 px/s², que es una caída creíble a
          cualquier tamaño de pantalla. */
-      if (t >= FRENESI) {
-        var cae = (t - FRENESI) / 1000;
+      /* ⚠️ ELLA NO SE VA CON LAS DEMÁS. El guion es explícito: «La rosa
+         muerta permanece un instante más sobre el nombre y LUEGO se
+         desliza y cae». Si cayera en el 54 con el empujón, se leería como
+         una cosa más que la fuerza barrió; quedándose 2,2 s sola sobre el
+         nombre, se lee como lo que es: la única que llegó. */
+      if (t >= CAE_LA_MARTIR) {
+        var cae = (t - CAE_LA_MARTIR) / 1000;
         muerte.y += 900 * cae * cae * 0.5;
         muerte.giro += cae * 1.8;
       }
@@ -2921,6 +3592,94 @@
 
   /* ─── 14. LAS FLORES DEL MARCO, DESDE AFUERA ────────────────────── */
 
+  /**
+   * El tirón del frenesí: una cuenta regresiva, no un ritmo.
+   *
+   * ⚡ QUÉ GESTO ES ESTE, QUE NO ES EL DE ANTES (2026-09-11)
+   *
+   * Carlos: «cada planta ha entendido que la forma de rozar lo divino, el
+   * nombre de Ania, es literalmente dando su vida, suicidándose,
+   * arrancando su propio tallo… no ven muerte, ven que una lo logró, y la
+   * envidian». Y: «están totalmente dispuestas a morir, a arrancarse a sí
+   * mismas por seguirla, pero ya no hay tiempo, o lo dan todo o no lo
+   * hacen».
+   *
+   * En los actos II y III las flores SE ESTIRAN HACIA el nombre. Acá no:
+   * TIRAN CONTRA SU PROPIA RAÍZ. Por eso cada ciclo empieza con una
+   * compresión —la cabeza vuelve hacia atrás, hacia la base— y sigue con
+   * un lanzamiento que se pasa del tope. Se estira hasta romperse, no
+   * hasta alcanzar. Es otro movimiento y se ve distinto.
+   *
+   * ⚠️ Y NO SON RÁFAGAS PAREJAS. El período se acorta de 1200 ms a 300 ms
+   * a lo largo de los diez segundos: unos 15 tirones, empezando a 0,8 por
+   * segundo y terminando a 3,3. Los intervalos DECRECEN porque lo que
+   * aprieta es el reloj, no un compás.
+   *
+   * La cuenta de ciclos es la integral de dt/período con período lineal,
+   * o sea un logaritmo. Se resuelve en forma cerrada a propósito: así esto
+   * es una FUNCIÓN PURA DE t, se puede probar sin correr la escena, y dos
+   * cuadros con el mismo t dan lo mismo.
+   *
+   * @param {number} t - Milisegundo de la secuencia.
+   * @returns {{u: number, fase: number, empuje: number}}
+   *   `u` va de 0 a 1 a lo largo del frenesí; `empuje` de -0,9 (comprimida
+   *   contra la raíz) a 1 (lanzada más allá del tope).
+   */
+  /** Cuánto tarda el empujón del 54 en devolverlas. Corto a propósito. */
+  var DURA_EL_EMPUJON = 200;
+
+  /** Cuándo se desliza la rosa muerta: 2,2 s después del empujón. */
+  var CAE_LA_MARTIR = 56200;
+
+  /**
+   * La curva del empujón: de 1 a 0 en 200 ms, pasándose un 8 %.
+   *
+   * Cae rápido y se PASA: a los tres cuartos del recorrido ya está en
+   * -0,08 —o sea, la flor cruzó su postura de reposo hacia el otro lado— y
+   * en el último cuarto vuelve a cero. Ese sobrepaso es la diferencia
+   * entre «la empujaron» y «se detuvo»: un cuerpo frenado por una fuerza
+   * externa rebota, uno que decide pararse no.
+   *
+   * @param {number} x - De 0 (recién empujada) a 1 (ya quieta).
+   * @returns {number} Cuánto le queda de su gesto: 1 entero, 0 en reposo,
+   *   negativo mientras está pasada.
+   */
+  function elEmpujon(x) {
+    if (x <= 0) return 1;
+    if (x >= 1) return 0;
+    if (x < 0.75) return 1 - suave(x / 0.75) * 1.08;
+    return -0.08 + 0.08 * suave((x - 0.75) / 0.25);
+  }
+
+  var PERIODO_INICIAL_DEL_TIRON = 1200;
+  var PERIODO_FINAL_DEL_TIRON   = 300;
+
+  function tironDelFrenesi(t) {
+    if (t < SHOCK || t >= FRENESI) return { u: 0, fase: 0, empuje: 0 };
+
+    var total = FRENESI - SHOCK;
+    var u = limitar((t - SHOCK) / total, 0, 1);
+
+    var p0 = PERIODO_INICIAL_DEL_TIRON;
+    var p1 = PERIODO_FINAL_DEL_TIRON;
+    var ciclos = (total / (p0 - p1)) * Math.log(p0 / (p0 - (p0 - p1) * u));
+    var fase = ciclos - Math.floor(ciclos);
+
+    var empuje;
+    if (fase < 0.20) {
+      /* Contra la raíz. Rápido: es un envión, no una duda. */
+      empuje = -0.9 * suave(fase / 0.20);
+    } else if (fase < 0.52) {
+      /* El lanzamiento, que se pasa del tope. */
+      empuje = -0.9 + 1.9 * suave((fase - 0.20) / 0.32);
+    } else {
+      /* Lo que queda del ciclo, cediendo hasta el siguiente envión. */
+      empuje = 1 - suave((fase - 0.52) / 0.48);
+    }
+
+    return { u: u, fase: fase, empuje: empuje };
+  }
+
   function moverLasFloresReales(t) {
     /* ⚡ EL MARCO PUEDE NO EXISTIR TODAVÍA CUANDO EL ECLIPSE ARRANCA
      *   (2026-09-10)
@@ -2944,34 +3703,60 @@
       if (!floresReales.length) return;
     }
 
+    /* ⚡ EL SEGUNDO 35: SE CUENTAN LOS ESFUERZOS Y HAY UNA GANADORA.
+     *
+     * Trece segundos de ranking en tiempo real (desde que despierta la
+     * primera, sobre el segundo 2,4) y acá se cierra la votación. La que
+     * más acumuló es la que se va a arrancar. Ver elegirALaQueMuere().
+     *
+     * Se comprueba `!laQueMuere` y no `t === PROFUNDA` porque el marco
+     * puede haber nacido tarde: si aparece en el segundo 40, se elige en
+     * el 40 con lo que haya, y no se queda el minuto sin mártir. */
+    if (!laQueMuere && t >= PROFUNDA) elegirALaQueMuere();
+
     /* El arranque de la mártir va ACÁ ARRIBA, antes de escribirle un solo
        estilo a una flor en este cuadro. Ver la nota de la función. */
     arrancarALaMartir(t);
 
-    /* En el último nivel de recorte las flores se quedan quietas, pero la
-       mártir sigue: es lo irreductible de la escena. Ver soltarLastre(). */
+    /* Idem: solo el diagnostico. Las flores del marco SON el rito y el
+       eclipse ya no las apaga nunca. Ver la nota del gobernador. */
     if (recortado('flores')) return;
 
     var enSumision = t >= FRENESI;
     var enShock    = t >= TOTALIDAD && t < SHOCK;
     var ahora = t / 1000;
 
-    /* ⚡ EL FRENAZO ES EL FINAL, NO LA SUMISIÓN (2026-09-10)
+    /* El tirón es igual para todas —lo que aprieta es el reloj, no cada
+       planta— así que se calcula UNA vez por cuadro y no doscientas. */
+    var tiron = tironDelFrenesi(t);
+
+    /* ⚡ EL EMPUJÓN DEL SEGUNDO 54, QUE NO EXISTÍA (2026-09-11)
      *
-     * Antes las plantas se calmaban a partir del segundo 54, bajando por
-     * una rampa. Eso contaba la historia equivocada: las plantas
-     * aceptando que se acabó.
+     * Acá decía `var retirada = 0;` y una nota explicando que las plantas
+     * NO se calman: que siguen estirando hasta el 60 y que terminar() las
+     * devuelve de golpe en el último cuadro.
      *
-     * No se calman. La luz vuelve entre el 57 y el 59,9 —el mundo se
-     * reilumina— y ellas SIGUEN estirando, con el permiso terminándose
-     * encima. Ese desacople es el momento más perturbador del minuto.
-     * Después, en el segundo 60, terminar() las devuelve a su sitio en UN
-     * SOLO CUADRO: no es un final, es una orden obedecida con violencia.
+     * Eso contradice la instrucción de Carlos, que es literal: «el final
+     * es abrupto porque una fuerza superior las empuja violentamente de
+     * vuelta a la normalidad», y el guion, que pone el retorno forzado en
+     * la franja 54-60 y no en el 60 pelado.
      *
-     * Por eso `retirada` queda en cero hasta el final. La rampa se
-     * conserva en la firma por si algún día hace falta un final suave,
-     * pero hoy no se usa: el frenazo ES el efecto. */
-    var retirada = 0;
+     * Y dejaba al scratch huérfano: el disco se rayaba en el 54 y en
+     * pantalla no pasaba nada durante seis segundos. Un sonido sin gesto.
+     *
+     * ⚠️ EL EMPUJÓN VIENE DE AFUERA, Y SE TIENE QUE VER ASÍ. No es una
+     * rampa suave —eso sería las plantas aceptando— ni el frenazo mudo del
+     * 60. Son 200 ms, todas a la vez, con un RETROCESO del 8 %: se pasan
+     * de su postura de reposo y vuelven, que es lo que hace un cuerpo al
+     * que empujaron, no uno que se detuvo solo.
+     *
+     * De los 54,2 a los 60 quedan quietas, fingiendo docilidad delante de
+     * quien acaba de verlas intentar arrancarse. Eso sigue siendo lo más
+     * perturbador del minuto — pero ahora es una quietud impuesta y
+     * visible, no seis segundos de seguir tirando. */
+    var retirada = t >= FRENESI
+      ? 1 - elEmpujon(limitar((t - FRENESI) / DURA_EL_EMPUJON, 0, 1))
+      : 0;
 
     for (var i = 0; i < floresReales.length; i++) {
       var f = floresReales[i];
@@ -2994,9 +3779,19 @@
       /* ── 2. EL DESEO, QUE CRECE ──
          De dócil a histérica. En el shock se congela —dos segundos de
          vacío, igual que la marea— y en el frenesí se desata. */
+      /* ── EL SHOCK NO ES ESPANTO, ES COMPRENSIÓN ──
+         Carlos: el parón es «lo que les toma entenderlo». Por eso no hay
+         retroceso ni encogimiento: se quedan quietas MIRANDO, en la última
+         postura que tenían. Y en los últimos 200 ms del shock todas giran
+         hacia el nombre a la vez: ese gesto colectivo es lo que dice «ya
+         lo saben», y es lo que enciende el frenesí. */
+      var vueltaColectiva = enShock ? tramo(t, SHOCK - 200, SHOCK) : 0;
+
       var fervor =
-          enShock    ? despierta * 0.55
-        : t >= SHOCK ? despierta * (0.55 + tramo(t, SHOCK, SHOCK + 2500) * 0.45)
+          enShock    ? despierta * (0.55 + vueltaColectiva * 0.18)
+        : (t >= SHOCK && t < FRENESI)
+                     ? despierta * (0.55 + tiron.empuje * 0.55)
+        : t >= FRENESI ? despierta * 0.55 * (1 - retirada)
         :              despierta * tramo(t, PENUMBRA * 0.3, PROFUNDA) * 0.55;
 
       if (fervor <= 0.001) {
@@ -3013,16 +3808,38 @@
          poco, que es lo que separa un coro de un pelotón. */
 
       /* ── 3b. EL ESFUERZO DE MÁS, QUE SOLO HACE UNA ──
-         Del segundo 35 al 36,5 la mártir pasa el tope que respetan las
+         Del segundo 35 al 38,5 la mártir pasa el tope que respetan las
          otras doscientas y tiembla casi el triple. Parece rota porque SE
          ESTÁ rompiendo: es el único aviso de lo que va a pasar, y es lo
          que hace que el ojo esté puesto en ella cuando se arranque. */
       var esfuerzo = f.martir ? tramo(t, PROFUNDA, MUERE_EN) : 0;
 
       var inclina = f.haciaElNombre * fervor * f.ansia * 0.58 * compensacion;
-      var tope = TOPE_DE_INCLINACION * (1 + esfuerzo * 0.45);
+
+      /* ── EL TOPE CEDE, Y CADA VEZ MÁS ──
+         Fuera del frenesí el único que se pasa del tope es el de la
+         mártir. Dentro, se pasan TODAS: de ×1,2 al empezar a ×1,9 al
+         final. Ese crecimiento es la desesperación —cada intento va más
+         lejos que el anterior— y es lo que hace que alguna se desgarre. */
+      var topeExtra = 1 + esfuerzo * 0.45;
+      if (tiron.empuje > 0) {
+        var topeDelTiron = 1 + tiron.empuje * (0.2 + tiron.u * 0.7);
+        if (topeDelTiron > topeExtra) topeExtra = topeDelTiron;
+      }
+      var tope = TOPE_DE_INCLINACION * topeExtra;
       if (inclina >  tope) inclina =  tope;
       if (inclina < -tope) inclina = -tope;
+
+      /* ── 3c. EL RANKING, EN TIEMPO REAL ──
+         Cada flor suma lo que se está esforzando AHORA. Todas reciben
+         turno con la misma frecuencia (round-robin por `turno % TANDAS`),
+         así que las sumas son comparables sin normalizar por nada.
+
+         Se deja de contar en el segundo 35: a partir de ahí ya hay
+         ganadora y seguir sumando no cambiaría nada, pero sí gastaría. */
+      if (t < PROFUNDA) {
+        f.esfuerzoAcumulado = (f.esfuerzoAcumulado || 0) + Math.abs(inclina);
+      }
 
       /* ── 4. EL TEMBLOR ──
          Lento y mínimo cuando recién despierta; rápido y amplio en la
@@ -3133,106 +3950,136 @@
      lo que se estaría mirando ya no sería la secuencia. */
   var velocidad = 1;
 
-  /* Gobernador en vivo: si el equipo se ahoga, se bajan rosas. NO se
-     vuelven a subir a mitad del ritual — ir prendiendo y apagando se ve
-     peor que quedarse con menos. La regla es explícita: entre más rosas
-     y que vaya fluido, GANA LA FLUIDEZ. */
-  var ultimoCuadro = 0, promedio = 16.7;
+  /* ─── EL GOBERNADOR ──────────────────────────────────────────────────
 
+     ⚡ EL GOBERNADOR ANTERIOR NO SALVÓ EL ECLIPSE: LO APAGÓ. (2026-09-11)
+
+     Decía `if (cuadrosVistos > 30 && promedio > 21)`, y ese 21 se calibró
+     mirando un viewport de 0,306 Mpx. La máquina donde Carlos revisa —un
+     HP ProDesk 600 G1 DM con gráficos HD 4600— corre a 2560×1277, o sea
+     3,269 Mpx: DIEZ VECES más superficie. El cuadro honesto ahí son unos
+     50 ms.
+
+     Con 50 contra un umbral de 21 la condición se cumple SIEMPRE, desde el
+     primer cuadro. Y la cuenta sale redonda:
+
+         30 cuadros × 50 ms ……………………………… 1,5 s por escalón
+         escalones: TANDAS 2→6 y recorte 1→4 … 8
+         1,5 × 8 ………………………………………………………… 12 SEGUNDOS
+
+     Doce segundos hasta el nivel 4, que apagaba todo salvo el velo, el
+     nombre y la mártir. Carlos lo reportó tal cual: «todo se congela,
+     desde el s10 hasta el 35 solo flota una rosa». No se rompió nada: lo
+     desarmó este bloque, obedeciendo un número pensado para otra pantalla.
+
+     ⚠️ DOS CAMBIOS DE FONDO, LOS DOS DECIDIDOS POR CARLOS.
+
+     1. EL UMBRAL SE MIDE, NO SE SUPONE. Un número fijo no puede servir a
+        la vez para un teléfono de 0,8 Mpx y para un monitor de 3,3. Se
+        toma la mediana de los cuadros 20 a 60 de la propia corrida —que
+        caen en plena penumbra, donde el velo todavía no hace nada y la
+        escena es la de cualquier otro momento del día— y el objetivo pasa
+        a ser `max(28, base × 1,15)`. En el ProDesk eso da ~57 ms; en una
+        máquina holgada, los 28 de piso.
+
+        Los primeros 20 cuadros se tiran: son los de las texturas subiendo
+        y los estilos resolviéndose, y no dicen nada del equipo. Es el
+        mismo error que tenía el diagnóstico del panel.
+
+     2. LA ESCALERA CEDE SUAVIDAD, NUNCA REPARTO. Antes se apagaban
+        llamas, pétalos, ramas y flores. Eso es quitar la obra para que
+        entre el telón. Ahora lo único que cede es cuántos píxeles hay
+        detrás de los pétalos del rito:
+
+            1-4 …… TANDAS 2 → 6      (repartir el marco; no se ve)
+            5 …… escala del lienzo → 0,60
+            6 …… escala del lienzo → 0,50
+            —— fin de la escalera ——
+
+        Después de 0,50 el gobernador SE CALLA y acepta los fps que haya.
+        Un minuto a 24 fps con el rito entero es mejor que 30 fps con la
+        escena desarmada: eso ya se probó, y fue la peor versión.
+
+        Y nunca se tocan las rosas del marco, la marea, las ramas, las
+        llamas, el velo ni la mártir. El `marea.length *= 0.82` que había
+        acá también se fue: la marea son rosas, y las rosas no son lastre.
+  */
+
+  var ultimoCuadro = 0, promedio = 16.7;
   var cuadrosVistos = 0;
 
-  /* ⚡ EL ECLIPSE SE SIMPLIFICA HASTA ENTRAR EN EL CUADRO (2026-09-11)
-   *
-   * Carlos, midiendo en su ProDesk: «159,5 ms - 6 fps, seis tandas». O sea
-   * que el marco ya estaba repartido en el máximo de tandas y el cuadro
-   * seguía sin entrar. A esa altura repartir más no arregla nada: hay que
-   * hacer MENOS COSAS.
-   *
-   * La decisión —suya— es que el eclipse suelte lastre hasta entrar, con
-   * un suelo de 30 fps, en vez de arrastrar la página a 6. En un equipo
-   * flojo se ve una versión más pobre pero fluida; en uno normal, la
-   * completa. Es lo contrario de lo que hacía hasta ahora, que era
-   * intentarlo todo y no hacer nada bien.
-   *
-   * EL ORDEN NO ES CASUAL: se suelta primero lo que menos cuenta la
-   * historia. Las llamas son un detalle de ambiente; los pétalos son
-   * decorado; las ramas son el cuerpo de la planta, que sí importa; y la
-   * cabeza de las flores —el gesto de estirar hacia el nombre— es lo
-   * último que se apaga, porque sin eso no hay ritual.
-   *
-   * En el nivel 4 queda lo irreductible: el velo rojo, el nombre y la
-   * rosa que se ofreció. Sigue siendo la escena, contada en su mínima
-   * expresión.
-   *
-   * ⚠️ SOLO SUBE, NUNCA BAJA dentro de la misma corrida. Si el nivel fuera
-   * y viniera, el espectador vería las llamas apagarse y encenderse solas,
-   * que se lee como un defecto y no como una escena.
-   */
-  var LASTRE = [
-    'las llamas',
-    'la mitad de los pétalos',
-    'las ramas',
-    'todo salvo el velo, el nombre y la mártir'
-  ];
+  /** Los cuadros que se tiran antes de creerle nada al equipo. */
+  var CALENTAMIENTO = 20;
+  /** Hasta acá se junta la muestra; recién después se juzga. */
+  var CUADROS_PARA_JUZGAR = 60;
+  /** Y nunca antes del segundo 6 de la secuencia. */
+  var NO_JUZGAR_ANTES_DE = 6000;
+  /** Mínimo entre un escalón y el siguiente, para que el promedio reaccione. */
+  var MS_ENTRE_ESCALONES = 3000;
 
-  var nivelDeRecorte = 0;
+  var muestrasDeLaBase = [];
+  var objetivoDeCuadro = 0;
+  var ultimoEscalon = 0;
 
   /* Apagados a mano por el diagnóstico del panel, para medir cuánto cuesta
-     cada parte EN LA MÁQUINA DE QUIEN MIRA. Nunca se tocan en el eclipse
-     de verdad: solo el panel de ensayo puede escribir acá, y el panel solo
-     existe en PBE. */
+     cada parte EN LA MÁQUINA DE QUIEN MIRA. El eclipse de verdad NUNCA
+     escribe acá: solo el panel de ensayo, y el panel solo existe en PBE.
+     Es una herramienta de medición, no una degradación automática. */
   var recorteDePrueba = { llamas: false, ramas: false, flores: false };
 
-  /** ¿Está apagado este subsistema? Por el recorte o por el diagnóstico. */
+  /**
+   * ¿Está apagado este subsistema? Solo puede estarlo por el diagnóstico.
+   *
+   * ⚠️ Antes esta función también consultaba `nivelDeRecorte`, que era la
+   * degradación automática. Ya no existe: ver la nota de arriba.
+   */
   function recortado(que) {
-    if (que === 'llamas')  return nivelDeRecorte >= 1 || recorteDePrueba.llamas;
-    if (que === 'ramas')   return nivelDeRecorte >= 3 || recorteDePrueba.ramas;
-    if (que === 'flores')  return nivelDeRecorte >= 4 || recorteDePrueba.flores;
-    if (que === 'petalos') return nivelDeRecorte >= 4;
+    if (que === 'llamas') return recorteDePrueba.llamas;
+    if (que === 'ramas')  return recorteDePrueba.ramas;
+    if (que === 'flores') return recorteDePrueba.flores;
     return false;
   }
 
-  function soltarLastre() {
-    if (nivelDeRecorte >= LASTRE.length) return;
-    nivelDeRecorte++;
-
-    /* Lo que se apaga hay que DEVOLVERLO, no solo dejar de tocarlo: si no,
-       las llamas se quedan inclinadas y las ramas dobladas para siempre. */
-    if (nivelDeRecorte === 1) devolverLasLlamas();
-
-    if (nivelDeRecorte === 2) {
-      /* La mitad de los pétalos, de atrás hacia adelante. */
-      petalos.length = Math.max(4, Math.floor(petalos.length * 0.5));
-      cajasDelCuadroAnterior.length = 0;
-    }
-
-    if (nivelDeRecorte === 3) devolverLasRamas();
-
-    if (nivelDeRecorte === 4) {
-      devolverLasFloresReales();
-      petalos.length = 0;
-      cajasDelCuadroAnterior.length = 0;
-    }
+  /** Mediana de una lista de números. Ordena una copia, no la original. */
+  function medianaDe(lista) {
+    if (!lista.length) return 0;
+    var copia = lista.slice().sort(function (a, b) { return a - b; });
+    var medio = Math.floor(copia.length / 2);
+    return copia.length % 2 ? copia[medio] : (copia[medio - 1] + copia[medio]) / 2;
   }
 
-  function gobernar(ahora) {
+  /**
+   * Aprieta un escalón. Devuelve true si de verdad cedió algo.
+   *
+   * Cuando ya no queda nada que ceder devuelve false y el gobernador se
+   * calla para el resto de la corrida.
+   */
+  function apretarUnEscalon() {
+    if (TANDAS < 6) { TANDAS++; return true; }
+    return bajarLaEscalaDelLienzo();
+  }
+
+  function gobernar(ahora, t) {
     if (ultimoCuadro) {
-      promedio += ((ahora - ultimoCuadro) - promedio) * 0.08;
-      if (promedio > 34 && marea.length > 40) {
-        marea.length = Math.floor(marea.length * 0.82);
+      var intervalo = ahora - ultimoCuadro;
+      promedio += (intervalo - promedio) * 0.08;
+      cuadrosVistos++;
+
+      /* La muestra de la base: cuadros 21 a 60, ya sin el arranque. */
+      if (cuadrosVistos > CALENTAMIENTO && cuadrosVistos <= CUADROS_PARA_JUZGAR) {
+        muestrasDeLaBase.push(intervalo);
       }
 
-      /* ⚠️ SE ESPERA MEDIO SEGUNDO ANTES DE JUZGAR. Los primeros cuadros de
-         cualquier escena son los más lentos —texturas subiéndose, estilos
-         resolviéndose— y no dicen nada del equipo. */
-      cuadrosVistos++;
-      if (cuadrosVistos > 30 && promedio > 21) {
-        /* Primero se reparte el marco en más tandas, que es barato y no se
-           ve. Recién cuando eso se agota se empieza a soltar lastre. */
-        if (TANDAS < 6) TANDAS++;
-        else soltarLastre();
+      if (!objetivoDeCuadro && cuadrosVistos > CUADROS_PARA_JUZGAR) {
+        objetivoDeCuadro = Math.max(28, (medianaDe(muestrasDeLaBase) || 16.7) * 1.15);
+        muestrasDeLaBase.length = 0;
+      }
 
-        cuadrosVistos = 0;      // se le da tiempo a que el promedio baje
+      if (objetivoDeCuadro &&
+          t >= NO_JUZGAR_ANTES_DE &&
+          ahora - ultimoEscalon > MS_ENTRE_ESCALONES &&
+          promedio > objetivoDeCuadro) {
+        if (apretarUnEscalon()) ultimoEscalon = ahora;
       }
     }
     ultimoCuadro = ahora;
@@ -3268,7 +4115,7 @@
   }
 
   function unCuadro(ahora, t) {
-    gobernar(ahora);
+    gobernar(ahora, t);
 
     /* A quién le toca moverse en este cuadro. Ver la nota de LOS TURNOS. */
     tandaDeEsteCuadro = (tandaDeEsteCuadro + 1) % TANDAS;
@@ -3288,26 +4135,33 @@
        ABRE — cuanto más corona, más grande el hueco de luz alrededor del
        nombre. Por eso resta en la apertura en vez de sumar en la opacidad. */
     var color = coloresEn(t);
-    /* ⚡ ERA UN TINTE, NO UN ECLIPSE (2026-09-11)
+    /* ⚠️ LOS COEFICIENTES SON 0,85 Y 0,95, Y SE MIDEN DONDE VIVE EL MARCO.
      *
-     * Estos coeficientes eran 0,58 y 0,66. Hechas las cuentas de
-     * composición normal, donde vive el marco —a un 70 % del radio— el
-     * velo quedaba en un alfa efectivo de 0,30 en el acto III. Carlos,
-     * mirándolo: «el eclipse es inexistente y solo ves pétalos de un lado
-     * a otro». Tenía razón, y el error fue mío: al pasar de `multiply` a
-     * composición normal bajé las opacidades para no aplastar el marco, y
-     * apilé dos márgenes de seguridad sobre el mismo miedo.
+     * Acá había una tabla con los valores de la v279 —alfas efectivos de
+     * 0,46 y 0,82, rosas en rgb(88,27,30) y rgb(48,14,17)— que dejaron de
+     * ser ciertos cuando cambiaron las paletas y los alfas de los tramos.
+     * Las cuentas al día están en la nota de TRAMOS_DEL_VELO, calculadas
+     * ejecutando las constantes; no se repiten acá para no tener dos
+     * fuentes que se puedan desincronizar otra vez.
      *
-     * Con 0,85 y 0,95, el mismo punto queda en 0,46 en el esfuerzo y 0,82
-     * en la cripta. Sobre una rosa del marco rgb(126, 27, 44):
-     *
-     *     esfuerzo (t=38 s) …… rgb(88, 27, 30)   se ve, y es roja
-     *     cripta   (t=43 s) …… rgb(48, 14, 17)   silueta
-     *
-     * Casi un factor de dos entre un acto y otro, y el altar sigue siendo
-     * el punto menos velado de la pantalla. */
+     * Lo único que hay que saber en este punto: el tope de 0,97 existe
+     * porque con `frio` y `sangre` en su máximo la suma se pasa de 1, y un
+     * velo opaco del todo no es un eclipse, es una pantalla apagada. */
     var velo = limitar(color.frio * 0.85 + color.sangre * 0.95, 0, 0.97);
     capaDelEclipse.style.opacity = velo.toFixed(3);
+
+    /* ⚡ CUÁNTO BORGOÑA HAY AHORA. Es lo que hace que el velo sea acero
+     * frío en la penumbra y vino en la totalidad, en vez de ser rojo desde
+     * el segundo 1. Ver la nota de las dos paletas.
+     *
+     * Sigue a `sangre` normalizada, así que hereda su curva exacta: vale
+     * CERO hasta el segundo 35 —el rojo es exclusivo de la totalidad— y
+     * llega a uno en el 38,5, que es cuando la rosa se arranca.
+     *
+     * `pintarElVelo` la cuantiza en doce escalones antes de decidir si
+     * reescribe el degradado, así que esto no cuesta un repintado por
+     * cuadro: son doce en todo el minuto. */
+    mezclaDelVelo = limitar(color.sangre / SANGRE_MAXIMA, 0, 1);
 
     /* ⚡ EL TERCER CONTACTO SE CUENTA CON LA LUZ, NO CON UN FLASH
      *   (2026-09-11)
@@ -3331,7 +4185,6 @@
     pintarElVelo();
 
     moverElMundo(t);
-    elNombreNoSeEntera(t);
 
     /* ⚠️ LAS PLANTAS VAN ANTES QUE EL LIENZO, Y EL ORDEN IMPORTA UNA SOLA
        VEZ EN TODO EL MINUTO: en el cuadro 36 500, cuando la mártir se
@@ -3389,7 +4242,52 @@
     turnosPorRaiz.length = 0;
     tandaDeEsteCuadro = 0;
     cuadrosVistos = 0;
-    nivelDeRecorte = 0;
+
+    /* ⚡ EL VELO ARRANCABA CON EL BORGOÑA DE LA CORRIDA ANTERIOR (2026-09-11)
+     *
+     * Carlos, mirando el panel de ensayo: «la penumbra muy roja y plana».
+     * Tenía razón y la causa estaba acá: `mezclaDelVelo` y su escalón NO
+     * se reiniciaban. En la SEGUNDA corrida el degradado ya estaba pintado
+     * en borgoña —de la totalidad anterior— y como `pintarElVelo` solo
+     * reescribe cuando el escalón CAMBIA, la penumbra entera se veía roja.
+     *
+     * Es el mismo patrón que ya había mordido dos veces en este archivo:
+     * estado que sobrevive de una corrida a la otra. En el eclipse de
+     * verdad se nota menos —hay una sola corrida por día— pero es en el
+     * ensayo donde se mira, y ahí era permanente. */
+    /* El pestillo del scratch: sin esto, la segunda corrida del panel de
+       ensayo pasaria muda. */
+    yaSonoElScratch = false;
+
+    /* ⚡ LA TRAMA SOBREVIVÍA A LA CORRIDA (2026-09-11)
+     *
+     * `ESCALA_DEL_LIENZO` se calculaba UNA vez al evaluar el archivo y el
+     * gobernador la bajaba a 0,60 y a 0,50. Nadie la devolvía. En el panel
+     * de ensayo, la primera corrida que activara el gobernador dejaba
+     * TODAS las siguientes a 0,50 hasta recargar la página — o sea que lo
+     * que Carlos mirara después ya no era lo que el código hace.
+     *
+     * Es el tercer estado de este archivo que se escapa de la misma forma
+     * (antes fueron `muerte.suelta`, `promedio` y `mezclaDelVelo`). */
+    ESCALA_DEL_LIENZO = esBaja ? 0.72 : 1;
+    medirElLienzo();
+
+    /* Y la apertura: `empezar()` llama a pintarElVelo() antes del primer
+       cuadro, así que sin esto el degradado nacía con la apertura final de
+       la corrida anterior. Se corrige sola en el cuadro 1, pero nacer mal
+       es nacer mal. */
+    aperturaDelVelo = 1;
+
+    mezclaDelVelo = 0;
+    ultimoEscalonDeMezcla = -1;
+    ultimaAperturaPintada = -1;
+    ultimaHuellaDeRadios = -1;
+
+    /* La base se vuelve a medir en cada corrida: la ventana puede haber
+       cambiado de tamano entre una y otra, y con ella el costo del cuadro. */
+    muestrasDeLaBase.length = 0;
+    objetivoDeCuadro = 0;
+    ultimoEscalon = 0;
     calibrarLasTandas();
 
     /* La evidencia de la corrida anterior no puede quedar colgada de la
@@ -3694,10 +4592,10 @@
              está costando a la página. */
           msPorCuadro: promedio,
           tandas: TANDAS,
-          /* Cuánto lastre soltó para entrar en el cuadro. 0 = la escena
-             completa. Ver soltarLastre(). */
-          recorte: nivelDeRecorte,
-          queSoltó: nivelDeRecorte ? LASTRE.slice(0, nivelDeRecorte).join(' · ') : ''
+          /* Lo unico que el gobernador puede haber cedido. La escena
+             siempre esta completa: ya no hay degradacion por recorte. */
+          objetivo: objetivoDeCuadro,
+          escalaDelLienzo: ESCALA_DEL_LIENZO
         };
       },
 
