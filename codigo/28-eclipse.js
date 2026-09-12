@@ -415,219 +415,187 @@
    *   cripta 43 s ……… ídem, R/G 4,6 y los separan 30 unidades
    */
 
-  /* ⚡ EL ECLIPSE ES LUZ, Y ENTRA POR DONDE ENTRA LA LUZ (2026-09-11)
+  /* ⚡ EL ECLIPSE ES UNA HORA, NO UNA CAPA ENCIMA (2026-09-11)
    *
-   * Carlos: «¿de dónde vienen los rayos de sol y de luna durante el día?
-   * DEL SOL Y LA LUNA QUE NO SE VEN EN ESCENA. Entonces… ¿de dónde viene
-   * la luz roja del eclipse? De la luna que no se ve en escena. ES
-   * EXACTAMENTE LA MISMA LÓGICA.»
+   * Carlos, después de cuatro intentos míos: «esto es un tinte, y es una
+   * mierda. Estudia cómo se comporta la luz del día y de la noche en la
+   * web, es la misma mierda, solo que rojo OSCURO». Y: «la única
+   * diferencia es que esto dura un minuto».
    *
-   * Y antes: «arriba, con el relicario y las rosas, donde se ven los rayos
-   * de luz en el día: allí rojo. Abajo, donde están los candelabros:
-   * oscuro.»
+   * Tenía razón, y es la corrección de fondo de toda la ronda.
    *
-   * ⛔ LO QUE HABÍA ACÁ ESTABA MAL DE RAÍZ. Era un radial centrado en el
-   * nombre cuya opacidad subía. El propio proyecto tiene escrita esa
-   * lección desde hace rondas, en 22-luz-de-la-hora.js:429:
+   * ⛔ LO QUE ESTABA MAL. El eclipse pintaba un degradado en una capa
+   * propia por encima de la escena. Da igual qué color o qué alfa se le
+   * ponga: un rectángulo de color encima de todo es un TINTE, y se lee
+   * como un tinte. El propio proyecto lo dice en 22-luz-de-la-hora.js:
+   * «eso no es luz, es un filtro de color pegado encima».
    *
-   *     «EL PRIMER INTENTO FUE UN TINTE PLANO —el mismo color con la misma
-   *      opacidad sobre toda la pantalla— y quedó fatal, con razón: eso no
-   *      es luz, es un filtro de color pegado encima, y se lee exactamente
-   *      como lo que es.»
+   * ⚠️ CÓMO FUNCIONA DE VERDAD LA LUZ ACÁ. `22-luz-de-la-hora.js` no
+   * pinta una capa: mueve CATORCE PERILLAS que ya existen en la escena.
    *
-   * Construí justo lo que ese comentario advierte.
+   *   los haces …………………… el color de los rayos que entran por los
+   *                          ventanales. Van con `screen`: SUMAN luz.
+   *   las motas ……………………… el polvo que flota dentro de esos rayos.
+   *   ambienteAlto ……………… el halo grande de la parte de arriba.
+   *   tinteDeSala ………………… la cúpula que cubre el fondo entero.
+   *   tinteDelVelo ……………… la capa de profundidad, que cubre el documento.
+   *   oscurecidoFijo ………… lo que RESTA luminancia en #capa-fondo.
+   *   profundidadDeSombra … lo que RESTA en #penumbra-profunda.
+   *   anguloDelSol ……………… por dónde entra la luz.
+   *   largoDelHaz ………………… cuánto se alarga el rayo.
+   *   fuerzaDeVelas ……………… cuánto mandan los candelabros.
+   *   deNoche ……………………… si se ven las luciérnagas.
    *
-   * ⚠️ LA GEOMETRÍA NO SE INVENTA: SE COPIA DE `veloDeLaSala()`.
-   * Esa función (22-luz-de-la-hora.js:450) enumera las tres propiedades
-   * que tiene la luz de verdad y que un tinte plano no tiene:
+   * Las dos que RESTAN son las que hacen la oscuridad, y ninguna capa
+   * puesta encima puede hacer su trabajo. Por eso todos mis intentos
+   * terminaban en barro: estaba sumando color donde hacía falta restar luz.
    *
-   *   1. VIENE DE UN SITIO — la elipse nace FUERA del borde (-8 %), como
-   *      si la fuente estuviera más allá de la ventana.
-   *   2. SE APAGA CON LA DISTANCIA — muere antes de la mitad de la
-   *      pantalla, así que abajo mandan los candelabros.
-   *   3. NO MANDA SOBRE LO QUE YA ESTÁ ILUMINADO — las velas se dibujan
-   *      por encima con suma aditiva y atraviesan el frío.
-   *
-   * El eclipse usa esa misma elipse, con otro color, y le suma su espejo
-   * desde abajo para la zona de los candelabros. Dos degradados, UNA capa.
+   * ASÍ QUE EL ECLIPSE ES OTRA HORA. La más oscura y la única roja. Entra
+   * y sale por la misma puerta que usa el reloj —`aplicarMomento`— y todo
+   * lo que ya reacciona a la hora reacciona al eclipse gratis: los rayos
+   * se ponen rojos, el polvo que flota en ellos se pone rojo, las velas
+   * crecen porque son lo único que queda, y las dos capas de sombra se
+   * hunden más que a medianoche.
    */
+  var HORA_DEL_ECLIPSE = {
+    /* Los rayos, en rojo. Son los que traen la luz de la luna eclipsada:
+       entran por los mismos ventanales y SUMAN, no tapan. */
+    hazCentro:  [184, 30, 32, 0.34],
+    hazMedio:   [132, 20, 26, 0.20],
+    hazBorde:   [ 92, 14, 20, 0.07],
 
-  /** La elipse de la luz, copiada de veloDeLaSala(): ancha y baja. */
-  var FORMA_DE_LA_LUZ = 'ellipse 130% 65%';
+    /* El polvo que flota dentro de los rayos, teñido por ellos. */
+    motaCentro: [248, 168, 156, 0.74],
+    motaBorde:  [198, 110, 104, 0.42],
 
-  /** Nace fuera del borde superior: la fuente está más allá de la ventana. */
-  var FUENTE_DE_ARRIBA = '50% -8%';
-  /** Y su espejo, para la oscuridad que sube desde los candelabros. */
-  var FUENTE_DE_ABAJO  = '50% 108%';
+    /* El halo de arriba y la cúpula de la sala: rojo oscuro, no vivo. */
+    ambienteAlto: [104, 12, 20, 0.44],
+    tinteDeSala:  [ 30,  4, 10, 0.62],
+    tinteDelVelo: [ 18,  3,  8, 0.58],
 
-  /* La caída, en fracciones del alfa máximo. Los mismos cortes que usa la
-     luz del día: fuerte en la fuente, muerta antes de la mitad. */
-  var CAIDA_DE_ARRIBA = [[1, 0], [0.62, 26], [0.28, 46], [0.08, 60], [0, 74]];
-  var CAIDA_DE_ABAJO  = [[0, 26], [0.08, 40], [0.28, 54], [0.62, 74], [1, 100]];
+    /* ⚠️ ACÁ ESTÁ LA OSCURIDAD DE VERDAD, y no en ninguna capa de color.
+       La noche cerrada va en 0,20 y 1,00; el eclipse se hunde bastante
+       más abajo. Es lo que hace que sea el momento más oscuro del día. */
+    oscurecidoFijo:      0.34,
+    profundidadDeSombra: 1.55,
 
-  /** Alfa máximo de cada uno de los dos degradados. */
-  /* ⚡ MENOS CARGA, MÁS SATURACIÓN (2026-09-11)
-   *
-   * Carlos: «hazlo más NATURAL… pero deja de cargarla».
-   *
-   * La luz de una totalidad lunar es LUZ REFRACTADA por la atmósfera de la
-   * Tierra: la suma de todos los amaneceres y atardeceres del planeta a la
-   * vez. Es MUY saturada y POCO intensa. Un rojo apagado a mucha opacidad
-   * da barro; un rojo saturado a poca opacidad da luz.
-   *
-   * Medido sobre el oro del relicario rgb(198,158,92):
-   *
-   *   antes  104,28,40 @ 0,51 → rgb(150, 92,65)  luz 63 %  sat 0,57
-   *   ahora  150,16,28 @ 0,26 → rgb(186,121,75)  luz 81 %  sat 0,60
-   *
-   * El oro sigue siendo oro. Y el fondo oscuro pasa a R/G 2,8 —rojo de
-   * verdad— con las rosas MÁS saturadas que antes, no menos.
-   *
-   * La oscuridad no la tiene que poner esta capa: ya la ponen el sol
-   * muriendo, los haces vaciándose y `#penumbra-profunda`. El trabajo de
-   * acá es el COLOR. */
-  /* ⚡ ROJO OSCURO, NO ROJO VIVO (2026-09-11)
-   *
-   * Carlos: «aún hay mucho color, oscurece y que el tono sea rojizo pero
-   * oscuro, no vivo, sino oscuro».
-   *
-   * El barro de las rondas anteriores no venía de la opacidad alta: venía
-   * de un rojo con DEMASIADO VERDE (104,28,40 tiene R/G 3,7) puesto a
-   * opacidad alta. Rojo + verde = marrón, y cuanto más se carga, más
-   * marrón. Un rojo MUY oscuro y MUY saturado —R/G alto— se puede cargar
-   * hasta donde haga falta y sigue siendo rojo.
-   *
-   * Medido sobre el oro del relicario rgb(198,158,92):
-   *
-   *   104, 28, 40 @ 0,51 → luz 63 %, fondo R/G 2,6   marrón
-   *   150, 16, 28 @ 0,26 → luz 81 %, fondo R/G 2,8   rojo pero vivo
-   *    48,  5, 14 @ 0,60 → luz 41 %, fondo R/G 3,5   oscuro y rojo
-   */
-  var ALFA_DE_ARRIBA = 1.00;
-  /* ⚠️ 0,88 APLASTABA LA ZONA DE ABAJO. Con el velo al tope el marco de
-     esa mitad quedaba a 14 unidades de rojo de su fondo —por debajo del
-     piso de 18— y dejaba de tener interior. 0,80 la deja igual de oscura
-     y con el detalle vivo. */
-  var ALFA_DE_ABAJO  = 0.80;
+    /* El sol está tapado: el haz se acorta y baja. */
+    anguloDelSol: -14,
+    largoDelHaz:   1.05,
 
-  /* Los colores. Índice 0 = la luz de arriba, índice 1 = la oscuridad de
-     abajo. Se mezclan entre las dos paletas según `mezclaDelVelo`.
+    /* Las velas son lo único que queda, así que crecen. Es el mismo
+       recurso que usa la madrugada, llevado un paso más allá. */
+    fuerzaDeVelas: 1.18,
+    deNoche: 1,
+  };
 
-     ⚠️ LA REGLA QUE SEPARA EL VINO DEL LADRILLO: B POR ENCIMA DE G. El
-     rojo que Carlos rechazó —«un rojo vivo»— tenía G por encima de B, que
-     es naranja quemado. Acá los cuatro cumplen: 46>32, 26>16, 40>28,
-     14>8. */
-  var PALETA_FRIA    = ['12, 20, 38', '5, 8, 16'];
-  var PALETA_BORGONA = ['48, 5, 14', '18, 3, 8'];
+  /** Desde dónde entra y a dónde vuelve: la luz que de verdad había. */
+  var horaDeAntes = null;
+
+  /** El último escalón aplicado, para no reescribir catorce cosas por cuadro. */
+  var ultimoEscalonDeLuz = -1;
+
+  /** Cuántos escalones tiene el minuto. Ver la nota de ponerLaLuzDelEclipse. */
+  var ESCALONES_DE_LUZ = 40;
 
   /**
-   * Interpola las dos paletas.
+   * Cuánto eclipse hay en el milisegundo `t`, de 0 a 1.
    *
-   * @param {number} i - 0 la luz de arriba, 1 la oscuridad de abajo.
-   * @param {number} k - 0 = acero frío, 1 = borgoña.
-   * @returns {string} Los tres canales, listos para un `rgba(...)`.
+   * ⚠️ Y NO TERMINA DE GOLPE. Carlos: «ningún eclipse en la historia de la
+   * Tierra ha terminado de golpe con un corte de oscuridad a luz». Antes,
+   * `terminar()` quitaba todo en UN cuadro y eso era exactamente el corte.
+   *
+   * Ahora la curva vuelve a CERO por su cuenta antes del segundo 58, así
+   * que cuando el minuto termina ya no queda nada que quitar: la luz salió
+   * por las mismas fases por las que entró, y el final es un no-evento.
+   *
+   * @param {number} t - Milisegundo de la secuencia.
+   * @returns {number} 0 = la hora de siempre, 1 = totalidad.
    */
-  function colorDelTramo(i, k) {
-    var frio = PALETA_FRIA[i].split(',');
-    var borg = PALETA_BORGONA[i].split(',');
-    var canales = [];
-    for (var c = 0; c < 3; c++) {
-      var a = parseFloat(frio[c]), b = parseFloat(borg[c]);
-      canales.push(Math.round(a + (b - a) * k));
+  function progresoDelEclipse(t) {
+    if (t <= 0) return 0;
+    /* Entrada: penumbra lenta, umbra decidida, totalidad. */
+    if (t < PROFUNDA) return suave(t / PROFUNDA) * 0.82;
+    /* Del 35 al 38,5 se cierra el último tramo: el máximo cae EXACTAMENTE
+       donde muere la rosa, como pide el guion, y se sostiene hasta que se
+       abre el tercer contacto. */
+    if (t < MUERE_EN) return 0.82 + suave((t - PROFUNDA) / (MUERE_EN - PROFUNDA)) * 0.18;
+    if (t < SHOCK) return 1;
+    /* Salida: el tercer contacto suelta rápido y después afloja, igual que
+       la entrada pero al revés. Llega a cero en el 58, no en el 60. */
+    var salida = (t - SHOCK) / (SALE_DEL_TODO - SHOCK);
+    if (salida >= 1) return 0;
+    return 1 - suave(salida);
+  }
+
+  /** Cuándo la luz ya volvió del todo. Dos segundos antes del final. */
+  var SALE_DEL_TODO = 58000;
+
+  /**
+   * Aplica la luz del eclipse: mezcla la hora de siempre con la del
+   * eclipse y la escribe por la misma puerta que usa el reloj.
+   *
+   * ⚠️ CUARENTA ESCALONES EN EL MINUTO, no uno por cuadro. Cada pasada
+   * escribe el fondo de 5 haces y 32 motas más siete variables CSS: es
+   * barato una vez cada diez minutos —que es para lo que se diseñó— y caro
+   * sesenta veces por segundo. Cuarenta pasos en sesenta segundos son dos
+   * tercios de segundo entre uno y otro, que a estas velocidades de cambio
+   * no se ve escalonado.
+   *
+   * @param {number} t - Milisegundo de la secuencia.
+   * @returns {void}
+   */
+  function ponerLaLuzDelEclipse(t) {
+    var luz = window.LuzDeLaHora;
+    if (!luz || typeof luz.aplicarMomento !== 'function') return;
+
+    if (!horaDeAntes) {
+      try { horaDeAntes = luz.momentoDeAhora(); } catch (e) { return; }
     }
-    return canales.join(', ');
+
+    var escalon = Math.round(progresoDelEclipse(t) * ESCALONES_DE_LUZ);
+    if (escalon === ultimoEscalonDeLuz) return;
+    ultimoEscalonDeLuz = escalon;
+
+    try {
+      luz.aplicarMomento(horaDeAntes, HORA_DEL_ECLIPSE, escalon / ESCALONES_DE_LUZ);
+    } catch (e) { /* el eclipse sigue aunque la luz no acompañe */ }
   }
 
   /**
-   * Arma uno de los dos degradados.
+   * Devuelve la luz al reloj.
    *
-   * @param {string} fuente - Dónde nace, fuera del borde.
-   * @param {Array} caida   - Los cortes, en fracciones del alfa máximo.
-   * @param {string} color  - Los tres canales.
-   * @param {number} alfa   - El alfa máximo.
-   * @returns {string}
+   * ⚠️ SE LLAMA SIEMPRE, pase lo que pase. Si el eclipse muriera por una
+   * excepción con la luz a mitad de camino, la invitación quedaría roja y
+   * oscura hasta que alguien recargara.
+   *
+   * @returns {void}
    */
-  function unDegradadoDeLuz(fuente, caida, color, alfa) {
-    var paradas = [];
-    for (var i = 0; i < caida.length; i++) {
-      var fuerza = caida[i][0], pct = caida[i][1];
-      paradas.push('rgba(' + color + ',' + (alfa * fuerza).toFixed(3) +
-                   ') ' + pct + '%');
-    }
-    return 'radial-gradient(' + FORMA_DE_LA_LUZ + ' at ' + fuente + ', ' +
-           paradas.join(', ') + ')';
+  function devolverLaLuzDelEclipse() {
+    horaDeAntes = null;
+    ultimoEscalonDeLuz = -1;
+    try {
+      if (window.LuzDeLaHora && typeof window.LuzDeLaHora.devolverLaHora === 'function') {
+        window.LuzDeLaHora.devolverLaHora();
+      }
+    } catch (e) { /* nada */ }
   }
 
   /** El techo de `sangre`, para normalizar la mezcla. Sale de coloresEn. */
+  /* El techo de `sangre`. Lo lee la prueba de luminancia. */
   var SANGRE_MAXIMA = 0.70;
 
   /** Cuánto borgoña hay ahora mismo, de 0 a 1. La mueve la secuencia. */
-  var mezclaDelVelo = 0;
-  var ultimoEscalonDeMezcla = -1;
 
   /** Doce escalones en el minuto: suficientes para que no se vea el salto. */
-  var ESCALONES_DE_MEZCLA = 12;
 
-  /**
-   * Interpola las dos paletas en el tramo `i`.
-   *
-   * @param {number} i - Índice del tramo.
-   * @param {number} k - 0 = acero frío, 1 = borgoña.
-   * @returns {string} Los tres canales, listos para un `rgba(...)`.
-   */
-  function colorDelTramo(i, k) {
-    var frio = PALETA_FRIA[i].split(',');
-    var borg = PALETA_BORGONA[i].split(',');
-    var canales = [];
-    for (var c = 0; c < 3; c++) {
-      var a = parseFloat(frio[c]), b = parseFloat(borg[c]);
-      canales.push(Math.round(a + (b - a) * k));
-    }
-    return canales.join(', ');
-  }
+  /* ⚠️ ACÁ VIVÍAN `colorDelTramo`, `unDegradadoDeLuz` y `pintarElVelo`.
 
-  /* Cuánto se abre el velo. 1 es su tamaño natural; más chico cierra la
-     luz sobre el nombre, más grande la abre. Lo mueve la secuencia. */
-  var aperturaDelVelo = 1;
-  var ultimaAperturaPintada = -1;
+     Las tres servían a una capa de color puesta encima de la escena. Eso
+     es un TINTE, y no hay color ni alfa que lo salve: la luz de esta
+     página son catorce perillas, no un rectángulo. Ver la nota grande de
+     HORA_DEL_ECLIPSE, que es lo que las reemplaza. */
 
-  /** El milisegundo de la secuencia, para que el velo sepa dónde va la sombra. */
-  var tDelVelo = 0;
-
-  /* ⚠️ ACÁ VIVÍAN `desvioDelVelo`, `radioHastaLaEsquina` y
-     `porcentajeDelAncla`. Las tres servían a un radial centrado en el
-     nombre con las paradas ancladas a cajas medidas — un diseño que era
-     mío y que no respetaba de dónde viene la luz en esta página. Se fueron
-     con él. Ver la nota grande de FORMA_DE_LA_LUZ. */
-
-  function pintarElVelo() {
-    /* ⚠️ LA GEOMETRÍA ES FIJA, Y ESO ES EL PUNTO. La luz entra siempre por
-       el mismo sitio —una fuente fuera del borde superior, la misma por la
-       que entran los haces del día— así que el degradado no se mueve. Lo
-       único que cambia con la secuencia es el COLOR y la opacidad de la
-       capa. Ver la nota de FORMA_DE_LA_LUZ.
-
-       Antes acá se recalculaba un centro a partir de la caja del nombre y
-       se le sumaba un desvío que viajaba. Eso hacía que la luz cambiara de
-       origen a mitad del minuto, que es justo lo que la luz no hace. */
-
-    /* El color entra en la banda muerta cuantizado: doce escalones en el
-       minuto entero, o sea doce rasterizaciones y no sesenta por segundo. */
-    var escalonDeMezcla = Math.round(mezclaDelVelo * ESCALONES_DE_MEZCLA);
-    if (escalonDeMezcla === ultimoEscalonDeMezcla) return;
-    ultimoEscalonDeMezcla = escalonDeMezcla;
-
-    var k = escalonDeMezcla / ESCALONES_DE_MEZCLA;
-
-    /* El orden importa: el primero de la lista se pinta ENCIMA. La luz de
-       arriba va primera para que su rojo mande sobre la zona del
-       relicario, y la oscuridad de abajo queda por debajo. */
-    capaDelEclipse.style.backgroundImage =
-      unDegradadoDeLuz(FUENTE_DE_ARRIBA, CAIDA_DE_ARRIBA,
-                       colorDelTramo(0, k), ALFA_DE_ARRIBA) + ', ' +
-      unDegradadoDeLuz(FUENTE_DE_ABAJO, CAIDA_DE_ABAJO,
-                       colorDelTramo(1, k), ALFA_DE_ABAJO);
-  }
 
 
 
@@ -2843,35 +2811,25 @@
         window.LienzoDePetalos.pausado = (t >= 1000);
       }
 
-      /* ⚡ EL VELO RECTANGULAR SE APARTA, NO SE CIERRA (2026-09-11)
+      /* ⚡ ACÁ EL ECLIPSE BAJABA `--profundidad-de-sombra` UN 75 % (2026-09-11)
        *
-       * Acá se subía `--profundidad-de-sombra` hasta 0,9 para que «las
-       * esquinas dejaran de existir». Carlos, mirándolo en el teléfono:
-       * «la penumbra se ve como un cuadro cerrándose». Era literal y era
-       * culpa de esto: `#penumbra-profunda` son degradados LINEALES a
-       * pantalla completa (estilos/12-haces-de-luz.css:79-108), así que
-       * subirlos oscurece en forma de marco rectangular.
+       * Tenía sentido mientras el eclipse pintaba su propio velo radial:
+       * `#penumbra-profunda` son degradados LINEALES a pantalla completa,
+       * así que subirlos oscurece en forma de marco rectangular, y los dos
+       * juntos se estorbaban — uno decía que la luz cae en redondo desde el
+       * nombre y el otro dibujaba un rectángulo encima. Carlos lo vio en el
+       * teléfono: «la penumbra se ve como un cuadro cerrándose».
        *
-       * Desde que el eclipse tiene su propio velo —radial y centrado en el
-       * relicario— ese trabajo ya está hecho, y mejor. Los dos juntos se
-       * estorban: uno dice que la luz cae en redondo desde el nombre y el
-       * otro dibuja un rectángulo encima.
+       * Ese velo ya no existe. Ahora el eclipse es una hora del sistema de
+       * luz, y ESA VARIABLE ES UNA DE SUS CATORCE PERILLAS: la hora del
+       * eclipse la sube a 1,55 contra el 1,00 de la noche cerrada, porque
+       * es una de las dos cosas que de verdad RESTAN luz.
        *
-       * Así que el eclipse lo BAJA en vez de subirlo. La oscuridad de la
-       * escena pasa a tener una sola forma, y es la del altar. */
-      if (mundo.velo) {
-        var cierre = limitar((t - 30000) / 5000, 0, 1) * (1 - volviendo);
-        if (cierre > 0.001) {
-          var deAntes = parseFloat(mundo.velo.prof);
-          if (!(deAntes > 0)) deAntes = 1;
-          mundo.velo.nodo.style.setProperty('--profundidad-de-sombra',
-            (deAntes * (1 - cierre * 0.75)).toFixed(3));
-        } else if (mundo.velo.prof) {
-          mundo.velo.nodo.style.setProperty('--profundidad-de-sombra', mundo.velo.prof);
-        } else {
-          mundo.velo.nodo.style.removeProperty('--profundidad-de-sombra');
-        }
-      }
+       * Dejar esto acá era pelearse consigo mismo. Medido en el navegador:
+       * con las dos escrituras compitiendo, en la totalidad la variable
+       * quedaba en 0,695 en vez de 1,55 — o sea MENOS sombra que de noche,
+       * justo al revés.
+       */
     } catch (e) { /* un módulo que no está no puede romper el homenaje */ }
   }
 
@@ -4175,46 +4133,13 @@
      * Lo único que hay que saber en este punto: el tope de 0,97 existe
      * porque con `frio` y `sangre` en su máximo la suma se pasa de 1, y un
      * velo opaco del todo no es un eclipse, es una pantalla apagada. */
-    var velo = limitar(color.frio * 0.85 + color.sangre * 0.95, 0, 0.97);
-    capaDelEclipse.style.opacity = velo.toFixed(3);
+    /* ⚡ ACÁ SE ANIMABA LA OPACIDAD DE UNA CAPA DE COLOR. Ya no hay capa:
+       el eclipse es una hora del sistema de luz y lo que se mueve son sus
+       catorce perillas. Ver la nota de HORA_DEL_ECLIPSE.
 
-    /* ⚡ CUÁNTO BORGOÑA HAY AHORA. Es lo que hace que el velo sea acero
-     * frío en la penumbra y vino en la totalidad, en vez de ser rojo desde
-     * el segundo 1. Ver la nota de las dos paletas.
-     *
-     * Sigue a `sangre` normalizada, así que hereda su curva exacta: vale
-     * CERO hasta el segundo 35 —el rojo es exclusivo de la totalidad— y
-     * llega a uno en el 38,5, que es cuando la rosa se arranca.
-     *
-     * `pintarElVelo` la cuantiza en doce escalones antes de decidir si
-     * reescribe el degradado, así que esto no cuesta un repintado por
-     * cuadro: son doce en todo el minuto. */
-    mezclaDelVelo = limitar(color.sangre / SANGRE_MAXIMA, 0, 1);
-
-    /* Dónde va la sombra en este milisegundo. Lo lee pintarElVelo(), que
-       decide solo si eso justifica reescribir el degradado. */
-    tDelVelo = t;
-
-    /* ⚡ EL TERCER CONTACTO SE CUENTA CON LA LUZ, NO CON UN FLASH
-     *   (2026-09-11)
-     *
-     * Acá había una capa blanca —después cobre— que se encendía 150 ms en
-     * el segundo 44. Carlos: «quita el flash». Tenía razón por dos motivos
-     * a la vez: no se entendía, y era una cuarta superficie mezclando a
-     * pantalla completa para usarse un sexto de segundo.
-     *
-     * El acontecimiento no se pierde. La luz se viene cerrando sobre el
-     * nombre desde el segundo 35 —el hueco del degradado encogiendo— y en
-     * el 44 se ABRE de golpe: de su punto más cerrado a su apertura máxima
-     * en 180 ms. Es el mismo tercer contacto, contado con la luz que ya
-     * está en escena en vez de con un parche encima. */
-    aperturaDelVelo =
-        t < TOTALIDAD ? 1.30 - tramo(t, PROFUNDA, TOTALIDAD) * 0.62
-      : t < SHOCK     ? 0.68 - tramo(t, TOTALIDAD, SHOCK) * 0.30
-      : t < SHOCK + 180 ? 0.38 + tramo(t, SHOCK, SHOCK + 180) * 0.72
-      :                 1.10 + tramo(t, SHOCK + 180, DURACION) * 0.35;
-
-    pintarElVelo();
+       Se fueron con ella `mezclaDelVelo`, `tDelVelo` y `aperturaDelVelo`,
+       que eran las tres cosas que esa capa necesitaba saber. */
+    ponerLaLuzDelEclipse(t);
 
     moverElMundo(t);
 
@@ -4304,20 +4229,10 @@
     ESCALA_DEL_LIENZO = esBaja ? 0.72 : 1;
     medirElLienzo();
 
-    /* Y la apertura: `empezar()` llama a pintarElVelo() antes del primer
-       cuadro, así que sin esto el degradado nacía con la apertura final de
-       la corrida anterior. Se corrige sola en el cuadro 1, pero nacer mal
-       es nacer mal. */
-    aperturaDelVelo = 1;
-
-    mezclaDelVelo = 0;
-    ultimoEscalonDeMezcla = -1;
-
-    /* Y dónde va la sombra: sin esto la corrida siguiente del panel de
-       ensayo arrancaría con el desvío final de la anterior, o sea con la
-       luz ya del lado equivocado. */
-    tDelVelo = 0;
-    ultimaAperturaPintada = -1;
+    /* La luz vuelve al reloj y el escalón se suelta: sin esto, la corrida
+       siguiente del panel de ensayo arrancaría desde la hora del eclipse
+       anterior en vez de desde la hora real. */
+    devolverLaLuzDelEclipse();
 
     /* La base se vuelve a medir en cada corrida: la ventana puede haber
        cambiado de tamano entre una y otra, y con ella el costo del cuadro. */
@@ -4352,9 +4267,12 @@
     document.body.appendChild(capaDelEclipse);
 
     medirElAltar();
-    /* El velo tiene que tener su degradado ANTES del primer cuadro: si se
-       pintara recién en unCuadro(), el cuadro cero se vería sin él. */
-    pintarElVelo();
+
+    /* La luz del eclipse tiene que estar puesta ANTES del primer cuadro:
+       si se aplicara recién en unCuadro(), el cuadro cero se vería con la
+       hora de siempre y habría un salto. En t=0 el progreso vale 0, así
+       que esto no cambia nada todavía — solo captura la hora de partida. */
+    ponerLaLuzDelEclipse(0);
     sembrarLaMarea();
     sembrarLosPetalos();
     /* ⚠️ La mártir se elige DENTRO de esto, no acá: es una flor del marco
@@ -4387,12 +4305,8 @@
     function alRedimensionar() {
       medirElLienzo();
       acomodarLaCopia();
-      /* ⚠️ EL VELO YA NO SE ENTERA DEL RESIZE, y es correcto: su geometría
-         está en porcentajes de pantalla, no en píxeles, así que el mismo
-         degradado vale para cualquier tamaño. Se fuerza el repintado solo
-         por si la capa nació antes de que hubiera nada. */
-      ultimoEscalonDeMezcla = -1;
-      pintarElVelo();
+      /* ⚠️ LA LUZ NO SE ENTERA DEL RESIZE, y es correcto: sus catorce
+         perillas no dependen del tamaño de la ventana. */
     }
 
     escuchaDeMedida = (typeof alCambiarElAncho === 'function')
@@ -4479,8 +4393,11 @@
       if (c.parentNode) c.parentNode.removeChild(c);
     });
     cajaAnteriorDeLaOfrenda = null;
-    ultimaAperturaPintada = -1;
-    ultimoEscalonDeMezcla = -1;
+
+    /* ⚠️ Y LA LUZ VUELVE AL RELOJ, PASE LO QUE PASE. Si el eclipse muriera
+       por una excepción con la luz a mitad de camino, la invitación
+       quedaría roja y oscura hasta que alguien recargara. */
+    devolverLaLuzDelEclipse();
 
     /* Y en el mismo cuadro en que desaparece todo, lo único que no
        desaparece. No es una transición: es un objeto que se queda. Ver la

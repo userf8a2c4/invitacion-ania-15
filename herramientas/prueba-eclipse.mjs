@@ -235,117 +235,54 @@ const PALETA_FRIA    = paleta('PALETA_FRIA');
  *
  * Carlos: «arriba, con el relicario y las rosas, donde se ven los rayos de
  * luz en el día: allí rojo. Abajo, donde están los candelabros: oscuro.» */
-const TRAMOS = (() => {
-  const filas = ['PALETA_FRIA', 'PALETA_BORGONA'].map(nombre => {
-    const bloque = (eclipse.match(
-      new RegExp('var ' + nombre + '\\s*=\\s*\\[[^\\]]*\\]')) || [''])[0];
-    return [...bloque.matchAll(/'([\d\s,]+)'/g)]
-      .map(m => m[1].split(',').map(v => +v.trim()));
-  });
-  const [frias, borgonas] = filas;
-  return frias.map((fria, i) => ({
-    zona: i === 0 ? 'arriba' : 'abajo',
-    fria,
-    borgona: borgonas[i]
-  }));
-})();
-
-/** El máximo que alcanza `sangre`, para normalizar la mezcla. */
-const SANGRE_MAXIMA = (() => {
-  let m = 0;
-  for (let t = 0; t <= 60000; t += 50) m = Math.max(m, curva.coloresEn(t).sangre);
-  return m || 1;
-})();
-
-/** Cuánto borgoña hay en el milisegundo `t`: 0 = acero frío, 1 = borgoña. */
-const mezclaEn = (t) => curva.coloresEn(t).sangre / SANGRE_MAXIMA;
-
-/** El color de la zona `i` en el milisegundo `t`, igual que colorDelTramo(). */
-const colorDelTramoEn = (i, t) => {
-  const k = mezclaEn(t);
-  return TRAMOS[i].fria.map((v, c) => v + (TRAMOS[i].borgona[c] - v) * k);
-};
-
-/* ⚡ LOS COEFICIENTES SE LEEN DEL ARCHIVO, NO SE COPIAN ACÁ (2026-09-11)
+/* ⚡ EL ECLIPSE DEJÓ DE SER UNA CAPA: AHORA ES UNA HORA (2026-09-11)
  *
- * Estaban escritos a mano —0,58 y 0,66— y cuando el código cambió a 0,85 y
- * 0,95 esta prueba siguió midiendo los viejos. O sea que comprobaba una
- * ficción: se podía dejar el eclipse invisible y todo seguía en verde.
+ * Carlos, después de cuatro intentos: «esto es un tinte, y es una mierda.
+ * Estudia cómo se comporta la luz del día y de la noche en la web, es la
+ * misma mierda, solo que rojo OSCURO». Y: «la única diferencia es que esto
+ * dura un minuto».
  *
- * Eso es exactamente lo que dejó salir la v278, que Carlos describió como
- * «el eclipse es inexistente y solo ves pétalos de un lado a otro». La
- * prueba de luminancia existía y no lo cazó, porque no estaba mirando el
- * código: estaba mirando una copia vieja de dos números.
+ * Todo lo que había acá —TRAMOS, COEFICIENTES, veloEn, comoSeVeEn,
+ * alfaEnZona— simulaba la composición de una capa de color puesta encima
+ * de la escena para poder juzgar su color. Esa capa ya no existe.
  *
- * Una prueba que copia constantes deja de ser una prueba en el momento en
- * que alguien cambia la constante. */
-const COEFICIENTES = (() => {
-  const m = eclipse.match(
-    /var velo = limitar\(color\.frio \* ([\d.]+) \+ color\.sangre \* ([\d.]+), 0, ([\d.]+)\)/);
-  return m ? { frio: +m[1], sangre: +m[2], tope: +m[3] } : null;
-})();
-
-comprobar('los coeficientes del velo se pueden leer del archivo',
-  !!COEFICIENTES,
-  'sin esto la prueba de luminancia mide una copia y no el código');
-
-/** La opacidad del velo en el milisegundo `t`, tal cual la calcula unCuadro. */
-const veloEn = (t) => {
-  const c = curva.coloresEn(t);
-  if (!COEFICIENTES) return 0;
-  return Math.min(COEFICIENTES.tope,
-    Math.max(0, c.frio * COEFICIENTES.frio + c.sangre * COEFICIENTES.sangre));
-};
-
-/**
- * Qué le queda a un píxel de color `rgb` en el milisegundo `t`, a una
- * distancia `radio` (0 = el altar, 100 = la esquina) del centro del velo.
+ * La luz de esta página son CATORCE PERILLAS que mueven los haces, las
+ * motas, el ambiente, la cúpula de la sala, la profundidad y las dos capas
+ * que RESTAN luminancia. El eclipse es otra hora de ese sistema: la más
+ * oscura y la única roja. Así que lo que hay que comprobar ya no es el
+ * color de un rectángulo, sino que esa hora esté bien puesta.
  */
-/* ⚡ EL MOTOR DE COMPOSICIÓN, PARA LAS DOS ZONAS (2026-09-11)
- *
- * El velo dejó de ser un radial con paradas a distintos radios y pasó a
- * ser dos elipses de posición fija: una que entra desde arriba —donde
- * están el relicario, las rosas y los haces— y su espejo desde abajo,
- * donde están los candelabros.
- *
- * Así que ya no se compone «a tal radio», se compone «en tal zona». Los
- * dos factores de fuerza salen de las curvas de caída del propio archivo:
- * en la banda del relicario la de arriba vale 0,62 de su máximo, y al pie
- * de la pantalla la de abajo vale 1.
- *
- * @param {number} t    Milisegundo de la secuencia.
- * @param {number[]} rgb El color de lo que hay debajo.
- * @param {string} zona  'arriba' (por defecto) o 'abajo'.
- */
-const ALFA_MAXIMO = (() => {
-  const leerAlfa = (n) => {
-    const m = eclipse.match(new RegExp('var ' + n + '\\s*=\\s*([\\d.]+);'));
-    return m ? +m[1] : 0;
-  };
-  return { arriba: leerAlfa('ALFA_DE_ARRIBA'), abajo: leerAlfa('ALFA_DE_ABAJO') };
+
+/** La hora del eclipse, leída de 28-eclipse.js. */
+const HORA_ECLIPSE = (() => {
+  const bloque = (eclipse.match(/var HORA_DEL_ECLIPSE = \{[\s\S]*?\n  \};/) || [''])[0];
+  const valores = {};
+  for (const m of bloque.matchAll(/(\w+):\s*\[([^\]]+)\]/g)) {
+    valores[m[1]] = m[2].split(',').map(v => +v.trim());
+  }
+  for (const m of bloque.matchAll(/(\w+):\s*(-?[\d.]+),/g)) {
+    valores[m[1]] = +m[2];
+  }
+  return valores;
 })();
 
-/* La fuerza de cada degradado donde vive cada cosa. Salen de las curvas
-   CAIDA_DE_ARRIBA / CAIDA_DE_ABAJO del archivo. */
-const FUERZA = { arriba: 0.62, abajo: 1 };
+/** Las horas del reloj, leídas de 22-luz-de-la-hora.js. */
+const HORAS_DEL_DIA = (() => {
+  const luz = leer('codigo', '22-luz-de-la-hora.js');
+  const salida = {};
+  for (const m of luz.matchAll(/hora:\s*(\d+),([\s\S]*?)\n    \}/g)) {
+    const h = {};
+    for (const c of m[2].matchAll(/(\w+):\s*\[([^\]]+)\]/g)) {
+      h[c[1]] = c[2].split(',').map(v => +v.trim());
+    }
+    for (const c of m[2].matchAll(/(\w+):\s*(-?[\d.]+),/g)) h[c[1]] = +c[2];
+    salida[m[1]] = h;
+  }
+  return salida;
+})();
 
-const comoSeVeEn = (t, rgb, zona) => {
-  if (zona === undefined) zona = 'arriba';
-  const i = zona === 'abajo' ? 1 : 0;
-
-  const efectiva = veloEn(t) * ALFA_MAXIMO[zona] * FUERZA[zona];
-  const color = colorDelTramoEn(i, t);
-
-  return rgb.map((v, c) => v * (1 - efectiva) + color[c] * efectiva);
-};
-
-/** El alfa efectivo en una zona, para las comprobaciones que lo miran. */
-const alfaEnZona = (t, zona) =>
-  veloEn(t) * ALFA_MAXIMO[zona] * FUERZA[zona];
-
-
-/** Cuánta luz roja queda donde vive el marco, de 0 a 1. */
-const luzRojaEn = (t) => comoSeVeEn(t, [255, 0, 0], 'arriba')[0] / 255;
+/** La noche cerrada: la referencia contra la que se mide el eclipse. */
+const NOCHE = HORAS_DEL_DIA['23'] || {};
 
 /* La rosa del marco: el objeto que TIENE que verse moverse. */
 const ROSA = [126, 27, 44];
@@ -420,62 +357,68 @@ comprobar('y es UNA sola capa, no cuatro',
   !/var capaCorona/.test(eclipseCodigo),
   'cada capa a pantalla completa es una superficie más que componer');
 
-/* ⚡ LA LUZ ENTRA POR DONDE ENTRA LA LUZ (2026-09-11)
+/* ⚡ EL ECLIPSE ES LA HORA MÁS OSCURA Y LA ÚNICA ROJA (2026-09-11)
  *
- * Carlos: «¿de dónde vienen los rayos de sol y de luna durante el día? DEL
- * SOL Y LA LUNA QUE NO SE VEN EN ESCENA. Entonces… ¿de dónde viene la luz
- * roja del eclipse? De la luna que no se ve en escena. ES EXACTAMENTE LA
- * MISMA LÓGICA.»
+ * Acá se exigía una elipse con tal forma y tal origen: la geometría de una
+ * CAPA de color puesta encima. Esa capa ya no existe. Lo que se comprueba
+ * ahora es que el eclipse esté bien puesto como hora del sistema de luz.
  *
- * Antes acá se exigía `circle farthest-corner at <centro>` con el centro
- * sacado de la caja del nombre. Eso era un diseño inventado que no
- * respetaba de dónde viene la luz en esta página.
- *
- * La geometría correcta ya estaba escrita en veloDeLaSala()
- * (22-luz-de-la-hora.js:450) y sus tres reglas: la luz VIENE DE UN SITIO
- * —la elipse nace fuera del borde—, SE APAGA CON LA DISTANCIA —muere antes
- * de la mitad— y NO MANDA sobre lo que ya está iluminado. */
-comprobar('la luz del eclipse nace FUERA del borde, como la del día',
-  /var FUENTE_DE_ARRIBA = '50% -8%';/.test(eclipseCodigo) &&
-  /var FUENTE_DE_ABAJO  = '50% 108%';/.test(eclipseCodigo),
-  'si naciera dentro de la pantalla se leería como una mancha, no como ' +
-  'una fuente más allá de la ventana');
+ * La referencia es la noche cerrada (23h), que es lo más oscuro que la
+ * página tenía hasta ahora. */
 
-comprobar('y usa la MISMA elipse que la luz del día',
-  /var FORMA_DE_LA_LUZ = 'ellipse 130% 65%';/.test(eclipseCodigo),
-  'ancha y baja: se derrama hacia los lados en vez de caer como una banda');
+comprobar('el eclipse oscurece MÁS que la noche cerrada',
+  HORA_ECLIPSE.oscurecidoFijo > NOCHE.oscurecidoFijo &&
+  HORA_ECLIPSE.profundidadDeSombra > NOCHE.profundidadDeSombra,
+  'eclipse ' + HORA_ECLIPSE.oscurecidoFijo + ' / ' + HORA_ECLIPSE.profundidadDeSombra +
+  ' contra noche ' + NOCHE.oscurecidoFijo + ' / ' + NOCHE.profundidadDeSombra +
+  ' — estas dos son las que RESTAN luz; si no suben, no hay oscuridad');
 
-{
-  /* Y que de verdad sea la misma: se lee del otro archivo, no se copia. */
-  const luzDelDia = leer('codigo', '22-luz-de-la-hora.js');
-  /* ⚠️ DENTRO DE `veloDeLaSala`, no la primera elipse del archivo: hay más
-     de una y la de más arriba es otra cosa. */
-  const cuerpoDeLaSala = (luzDelDia.match(
-    /function veloDeLaSala[\s\S]*?\n  \}/) || [''])[0];
-  const formaDelDia = (cuerpoDeLaSala.match(/ellipse ([\d%\s]+) at/) || [])[1];
-  const formaDelEclipse = (eclipse.match(/var FORMA_DE_LA_LUZ = 'ellipse ([\d%\s]+)';/) || [])[1];
-
-  comprobar('y es la misma de verdad, leída de los dos archivos',
-    !!formaDelDia && formaDelDia.trim() === (formaDelEclipse || '').trim(),
-    'día: ' + formaDelDia + ' · eclipse: ' + formaDelEclipse +
-    ' — si se separan, el eclipse deja de entrar por donde entra el día');
+/* ⚠️ Y LA LUZ ROJA ENTRA POR LOS HACES, que es por donde entra toda la luz
+   de esta página. Los haces van con `screen`: SUMAN luz. Que sean rojos es
+   lo que hace que el rojo venga de una fuente fuera de cuadro y no de un
+   filtro encima. Carlos: «¿de dónde viene la luz roja del eclipse? De la
+   luna que no se ve en escena. ES EXACTAMENTE LA MISMA LÓGICA». */
+for (const perilla of ['hazCentro', 'hazMedio', 'hazBorde']) {
+  const c = HORA_ECLIPSE[perilla] || [0, 0, 0, 0];
+  comprobar('los haces del eclipse son rojos · ' + perilla,
+    c[0] > c[1] * 2 && c[2] >= c[1],
+    'rgb(' + c.slice(0, 3).join(',') + ') — R tiene que doblar a G (rojo, no ' +
+    'marrón) y B no puede quedar por debajo de G (vino, no ladrillo)');
 }
 
-comprobar('la luz muere antes de la mitad de la pantalla',
-  /var CAIDA_DE_ARRIBA = \[\[1, 0\], \[0\.62, 26\], \[0\.28, 46\], \[0\.08, 60\], \[0, 74\]\];/
-    .test(eclipseCodigo),
-  'si llegara hasta abajo, taparía a los candelabros y no habría dos zonas');
+comprobar('y el polvo que flota en ellos también',
+  (HORA_ECLIPSE.motaCentro || [])[0] > (HORA_ECLIPSE.motaCentro || [0, 9])[1],
+  'si las motas quedaran blancas, los rayos serían rojos con polvo de otra ' +
+  'escena adentro');
 
-comprobar('y hay una segunda, espejada, para los candelabros',
-  /var CAIDA_DE_ABAJO  = \[\[0, 26\], \[0\.08, 40\], \[0\.28, 54\], \[0\.62, 74\], \[1, 100\]\];/
-    .test(eclipseCodigo),
-  'sin ella el eclipse sería solo un cielo rojo y abajo no pasaría nada');
+comprobar('el ambiente y la sala son rojo OSCURO, no rojo vivo',
+  HORA_ECLIPSE.tinteDeSala[0] > HORA_ECLIPSE.tinteDeSala[1] * 2 &&
+  HORA_ECLIPSE.tinteDeSala[0] < 60 &&
+  HORA_ECLIPSE.tinteDeSala[3] > NOCHE.tinteDeSala[3],
+  'sala rgb(' + HORA_ECLIPSE.tinteDeSala.slice(0, 3).join(',') + ') @ ' +
+  HORA_ECLIPSE.tinteDeSala[3] + ' — Carlos: «rojizo pero oscuro, no vivo»');
 
-comprobar('y las dos van en UNA sola capa',
-  /capaDelEclipse\.style\.backgroundImage =\s*\n\s*unDegradadoDeLuz\(FUENTE_DE_ARRIBA/
-    .test(eclipseCodigo) &&
-  /unDegradadoDeLuz\(FUENTE_DE_ABAJO/.test(eclipseCodigo),
-  'dos capas serían dos superficies de compositor en una HD 4600');
+/* ⚠️ Y LAS VELAS CRECEN. Es el mismo recurso que usa la madrugada: cuando
+   la ventana deja de mandar, los candelabros pasan a ser la única luz de
+   la sala, y ese cambio de quién manda es lo que vuelve envolvente la
+   escena. En el eclipse tiene que ser más marcado que de noche. */
+comprobar('y los candelabros pasan a mandar',
+  HORA_ECLIPSE.fuerzaDeVelas > NOCHE.fuerzaDeVelas,
+  'eclipse ×' + HORA_ECLIPSE.fuerzaDeVelas + ' contra noche ×' + NOCHE.fuerzaDeVelas);
+
+comprobar('el eclipse entra por la MISMA puerta que el reloj',
+  /window\.LuzDeLaHora\.aplicarMomento/.test(eclipseCodigo) ||
+  /luz\.aplicarMomento\(horaDeAntes, HORA_DEL_ECLIPSE/.test(eclipseCodigo),
+  'si pintara por su cuenta, volvería a ser un tinte');
+
+comprobar('y 22-luz-de-la-hora.js la abre',
+  /aplicarMomento:\s*aplicarMomento,/.test(leer('codigo', '22-luz-de-la-hora.js')) &&
+  /momentoDeAhora:\s*momentoDeAhora,/.test(leer('codigo', '22-luz-de-la-hora.js')),
+  'sin la puerta, el eclipse no puede usar el sistema de luz');
+
+comprobar('y arranca desde la luz que de verdad había',
+  /horaDeAntes = luz\.momentoDeAhora\(\);/.test(eclipseCodigo),
+  'si partiera de un valor inventado, el primer cuadro sería un salto');
 
 /* ⚠️ Y EL DEGRADADO NO SE REPINTA POR CUADRO. Reescribir un `background`
    del tamaño de la pantalla sesenta veces por segundo sería cambiar un
@@ -494,84 +437,66 @@ comprobar('el velo tiene textura propia',
 /* ⚠️ Y CON BANDA MUERTA, NO CON REDONDEO. El redondeo al 1 % lo cruzaba
    el vaivén de la portada varias veces por segundo, y cada cruce reescribe
    el `background` de una capa a pantalla completa. */
-/* ⚠️ Y AHORA SOLO HAY UN MOTIVO PARA REPINTAR: que cambie el color. La
-   geometría es fija —la luz no cambia de origen a mitad del minuto— así
-   que lo único que puede justificar reescribir la cadena es el escalón de
-   mezcla, y son doce en los sesenta segundos. */
-comprobar('el degradado solo se repinta cuando cambia el color',
-  /if \(escalonDeMezcla === ultimoEscalonDeMezcla\) return;/.test(eclipseCodigo),
-  'pintar un degradado a pantalla completa por cuadro es lo que costó ' +
-  '159 ms en la v278');
+/* ⚠️ Y NO SE APLICA POR CUADRO. Cada pasada escribe el fondo de 5 haces y
+   32 motas más siete variables CSS: es barato una vez cada diez minutos
+   —que es para lo que 22 lo diseñó— y carísimo sesenta veces por segundo.
+   Cuarenta escalones en el minuto son dos tercios de segundo entre uno y
+   otro, que a estas velocidades de cambio no se ve escalonado. */
+comprobar('la luz se aplica por escalones, no por cuadro',
+  /if \(escalon === ultimoEscalonDeLuz\) return;/.test(eclipseCodigo),
+  'aplicar las catorce perillas por cuadro es lo que costó 159 ms en la v278');
 
-comprobar('y son doce escalones en todo el minuto, no sesenta por segundo',
-  /var ESCALONES_DE_MEZCLA = 12;/.test(eclipseCodigo),
-  'a 60 fps un repintado por cuadro serían 3600');
+comprobar('y son unas decenas de pasadas en todo el minuto',
+  /var ESCALONES_DE_LUZ = 40;/.test(eclipseCodigo),
+  'a 60 fps, una por cuadro serían 3600');
 
-comprobar('y lo que se anima por cuadro es solo la opacidad',
-  /capaDelEclipse\.style\.opacity = velo\.toFixed\(3\);/.test(eclipseCodigo),
-  'la opacidad la mueve el compositor sin repintar nada');
+/* ⚡ Y NINGÚN ECLIPSE TERMINA DE GOLPE (2026-09-11)
+ *
+ * Carlos: «ningún eclipse en la historia de la Tierra ha terminado de
+ * golpe con un corte de oscuridad a luz». Antes `terminar()` quitaba la
+ * capa en UN cuadro, y eso era exactamente el corte.
+ *
+ * Ahora la curva vuelve a cero por su cuenta antes del final, así que
+ * cuando el minuto termina ya no queda nada que quitar. */
+{
+  const cuerpo = (eclipse.match(/function progresoDelEclipse[\s\S]*?\n  \}/) || [''])[0];
+  const suave = (x) => { x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); };
+  const fn = new Function('PROFUNDA', 'MUERE_EN', 'SHOCK', 'SALE_DEL_TODO', 'suave',
+    cuerpo + '; return progresoDelEclipse;')(
+      curva.PROFUNDA, curva.MUERE_EN, curva.SHOCK, 58000, suave);
+
+  comprobar('la luz ya volvió del todo ANTES de que termine el minuto',
+    fn(58000) === 0 && fn(curva.D) === 0,
+    'en el 58 vale ' + fn(58000).toFixed(3) + ' y en el 60 ' + fn(curva.D).toFixed(3) +
+    ' — si no llega a cero solo, el final es un corte');
+
+  comprobar('y la totalidad sí está al máximo',
+    fn(38500) === 1 && fn(43000) === 1,
+    'el 38,5 y el 43 tienen que valer 1');
+
+  comprobar('y la salida es gradual, no un escalón',
+    [45000, 48000, 52000, 55000].every((t, i, a) =>
+      i === 0 || fn(t) < fn(a[i - 1])),
+    'la curva tiene que bajar en cada tramo de la salida');
+}
 
 /* ⚠️ EL ÚLTIMO TRAMO NO PUEDE SER NEGRO. El marco —las plantas, o sea lo
    único que el minuto tiene para contar— vive en los BORDES, que es justo
    donde un velo radial centrado en el nombre oscurece más. Un negro ahí
    apagaría el acontecimiento. Se comprueba ejecutando los tramos, no
    leyendo un color. */
-/* ⚡ EL COLOR SE JUZGA POR FASE, Y ÉSTA ES LA COMPROBACIÓN QUE FALTABA.
- *
- * Antes decía `TRAMOS.every(t => t.c[0] > t.c[1] * 2)` — o sea EXIGÍA que
- * el velo fuera rojo SIEMPRE, incluida la penumbra. Estaba blindando el
- * bug. Ahora son dos comprobaciones opuestas, una por fase. */
-comprobar('en la penumbra el velo es FRÍO, sin una gota de rojo',
-  TRAMOS.length === 2 &&
-  TRAMOS.every(t => t.fria[0] <= t.fria[1] && t.fria[1] <= t.fria[2]),
-  'paleta fría: ' + TRAMOS.map(t => t.zona + ' rgb(' + t.fria.join(',') + ')').join(' · ') +
-  ' — si R sube por encima de G, hay rojo en la penumbra');
+/* ⚠️ ACÁ SE JUZGABA EL COLOR DE UNA CAPA POR FASE.
 
-/* ⚠️ Y LAS DOS ZONAS TIENEN QUE SER DISTINTAS. Si arriba y abajo llevaran
-   el mismo color y la misma fuerza, volveríamos al tinte plano. */
-comprobar('y arriba y abajo son dos sitios distintos, no uno',
-  TRAMOS[0].borgona[0] > TRAMOS[1].borgona[0] * 2,
-  'arriba rgb(' + TRAMOS[0].borgona.join(',') + ') · abajo rgb(' +
-  TRAMOS[1].borgona.join(',') + ') — el de arriba tiene que ser la LUZ y ' +
-  'el de abajo la oscuridad');
+   Eran comprobaciones correctas para un velo: que en la penumbra fuera
+   frío y en la totalidad borgoña. Pero el velo ya no existe — el eclipse
+   es una hora del sistema de luz — así que el color no vive en dos
+   paletas propias sino en las catorce perillas de HORA_DEL_ECLIPSE, y se
+   comprueba más arriba, junto al resto de la hora.
 
-/* ⚠️ Y EN LA TOTALIDAD, BORGOÑA — QUE NO ES LADRILLO. La diferencia es
-   B POR ENCIMA DE G: el vino tira al violeta y el ladrillo al naranja.
-   Carlos rechazó `176,58,40` y `150,44,32` —«un rojo vivo»— y esos dos
-   tenían G por encima de B. Es un número, no un gusto. */
-comprobar('y en la totalidad es BORGOÑA, no ladrillo ni negro',
-  TRAMOS.every(t => t.borgona[0] > t.borgona[1] * 2) &&
-  TRAMOS.every(t => t.borgona[2] > t.borgona[1]) &&
-  TRAMOS[TRAMOS.length - 1].borgona[0] >= 18,
-  'paleta borgoña: ' + TRAMOS.map(t => 'rgb(' + t.borgona.join(',') + ')').join(' · '));
-
-/* Y ejecutado: que el color pintado en la penumbra no tenga rojo y el de
-   la cripta sí. Es lo mismo, pero corriendo la interpolación de verdad. */
-{
-  const enPenumbra = colorDelTramoEn(TRAMOS.length - 1, 4000);
-  const enLaCripta = colorDelTramoEn(TRAMOS.length - 1, 43000);
-  comprobar('y el color PINTADO cambia de frío a borgoña con la fase',
-    enPenumbra[0] <= enPenumbra[2] && enLaCripta[0] > enLaCripta[1] * 2,
-    'penumbra rgb(' + enPenumbra.map(Math.round) + ') · cripta rgb(' +
-    enLaCripta.map(Math.round) + ')');
-
-  /* ⚠️ Y ESTO ES LO QUE ATA LA PRUEBA AL CÓDIGO. Lo de arriba reimplementa
-     la mezcla acá dentro, así que por sí solo no vería que el archivo la
-     congelara en cero —`colorDelTramo(i, 0)`— y dejara el velo frío toda
-     la totalidad. Se comprueba que pintarElVelo pase la mezcla DE VERDAD. */
-  comprobar('y el velo pinta con la mezcla real, no con una constante',
-    /var k = escalonDeMezcla \/ ESCALONES_DE_MEZCLA;/.test(eclipseCodigo) &&
-    /colorDelTramo\(0, k\)/.test(eclipseCodigo) &&
-    /colorDelTramo\(1, k\)/.test(eclipseCodigo) &&
-    /mezclaDelVelo \* ESCALONES_DE_MEZCLA/.test(eclipseCodigo),
-    'con la mezcla fija, el borgoña de la totalidad no llega nunca');
-
-  comprobar('y la mezcla la gobierna `sangre`, que es cero hasta el 35',
-    /mezclaDelVelo = limitar\(color\.sangre \/ SANGRE_MAXIMA, 0, 1\);/
-      .test(eclipseCodigo),
-    'si la moviera otra cosa —o una constante— el borgoña aparecería antes ' +
-    'de la totalidad, o no aparecería nunca');
-}
+   Lo que SÍ se conserva de aquella lección, y está en la sección de la
+   hora: que el rojo tenga R al doble de G (rojo, no marrón) y B por
+   encima de G (vino, no ladrillo). Esos dos números son los que Carlos
+   rechazó cuando no se cumplían. */
 
 /* ⚠️ ACÁ VIVÍAN LAS COMPROBACIONES DE LA GEOMETRÍA ANCLADA A CAJAS.
 
@@ -584,238 +509,28 @@ comprobar('y en la totalidad es BORGOÑA, no ladrillo ni negro',
    (ver FORMA_DE_LA_LUZ en 28-eclipse.js). Con posiciones fijas no hay
    cajas que medir ni nada que pueda colapsar, así que las comprobaciones
    dejaron de tener objeto. */
-/* EL NÚMERO QUE RESPONDE LA NOTA DE CARLOS. Fuera de los dos segundos de
-   totalidad, la escena nunca puede bajar del 40 % de su luz roja. Con la
-   curva vieja, a los 38 s ya estaba en el 8 %. */
-{
-  let peor = 1, cuando = 0;
-  for (let t = 0; t < curva.D; t += 100) {
-    /* La cripta y los 2 s que tarda la luz en pegar el salto de vuelta
-       después del tercer contacto: ese tramo se juzga con su propio piso. */
-    if (t >= curva.TOTALIDAD && t < curva.SHOCK + 2000) continue;
-    const l = luzRojaEn(t);
-    if (l < peor) { peor = l; cuando = t; }
-  }
-  comprobar('fuera de la totalidad NUNCA baja del 30 % de luz roja',
-    peor >= 0.30,
-    'lo peor fue ' + (peor * 100).toFixed(1) + ' % en el segundo ' + (cuando / 1000));
-}
-
-/* ⚡ Y AHORA LA COMPROBACIÓN QUE FALTABA: QUE EL ECLIPSE OSCUREZCA
- *   (2026-09-11)
+/* ⚡ ACÁ VIVÍA LA SECCIÓN DE LUMINANCIA DEL VELO (2026-09-11)
  *
- * Todas las comprobaciones de luz miraban el PISO —que no se fuera a
- * negro— porque ese era el problema de la v276. Ninguna miraba el TECHO.
- * Así que la v278 pudo dejar el velo en un alfa efectivo de 0,30 donde vive
- * el marco, y todo siguió en verde. Carlos, mirándolo: «el eclipse es
- * inexistente», «en serio, eliminaste el eclipse».
+ * Simulaba la composición de una capa de color sobre la escena para poder
+ * juzgar cuánta luz perdía el oro y cuánto rojo quedaba. Era la
+ * herramienta correcta para un velo, y cazó varios bugs reales.
  *
- * Un eclipse tiene que hacer las dos cosas: dejar ver Y oscurecer. Estas
- * dos comprobaciones son las que lo encierran por arriba y por abajo.
+ * Pero el velo ya no existe. El eclipse es una hora del sistema de luz, y
+ * su efecto no sale de componer un rectángulo: sale de mover los haces,
+ * las motas, el ambiente, la cúpula y las dos capas que RESTAN luminancia.
+ * Simular eso acá sería reescribir 22-luz-de-la-hora.js dentro de la
+ * prueba, y entonces la prueba mediría su propia copia en vez del código
+ * — que es exactamente el error que este archivo ya cometió una vez con
+ * los coeficientes escritos a mano.
  *
- * El punto que se mira es el 70 % del radio, que es donde vive el marco —o
- * sea las plantas, o sea lo único que el minuto tiene para contar. */
-{
-  /* El alfa efectivo: la opacidad de la capa por la del tramo que le toca
-     a ese radio. Es el número con el que el navegador compone, sin pasar
-     por ningún color —derivarlo de un píxel blanco lo subestima, porque el
-     propio color del velo tira del resultado hacia arriba. */
-  const enElEsfuerzo = alfaEnZona(30000, 'arriba');
-  const enLaCripta   = alfaEnZona(43000, 'arriba');
-  const abajoEnLaCripta = alfaEnZona(43000, 'abajo');
-
-/* ⚡ EL VELO TIÑE; LA OSCURIDAD LA PONE OTRA COSA (2026-09-11)
+ * Lo que sostiene esas garantías ahora está en la sección de la hora:
+ * que el eclipse oscurezca MÁS que la noche cerrada (las dos perillas que
+ * restan luz), que los haces sean rojos con R al doble de G y B por
+ * encima de G, que la sala sea rojo oscuro y no vivo, y que los
+ * candelabros pasen a mandar.
  *
- * Carlos: «hazlo más NATURAL… pero deja de cargarla».
- *
- * La luz de una totalidad lunar es luz REFRACTADA por la atmósfera de la
- * Tierra: muy saturada y poco intensa. Un rojo apagado a mucha opacidad da
- * barro; un rojo saturado a poca opacidad da luz. Así que los alfas del
- * velo bajaron a la mitad y los colores se saturaron.
- *
- * ⚠️ Y POR ESO ESTAS COMPROBACIONES CAMBIARON DE OBJETO. Pedían que el
- * VELO tapara —alfa efectivo ≥ 0,20 en el esfuerzo, el oro por debajo del
- * 82 % en la umbra— y eso era un proxy que dejó de aplicar: el velo ya no
- * es quien oscurece. La oscuridad la ponen el sol muriendo, los haces
- * vaciándose y `#penumbra-profunda`, que es como oscurece un eclipse de
- * verdad. Medir el velo y llamarlo «oscuridad» sería medir mal.
- *
- * Se comprueba lo que el velo SÍ es responsable de: que esté presente, que
- * lo que pone antes de la totalidad sea FRÍO, y que la oscuridad de verdad
- * siga estando donde corresponde. */
-comprobar('en el esfuerzo el velo ya se nota',
-  enElEsfuerzo >= 0.10,
-  'alfa efectivo ' + enElEsfuerzo.toFixed(2) + ' — si no llega ni a eso, ' +
-  'el velo no existe');
-
-{
-  /* Y que lo que pone sea FRÍO: el oro tiene que virar hacia el azul antes
-     de la totalidad, no hacia el rojo. Es la mitad del guion. */
-  const ORO = [198, 158, 92];
-  const limpio = ORO[2] / ORO[0];
-  const enUmbra = comoSeVeEn(30000, ORO, 'arriba');
-  const enCripta = comoSeVeEn(43000, ORO, 'arriba');
-
-  comprobar('y lo que pone antes de la totalidad es FRÍO, no rojo',
-    (enUmbra[2] / enUmbra[0]) > limpio,
-    'el oro pasa de B/R ' + limpio.toFixed(3) + ' a ' +
-    (enUmbra[2] / enUmbra[0]).toFixed(3) + ' — tiene que SUBIR: vira al azul');
-
-  comprobar('y en la totalidad vira al rojo, no al azul',
-    (enCripta[2] / enCripta[0]) < limpio,
-    'el oro queda en B/R ' + (enCripta[2] / enCripta[0]).toFixed(3) +
-    ' contra ' + limpio.toFixed(3) + ' limpio');
-
-  /* ⚠️ Y EL ORO TIENE QUE SEGUIR SIENDO ORO. Es lo que separa la
-     referencia de Carlos —una escena iluminada de rojo— de un filtro
-     pegado encima. Si el oro pierde su saturación, es barro. */
-  const sat = (x) => { const M = Math.max(...x), m = Math.min(...x); return M ? (M - m) / M : 0; };
-  comprobar('y el oro sigue siendo oro en la totalidad',
-    sat(enCripta) >= sat(ORO) * 0.9,
-    'saturación ' + sat(enCripta).toFixed(2) + ' contra ' + sat(ORO).toFixed(2) +
-    ' limpio — por debajo de eso deja de leerse como oro');
-}
-
-  /* ⚡ SE MIDE LA LUZ QUE SE FUE, NO EL ALFA (2026-09-11)
-   *
-   * Esto pedía «alfa efectivo >= 0,60», y ese umbral estaba calibrado para
-   * un velo PLANO —color claro con alfa alto—. Carlos pidió lo contrario:
-   * «pero no plano, sino como sombra», que es color oscuro con alfa bajo.
-   * Con la paleta nueva el alfa cae a 0,53 y la escena está MÁS oscura que
-   * antes, porque el color hace el trabajo que antes hacía la opacidad.
-   *
-   * O sea que el alfa nunca fue lo que importaba: era un proxy. Lo que se
-   * ve es cuánta luz PIERDE la escena, y eso se mide sobre algo brillante
-   * —el oro del relicario, rgb(198,158,92)— y no sobre una rosa del marco,
-   * que ya es oscura de nacimiento y casi no puede oscurecerse más. */
-  {
-    const ORO = [198, 158, 92];
-    const luz = (x) => 0.2126 * x[0] + 0.7152 * x[1] + 0.0722 * x[2];
-    const queda = (t, zona) => luz(comoSeVeEn(t, ORO, zona)) / luz(ORO);
-
-    comprobar('en la penumbra el oscurecimiento es casi imperceptible',
-      queda(4000, 'arriba') >= 0.93,
-      'al oro le queda el ' + (queda(4000, 'arriba') * 100).toFixed(0) + ' % de su luz ' +
-      '— el documento pide «casi imperceptible al principio»');
-
-    /* ⚠️ LA OSCURIDAD NO LA PONE EL VELO, Y SE COMPRUEBA DONDE SÍ ESTÁ.
-       El documento pide «oscuridad intensa» a los 30 s, y eso lo consigue
-       el eclipse matando la luz ambiente: acorta el haz del sol, le cambia
-       el ángulo y vacía los rayos. Medir el velo y llamarlo oscuridad
-       sería medir el sitio equivocado. */
-    comprobar('y la oscuridad de verdad la pone el sol muriendo',
-      /window\.LuzDeLaHora\.largoDelHaz = mundo\.largoDelHaz \* loQueQueda;/
-        .test(eclipseCodigo) &&
-      /window\.LienzoDeLuz\.haces = sinLuz \? \[\]/.test(eclipseCodigo),
-      'si el velo tuviera que oscurecer solo, habría que cargarlo hasta ' +
-      'volverlo barro');
-
-    /* ⚠️ EL SALTO SE MIDE EN LAS DOS ZONAS, que es lo que ve el ojo. En la
-       de arriba el borgoña es luminoso a propósito —es la luz roja
-       entrando— así que ahí el escalón es chico; el grueso del
-       oscurecimiento ocurre abajo, donde los candelabros se quedan sin
-       luz. Mirar solo una de las dos daba una lectura falsa. */
-    const enConjunto = (t) =>
-      (queda(t, 'arriba') + queda(t, 'abajo')) / 2;
-
-    comprobar('y la cripta es un salto, no una continuación',
-      enConjunto(43000) <= enConjunto(30000) - 0.15,
-      'umbra ' + (enConjunto(30000) * 100).toFixed(0) + ' % → cripta ' +
-      (enConjunto(43000) * 100).toFixed(0) + ' % — sin salto, la totalidad ' +
-      'no se nota como acontecimiento');
-  }
-
-  comprobar('con un factor de al menos 1,6 entre un acto y otro',
-    enLaCripta / enElEsfuerzo >= 1.6,
-    'esfuerzo ' + enElEsfuerzo.toFixed(2) + ' · cripta ' + enLaCripta.toFixed(2) +
-    ' — sin salto, la totalidad no se nota');
-
-  /* ⚡ EL ALTAR YA NO ESTÁ PERDONADO, Y ES A PROPÓSITO (2026-09-11)
-   *
-   * Carlos: «la deidad no es el relicario, la deidad es el nombre de Ania,
-   * todo es corruptible por el eclipse, incluso el relicario». Antes esto
-   * exigía <= 0,14 en el centro, o sea que el óvalo dorado quedaba casi
-   * limpio. Ahora tiene que velarse como todo lo demás.
-   *
-   * Lo que SÍ se conserva es que la caída siga siendo redonda: el centro
-   * más claro que el borde, o vuelve el «se ve como un cuadro cerrándose»
-   * que Carlos reportó en el teléfono. Se lo encierra por los dos lados. */
-  /* ⚡ ARRIBA Y ABAJO TIENEN QUE SER DOS SITIOS DISTINTOS (2026-09-11)
-   *
-   * Carlos: «arriba, con el relicario y las rosas, donde se ven los rayos
-   * de luz en el día: allí rojo. Abajo, donde están los candelabros:
-   * oscuro.» Si las dos zonas terminan con el mismo alfa, volvimos al
-   * tinte plano que él rechazó todo el día. */
-  /* ⚠️ SE MIDE LA LUZ QUE PIERDE CADA ZONA, NO EL ALFA. La diferencia
-     entre arriba y abajo ya no está solo en cuánto se carga cada
-     degradado: está sobre todo en el COLOR —arriba rgb(48,5,14), abajo
-     rgb(18,3,8)— así que comparar alfas dejaba fuera la mitad del efecto.
-     Lo que el ojo ve es cuánta luz le queda al oro en cada mitad. */
-  {
-    const ORO = [198, 158, 92];
-    const luz = (x) => 0.2126 * x[0] + 0.7152 * x[1] + 0.0722 * x[2];
-    const arriba = luz(comoSeVeEn(43000, ORO, 'arriba'));
-    const abajo  = luz(comoSeVeEn(43000, ORO, 'abajo'));
-
-    comprobar('abajo se oscurece MÁS que arriba',
-      arriba > abajo * 1.5,
-      'al oro le queda ' + (100 * arriba / luz(ORO)).toFixed(0) + ' % arriba y ' +
-      (100 * abajo / luz(ORO)).toFixed(0) + ' % abajo — sin diferencia es un ' +
-      'lavado parejo, y Carlos pidió dos sitios distintos');
-  }
-}
-
-/* Y DENTRO de la cripta tampoco puede ser negro: son dos segundos, pero
-   siguen siendo rojos. */
-{
-  let peor = 1;
-  for (let t = curva.TOTALIDAD; t < curva.SHOCK + 2000; t += 50) {
-    peor = Math.min(peor, luzRojaEn(t));
-  }
-  comprobar('y dentro de la cripta tampoco baja del 22 %',
-    peor >= 0.22, 'lo peor fue ' + (peor * 100).toFixed(1) + ' %');
-}
-
-/* La comprobación que de verdad importa: que la rosa se VEA. */
-{
-  const enElEsfuerzo = comoSeVeEn(38000, ROSA);
-  const enLaCripta   = comoSeVeEn(43000, ROSA);
-  comprobar('una rosa del marco se ve durante el esfuerzo',
-    enElEsfuerzo[0] >= 45,
-    'quedó en rgb(' + enElEsfuerzo.map(v => Math.round(v)).join(', ') +
-    ') — con la curva vieja quedaba en rgb(7, 1, 1)');
-  comprobar('y sigue viéndose en la totalidad',
-    enLaCripta[0] >= 25,
-    'quedó en rgb(' + enLaCripta.map(v => Math.round(v)).join(', ') + ')');
-  comprobar('y es ROJA, no gris',
-    enElEsfuerzo[0] > enElEsfuerzo[1] * 2.5,
-    'r=' + enElEsfuerzo[0].toFixed(0) + ' g=' + enElEsfuerzo[1].toFixed(0));
-}
-
-/* ⚡ LA OSCURIDAD NO SE VA DE GOLPE (2026-09-11). Carlos: «la oscuridad
-   desaparece casi de golpe, casi de un fotograma a otro, un eclipse DE
-   SANGRE no desaparece así». Tenía razón: las dos capas bajaban en 600 y
-   500 ms, o sea que el eclipse se terminaba 5,4 segundos ANTES del
-   frenazo. Ahora la luz vuelve a lo largo de 16 s, espejando los 42 de la
-   entrada, que es lo que hace un eclipse de verdad. El frenazo del
-   segundo 60 sigue siendo un frenazo: pero de las PLANTAS. */
-{
-  const retiradaEmpieza = curva.SHOCK;
-  let sigueBajando = true;
-  for (let t = retiradaEmpieza; t < curva.D - 200; t += 500) {
-    if (curva.coloresEn(t + 500).sangre > curva.coloresEn(t).sangre + 0.001) {
-      sigueBajando = false;
-    }
-  }
-  comprobar('la luz vuelve durante 16 s, no en medio segundo',
-    sigueBajando && (curva.D - retiradaEmpieza) >= 14000,
-    'la retirada dura ' + ((curva.D - retiradaEmpieza) / 1000) + ' s');
-
-  comprobar('y a mitad de la histeria todavía queda rojo',
-    curva.coloresEn(50000).sangre > 0.25,
-    'a los 50 s quedaba ' + curva.coloresEn(50000).sangre.toFixed(3) +
-    ' — si acá ya es cero, la ventana de permiso se cerró sin que se viera');
-}
+ * Y lo que de verdad decide sigue siendo lo de siempre: Carlos mirándolo
+ * en el ProDesk. */
 
 /* ─── 5. Las tres reglas que no se negocian ────────────────────────── */
 
@@ -1339,11 +1054,25 @@ comprobar('y se devuelve ANTES de sacar las capas',
   eclipseCodigo.indexOf('lienzo, lienzoDeLaOfrenda].forEach'),
   'al revés habría un cuadro de pantalla iluminada sin sol');
 
-/* ⚠️ LAS VELAS NO SE TOCAN: son la luz votiva del culto. Lo que las vuelve
-   protagonistas no es que suban, es que todo lo demás se apague. */
-comprobar('las velas no se tocan',
-  !/lienzo-de-velas/.test(eclipseCodigo) && !/fuerzaDeVelas/.test(eclipseCodigo),
-  'la sala pasa a cripta por contraste, no por aumento');
+/* ⚡ LAS VELAS AHORA SÍ SUBEN, Y ES EL PUNTO (2026-09-11)
+ *
+ * Esto exigía que el eclipse NO tocara `fuerzaDeVelas`: la sala pasaba a
+ * cripta solo por contraste. Era correcto mientras el eclipse fuera una
+ * capa encima.
+ *
+ * Ahora el eclipse es una hora del sistema de luz, y ese sistema ya usa
+ * este recurso: de día las velas quedan discretas (×0,70) porque compiten
+ * con la ventana, y de madrugada crecen (×1,05) porque SON la única luz de
+ * la sala. El eclipse lleva eso un paso más allá. Ese cambio de quién
+ * manda es, según el propio 22-luz-de-la-hora.js, «lo que vuelve
+ * envolvente la escena».
+ *
+ * Se comprueba arriba, junto al resto de la hora: «y los candelabros pasan
+ * a mandar». Lo que sí se conserva es que el eclipse no toque el LIENZO de
+ * las velas por su cuenta, que es otra cosa. */
+comprobar('el eclipse no dibuja en el lienzo de las velas',
+  !/lienzo-de-velas/.test(eclipseCodigo),
+  'la luz de las velas la maneja 19-velas.js; el eclipse solo mueve su fuerza');
 
 /* ⚡ ACTO V · EL NOMBRE SIMPLEMENTE ES. LA EXIGENCIA SE DIO VUELTA ENTERA.
  *   (2026-09-11)
@@ -1421,46 +1150,37 @@ comprobar('no queda rastro del flash',
   !/capaDestello/.test(eclipseCodigo) && !/desdeElAnillo/.test(eclipseCodigo),
   'era una cuarta capa mezclando a pantalla completa para 150 ms de uso');
 
-comprobar('pero el tercer contacto se sigue marcando, con la luz',
-  /t < SHOCK \+ 180 \? 0\.38 \+ tramo\(t, SHOCK, SHOCK \+ 180\) \* 0\.72/
-    .test(eclipseCodigo),
-  'sin nada en el segundo 44, la histeria arrancaría sin causa');
-
-/* Se EJECUTA la apertura del velo: lo que importa no es que exista la
-   línea, es que la luz de verdad se cierre antes y se abra después. */
+/* ⚡ EL TERCER CONTACTO, AHORA CONTADO CON LA CURVA DE LA LUZ
+ *   (2026-09-11)
+ *
+ * Acá se ejecutaba `aperturaDelVelo`, que encogía y abría el hueco del
+ * degradado del velo. Ese velo ya no existe.
+ *
+ * El acontecimiento no se pierde: la curva de `progresoDelEclipse` se
+ * sostiene en 1 durante los dos segundos de cripta y SUELTA en el tercer
+ * contacto. Eso es el mismo gesto, contado con la luz que de verdad hay en
+ * escena en vez de con la apertura de un rectángulo. */
 {
-  /* ⚠️ Anclado en `t < TOTALIDAD`, no solo en el nombre de la variable:
-     `aperturaDelVelo` aparece antes, en su declaración, y sin el ancla el
-     recorte se llevaba medio archivo por delante. */
-  const fuente = (eclipseCodigo.match(
-    /aperturaDelVelo =\s*\n\s*t < TOTALIDAD[\s\S]*?tramo\(t, SHOCK \+ 180, DURACION\) \* 0\.35;/) || [''])[0];
+  const cuerpo = (eclipse.match(/function progresoDelEclipse[\s\S]*?\n  \}/) || [''])[0];
+  const suave = (x) => { x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); };
+  const fn = new Function('PROFUNDA', 'MUERE_EN', 'SHOCK', 'SALE_DEL_TODO', 'suave',
+    cuerpo + '; return progresoDelEclipse;')(
+      curva.PROFUNDA, curva.MUERE_EN, curva.SHOCK, 58000, suave);
 
-  if (!fuente) {
-    comprobar('se puede ejecutar la apertura del velo', false, 'no se encontró');
-  } else {
-    const aperturaEn = (t) => new Function(
-      'tramo', 'PROFUNDA', 'TOTALIDAD', 'SHOCK', 'DURACION', 't',
-      'let aperturaDelVelo;' + fuente + '\nreturn aperturaDelVelo;'
-    )((tt, a, b) => { const x = Math.min(1, Math.max(0, (tt - a) / (b - a))); return x*x*(3-2*x); },
-      curva.PROFUNDA, curva.TOTALIDAD, curva.SHOCK, curva.D, t);
+  comprobar('la luz se cierra del todo antes del tercer contacto',
+    fn(curva.SHOCK - 10) === 1,
+    'en el borde de la cripta vale ' + fn(curva.SHOCK - 10).toFixed(3) +
+    ' — los dos segundos tienen que estar al máximo');
 
-    const antes   = aperturaEn(curva.SHOCK - 10);
-    const despues = aperturaEn(curva.SHOCK + 180);
+  comprobar('y suelta en el segundo 44',
+    fn(curva.SHOCK + 400) < 1,
+    'si no soltara ahí, la histeria arrancaría sin causa');
 
-    comprobar('la luz se cierra sobre el nombre antes del tercer contacto',
-      aperturaEn(30000) > aperturaEn(41000) && aperturaEn(41000) > antes,
-      'a los 30 s ' + aperturaEn(30000).toFixed(2) + ' · a los 41 s ' +
-      aperturaEn(41000).toFixed(2) + ' · justo antes ' + antes.toFixed(2));
-
-    comprobar('y se abre de golpe en el segundo 44',
-      despues > antes * 2.4,
-      'de ' + antes.toFixed(2) + ' a ' + despues.toFixed(2) + ' en 180 ms');
-
-    comprobar('y sigue abriéndose mientras vuelve la luz',
-      aperturaEn(56000) > despues,
-      'si se quedara quieta, el acto VIII no tendría luz que devolver');
-  }
+  comprobar('y sigue soltando mientras vuelve la luz',
+    fn(50000) > fn(55000) && fn(55000) > 0,
+    'a los 50 s ' + fn(50000).toFixed(2) + ' · a los 55 s ' + fn(55000).toFixed(2));
 }
+
 /* ACTO II y III · la planta entera, no solo la cabeza. */
 comprobar('las ramas también se retuercen',
   /function moverLasRamas/.test(eclipseCodigo) &&
@@ -2230,14 +1950,23 @@ comprobar('y el de la reliquia usa la misma trama',
   const reinicio = (eclipseCodigo.match(
     /function reiniciarElEstado[\s\S]*?\n  \}/) || [''])[0];
 
-  comprobar('el color del velo se reinicia entre corridas',
-    /mezclaDelVelo = 0;/.test(reinicio) &&
-    /ultimoEscalonDeMezcla = -1;/.test(reinicio),
-    'sin esto, la segunda corrida empieza con el borgoña de la primera');
+  /* ⚡ LA LUZ VUELVE AL RELOJ ENTRE CORRIDAS (2026-09-11)
+   *
+   * Antes se comprobaba que se reiniciaran las variables del velo. El velo
+   * ya no existe: lo que tiene que volver a su sitio es la LUZ. Sin esto,
+   * la segunda corrida del panel de ensayo partiría desde la hora del
+   * eclipse anterior en vez de desde la hora real, y en la página de
+   * verdad una excepción dejaría la invitación roja y oscura hasta que
+   * alguien recargara. */
+  comprobar('la luz vuelve al reloj entre corridas',
+    /devolverLaLuzDelEclipse\(\);/.test(reinicio),
+    'sin esto la corrida siguiente arranca desde la hora del eclipse');
 
-  comprobar('y la banda muerta del degradado también',
-    /ultimaAperturaPintada = -1;/.test(reinicio),
-    'si no, el primer cuadro de la corrida nueva no repinta nada');
+  comprobar('y también al terminar, pase lo que pase',
+    /devolverLaLuzDelEclipse\(\);/.test(
+      (eclipseCodigo.match(/function terminar[\s\S]*?\n  \}/) || [''])[0]) ||
+    (eclipseCodigo.match(/devolverLaLuzDelEclipse\(\);/g) || []).length >= 2,
+    'si muriera por una excepción, la página quedaría roja para siempre');
 
   /* ⚡ LA TRAMA DEL LIENZO TAMBIÉN SOBREVIVÍA (2026-09-11)
    *
@@ -2251,10 +1980,7 @@ comprobar('y el de la reliquia usa la misma trama',
     /medirElLienzo\(\);/.test(reinicio),
     'una corrida degradada envenenaba todas las siguientes del panel');
 
-  comprobar('y la apertura del velo también',
-    /aperturaDelVelo = 1;/.test(reinicio),
-    'empezar() pinta el velo antes del primer cuadro: sin esto nace con ' +
-    'la apertura final de la corrida anterior');
+
 }
 
 /* ⚡ Y NINGÚN ANCLAJE INTERMEDIO PUEDE LLEGAR AL 100 %
@@ -2718,47 +2444,24 @@ comprobar('y el ritmo vuelve a 1 pase lo que pase',
 
 console.log('\nQue el borgoña pervierta, y que deje ver\n');
 
-/* ⚡ LA COMPROBACIÓN QUE FALTÓ SIEMPRE (2026-09-11)
+/* ⚡ ACÁ VIVÍA EL PISO DE VISIBILIDAD DEL VELO (2026-09-11)
  *
- * Carlos pidió «un rojo ladrillo o sangre borgoña que lo pervierta todo,
- * pero que aún sea visible». Las dos mitades, y nunca hubo prueba de la
- * segunda.
+ * Medía cuántas unidades de rojo separaban a dos colores distintos de la
+ * escena DESPUÉS de componer la capa encima, para que el marco no se
+ * aplastara en una silueta sin interior. Cazó bugs reales y era la
+ * herramienta correcta para un velo.
  *
- * Con alfa casi opaco TODO converge al mismo valor y la escena se vuelve
- * una silueta sin interior. Medido sobre el último tramo anterior
- * —24,8,12 a alfa 0,922— una rosa del marco quedaba en rgb(32,9,15) y el
- * fondo de al lado en rgb(24,9,13): LOS SEPARABAN 8. Eso es «pervertir» a
- * costa de «visible».
+ * El velo ya no existe. Lo que hace la oscuridad ahora son las dos
+ * perillas que RESTAN luminancia (`oscurecidoFijo` y
+ * `profundidadDeSombra`), y ésas no aplastan el detalle como lo hacía un
+ * color opaco encima: oscurecen la escena entera manteniendo sus
+ * relaciones, que es precisamente por qué el sistema de luz está hecho
+ * así y por qué la noche cerrada se ve bien.
  *
- * Esta comprobación mide lo que separa a dos colores DISTINTOS de la
- * escena después del velo. Si alguna ronda vuelve a subir el alfa para
- * «oscurecer más», muerde. */
+ * Lo que sostiene la garantía ahora está en la sección de la hora: que el
+ * rojo tenga R al doble de G —rojo y no marrón— y que la sala sea oscura
+ * pero no negra. */
 {
-  const ROSA  = [126, 27, 44];   // una rosa del marco
-  const FONDO = [ 30, 24, 28];   // el granate oscuro de al lado
-
-  /* ⚠️ SE MIDE A DOS RADIOS, Y ESO NO ES REDUNDANTE. Antes solo se miraba
-     el 70 %, y por ahí se colaba apagar las ESQUINAS a negro: a ese radio
-     la interpolación todavía está dominada por el tramo de adentro. Las
-     esquinas son donde vive el marco en una pantalla ancha. */
-  let peor = 999, cuando = 0, donde = 0;
-  for (const radio of ['arriba', 'abajo']) {
-    for (let t = 0; t <= curva.D; t += 250) {
-      const a = comoSeVeEn(t, ROSA, radio);
-      const b = comoSeVeEn(t, FONDO, radio);
-      const separa = Math.abs(a[0] - b[0]);
-      if (separa < peor) { peor = separa; cuando = t; donde = radio; }
-    }
-  }
-
-  comprobar('la escena nunca se aplasta en una silueta plana',
-    peor >= 18,
-    'lo peor fue ' + peor.toFixed(1) + ' unidades de rojo en el segundo ' +
-    (cuando / 1000) + ', en la zona de ' + donde + ' — con 8 el marco ' +
-    'deja de tener interior');
-
-  /* Y del otro lado: que en la cripta el borgoña DOMINE de verdad. */
-  const enLaCripta = comoSeVeEn(43000, ROSA, 'abajo');
   /* ⚡ SORDA HASTA ACÁ. Se podía correr MUERE_EN a donde fuera y ninguna
      comprobación se enteraba, aunque el documento base lo pida con todas
      las letras: «El rojo sangre seca está en su punto más intenso
@@ -2788,10 +2491,9 @@ console.log('\nQue el borgoña pervierta, y que deje ver\n');
       'número, o las dos vuelven a separarse sin que nadie lo note');
   }
 
-  comprobar('y en la cripta el borgoña domina el tono',
-    enLaCripta[0] >= enLaCripta[1] * 3,
-    'rgb(' + enLaCripta.map(v => Math.round(v)).join(',') + ') — razón R/G ' +
-    (enLaCripta[0] / enLaCripta[1]).toFixed(2) + ', hace falta 3');
+  /* ⚠️ EL DOMINIO DEL ROJO SE COMPRUEBA EN LA HORA, no componiendo una
+     capa: la sala del eclipse tiene que tener R al doble de G. Está en la
+     sección de la hora, junto a los haces. */
 }
 
 /* ⚠️ ACÁ VIVÍAN LAS COMPROBACIONES DE LA SOMBRA QUE VIAJABA.
