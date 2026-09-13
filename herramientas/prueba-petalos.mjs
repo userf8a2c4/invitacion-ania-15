@@ -196,26 +196,62 @@ comprobar('ya no se apaga por índice sobre el array plano',
        cuesta pintar un pétalo es su superficie: el lado al cuadrado. */
     const LADO = { fondo: (18 + 35) / 2, medio: (30 + 54) / 2, frente: (48 + 84) / 2 };
 
-    const repartir = (reparto, calidad) => {
+    /* ⚠️ LA RESERVA ENTRA EN EL BANCO DE PRUEBAS, Y ES A PROPÓSITO. Todas
+       las comprobaciones de presupuesto de más abajo corren AHORA con la
+       reserva presente. Si la reserva se colara en `todoElArea` —que es
+       relativo—, el techo crecería con ella y quedarían activos más
+       pétalos que antes en todos los niveles: los números medidos de
+       AREA_DE_ANTES se pondrían en rojo solos. */
+    const RESERVA_RELATIVA =
+      Number((fisica.match(/const RESERVA_RELATIVA = ([\d.]+);/) || [])[1]);
+
+    /* Una sola llamada a la función real, sobre un array que ya existe.
+       Hace falta para poder ajustar DOS veces los mismos pétalos y ver qué
+       cambió entre una y otra. */
+    const correrAjuste = (petalos, calidad, pedido) => {
+      new Function('petalos', 'calidad', 'window', 'numeroAlAzar',
+                   'anchoDePantalla', 'RESERVA_RELATIVA',
+        fuente + '\najustarCantidadDePetalos(calidad);'
+      )(petalos, calidad, { IntensidadDeLaLluvia: pedido },
+        (a, b) => (a + b) / 2, 2560, RESERVA_RELATIVA);
+    };
+
+    const repartir = (reparto, calidad, pedido = 1, conReserva = true) => {
       const petalos = [];
+      const nacer = (plano, deReserva) => ({
+        plano, deReserva,
+        activo: !deReserva,
+        elemento: null,
+        'tamaño': LADO[plano],
+        /* `entrarPorArriba` los necesita: un pétalo que se enciende entra
+           cayendo, y para eso lee la velocidad de caída de su plano. */
+        rasgos: { caida: [14, 30] },
+        x: 0, y: 500, velocidadX: 0, velocidadY: 0, velocidadAngular: 0,
+      });
+
       for (const plano of Object.keys(reparto)) {
-        for (let i = 0; i < reparto[plano]; i++) {
-          petalos.push({ plano, activo: true, elemento: null, 'tamaño': LADO[plano] });
-        }
+        for (let i = 0; i < reparto[plano]; i++) petalos.push(nacer(plano, false));
+        if (!conReserva) continue;
+        const deReserva = Math.ceil(reparto[plano] * RESERVA_RELATIVA);
+        for (let i = 0; i < deReserva; i++) petalos.push(nacer(plano, true));
       }
 
-      new Function('petalos', 'calidad',
-        fuente + '\najustarCantidadDePetalos(calidad);'
-      )(petalos, calidad);
+      correrAjuste(petalos, calidad, pedido);
 
       const vivos = {};
       let area = 0;
+      let areaBase = 0;
       for (const p of petalos) {
+        if (!p.deReserva) areaBase += p['tamaño'] * p['tamaño'];
         if (!p.activo) continue;
         vivos[p.plano] = (vivos[p.plano] || 0) + 1;
         area += p['tamaño'] * p['tamaño'];
       }
       vivos.__area = area;
+      /* El techo de la tabla se declara como fracción del pool BASE, así
+         que para comprobarlo hay que tener el pool base a mano. */
+      vivos.__areaBase = areaBase;
+      vivos.__petalos = petalos;
       return vivos;
     };
 
@@ -293,6 +329,137 @@ comprobar('ya no se apaga por índice sobre el array plano',
       proporcional,
       'fondo ' + enBaja.fondo + ' · medio ' + enBaja.medio +
       ' · frente ' + enBaja.frente);
+
+
+    /* ─── LA LLUVIA QUE ARRECIA ───────────────────────────────────────
+     *
+     * Carlos: «que tal si empezamos un poquito antes aumentando la
+     * cantidad de pétalos que caen? unos 15 segundos antes del eclipse?».
+     *
+     * La reserva son pétalos que ya existen y duermen desde que carga la
+     * página. Lo que se comprueba acá es lo único que puede salir mal de
+     * verdad: que estando ahí, en reposo NO cambien nada.
+     * ------------------------------------------------------------- */
+    console.log('\nLa lluvia que arrecia\n');
+
+    comprobar('hay una reserva declarada, y es una fracción',
+      RESERVA_RELATIVA > 0 && RESERVA_RELATIVA < 2,
+      'sin reserva, en calidad alta no hay ni un pétalo dormido que ' +
+      'despertar: están todos activos');
+
+    /* ⛔ LA COMPROBACIÓN QUE IMPORTA. Si la reserva entrara en el
+       presupuesto, esto se pone en rojo en los tres niveles a la vez. */
+    for (const [calidad, comoSeLlama] of [[0, 'alta'], [1, 'media'], [2, 'baja']]) {
+      const sin = repartir(GRANDE, calidad, 1, false);
+      const con = repartir(GRANDE, calidad, 1, true);
+      comprobar('en reposo, la reserva no mueve calidad ' + comoSeLlama,
+        total(sin) === total(con) &&
+        ['fondo', 'medio', 'frente'].every((x) => (sin[x] || 0) === (con[x] || 0)),
+        'sin reserva ' + total(sin) + ' pétalos, con reserva ' + total(con) +
+        ' — la reserva NO entra en el presupuesto, que es relativo');
+    }
+
+    comprobar('y ningún pétalo de la reserva despierta solo',
+      repartir(GRANDE, 0, 1, true).__petalos
+        .filter((x) => x.deReserva && x.activo).length === 0,
+      'en calidad alta el presupuesto es 1: si la reserva contara, se ' +
+      'encenderían todos desde el arranque');
+
+    /* Y que cuando se pide, sirva de algo. */
+    for (const [calidad, comoSeLlama] of [[0, 'alta'], [1, 'media'], [2, 'baja']]) {
+      const reposo = repartir(GRANDE, calidad, 1);
+      const lluvia = repartir(GRANDE, calidad, 2);
+      comprobar('pidiendo lluvia, calidad ' + comoSeLlama + ' suma pétalos',
+        total(lluvia) > total(reposo),
+        'de ' + total(reposo) + ' a ' + total(lluvia));
+    }
+
+    /* ⚠️ EL FRENO VIVE EN EL QUE PINTA, NO EN EL QUE PIDE. Quien pide la
+       lluvia no conoce el coste de un pétalo; este archivo sí. La regla
+       que ordena la tabla de techos: en su PICO, un equipo lento sigue
+       pagando menos que uno medio en REPOSO. */
+    {
+      const picoBaja   = repartir(GRANDE, 2, 99).__area;
+      const picoMedia  = repartir(GRANDE, 1, 99).__area;
+      const reposoMedia = repartir(GRANDE, 1, 1).__area;
+      const reposoAlta  = repartir(GRANDE, 0, 1).__area;
+
+      comprobar('en su pico, calidad baja paga menos que media en reposo',
+        picoBaja < reposoMedia,
+        Math.round(picoBaja) + ' px² contra ' + Math.round(reposoMedia));
+
+      comprobar('y media en su pico, menos que alta en reposo',
+        picoMedia < reposoAlta,
+        Math.round(picoMedia) + ' px² contra ' + Math.round(reposoAlta));
+
+      /* ⛔ ESTA ASERCIÓN ESTABA ROTA, Y LA MORDIDA LO DIJO (2026-09-13)
+       *
+       * Decía `repartir(GRANDE, 2, 1e6).__area <= picoBaja`, con
+       * `picoBaja` medido a pedido 99. Los dos lados son pedidos enormes,
+       * o sea que los dos topan en el mismo lugar Y LOS DOS SE MUEVEN
+       * JUNTOS: quitando el techo del código, ambos crecían igual y la
+       * comprobación seguía en verde. Comparaba una cosa consigo misma.
+       *
+       * Lo que la ata a algo es la TABLA declarada en el código, leída del
+       * archivo. Si alguien quita el `Math.min`, el área se va al
+       * `presupuesto * pedido` sin freno y esto se pone rojo. */
+      const TECHO_DECLARADO = new Function('return ' + (fisica.match(
+        /const TECHO_DE_AREA_CON_LLUVIA_POR_CALIDAD = (\{[^}]*\});/) || [])[1])();
+
+      for (const [calidad, comoSeLlama] of [[0, 'alta'], [1, 'media'], [2, 'baja']]) {
+        const pedido = repartir(GRANDE, calidad, 1e6);
+        const limite = pedido.__areaBase * TECHO_DECLARADO[calidad];
+        comprobar('un pedido absurdo no pasa el techo de calidad ' + comoSeLlama,
+          pedido.__area <= limite * 1.001,
+          Math.round(pedido.__area) + ' px² contra un techo de ' +
+          Math.round(limite) + ' (' + TECHO_DECLARADO[calidad] +
+          ' del pool base) — el pedido se acota contra la tabla, no se le ' +
+          'cree el número');
+      }
+    }
+
+    /* ⛔ «APARECEN PÉTALOS DE LA NADA», OTRA VEZ.
+     *
+     * Un pétalo dormido quedó donde estaba cuando se apagó, y el bucle no
+     * lo movió mientras dormía: encenderlo sin más lo hace materializarse
+     * a mitad de pantalla.
+     *
+     * ⚠️ LA PRIMERA VERSIÓN DE ESTO NO COMPROBABA NADA, Y LA MORDIDA LO
+     * DIJO. Miraba `deReserva && y >= 0` sobre UNA sola llamada en calidad
+     * baja — donde la lluvia ni siquiera llega a tocar la reserva, porque
+     * todavía sobran pétalos base apagados que despertar. O sea que
+     * contaba cero pasara lo que pasara: apagando `entrarPorArriba` del
+     * código, seguía en verde.
+     *
+     * Lo que hace falta son DOS llamadas sobre EL MISMO array —una en
+     * reposo y otra lloviendo—, mirar quién se encendió entre medio, y
+     * exigirlo de TODOS los que se encendieron, sean de la reserva o de la
+     * base. Y en calidad alta, que es donde la reserva sí entra. */
+    for (const [calidad, comoSeLlama] of [[0, 'alta'], [2, 'baja']]) {
+      const enReposo = repartir(GRANDE, calidad, 1);
+      const todos = enReposo.__petalos;
+
+      /* Todos a mitad de pantalla, incluidos los que duermen: si alguno se
+         enciende sin entrar cayendo, se lo va a ver acá. */
+      const dormian = new Set();
+      for (const x of todos) {
+        x.y = 500;
+        if (!x.activo) dormian.add(x);
+      }
+
+      correrAjuste(todos, calidad, 2);
+
+      const despertaron = todos.filter((x) => x.activo && dormian.has(x));
+      const aparecidos = despertaron.filter((x) => x.y >= 0);
+
+      comprobar('en calidad ' + comoSeLlama +
+                ', los que despiertan entran cayendo',
+        despertaron.length > 0 && aparecidos.length === 0,
+        despertaron.length === 0
+          ? 'no despertó ninguno: la comprobación no estaría comprobando nada'
+          : aparecidos.length + ' de ' + despertaron.length +
+            ' se encendieron dentro de la pantalla en vez de arriba del borde');
+    }
   }
 }
 

@@ -3316,6 +3316,94 @@ for (const [archivo, cual] of [['24-lienzo-de-petalos.js', 'plano.lienzo'],
     'si alguno lo pierde, hereda el mismo bug');
 }
 
+/* ─── EL PRELUDIO · LA LLUVIA ARRECIA ANTES ────────────────────────
+ *
+ * Carlos: «que tal si empezamos un poquito antes aumentando la cantidad
+ * de pétalos que caen? unos 15 segundos antes del eclipse?», y después
+ * «para que no se sientan amontonadas, quizás unos 15-20 segundos antes».
+ *
+ * Lo que se comprueba acá es la parte que vive en el eclipse y en el
+ * vigía. Que la lluvia REPARTA bien los pétalos —y que la reserva no
+ * mueva nada en reposo— lo comprueba prueba-petalos.mjs, ejecutando la
+ * función de verdad.
+ * ---------------------------------------------------------------- */
+
+console.log('\nEl preludio\n');
+
+const PRELUDIO = Number((eclipse.match(
+  /var DURA_EL_PRELUDIO = (\d+);/) || [])[1]);
+
+comprobar('el preludio dura entre 15 y 20 segundos',
+  PRELUDIO >= 15000 && PRELUDIO <= 20000,
+  'Carlos pidió «15-20 segundos antes»; está en ' + PRELUDIO + ' ms');
+
+comprobar('la bandera es genérica y no nombra al eclipse',
+  /window\.IntensidadDeLaLluvia = cuanta;/.test(eclipseCodigo),
+  'mismo criterio que PausaDeEscena: la bandera dice «llové más fuerte», ' +
+  'no «hay un eclipse». Ver la sección 16b');
+
+comprobar('y 06 la lee, defensivo, sin creerle el número',
+  /window\.IntensidadDeLaLluvia/.test(sinComentarios(
+    leer('codigo', '06-petalos-con-fisica.js'))),
+  'si el que pinta no la lee, el que pide habla solo');
+
+comprobar('el freno vive en el que pinta, no en el que pide',
+  /TECHO_DE_AREA_CON_LLUVIA_POR_CALIDAD/.test(sinComentarios(
+    leer('codigo', '06-petalos-con-fisica.js'))) &&
+  !/TECHO_DE_AREA_CON_LLUVIA/.test(eclipseCodigo),
+  'el eclipse no sabe lo que cuesta un pétalo en el equipo que lo está ' +
+  'mirando; 06 sí. Si el tope estuviera acá, sería el mismo para todos');
+
+comprobar('la subida arranca en la puerta, antes de empezar()',
+  /arrancarElPreludio\(faltan\);/.test(eclipseCodigo),
+  'es lo único de la secuencia que ocurre antes del minuto');
+
+comprobar('y entra a mitad de la subida si llega tarde',
+  /var recorrido = Math\.min\(DURA_EL_PRELUDIO, cuantoFalta\);/
+    .test(eclipseCodigo) &&
+  /Date\.now\(\) - \(DURA_EL_PRELUDIO - recorrido\)/.test(eclipseCodigo),
+  'quien abre la página a ocho segundos del minuto tiene que ver la ' +
+  'lluvia que corresponde a ese momento, no arrancarla de cero');
+
+/* ⚠️ ESTO ES LO QUE IMPIDE QUE LA LLUVIA CUESTE DURANTE EL RITUAL. Apenas
+   empieza, los lienzos de la invitación se funden a cero y esos pétalos
+   dejan de VERSE — pero seguirían costando física en los sesenta segundos
+   más caros de la visita. */
+comprobar('la lluvia se suelta en cuanto termina el fundido',
+  /setTimeout\(function \(\) \{ pedirLluvia\(1\); \}, DURA_EL_FUNDIDO\);/
+    .test(eclipseCodigo),
+  'sin esto son pétalos invisibles calculando física durante el minuto');
+
+comprobar('y vuelve a lo de siempre pase lo que pase',
+  /function terminar\(completo\) \{[\s\S]{0,400}?pedirLluvia\(1\);/
+    .test(eclipseCodigo),
+  'mismo criterio que devolverLaLuzDelEclipse(): si el ritual muriera por ' +
+  'una excepción, la invitación quedaría lloviendo al doble para siempre');
+
+comprobar('el temporizador del preludio se puede cortar',
+  /function soltarLaLluvia\(\) \{[\s\S]{0,200}?clearInterval\(relojDeLaLluvia\)/
+    .test(eclipseCodigo),
+  'un setInterval que nadie corta sobrevive al ritual');
+
+/* ⛔ LA COMPROBACIÓN QUE CRUZA LOS DOS ARCHIVOS. El preludio no puede
+   empezar antes de que el archivo esté cargado y la rosa rasterizada. Si
+   alguien devuelve AVISO a 10 s «para que pese menos», el preludio se
+   queda con diez segundos y nadie se entera hasta el día siguiente. */
+{
+  const AVISO = Number((vigia.match(/var AVISO\s*=\s*(\d+);/) || [])[1]);
+
+  comprobar('el vigía pide el archivo con tiempo para el preludio',
+    AVISO >= PRELUDIO + 3000,
+    'AVISO está en ' + AVISO + ' ms y el preludio dura ' + PRELUDIO +
+    ': hace falta margen para bajar el archivo Y rasterizar la rosa antes ' +
+    'de que la subida tenga que empezar');
+
+  comprobar('y aun así sigue sin costar nada las otras 23:59',
+    AVISO < 60000,
+    'pedirlo con minutos de anticipación lo volvería parte de la carga de ' +
+    'la invitación, que es justo lo que el vigía existe para evitar');
+}
+
 console.log('');
 if (fallos) {
   console.log('✗ ' + fallos + ' comprobación(es) fallaron.\n');

@@ -2495,10 +2495,10 @@
      que pesa un 80% menos. Acá abajo se pide la copia liviana; el
      original comentado sigue intacto en codigo/, es el que se edita.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/produccion/01-configuracion.js?v=307"></script>
-<script defer src="codigo/produccion/02-utilidades.js?v=307"></script>
-<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=307"></script>
-<script defer src="codigo/produccion/04-invitado-personalizado.js?v=307"></script>
+<script defer src="codigo/produccion/01-configuracion.js?v=308"></script>
+<script defer src="codigo/produccion/02-utilidades.js?v=308"></script>
+<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=308"></script>
+<script defer src="codigo/produccion/04-invitado-personalizado.js?v=308"></script>
 
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda) — es MARCADO, no script.
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
@@ -2556,7 +2556,7 @@
      para EXISTIR, solo para reaccionar al clic — y ese clic no puede
      llegar antes de que la lista termine de bajar el archivo 20. -->
 <script type="application/json" id="scripts-de-la-escena">
-["codigo/produccion/10-reproductor-de-musica.js?v=307", "codigo/produccion/05-cursor-personalizado.js?v=307", "codigo/produccion/24-lienzo-de-petalos.js?v=307", "codigo/produccion/06-petalos-con-fisica.js?v=307", "codigo/produccion/07-marco-y-enredaderas.js?v=307", "codigo/produccion/08-efectos-de-scroll.js?v=307", "codigo/produccion/09-cuenta-regresiva.js?v=307", "codigo/produccion/11-formulario-confirmacion.js?v=307", "codigo/produccion/12-pase-de-acceso.js?v=307", "codigo/produccion/13-agregar-al-calendario.js?v=307", "codigo/produccion/23-lienzo-de-luz.js?v=307", "codigo/produccion/27-fauna-nocturna.js?v=307", "codigo/produccion/14-haces-de-luz.js?v=307", "codigo/produccion/15-registro-de-confirmaciones.js?v=307", "codigo/produccion/16-volver-arriba.js?v=307", "codigo/produccion/17-joyas-colgantes.js?v=307", "codigo/produccion/18-motas-de-polvo.js?v=307", "codigo/produccion/19-velas.js?v=307", "codigo/produccion/20-boton-de-animaciones.js?v=307", "codigo/produccion/21-monitor-de-rendimiento.js?v=307", "codigo/produccion/22-luz-de-la-hora.js?v=307", "codigo/produccion/25-preguntas-frecuentes.js?v=307", "codigo/produccion/26-mapa-a-pedido.js?v=307"]
+["codigo/produccion/10-reproductor-de-musica.js?v=308", "codigo/produccion/05-cursor-personalizado.js?v=308", "codigo/produccion/24-lienzo-de-petalos.js?v=308", "codigo/produccion/06-petalos-con-fisica.js?v=308", "codigo/produccion/07-marco-y-enredaderas.js?v=308", "codigo/produccion/08-efectos-de-scroll.js?v=308", "codigo/produccion/09-cuenta-regresiva.js?v=308", "codigo/produccion/11-formulario-confirmacion.js?v=308", "codigo/produccion/12-pase-de-acceso.js?v=308", "codigo/produccion/13-agregar-al-calendario.js?v=308", "codigo/produccion/23-lienzo-de-luz.js?v=308", "codigo/produccion/27-fauna-nocturna.js?v=308", "codigo/produccion/14-haces-de-luz.js?v=308", "codigo/produccion/15-registro-de-confirmaciones.js?v=308", "codigo/produccion/16-volver-arriba.js?v=308", "codigo/produccion/17-joyas-colgantes.js?v=308", "codigo/produccion/18-motas-de-polvo.js?v=308", "codigo/produccion/19-velas.js?v=308", "codigo/produccion/20-boton-de-animaciones.js?v=308", "codigo/produccion/21-monitor-de-rendimiento.js?v=308", "codigo/produccion/22-luz-de-la-hora.js?v=308", "codigo/produccion/25-preguntas-frecuentes.js?v=308", "codigo/produccion/26-mapa-a-pedido.js?v=308"]
 </script>
 
 <!-- ══════════════════════════════════════════════════════════════════
@@ -2575,7 +2575,7 @@
 
      Por eso acá no hay nada del eclipse: solo una resta y un
      setTimeout. El archivo pesado (28-eclipse.js) NO está en la lista de
-     la escena de arriba y NO se pide hasta diez segundos antes. Quien no
+     la escena de arriba y NO se pide hasta veinticinco segundos antes. Quien no
      esté en la página en ese momento no lo baja, no lo parsea y no lo
      ejecuta — para él, el eclipse no existe.
 
@@ -2587,8 +2587,22 @@
   (function vigiaDelEclipse() {
     var HORA_UTC = 12, MINUTO_UTC = 30;   // 06:30 en Toluca
     var DURA     = 60000;
-    var AVISO    = 10000;                 // cuánto antes se pide el archivo
-    var ARCHIVO  = 'codigo/produccion/28-eclipse.js?v=307';
+    /* ⚡ VEINTICINCO SEGUNDOS, NO DIEZ (2026-09-13)
+
+       El ritual ya no empieza en el minuto exacto: veinte segundos antes
+       la lluvia de pétalos empieza a espesar (el preludio, sección 16b de
+       28-eclipse.js). Para eso el archivo tiene que estar cargado Y la
+       rosa rasterizada ANTES de esos veinte segundos, así que se pide a
+       los veinticinco: veinte de preludio y cinco de margen.
+
+       Si aun así llegara tarde, el preludio entra a mitad de la subida en
+       vez de arrancarla de cero —no hay un caso en que se vea el salto—.
+
+       Lo que NO cambia es la regla: quien no esté en la página en ese
+       momento sigue sin bajarlo, sin parsearlo y sin ejecutarlo. Son los
+       mismos bytes, quince segundos antes, y solo para quien ya está. */
+    var AVISO    = 25000;                 // cuánto antes se pide el archivo
+    var ARCHIVO  = 'codigo/produccion/28-eclipse.js?v=308';
 
     /** Milisegundos hasta el próximo arranque. Negativo = ya empezó. */
     function faltaPara() {
@@ -2665,7 +2679,7 @@
         pedirElArchivo(0);
 
         var panel = document.createElement('script');
-        panel.src = 'codigo/produccion/29-ensayo-del-eclipse.js?v=307';
+        panel.src = 'codigo/produccion/29-ensayo-del-eclipse.js?v=308';
         panel.async = true;
         document.body.appendChild(panel);
         return;

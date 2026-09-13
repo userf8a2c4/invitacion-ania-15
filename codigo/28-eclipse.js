@@ -4835,6 +4835,106 @@
    *   vez de seguir corriendo. Ver la nota junto a `enPausa`.
    * @returns {void}
    */
+  /* ─── 16b. EL PRELUDIO · QUE LLUEVA MÁS FUERTE ─────────────────────
+
+     Carlos: «que tal si empezamos un poquito antes aumentando la cantidad
+     de pétalos que caen? unos 15 segundos antes del eclipse?», y después
+     «para que no se sientan amontonadas, quizás unos 15-20 segundos
+     antes».
+
+     QUÉ HACE
+     Durante los veinte segundos previos al minuto, le pide a la
+     invitación que llueva cada vez más fuerte. No se crea ningún pétalo:
+     06-petalos-con-fisica.js tiene una reserva que duerme desde que carga
+     la página, y esto la va despertando de a uno. Entran cayendo desde
+     arriba del borde, escalonados, así que a los ojos la lluvia se va
+     espesando sola — nunca aparece un bloque de pétalos de golpe.
+
+     ⚡ Y ADEMÁS ES MÁS HALO. `sembrarLosPetalos()` hereda EXACTAMENTE los
+     pétalos que la invitación tiene vivos en el instante de arrancar, y
+     no inventa ninguno (ver la sección 4). O sea que espesar la lluvia
+     antes no es solo atmósfera: es la única manera que tiene el ritual de
+     empezar con más pétalos sin volver a fabricarlos de la nada. Medido
+     sobre el reparto de escritorio, en calidad baja el eclipse pasa de
+     heredar 10 a heredar 18.
+
+     ⚠️ LA BANDERA ES GENÉRICA Y NO NOMBRA AL ECLIPSE. `IntensidadDeLaLluvia`
+     dice «llové más fuerte», no «hay un eclipse», igual que `PausaDeEscena`
+     dice «quedáte quieto». El módulo de pétalos no sabe por qué llueve, y
+     tampoco decide cuánto: acota el pedido contra lo que su equipo
+     aguanta (TECHO_DE_AREA_CON_LLUVIA_POR_CALIDAD, en 06). Acá se pide;
+     allá se frena.
+
+     ⚠️ Y SE SUELTA AL ARRANCAR. Apenas empieza el ritual, los lienzos de
+     la invitación se funden a cero (apagarLosPetalosDeSiempre) y esos
+     pétalos dejan de verse — pero seguirían costando física. Se devuelve
+     la lluvia a 1 en cuanto termina el fundido: el eclipse ya heredó lo
+     que necesitaba y lo que queda debajo es trabajo invisible en los
+     sesenta segundos más caros de la visita.
+     ------------------------------------------------------------------ */
+
+  /** Cuánto dura la subida, en milisegundos. */
+  var DURA_EL_PRELUDIO = 20000;
+
+  /** Cuánto se pide en el pico. Lo acota el que pinta, no el que pide. */
+  var LLUVIA_EN_EL_PRELUDIO = 2;
+
+  /** Cada cuánto se mueve la perilla. No hace falta precisión de cuadro:
+      cuatro veces por segundo sobran para veinte segundos de subida, y un
+      requestAnimationFrame corriendo veinte segundos antes del ritual
+      sería un callback compitiendo por el hilo sin ganar nada. */
+  var PULSO_DEL_PRELUDIO = 250;
+
+  var relojDeLaLluvia = 0;
+
+  /**
+   * Deja el pedido de lluvia en un valor. Defensivo a propósito.
+   *
+   * @param {number} cuanta - 1 es lo de siempre.
+   * @returns {void}
+   */
+  function pedirLluvia(cuanta) {
+    try { window.IntensidadDeLaLluvia = cuanta; } catch (error) { /* nada */ }
+  }
+
+  /** Corta la subida si estuviera en curso. @returns {void} */
+  function soltarLaLluvia() {
+    if (relojDeLaLluvia) { clearInterval(relojDeLaLluvia); relojDeLaLluvia = 0; }
+  }
+
+  /**
+   * Empieza a espesar la lluvia hacia el minuto.
+   *
+   * Si falta menos que el preludio entero —alguien que abre la página a
+   * los ocho segundos de que empiece— se entra a mitad de la subida en
+   * vez de arrancarla de cero: la lluvia queda donde corresponde para el
+   * momento en que está, no donde habría estado si hubiera llegado antes.
+   *
+   * @param {number} cuantoFalta - Milisegundos hasta el arranque.
+   * @returns {void}
+   */
+  function arrancarElPreludio(cuantoFalta) {
+    soltarLaLluvia();
+    if (!(cuantoFalta > 0)) { pedirLluvia(LLUVIA_EN_EL_PRELUDIO); return; }
+
+    var recorrido = Math.min(DURA_EL_PRELUDIO, cuantoFalta);
+    var empieza = Date.now() - (DURA_EL_PRELUDIO - recorrido);
+
+    relojDeLaLluvia = setInterval(function () {
+      var viaje = (Date.now() - empieza) / DURA_EL_PRELUDIO;
+      if (viaje >= 1) {
+        pedirLluvia(LLUVIA_EN_EL_PRELUDIO);
+        soltarLaLluvia();
+        return;
+      }
+      /* Lineal, y es a propósito: lo que se busca es que espese PAREJO,
+         sin un momento en que se note que algo cambió. Con una curva, la
+         mitad del crecimiento cae en los últimos segundos y vuelve justo
+         al defecto que esto vino a evitar. */
+      pedirLluvia(1 + (LLUVIA_EN_EL_PRELUDIO - 1) * limitar(viaje, 0, 1));
+    }, PULSO_DEL_PRELUDIO);
+  }
+
   function empezar(desfase, congelado) {
     if (vivo) return;
     vivo = true;
@@ -4863,6 +4963,13 @@
        y el marco puede no existir todavía. Ver la sección 8. */
     tomarLasFloresReales();
     apagarLosPetalosDeSiempre();
+
+    /* Ya se heredó lo que había que heredar (sembrarLosPetalos, arriba) y
+       los lienzos de la invitación se están yendo a cero. En cuanto
+       terminen de irse, la lluvia extra deja de costar física para nadie.
+       Ver la sección 16b. */
+    soltarLaLluvia();
+    setTimeout(function () { pedirLluvia(1); }, DURA_EL_FUNDIDO);
     engancharElSonido();
 
     /* ⚡ EN EL CELULAR, EL LIENZO SE BORRABA SOLO A MITAD DEL RITUAL
@@ -4972,6 +5079,13 @@
     vivo = false;
     if (pedidoDeCuadro) cancelAnimationFrame(pedidoDeCuadro);
 
+    /* ⚠️ LA LLUVIA VUELVE A LO DE SIEMPRE, PASE LO QUE PASE. Mismo criterio
+       que devolverLaLuzDelEclipse(): si el ritual muriera por una excepción
+       con el preludio a mitad de camino, la invitación quedaría lloviendo
+       al doble para siempre. */
+    soltarLaLluvia();
+    pedirLluvia(1);
+
     /* El seguro de esta corrida ya no tiene a quién cuidar. Si se dejara
        andando, cortaría la corrida SIGUIENTE del panel de ensayo. */
     if (relojDeSeguridad) { clearTimeout(relojDeSeguridad); relojDeSeguridad = 0; }
@@ -5029,6 +5143,10 @@
 
   rasterizarLaRosa(function () {
     if (soloEnsayo) return;
+    /* La lluvia empieza a espesar ANTES que cualquier otra cosa del
+       ritual: es lo único de esta secuencia que ocurre antes del minuto.
+       Ver la sección 16b. */
+    arrancarElPreludio(faltan);
     if (faltan > 0) setTimeout(function () { empezar(0); }, faltan);
     else            empezar(-faltan);      // ya había empezado: se entra en curso
   });
@@ -5164,6 +5282,20 @@
          se muevan y no se entiende nada. El panel lo muestra para que un
          cero se vea en vez de tener que deducirlo. */
       cuantasFlores: function () { return floresReales.length; },
+
+      /**
+       * El preludio, para poder verlo sin esperar a las 6:30.
+       *
+       * @param {number} [cuantoFalta] - Milisegundos hasta el arranque.
+       *        Sin argumento, el preludio entero.
+       * @returns {number} Cuántos milisegundos va a durar la subida.
+       */
+      preludio: function (cuantoFalta) {
+        var falta = typeof cuantoFalta === 'number' ? cuantoFalta
+                                                    : DURA_EL_PRELUDIO;
+        arrancarElPreludio(falta);
+        return Math.min(DURA_EL_PRELUDIO, falta);
+      },
 
       /**
        * El recuento de la escena, para mirarlo en vez de deducirlo.
