@@ -420,6 +420,257 @@ comprobar('y arranca desde la luz que de verdad había',
   /horaDeAntes = luz\.momentoDeAhora\(\);/.test(eclipseCodigo),
   'si partiera de un valor inventado, el primer cuadro sería un salto');
 
+/* ⚡ Y EL BORDE SE HUNDE DETRÁS DEL MARCO (2026-09-12)
+ *
+ * Carlos: «que cerca de los bordes (detrás) de los marcos la sombra sea
+ * mucho más oscura, cercano a negra».
+ *
+ * ⚠️ ESTO SE HIZO DOS VECES, Y LA PRIMERA HABÍA QUE TIRARLA. Era una
+ * `box-shadow: inset` animada sobre #marco-victoriano. Se veía bien y
+ * costaba +133 ms POR ESCRITURA, medido en el navegador contra un control
+ * de 66,7 ms; la variante con degradados de fondo sobre el mismo elemento,
+ * +183 ms. Las dos obligan a repintar un elemento del tamaño del documento
+ * y con hijos caros, cuarenta veces en el minuto.
+ *
+ * Lo que quedó no repinta nada: una capa que YA existía —la del velo
+ * viejo, que estaba vacía— lleva el degradado estático y lo único que se
+ * mueve es su opacidad. Medido: 0 ms.
+ *
+ * Estas comprobaciones existen para que nadie «mejore» esto volviendo a
+ * la primera forma. */
+{
+  const marcoCss = leer('estilos', '02-marco-victoriano.css');
+  const luzCodigo = leer('codigo', '22-luz-de-la-hora.js');
+
+  comprobar('el eclipse hunde el borde casi a negro',
+    HORA_ECLIPSE.sombraDelBorde >= 0.85,
+    'vale ' + HORA_ECLIPSE.sombraDelBorde + ' — Carlos pidió «cercano a negra»');
+
+  comprobar('y NINGUNA hora del reloj la enciende',
+    Object.values(HORAS_DEL_DIA).every(h => h.sombraDelBorde === 0),
+    'fuera del eclipse la página no puede cambiar ni un píxel');
+
+  comprobar('las siete horas la declaran, incluidas las dos sueltas',
+    (luzCodigo.match(/sombraDelBorde:/g) || []).length === 7,
+    'si una hora no la trae, mezclarNumero devuelve NaN');
+
+  /* ⚠️ Z-INDEX 59, Y EL NÚMERO ES EL PUNTO ENTERO. El marco victoriano
+     está en 60. En 59 el negro queda DEBAJO del oro y de las rosas: las
+     recorta contra la sombra en vez de taparlas. En su vida anterior esta
+     capa iba en 2147483000 —encima de todo— y ahí un borde negro habría
+     apagado justo lo único que este minuto tiene para contar. */
+  comprobar('la sombra va DEBAJO del marco victoriano',
+    /z-index:59;/.test(eclipseCodigo) && !/z-index:2147483000/.test(eclipseCodigo),
+    'el marco está en 60; en 59 la sombra queda detrás, que es lo pedido');
+
+  comprobar('y nace apagada y promovida',
+    /opacity:0;/.test(eclipseCodigo) && /will-change:opacity/.test(eclipseCodigo),
+    'sin will-change, cambiar la opacidad REPINTA el degradado: es ' +
+    'exactamente el error de 159 ms de la v278');
+
+  /* ⚠️ Y EL CENTRO TIENE QUE QUEDAR TRANSPARENTE DE LADO A LADO. El
+     nombre de Ania no reacciona al eclipse: es la regla 1 de este archivo.
+     Si el degradado cerrara en el medio, la sombra lo tocaría. */
+  comprobar('el centro queda transparente: el nombre no se entera',
+    /rgba\(0,0,0,0\) 17%/.test(eclipseCodigo) &&
+    /rgba\(0,0,0,0\) 83%/.test(eclipseCodigo),
+    'del 17 % al 83 % a lo ancho no puede haber nada');
+
+  comprobar('la luz escribe OPACIDAD, no una variable CSS',
+    /borde\.style\.opacity = mezclarNumero\('sombraDelBorde'\)/.test(luzCodigo),
+    'una variable CSS obliga a recalcular estilo y repintar; la opacidad ' +
+    'directa sobre una capa promovida la mueve el compositor gratis');
+
+  comprobar('y el marco victoriano quedó sin sombra animada',
+    !/--sombra-del-marco/.test(marcoCss) && !/--sombra-del-marco/.test(luzCodigo),
+    'esa era la forma de +133 ms; volver a ella es el error que esto cuida');
+}
+
+/* ⚡ LOS CONTROLES DE SALTO VIVEN EN EL PANEL DEL ECLIPSE (2026-09-12)
+ *
+ * Primero los puse en el reproductor de música, y estaba mal. Carlos:
+ * «el retroceder y avanzar no van en el reproductor de música, saca eso de
+ * allí, esto va en el reproductor del eclipse, para controlar el momento y
+ * verlo lentamente».
+ *
+ * Son dos cosas distintas: la música es una sola canción en bucle de
+ * fondo, donde saltar diez segundos no significa nada; la secuencia del
+ * eclipse dura un minuto exacto y hay momentos concretos que hay que poder
+ * mirar. */
+{
+  const html = leer('index.html');
+  const panel = leer('codigo', '29-ensayo-del-eclipse.js');
+  const musica = leer('codigo', '10-reproductor-de-musica.js');
+  const cssMusica = leer('estilos', '09-reproductor.css');
+
+  /* ⚠️ SE MIRA EL MARCADO DEL REPRODUCTOR, NO index.html ENTERO, y la
+     diferencia no es cosmética. herramientas/empaquetar.mjs pega el CSS
+     compilado dentro de un <style> de index.html, así que el archivo
+     contiene además una FOTO del CSS de la última vez que se empaquetó.
+     Buscando en todo el archivo, esta prueba fallaba por una regla que ya
+     no está en el fuente y que se va sola al reempaquetar: acusaba al
+     código de algo que era del compilado. */
+  const pildora = (html.match(/<aside id="reproductor"[\s\S]*?<\/aside>/) || [''])[0];
+
+  comprobar('el reproductor de música no tiene botones de salto',
+    pildora.length > 0 &&
+    !/boton-retroceder|boton-avanzar|reproductor__saltar/.test(pildora) &&
+    !/reproductor__saltar/.test(cssMusica) &&
+    !/botonRetroceder|botonAvanzar/.test(musica),
+    'una canción en bucle de fondo no se navega');
+
+  comprobar('y el panel del eclipse sí',
+    /id="ensayo-atras"/.test(panel) && /id="ensayo-adelante"/.test(panel) &&
+    /id="ensayo-pausa"/.test(panel),
+    'son los tres que pidió: retroceder, pausa y avanzar');
+
+  comprobar('el eclipse sabe pausar, seguir y decir en qué estado está',
+    /^  function pausar\(\)/m.test(eclipseCodigo) &&
+    /^  function seguir\(\)/m.test(eclipseCodigo) &&
+    /estaEnPausa: function/.test(eclipseCodigo) &&
+    /pausar: pausar,/.test(eclipseCodigo) && /seguir: seguir,/.test(eclipseCodigo),
+    'sin las tres, el botón no puede ni congelar ni saber qué decir; y ' +
+    'pausar() tiene que ser del módulo, porque el bucle la llama');
+
+  /* ⚠️ EL RELOJ DE LA SECUENCIA MIDE CONTRA EL RELOJ DE PARED. Si la
+     pausa no corriera `arranque` al seguir, la secuencia saltaría hacia
+     adelante todo lo que duró la pausa. */
+  comprobar('al seguir, el reloj se corre lo que duró la pausa',
+    /arranque = performance\.now\(\) - tCongelado \/ velocidad;/.test(eclipseCodigo),
+    'sin esto, pausar treinta segundos adelantaría la secuencia treinta ' +
+    'segundos al soltar');
+
+  comprobar('y en pausa el reloj del panel se congela con la imagen',
+    /return enPausa \? tCongelado :/.test(eclipseCodigo),
+    'dondeVa() tenía que dejar de restar contra el reloj de pared');
+
+  /* ⚠️ EL RELOJ DE SEGURIDAD SE CANCELA AL PAUSAR —si no, cortaría la
+     pausa sola a los 61 s— Y SE REARMA AL SEGUIR. Si no se rearmara, una
+     corrida pausada y soltada quedaría sin la red que garantiza que las
+     capas se sacan pase lo que pase. */
+  comprobar('la pausa apaga el reloj de seguridad y seguir lo rearma',
+    /if \(relojDeSeguridad\) clearTimeout\(relojDeSeguridad\);/.test(eclipseCodigo) &&
+    /\(DURACION - tCongelado\) \/ velocidad \+ 1000/.test(eclipseCodigo),
+    'sin cancelarlo, la pausa se corta sola; sin rearmarlo, la corrida ' +
+    'queda sin red');
+
+  /* ⚠️ SALTAR TIENE QUE PASAR POR correr(), no reposicionar el reloj: la
+     secuencia tiene pestillos de una sola vez —el scratch, la mártir, el
+     destello— que al retroceder ya dispararon. */
+  comprobar('saltar reinicia los pestillos, no solo mueve el reloj',
+    /function saltar\(cuanto\)[\s\S]*?correr\(destino, estabaEnPausa\);/.test(panel),
+    'reposicionar a secas dejaría el tramo mudo al retroceder');
+
+  /* ⚡ LO QUE EL PANEL LLAMA TIENE QUE SER LLAMABLE (2026-09-12)
+   *
+   * Esta comprobación nació de un defecto real: escribí
+   * `window.ECLIPSE.duracion()` y `duracion` es una PROPIEDAD, no una
+   * función. La llamada lanzaba dentro del manejador del clic, así que el
+   * botón se quedaba mudo —sin error visible, sin aviso, sin nada: solo no
+   * saltaba—. Es el peor tipo de falla porque se parece a «no anda» y
+   * manda a buscar la causa a cualquier lado.
+   *
+   * Acá se lee la forma REAL del objeto que expone 28-eclipse.js y se
+   * contrasta contra cómo lo usa el panel. */
+  {
+    const api = (eclipseCodigo.match(/window\.ECLIPSE = \{[\s\S]*?\n    \};/) || [''])[0];
+    /* Se clasifica por LINEA y no con un lookahead. Un `/: *(?!function)/`
+       parece que alcanza y no alcanza: el `*` retrocede a cero espacios y
+       entonces el lookahead se mide contra el espacio en vez de contra la
+       palabra, asi que `correr: function ()` cae del lado de los valores.
+       Fue exactamente el fallo de la primera version de esta prueba. */
+    const funciones = new Set();
+    const valores = new Set();
+    for (const linea of api.split('\n')) {
+      const m = linea.match(/^ {6}(\w+): *(.*)$/);
+      if (!m) continue;
+      if (/^function\b/.test(m[2])) { funciones.add(m[1]); continue; }
+      /* `pausar: pausar,` es una REFERENCIA a una funcion del modulo, no un
+         valor. Sin esta rama, el parser las tomaba por propiedades y
+         acusaba al panel de llamarlas mal. */
+      const ref = (m[2].match(/^(\w+),?$/) || [])[1];
+      if (ref && new RegExp('function ' + ref + '\\(').test(eclipseCodigo)) {
+        funciones.add(m[1]);
+      } else {
+        valores.add(m[1]);
+      }
+    }
+
+    const llamadas = [...sinComentarios(panel).matchAll(/window\.ECLIPSE\.(\w+) *\(/g)]
+      .map(m => m[1]);
+    const malLlamadas = llamadas.filter(n => valores.has(n));
+    const inexistentes = llamadas.filter(n => !funciones.has(n) && !valores.has(n));
+
+    comprobar('se leyo la forma real de la API del eclipse',
+      funciones.size > 0 && valores.size > 0,
+      'si no se parsea nada, esta prueba no protege nada: ' +
+      funciones.size + ' funciones, ' + valores.size + ' valores');
+
+    comprobar('el panel no llama como funcion a lo que es un valor',
+      malLlamadas.length === 0,
+      'llama a ' + malLlamadas.join(', ') + ' con parentesis, y son ' +
+      'propiedades: lanza dentro del manejador y el boton queda mudo');
+
+    comprobar('y todo lo que llama existe en la API',
+      inexistentes.length === 0,
+      'llama a ' + inexistentes.join(', ') + ', que no esta en la API');
+  }
+
+  /* ⚡ Y SI ESTABA EN PAUSA, SIGUE EN PAUSA — SIN CONTAR CUADROS
+   *   (2026-09-12)
+   *
+   * ⛔ EL PRIMER INTENTO LO HIZO DESDE EL PANEL: dos
+   * requestAnimationFrame después del salto y entonces pausar. Es una
+   * carrera perdida. Después de un salto, empezar() vuelve a sembrar la
+   * escena y los primeros cuadros tardan 300-500 ms en calidad baja;
+   * medido, retroceder conservaba la pausa y avanzar la perdía, con el
+   * mismo código y en la misma corrida.
+   *
+   * La decisión vive ahora dentro del bucle del eclipse: se dibuja un
+   * cuadro y en ese mismo cuadro se pausa. No depende de cuánto tarde
+   * nada. */
+  comprobar('saltar en pausa no cuenta cuadros a ojo',
+    !/requestAnimationFrame\([\s\S]{0,120}?pausar\(\)/.test(panel),
+    'contar cuadros desde el panel es la carrera que ya fallo una vez');
+
+  /* ⚠️ EL CONGELADO ES SÍNCRONO, Y NO PUEDE VOLVER A SER UNA BANDERA.
+   *
+   * Fallaron dos versiones, las dos por dejarlo en manos de un cuadro
+   * futuro:
+   *
+   *   1. Contando cuadros desde el panel (dos requestAnimationFrame).
+   *      Tras un salto los primeros cuadros tardan 300-500 ms en calidad
+   *      baja: caía tarde o no caía.
+   *   2. Con una bandera que consumía el primer cuadro. Medido: el primer
+   *      salto congelaba y los encadenados no, porque un cuadro ya pedido
+   *      por la corrida anterior llega después de que arrancó la nueva y
+   *      se come la bandera.
+   *
+   * Ahora empezar() dibuja el cuadro de entrada él mismo y se queda. */
+  comprobar('el congelado lo dibuja empezar(), en la misma vuelta',
+    /function empezar\(desfase, congelado\)/.test(eclipseCodigo) &&
+    /if \(congelado\) \{[\s\S]{0,400}?unCuadro\(performance\.now\(\)/.test(eclipseCodigo) &&
+    /if \(congelado\) \{[\s\S]{0,400}?enPausa = true;/.test(eclipseCodigo),
+    'si vuelve a depender de un cuadro futuro, los saltos encadenados ' +
+    'pierden la pausa');
+
+  comprobar('y no queda ninguna bandera que otro cuadro pueda comerse',
+    !/congelarTrasElPrimerCuadro/.test(eclipseCodigo) &&
+    !/congelarAlSalir/.test(eclipseCodigo),
+    'esa bandera es exactamente el mecanismo que fallo');
+
+  comprobar('el congelado no pide mas cuadros',
+    /if \(congelado\) \{[\s\S]{0,400}?pedidoDeCuadro = 0;/.test(eclipseCodigo),
+    'sin cancelar el pedido, la secuencia sigue corriendo bajo la pausa');
+
+  comprobar('y el panel se lo pide a correr()',
+    /correr\(destino, estabaEnPausa\);/.test(panel) &&
+    /window\.ECLIPSE\.correr\(desde, velocidadElegida, congelado\);/.test(panel),
+    'sin el tercer argumento, el salto sale de la pausa');
+
+}
+
+
 /* ⚠️ Y EL DEGRADADO NO SE REPINTA POR CUADRO. Reescribir un `background`
    del tamaño de la pantalla sesenta veces por segundo sería cambiar un
    problema de compositor por uno de pintura. */
@@ -443,8 +694,31 @@ comprobar('el velo tiene textura propia',
    Cuarenta escalones en el minuto son dos tercios de segundo entre uno y
    otro, que a estas velocidades de cambio no se ve escalonado. */
 comprobar('la luz se aplica por escalones, no por cuadro',
-  /if \(escalon === ultimoEscalonDeLuz\) return;/.test(eclipseCodigo),
+  /if \(escalon === ultimoEscalonDeLuz && !tocaElFondo\) return;/.test(eclipseCodigo),
   'aplicar las catorce perillas por cuadro es lo que costó 159 ms en la v278');
+
+/* ⚡ Y LO CARO VA EN MENOS ESCALONES QUE LO BARATO (2026-09-12)
+ *
+ * Las catorce perillas no cuestan lo mismo. Medido con la escena quieta,
+ * sobre un control de 66,7 ms por cuadro: las dos de #capa-fondo cuestan
+ * +165 ms cada vez, la penumbra +17 y la opacidad del borde 0. La culpable
+ * es la turbulencia SVG del papel antiguo, que se regenera entera cada vez
+ * que esa capa se toca.
+ *
+ * Si alguien iguala los dos números «para simplificar», vuelven los
+ * cuarenta repintados caros. */
+comprobar('el fondo, que es lo caro, se escribe menos veces',
+  /var ESCALONES_DEL_FONDO = (\d+);/.test(eclipseCodigo) &&
+  Number((eclipseCodigo.match(/var ESCALONES_DEL_FONDO = (\d+);/) || [])[1]) <
+  Number((eclipseCodigo.match(/var ESCALONES_DE_LUZ = (\d+);/) || [])[1]),
+  'fondo ' + (eclipseCodigo.match(/var ESCALONES_DEL_FONDO = (\d+);/) || [])[1] +
+  ' contra luz ' + (eclipseCodigo.match(/var ESCALONES_DE_LUZ = (\d+);/) || [])[1]);
+
+comprobar('y 22-luz-de-la-hora.js sabe saltárselo',
+  /function aplicarMomento\(desde, hasta, t, sinElFondo\)/.test(
+    leer('codigo', '22-luz-de-la-hora.js')) &&
+  /const fondo = sinElFondo \? null :/.test(leer('codigo', '22-luz-de-la-hora.js')),
+  'sin el parámetro, el eclipse no puede pedir la luz sin el fondo');
 
 comprobar('y son unas decenas de pasadas en todo el minuto',
   /var ESCALONES_DE_LUZ = 40;/.test(eclipseCodigo),
@@ -1997,12 +2271,32 @@ comprobar('y el de la reliquia usa la misma trama',
 }
 
 
-/* ─── 14j. EL ORDEN DE LAS CAPAS ────────────────────────────────────
-   La regla de fotografía de la escena entera, dicha con z-index: en todo
-   el minuto hay exactamente DOS cosas que la oscuridad no toca — el
-   nombre y la rosa que se ofreció. Todo lo demás vive debajo del velo. */
+/* ─── 14j. EL ORDEN DE LAS CAPAS ─────────────────────────
+   La regla de fotografía de la escena entera, dicha con z-index.
 
-console.log('\nQué está por encima de la oscuridad\n');
+   ⚡ ESTA REGLA SE REESCRIBIÓ PORQUE EL MECANISMO CAMBIÓ (2026-09-12)
+
+   Decía: «en todo el minuto hay exactamente DOS cosas que la oscuridad no
+   toca —el nombre y la rosa que se ofreció—; todo lo demás vive DEBAJO
+   del velo». Y comprobaba que los pétalos quedaran por debajo de
+   `capaDelEclipse`, que entonces era un velo radial a pantalla completa en
+   z-index 2147483000.
+
+   ⚠️ ESE VELO NO EXISTE. El eclipse dejó de oscurecer tapando y pasó a
+   oscurecer restando luz desde el sistema de la hora. `capaDelEclipse`
+   quedó vacía y ahora lleva otra cosa: la sombra del borde, en z-index 59.
+
+   Y con eso la regla se da vuelta, a propósito. Un velo va ENCIMA y tapa;
+   un fondo va DEBAJO y recorta. Que los pétalos queden por ENCIMA de la
+   sombra ya no es el defecto que aquella prueba cuidaba —pétalos al 100 %
+   sobre una escena al 5 %— sino lo contrario: es lo que los deja
+   recortados contra el negro en vez de apagados con él.
+
+   Lo que SÍ sigue valiendo, y se comprueba igual que siempre, es el orden
+   interno de lo que el eclipse dibuja: el mundo abajo, el nombre por
+   encima del mundo, y la mártir por encima del nombre. */
+
+console.log('\nEl orden de las capas\n');
 
 {
   const z = (que) => {
@@ -2010,18 +2304,25 @@ console.log('\nQué está por encima de la oscuridad\n');
     return bloque ? Number(bloque) : null;
   };
 
-  const zVelos    = z("capaDelEclipse\\.style\\.cssText");
+  const zSombra   = z("capaDelEclipse\\.style\\.cssText");
   const zMundo    = z("var lienzo = document\\.createElement");
   const zNombre   = z("jaula\\.style\\.cssText");
   const zOfrenda  = z("var lienzoDeLaOfrenda");
 
-  comprobar('los pétalos van DEBAJO de los velos',
-    zMundo !== null && zVelos !== null && zMundo < zVelos,
-    'pétalos ' + zMundo + ' · velos ' + zVelos +
-    ' — por encima quedaban al 100 % de brillo mientras el resto estaba al 5 %');
+  /* ⚠️ EL 60 ES EL DEL MARCO VICTORIANO (estilos/02-marco-victoriano.css).
+     Es el número que decide si esto es un fondo o un velo: por debajo, la
+     sombra se mete detrás del oro y de las rosas; por encima, las apaga. */
+  comprobar('la sombra del borde va DEBAJO del marco victoriano',
+    zSombra !== null && zSombra < 60,
+    'sombra ' + zSombra + ' · marco 60 — por encima apagaría justamente lo ' +
+    'único que este minuto tiene para contar');
 
-  comprobar('el nombre va por encima de los velos',
-    zNombre > zVelos, 'nombre ' + zNombre + ' · velos ' + zVelos);
+  comprobar('y por debajo de todo lo que el eclipse dibuja',
+    zMundo !== null && zSombra < zMundo,
+    'sombra ' + zSombra + ' · mundo ' + zMundo + ' — es un fondo, no un velo');
+
+  comprobar('el nombre va por encima del mundo',
+    zNombre > zMundo, 'nombre ' + zNombre + ' · mundo ' + zMundo);
 
   comprobar('y la mártir por encima del nombre',
     zOfrenda > zNombre, 'ofrenda ' + zOfrenda + ' · nombre ' + zNombre);

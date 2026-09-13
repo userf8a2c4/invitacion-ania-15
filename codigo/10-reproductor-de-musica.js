@@ -36,8 +36,6 @@
   const audioDeFondo     = buscar('#audio-de-fondo');
   const botonMusica      = buscar('#boton-musica');
   const botonPlay        = buscar('#boton-play');
-  const botonRetroceder  = buscar('#boton-retroceder');
-  const botonAvanzar     = buscar('#boton-avanzar');
   const botonSilencio    = buscar('#boton-silencio');
   const deslizadorVolumen = buscar('#deslizador-de-volumen');
 
@@ -496,60 +494,6 @@
   audioDeFondo.addEventListener('play',  actualizarBotonPlay);
   audioDeFondo.addEventListener('pause', actualizarBotonPlay);
   if (botonPlay) botonPlay.addEventListener('click', alternarPlayPausa);
-
-  /* ── RETROCEDER Y AVANZAR ────────────────────────────────────────────
-
-     Es una sola canción en bucle, así que estas dos mueven la aguja diez
-     segundos en vez de cambiar de tema.
-
-     ⚠️ SE DA LA VUELTA EN LOS DOS EXTREMOS, y no es un capricho: el
-     <audio> tiene `loop`, o sea que la canción ya se comporta como un
-     círculo. Frenar la aguja en el segundo 0 sería la única parte de la
-     pieza que no da la vuelta, y se sentiría como que el botón se trabó.
-
-     ⚠️ Y `duration` PUEDE SER NaN. Con `preload="none"` el archivo no se
-     descarga hasta el primer clic, así que antes de eso el navegador no
-     sabe cuánto dura. Sin este guard, `currentTime = NaN` lanza y el botón
-     queda muerto para siempre. */
-  const SALTO = 10;
-
-  /**
-   * Mueve la aguja `segundos` (negativo para atrás), dando la vuelta.
-   *
-   * @param {number} segundos
-   * @returns {void}
-   */
-  function saltar(segundos) {
-    const dura = audioDeFondo.duration;
-    if (!(dura > 0) || !isFinite(dura)) return;
-
-    let destino = (audioDeFondo.currentTime || 0) + segundos;
-    while (destino < 0) destino += dura;
-    while (destino >= dura) destino -= dura;
-
-    try { audioDeFondo.currentTime = destino; } catch (error) { /* nada */ }
-  }
-
-  /** El pulso que confirma el salto. Ver la nota de .saltando en el CSS. */
-  function pulsar(boton) {
-    if (!boton) return;
-    boton.classList.add('saltando');
-    setTimeout(() => boton.classList.remove('saltando'), 120);
-  }
-
-  if (botonRetroceder) {
-    botonRetroceder.addEventListener('click', () => {
-      saltar(-SALTO);
-      pulsar(botonRetroceder);
-    });
-  }
-
-  if (botonAvanzar) {
-    botonAvanzar.addEventListener('click', () => {
-      saltar(SALTO);
-      pulsar(botonAvanzar);
-    });
-  }
 
   /* El momento clave: cuando se abre el sobre, el navegador ya nos deja
      reproducir sonido. Esta primera vez entra como eco lejano, junto con

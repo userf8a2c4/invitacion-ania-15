@@ -260,203 +260,67 @@
    * corresponde cuando el elemento ANIMA de verdad y NO vive dentro de un
    * contexto de mezcla. Es exactamente este caso. Y es UNA capa, que existe
    * sesenta segundos al día. */
+  /* ⚡ ESTA CAPA CAMBIÓ DE OFICIO: AHORA ES LA SOMBRA DEL BORDE
+   *   (2026-09-12)
+   *
+   * Carlos: «que cerca de los bordes (detrás) de los marcos la sombra sea
+   * mucho más oscura, cercano a negra».
+   *
+   * ⚠️ Y SE HIZO ACÁ PORQUE LAS OTRAS DOS FORMAS SE MIDIERON Y SON
+   * IMPAGABLES. Probadas las dos en el navegador, contra un control de
+   * 66,7 ms por cuadro:
+   *
+   *     box-shadow inset animada en #marco-victoriano ……… +133 ms
+   *     degradados de fondo en #marco-victoriano ………………… +183 ms
+   *     opacidad de esta capa ………………………………………………………………… +0 ms
+   *
+   * Las dos primeras obligan a repintar un elemento del tamaño del
+   * DOCUMENTO —y con hijos caros: las cenefas, las esquinas y las rosas
+   * cuelgan de él— cuarenta veces en el minuto. La tercera no repinta
+   * nada: el degradado se rasteriza UNA vez al montarse y lo único que se
+   * mueve después es la opacidad, que es trabajo del compositor.
+   *
+   * ⚠️ Y BAJA DE z-index 2147483000 A 59, QUE ES EL PUNTO. En 59 queda
+   * DEBAJO del marco victoriano (60) y de todo lo que cuelga de él. O sea
+   * que el negro se mete detrás del oro y de las rosas en vez de taparlas:
+   * el borde se hunde y el marco sigue encendido delante. Eso es
+   * profundidad. Encima de todo —que es donde estaba esta capa cuando era
+   * un velo— habría apagado justamente lo único que este minuto tiene
+   * para contar.
+   *
+   * El centro queda transparente de lado a lado (del 17 % al 83 % a lo
+   * ancho, del 21 % al 79 % a lo alto), así que el nombre no se entera.
+   * La deidad no reacciona. */
+  capaDelEclipse.id = 'sombra-del-borde';
   capaDelEclipse.style.cssText =
     'position:fixed;inset:0;pointer-events:none;opacity:0;' +
-    'z-index:2147483000;will-change:opacity;';
+    'z-index:59;will-change:opacity;background-image:' +
+    'linear-gradient(to right,' +
+      'rgba(0,0,0,.97) 0, rgba(0,0,0,.62) 4%, rgba(0,0,0,0) 17%,' +
+      'rgba(0,0,0,0) 83%, rgba(0,0,0,.62) 96%, rgba(0,0,0,.97) 100%),' +
+    'linear-gradient(to bottom,' +
+      'rgba(0,0,0,.97) 0, rgba(0,0,0,.58) 5%, rgba(0,0,0,0) 21%,' +
+      'rgba(0,0,0,0) 79%, rgba(0,0,0,.58) 95%, rgba(0,0,0,.97) 100%);';
 
-  /* Los cuatro tramos del degradado, del altar hacia afuera.
+  /* ⛔ ACÁ ESTABA LA DOCUMENTACIÓN DEL VELO RADIAL, Y SE BORRÓ ENTERA
+   *   (2026-09-12)
+   *
+   * Describía los cuatro tramos de un degradado centrado en el nombre, con
+   * las cuentas de composición sobre una rosa del marco. Ese velo no
+   * existe: el eclipse dejó de pintar capas de color y pasó a ser una hora
+   * del sistema de luz.
+   *
+   * ⚠️ PERO UNA DE SUS REGLAS HAY QUE CONSERVAR, DADA VUELTA. Decía: «el
+   * último tramo NO es negro, porque el marco —o sea las plantas, o sea lo
+   * único que este minuto tiene para contar— vive en los BORDES, y un
+   * negro ahí apagaría el acontecimiento». Era cierto, y seguía siendo
+   * cierto mientras el velo estuviera ENCIMA de todo.
+   *
+   * La sombra del borde de hoy sí llega al negro, y no contradice aquello:
+   * va en z-index 59, DEBAJO del marco. No apaga las plantas, las recorta
+   * contra el negro. Lo que estaba prohibido era tapar el borde; hundir lo
+   * que hay detrás del borde es lo contrario. */
 
-     ⚠️ EL ÚLTIMO TRAMO NO ES NEGRO, Y ESO NO ES UN DESCUIDO. El marco —o
-     sea LAS PLANTAS, o sea lo único que este minuto tiene para contar—
-     vive en los BORDES de la pantalla, que es justo donde un velo radial
-     centrado en el nombre oscurece más. Un último tramo negro apagaría
-     exactamente el acontecimiento.
-
-     Así que las esquinas se van a un rojo muy oscuro y no a negro. Lo que
-     hace la cripta no es que los bordes desaparezcan: es que la luz
-     alrededor del nombre COLAPSA (ver `aperturaDelVelo`, que encoge el
-     degradado y deja casi toda la pantalla en el último tramo).
-
-     Hechas las cuentas de composición normal sobre una rosa del marco
-     —rgb(126, 27, 44)—, que es la comprobación que importa:
-
-         en el esfuerzo (t=38 s) ……… rgb(102, 23, 28)   se ve y es roja
-         en la cripta   (t=43 s) ……… rgb( 49, 13, 17)   silueta roja
-
-     Un factor de dos entre uno y otro: se lee como un golpe de oscuridad
-     sin que nada llegue a desaparecer. */
-  /* ⚡ BORGOÑA QUE PERVIERTE TODO Y QUE DEJA VERLO TODO (2026-09-11)
-   *
-   * Carlos pidió «un rojo ladrillo o sangre borgoña que lo pervierta todo,
-   * pero que aún sea visible». Haciendo las cuentas apareció un error en
-   * lo que había.
-   *
-   * ⚠️ LA OSCURIDAD TIENE QUE VENIR DEL COLOR, NO DEL ALFA. Composición
-   * normal (`fondo × (1−α) + color × α`) del último tramo sobre una rosa
-   * del marco rgb(126, 27, 44) y sobre un fondo oscuro rgb(30, 24, 28):
-   *
-   *   antes  24, 8, 12 @ α 0,922 → rosa rgb(32, 9, 15) · fondo rgb(24, 9, 13)
-   *                                LOS SEPARAN 8 → una mancha plana
-   *   ahora  74,18, 28 @ α 0,757 → rosa rgb(87,20, 32) · fondo rgb(63,19, 28)
-   *                                LOS SEPARAN 24 → se ve el detalle
-   *
-   * Con alfa casi opaco TODO converge al mismo valor y el marco se vuelve
-   * una silueta sin interior: eso es «pervertir» a costa de «visible».
-   * Bajando el alfa y saturando el color se consiguen las dos cosas.
-   *
-   * Y hay un argumento físico que lo respalda: una luna totalmente
-   * eclipsada NO se pone negra, se pone cobre-rojo y perfectamente
-   * visible. Por eso se llama luna de sangre. El drama de la totalidad no
-   * viene del colapso de luminancia sino del colapso de la APERTURA, que
-   * es lo que `aperturaDelVelo` ya hace.
-   *
-   * ⚠️ Y LOS RADIOS SE MIDEN, NO SE ESTIMAN. Antes eran porcentajes fijos
-   * de la pantalla, y por eso el óvalo quedaba perdonado (ver la nota de
-   * medirElAltar). Ahora cada tramo se ancla a una caja REAL:
-   *
-   *   'centro'   el punto del degradado
-   *   'letras'   la caja entintada de la palabra «ANIA»
-   *   'broche'   el óvalo dorado, `.portada__broche`
-   *   'broche2'  el doble: el marco y las plantas
-   *   'esquina'  la esquina más lejana
-   *
-   * Así el mismo código da la misma lectura en un monitor de 2560 y en un
-   * teléfono vertical, que es justo lo que Carlos pide que sea igual.
-   *
-   * CÓMO QUEDA CADA COSA. Todos estos números salen de ejecutar las
-   * constantes de este archivo, no de estimarlos, y se rehicieron el
-   * 2026-09-11 cuando cambiaron las paletas y los alfas:
-   *
-   *   fase            velo   rosa del marco      separa   oro
-   *   penumbra  4 s   0,068  rgb(122, 27, 44)      93     97 %
-   *   umbra    15 s   0,255  rgb(110, 26, 42)      82     88 %
-   *   esfuerzo 30 s   0,510  rgb( 95, 25, 40)      70     76 %
-   *   muerte 38,5 s   0,970  rgb( 89, 23, 35)      45     57 %
-   *   cripta   43 s   0,970  rgb( 89, 23, 35)      45     57 %
-   *
-   * «separa» es cuántas unidades de rojo quedan entre esa rosa y el fondo
-   * oscuro de al lado: es la medida de que la escena NO se aplasta en una
-   * silueta. Nunca baja de 45, contra un piso exigido de 18.
-   *
-   * «oro» es cuánta luz conserva el oro del relicario, rgb(198,158,92).
-   * Ahí se lee el arco entero del eclipse: casi imperceptible al empezar,
-   * oscuridad de verdad a los 30, y un salto a la mitad en la totalidad.
-   *
-   * ⚠️ EL ÓVALO SE CORROMPE MENOS DE LO QUE ESTE COMENTARIO DECÍA ANTES.
-   * Acá figuraba «R/G 1,88». Es falso: con la paleta oscura de Carlos y
-   * los alfas de sombra, el oro pasa de R/G 1,25 a 1,42 —queda en
-   * rgb(142,100,65), un bronce deslucido—. Llegar a 1,8 exigiría subir el
-   * alfa de ese tramo a 0,64, por ENCIMA del tramo de afuera (0,54), y el
-   * degradado dejaría de crecer hacia el borde. El 1,88 venía de la
-   * paleta anterior, más clara y con alfas más altos: era otro cálculo.
-   *
-   * Se deja dicho acá para que nadie vuelva a perseguir ese número sin
-   * saber qué rompe.
-   */
-  /* ⚡ SOMBRA, NO MANO DE PINTURA. LOS ALFAS BAJARON. (2026-09-11)
-   *
-   * Carlos: «pero no plano, sino como sombra». Es una distinción técnica,
-   * no de gusto, y decide estos cinco números.
-   *
-   * PLANO es lo que pasa con el alfa alto: todo lo que hay debajo converge
-   * al color del velo y el marco se vuelve una silueta sin interior.
-   * SOMBRA es color oscuro con alfa BAJO: lo de abajo sobrevive, apagado.
-   * Una rosa en sombra sigue siendo reconociblemente una rosa.
-   *
-   * Con la paleta de abajo el COLOR ya hace el trabajo de oscurecer, así
-   * que el alfa no tiene que hacerlo también. Medido sobre una rosa del
-   * marco rgb(126,27,44) contra el fondo de al lado rgb(30,24,28):
-   *
-   *                        alfas de antes    alfas de sombra
-   *   cripta, marco ……… separa 30          separa 45
-   *   cripta, esquina … separa 24          separa 38
-   *   luminancia ………… 35 / 22            38 / 28
-   *
-   * Se ve el interior del marco casi el doble mejor, y la escena igual se
-   * oscurece: la luminancia de la rosa cae de 45 en el esfuerzo a 28 en la
-   * cripta. Eso es una sombra cayendo encima, no un filtro puesto delante. */
-
-  /* ⚡ EL VELO ERA ROJO DESDE EL SEGUNDO 1. (2026-09-11)
-   *
-   * Carlos, mirándolo: «vi un rojo vivo allí como sombra, ¿puedes cambiar
-   * a un borgoña? o sea, la penumbra del eclipse de sangre».
-   *
-   * Tenía razón dos veces, y las dos son errores distintos.
-   *
-   * ⚠️ ERROR 1: EL COLOR NO CAMBIABA NUNCA. Esta capa es UNA sola con un
-   * degradado fijo, y lo único que se anima es su opacidad. O sea que el
-   * degradado rojo ya estaba puesto en el segundo 1 —más tenue, pero
-   * rojo—. El documento base dice lo contrario con todas las letras: en la
-   * penumbra «la luz ambiental se enfría y pierde un poco de saturación,
-   * PERO TODAVÍA NO HAY ROJO», y el rojo «es exclusivo del momento de
-   * máxima totalidad».
-   *
-   * Y la prueba no lo cazaba porque comprobaba el COEFICIENTE `sangre`
-   * —que sí valía cero— y no el color que se pinta en pantalla.
-   *
-   * ⚠️ ERROR 2: NO ERA BORGOÑA, ERA LADRILLO. Los tramos de adentro eran
-   * `176,58,40` y `150,44,32`: con G POR ENCIMA de B, que es naranja
-   * quemado. El borgoña es al revés —B por encima de G— porque el vino
-   * tira al violeta y el ladrillo al naranja. Es un número, no un gusto.
-   *
-   * LA SOLUCIÓN, sin volver a los 159 ms: dos paletas fijas y una mezcla
-   * entre ellas gobernada por `sangre`. En penumbra y umbra la mezcla vale
-   * CERO y el velo es acero frío puro; en la totalidad vale uno y es
-   * borgoña. El degradado se reescribe solo cuando la mezcla cambia de
-   * ESCALÓN —doce en todo el minuto— así que son doce rasterizaciones en
-   * sesenta segundos en vez de tres mil seiscientas.
-   *
-   * Comprobado con la misma cuenta que hace la prueba, sobre una rosa del
-   * marco rgb(126,27,44) y el fondo de al lado rgb(30,24,28):
-   *
-   *   penumbra 4 s ….. velo 0,041 · mezcla 0,00 · frío puro, sin rojo
-   *   esfuerzo 30 s … velo 0,306 · mezcla 0,00 · sigue frío
-   *   muerte 38,5 s … velo 0,970 · mezcla 1,00 · rgb(86,19,34), B>G ✓
-   *   cripta 43 s ……… ídem, R/G 4,6 y los separan 30 unidades
-   */
-
-  /* ⚡ EL ECLIPSE ES UNA HORA, NO UNA CAPA ENCIMA (2026-09-11)
-   *
-   * Carlos, después de cuatro intentos míos: «esto es un tinte, y es una
-   * mierda. Estudia cómo se comporta la luz del día y de la noche en la
-   * web, es la misma mierda, solo que rojo OSCURO». Y: «la única
-   * diferencia es que esto dura un minuto».
-   *
-   * Tenía razón, y es la corrección de fondo de toda la ronda.
-   *
-   * ⛔ LO QUE ESTABA MAL. El eclipse pintaba un degradado en una capa
-   * propia por encima de la escena. Da igual qué color o qué alfa se le
-   * ponga: un rectángulo de color encima de todo es un TINTE, y se lee
-   * como un tinte. El propio proyecto lo dice en 22-luz-de-la-hora.js:
-   * «eso no es luz, es un filtro de color pegado encima».
-   *
-   * ⚠️ CÓMO FUNCIONA DE VERDAD LA LUZ ACÁ. `22-luz-de-la-hora.js` no
-   * pinta una capa: mueve CATORCE PERILLAS que ya existen en la escena.
-   *
-   *   los haces …………………… el color de los rayos que entran por los
-   *                          ventanales. Van con `screen`: SUMAN luz.
-   *   las motas ……………………… el polvo que flota dentro de esos rayos.
-   *   ambienteAlto ……………… el halo grande de la parte de arriba.
-   *   tinteDeSala ………………… la cúpula que cubre el fondo entero.
-   *   tinteDelVelo ……………… la capa de profundidad, que cubre el documento.
-   *   oscurecidoFijo ………… lo que RESTA luminancia en #capa-fondo.
-   *   profundidadDeSombra … lo que RESTA en #penumbra-profunda.
-   *   anguloDelSol ……………… por dónde entra la luz.
-   *   largoDelHaz ………………… cuánto se alarga el rayo.
-   *   fuerzaDeVelas ……………… cuánto mandan los candelabros.
-   *   deNoche ……………………… si se ven las luciérnagas.
-   *
-   * Las dos que RESTAN son las que hacen la oscuridad, y ninguna capa
-   * puesta encima puede hacer su trabajo. Por eso todos mis intentos
-   * terminaban en barro: estaba sumando color donde hacía falta restar luz.
-   *
-   * ASÍ QUE EL ECLIPSE ES OTRA HORA. La más oscura y la única roja. Entra
-   * y sale por la misma puerta que usa el reloj —`aplicarMomento`— y todo
-   * lo que ya reacciona a la hora reacciona al eclipse gratis: los rayos
-   * se ponen rojos, el polvo que flota en ellos se pone rojo, las velas
-   * crecen porque son lo único que queda, y las dos capas de sombra se
-   * hunden más que a medianoche.
-   */
   var HORA_DEL_ECLIPSE = {
     /* Los rayos, en rojo. Son los que traen la luz de la luna eclipsada:
        entran por los mismos ventanales y SUMAN, no tapan. */
@@ -499,6 +363,22 @@
     oscurecidoFijo:      0.44,
     profundidadDeSombra: 1.55,
 
+    /* ⚡ Y EL BORDE, DETRÁS DEL MARCO, SE VA A NEGRO (2026-09-12)
+     *
+     * Carlos: «que cerca de los bordes (detrás) de los marcos la sombra
+     * sea mucho más oscura, cercano a negra».
+     *
+     * Es la misma idea de la ronda anterior llevada al borde: el fondo se
+     * fue hacia atrás, y ahora el borde —que es donde vive la atmósfera
+     * de esta página: enredaderas, rosas, moldura— se hunde del todo. El
+     * oro y las rosas quedan encendidos DELANTE de un negro, que es lo
+     * que de verdad da profundidad; un rojo parejo de borde a borde no la
+     * da por oscuro que sea.
+     *
+     * Todas las demás horas la dejan en 0, así que fuera del eclipse la
+     * página no cambia ni un píxel. */
+    sombraDelBorde: 0.92,
+
     /* El sol está tapado: el haz se acorta y baja. */
     anguloDelSol: -14,
     largoDelHaz:   1.05,
@@ -514,9 +394,30 @@
 
   /** El último escalón aplicado, para no reescribir catorce cosas por cuadro. */
   var ultimoEscalonDeLuz = -1;
+  var ultimoEscalonDelFondo = -1;
 
   /** Cuántos escalones tiene el minuto. Ver la nota de ponerLaLuzDelEclipse. */
   var ESCALONES_DE_LUZ = 40;
+
+  /* ⚡ Y EL FONDO VA EN DIECISÉIS, NO EN CUARENTA (2026-09-12)
+   *
+   * Las catorce perillas de la hora no cuestan lo mismo. Medido con la
+   * escena quieta, sobre un control de 66,7 ms por cuadro: las dos que
+   * escriben #capa-fondo cuestan +165 ms cada vez —esa capa lleva un
+   * filtro SVG de turbulencia que hay que volver a generar entero—,
+   * mientras que la penumbra cuesta +17 ms y la sombra del borde 0.
+   *
+   * A cuarenta escalones eso son cuarenta repintados caros repartidos en
+   * el minuto: cuarenta tirones. A dieciséis son dieciséis, uno cada 3,7
+   * segundos, y el salto de oscurecido entre uno y otro es de 0,023 sobre
+   * un fondo ya oscuro —por debajo de lo que el ojo separa, y encima
+   * enmascarado porque los haces, las motas y la penumbra SÍ siguen
+   * moviéndose en los cuarenta—.
+   *
+   * ⚠️ EN LOS EXTREMOS LOS DOS COINCIDEN, que es lo que importa: con el
+   * progreso en 0 y en 1, 16/16 y 40/40 dan lo mismo, así que la totalidad
+   * llega a su valor exacto y la vuelta a la hora de siempre también. */
+  var ESCALONES_DEL_FONDO = 16;
 
   /**
    * Cuánto eclipse hay en el milisegundo `t`, de 0 a 1.
@@ -573,12 +474,21 @@
       try { horaDeAntes = luz.momentoDeAhora(); } catch (e) { return; }
     }
 
-    var escalon = Math.round(progresoDelEclipse(t) * ESCALONES_DE_LUZ);
-    if (escalon === ultimoEscalonDeLuz) return;
+    var progreso = progresoDelEclipse(t);
+    var escalon = Math.round(progreso * ESCALONES_DE_LUZ);
+    var escalonDelFondo = Math.round(progreso * ESCALONES_DEL_FONDO);
+
+    /* El fondo manda también: puede tocarle repintar en un cuadro en el
+       que lo barato no se movió, y ahí hay que pasar igual. */
+    var tocaElFondo = escalonDelFondo !== ultimoEscalonDelFondo;
+    if (escalon === ultimoEscalonDeLuz && !tocaElFondo) return;
+
     ultimoEscalonDeLuz = escalon;
+    if (tocaElFondo) ultimoEscalonDelFondo = escalonDelFondo;
 
     try {
-      luz.aplicarMomento(horaDeAntes, HORA_DEL_ECLIPSE, escalon / ESCALONES_DE_LUZ);
+      luz.aplicarMomento(horaDeAntes, HORA_DEL_ECLIPSE,
+                         escalon / ESCALONES_DE_LUZ, !tocaElFondo);
     } catch (e) { /* el eclipse sigue aunque la luz no acompañe */ }
   }
 
@@ -594,6 +504,7 @@
   function devolverLaLuzDelEclipse() {
     horaDeAntes = null;
     ultimoEscalonDeLuz = -1;
+    ultimoEscalonDelFondo = -1;
     try {
       if (window.LuzDeLaHora && typeof window.LuzDeLaHora.devolverLaHora === 'function') {
         window.LuzDeLaHora.devolverLaHora();
@@ -3943,6 +3854,77 @@
   var vivo = false;
   var pedidoDeCuadro = 0;
   var relojDeSeguridad = 0;
+
+  /* ⚡ LA PAUSA (2026-09-12)
+   *
+   * Carlos la pidió para el panel de ensayo: «para controlar el momento y
+   * verlo lentamente». Las velocidades ya dejaban mirar en cámara lenta;
+   * lo que faltaba era poder CONGELAR un cuadro y quedarse ahí.
+   *
+   * ⚠️ NO SE PUEDE SIMPLEMENTE DEJAR DE PEDIR CUADROS Y YA. El reloj de
+   * esta secuencia es `(ahora - arranque) * velocidad`, o sea que mide
+   * contra el reloj de pared: si se soltara y se volviera a pedir cuadros
+   * un minuto después, `t` habría saltado al final. Al seguir hay que
+   * correr `arranque` hacia adelante todo lo que duró la pausa, que es lo
+   * que hace `seguir()` al recalcularlo desde `tCongelado`.
+   *
+   * ⚠️ Y EL RELOJ DE SEGURIDAD SE CANCELA MIENTRAS TANTO. Ese reloj corta
+   * el eclipse a los 61 s pase lo que pase, justamente para que la
+   * invitación no quede arruinada si los cuadros se congelan. Una pausa
+   * son cuadros congelados A PROPÓSITO, así que tiene que dejar de correr
+   * o cortaría la pausa sola. Se rearma al seguir, con lo que falta.
+   *
+   * ⛔ ESO SIGNIFICA QUE UNA PAUSA NO TIENE RED. Si alguien pausa y se va,
+   * el eclipse se queda puesto. Es aceptable Únicamente porque esto existe
+   * solo en el panel de ensayo —que solo se monta en pbe— y jamás en la
+   * invitación de nadie: ver el guión del vigía en index.html. */
+  var enPausa = false;
+  var tCongelado = 0;
+
+  /* ⚡ SALTAR SIN PERDER LA PAUSA (2026-09-12)
+   *
+   * Retroceder diez segundos es volver a correr desde otro milisegundo
+   * —hay que reiniciar los pestillos de una sola vez, o el tramo se ve
+   * mudo—, y una corrida nueva nace andando. Si se estaba en pausa, hay
+   * que volver a congelar.
+   *
+   * ⛔ DOS INTENTOS ANTERIORES FALLARON, Y LOS DOS POR LO MISMO: quisieron
+   * que el congelado lo aplicara ALGÚN cuadro futuro.
+   *
+   *   1. Contando cuadros desde el panel (dos requestAnimationFrame y
+   *      entonces pausar). Después de un salto los primeros cuadros tardan
+   *      300-500 ms en calidad baja: el pestillo caía tarde o no caía.
+   *
+   *   2. Con una bandera que consumía el primer cuadro. Medido: el primer
+   *      salto congelaba y los encadenados no. La causa es que un cuadro
+   *      YA PEDIDO por la corrida anterior puede llegar después de que la
+   *      nueva arrancó, comerse la bandera y no congelar nada.
+   *
+   * Así que no hay bandera ni cuadro futuro: `empezar()` dibuja el cuadro
+   * de entrada ÉL MISMO, en la misma vuelta, y se queda ahí. No depende de
+   * quién llegue primero porque no hay nadie más. */
+
+  /** Congela la secuencia. Ver la nota larga junto a `enPausa`. */
+  function pausar() {
+    if (!vivo || enPausa) return;
+    enPausa = true;
+    tCongelado = (performance.now() - arranque) * velocidad;
+    if (pedidoDeCuadro) cancelAnimationFrame(pedidoDeCuadro);
+    pedidoDeCuadro = 0;
+    if (relojDeSeguridad) clearTimeout(relojDeSeguridad);
+    relojDeSeguridad = 0;
+  }
+
+  /** Sigue desde donde se había congelado. */
+  function seguir() {
+    if (!vivo || !enPausa) return;
+    enPausa = false;
+    arranque = performance.now() - tCongelado / velocidad;
+    pedidoDeCuadro = requestAnimationFrame(cuadro);
+    relojDeSeguridad = setTimeout(function () {
+      if (vivo) terminar();
+    }, (DURACION - tCongelado) / velocidad + 1000);
+  }
   var escuchaDeMedida = null;
 
   /* Multiplicador del paso del tiempo. Siempre 1 en el eclipse de verdad;
@@ -4203,6 +4185,12 @@
    * @returns {void}
    */
   function reiniciarElEstado() {
+    /* Una corrida nueva siempre nace andando. Sin esto, pausar y después
+       apretar «Reproducir» dejaría la secuencia viva pero congelada.
+ */
+    enPausa = false;
+    tCongelado = 0;
+
     muerte.x = 0; muerte.y = 0; muerte.vx = 0; muerte.vy = 0;
     muerte.x0 = 0; muerte.y0 = 0; muerte.giro0 = 0;
     muerte.giro = 0; muerte.giroVel = 0; muerte.suelta = false;
@@ -4271,7 +4259,13 @@
     sentidosMedidos.length = 0;
   }
 
-  function empezar(desfase) {
+  /**
+   * @param {number} desfase - Milisegundo de la secuencia por el que entrar.
+   * @param {boolean} [congelado] - Dibujar ese cuadro y quedarse ahí, en
+   *   vez de seguir corriendo. Ver la nota junto a `enPausa`.
+   * @returns {void}
+   */
+  function empezar(desfase, congelado) {
     if (vivo) return;
     vivo = true;
     reiniciarElEstado();
@@ -4341,6 +4335,22 @@
        SECUENCIA y no en tiempo de reloj: pedir "arrancá en el segundo 42"
        a media velocidad tiene que dejar la secuencia en el 42, no en el 21. */
     arranque = performance.now() - (desfase > 0 ? desfase : 0) / velocidad;
+
+    /* ⚡ ARRANCAR CONGELADO: se dibuja el cuadro de entrada acá mismo y no
+       se pide ninguno más. Ver la nota larga junto a `enPausa`, que cuenta
+       los dos intentos que fallaron por dejarlo en manos de un cuadro
+       futuro. No se arma el reloj de seguridad porque no hay nada
+       corriendo que cortar; lo arma `seguir()` cuando suelte. */
+    if (congelado) {
+      try { unCuadro(performance.now(), desfase > 0 ? desfase : 0); }
+      catch (error) { terminar(); return; }
+      if (pedidoDeCuadro) cancelAnimationFrame(pedidoDeCuadro);
+      pedidoDeCuadro = 0;
+      enPausa = true;
+      tCongelado = desfase > 0 ? desfase : 0;
+      return;
+    }
+
     pedidoDeCuadro = requestAnimationFrame(cuadro);
 
     /* ⚠️ EL SEGURO DE ÚLTIMA INSTANCIA.
@@ -4481,19 +4491,37 @@
        *   veces más lento; 4 es cuatro veces más rápido.
        * @returns {void}
        */
-      correr: function (desde, aQueVelocidad) {
+      /**
+       * Corre la secuencia.
+       *
+       * @param {number} [desde]
+       * @param {number} [aQueVelocidad]
+       * @param {boolean} [congelado] - Dibujar un cuadro y quedarse ahí.
+       *   Lo usa el panel de ensayo para saltar sin salir de la pausa.
+       * @returns {void}
+       */
+      correr: function (desde, aQueVelocidad, congelado) {
         if (vivo) terminar();          // cortar la anterior antes de empezar
         velocidad = Number(aQueVelocidad) > 0 ? Number(aQueVelocidad) : 1;
-        empezar(Number(desde) > 0 ? Number(desde) : 0);
+        empezar(Number(desde) > 0 ? Number(desde) : 0, !!congelado);
       },
 
       cortar: function () { if (vivo) terminar(); },
+
+      pausar: pausar,
+      seguir: seguir,
+      estaEnPausa: function () { return enPausa; },
 
       enCurso: function () { return vivo; },
 
       /** El milisegundo de la secuencia que se está dibujando, o -1. */
       dondeVa: function () {
-        return vivo ? (performance.now() - arranque) * velocidad : -1;
+        if (!vivo) return -1;
+        /* En pausa el reloj de pared sigue corriendo pero la secuencia no:
+           lo que vale es el milisegundo congelado, no el que daría la
+           resta. Sin esto, el reloj del panel seguiría avanzando sobre una
+           imagen quieta. */
+        return enPausa ? tCongelado : (performance.now() - arranque) * velocidad;
       },
 
       /* Las fases con su milisegundo real, sacadas de las constantes de
