@@ -75,6 +75,26 @@
     ? { fondo: 8,  medio: 5,  frente: 6 }
     : { fondo: 14, medio: 10, frente: 12 };
 
+  /* ⚡ UNA RESERVA DORMIDA, PARA CUANDO LLUEVA MÁS FUERTE (2026-09-13)
+
+     El reparto de arriba es el de CALIDAD ALTA, y en calidad alta están
+     todos activos. O sea que en el mejor equipo no hay ni un pétalo
+     dormido: si algo pide "que llueva más", no hay de dónde sacarlo.
+
+     Esta reserva son pétalos idénticos a los otros —mismo `crearPetalo`,
+     mismos planos, mismos rasgos— que nacen APAGADOS en todos los
+     niveles y solo se encienden cuando alguien lo pide (ver
+     `intensidadDeLaLluvia`). Mientras duermen no cuestan nada: el bucle
+     los saltea con el mismo `continue` que saltea a los que apaga la
+     calidad, y sin elemento en el DOM cuando se usa el lienzo.
+
+     Lo único que cuesta crearlos es crearlos: una vez, al cargar.
+
+     0,6 es lo que hace falta para que calidad alta pueda llegar a su
+     techo de lluvia (1,6 × el área base). Ver
+     TECHO_DE_AREA_CON_LLUVIA_POR_CALIDAD. */
+  const RESERVA_RELATIVA = 0.6;
+
   /* Cada plano tiene su propio tamaño y su propia transparencia. Eso es
      lo que hace que se lean como distancias distintas y no como tres
      grupos del mismo tamaño superpuestos. */
@@ -365,6 +385,21 @@
       // El lienzo dibuja cada plano por separado, para respetar la profundidad.
       if (usaElLienzo) window.LienzoDePetalos.planos[plano].push(petalo);
     }
+
+    /* Y la reserva, en el mismo plano y a continuación. Nacen apagados y
+       marcados: `ajustarCantidadDePetalos` los deja fuera del presupuesto
+       y solo los toca cuando se pide más lluvia. Van al final de la lista
+       del plano a propósito — así los índices por encima de la base caen
+       en la reserva solos, sin ninguna cuenta aparte. */
+    const cuantosDeReserva = Math.ceil(REPARTO_POR_PLANO[plano] * RESERVA_RELATIVA);
+    for (let i = 0; i < cuantosDeReserva; i++) {
+      const petalo = crearPetalo(true, plano);
+      petalo.deReserva = true;
+      petalo.activo = false;
+      if (petalo.elemento) petalo.elemento.style.display = 'none';
+      petalos.push(petalo);
+      if (usaElLienzo) window.LienzoDePetalos.planos[plano].push(petalo);
+    }
   }
 
 
@@ -517,6 +552,70 @@
    */
   const PRESUPUESTO_DE_AREA_POR_CALIDAD = { 0: 1, 1: 0.617, 2: 0.211 };
 
+  /* ⚡ HASTA DÓNDE PUEDE ARRECIAR, SEGÚN CALIDAD (2026-09-13)
+
+     El techo se expresa en ÁREA —la misma moneda que
+     PRESUPUESTO_DE_AREA_POR_CALIDAD, que es lo que de verdad cuesta un
+     pétalo— y como fracción del área del reparto base:
+
+         calidad   en reposo   lloviendo fuerte
+         alta        1,000          1,600
+         media       0,617          0,950
+         baja        0,211          0,400
+
+     La regla que ordena la tabla: EN SU PICO, UN EQUIPO LENTO SIGUE
+     PAGANDO MENOS QUE UNO MEDIO EN REPOSO, y uno medio menos que uno
+     alto en reposo. Así la lluvia fuerte nunca empuja a un equipo a un
+     coste que ya sabemos que no aguanta — 0,40 en baja es casi el doble
+     de pétalos que en reposo, y aun así menos de la mitad de lo que un
+     escritorio normal paga sin despeinarse.
+
+     Quien pide la lluvia no conoce esta tabla ni tiene por qué: pide un
+     número y acá se lo acota. El módulo que sabe lo que cuesta pintar es
+     este, así que el freno vive acá. */
+  const TECHO_DE_AREA_CON_LLUVIA_POR_CALIDAD = { 0: 1.6, 1: 0.95, 2: 0.4 };
+
+  /**
+   * Cuánto se está pidiendo que llueva. 1 = lo de siempre.
+   *
+   * ⚠️ BANDERA GENÉRICA, IGUAL QUE `PausaDeEscena`. Este archivo no sabe
+   * por qué llueve más ni quién lo pide, y no tiene que saberlo: recibe
+   * «llové más fuerte» y lo hace dentro de lo que su equipo aguanta.
+   * Lectura defensiva —el que la escribe puede no existir— y sin creerle
+   * el número: lo acota la tabla de arriba.
+   *
+   * @returns {number} 1 o más.
+   */
+  function intensidadDeLaLluvia() {
+    const pedido = window.IntensidadDeLaLluvia;
+    return (typeof pedido === 'number' && pedido > 1) ? pedido : 1;
+  }
+
+  /** Lo último que se le hizo caso, ×50, para no recalcular por gusto. */
+  let ultimaLluvia = 50;
+
+  /**
+   * Un pétalo que se enciende entra CAYENDO, no apareciendo.
+   *
+   * ⚠️ ESTO ES EL DEFECTO DE «APARECEN PÉTALOS DE LA NADA», OTRA VEZ. Un
+   * pétalo dormido quedó con la posición que tenía cuando se apagó —o la
+   * que le tocó al crearse—, y el bucle no se la actualizó ni una vez
+   * mientras dormía. Encenderlo sin más lo hace materializarse a mitad de
+   * pantalla. Se lo manda arriba del borde con velocidades frescas, que
+   * es exactamente lo que hace el reciclado de abajo cuando un pétalo
+   * sale por el pie.
+   *
+   * @param {Object} petalo
+   * @returns {void}
+   */
+  function entrarPorArriba(petalo) {
+    petalo.y = numeroAlAzar(-160, -30);
+    petalo.x = numeroAlAzar(0, anchoDePantalla);
+    petalo.velocidadX = numeroAlAzar(-12, 12);
+    petalo.velocidadY = numeroAlAzar(petalo.rasgos.caida[0], petalo.rasgos.caida[1]);
+    petalo.velocidadAngular = numeroAlAzar(-45, 45);
+  }
+
   function ajustarCantidadDePetalos(calidad) {
     const presupuesto = PRESUPUESTO_DE_AREA_POR_CALIDAD[calidad] ?? 1;
 
@@ -526,7 +625,20 @@
     const porPlano = {};
     let todoElArea = 0;
 
+    const reservaPorPlano = {};
+
     for (const petalo of petalos) {
+      /* ⚠️ LA RESERVA NO ENTRA EN EL PRESUPUESTO, Y ES LO QUE HACE QUE
+         TODAS LAS MEDICIONES DE ARRIBA SIGAN SIENDO CIERTAS. Si sumara
+         su área a `todoElArea`, el techo crecería con ella y en reposo
+         quedarían activos MÁS pétalos que hoy en todos los niveles —el
+         presupuesto es relativo—. La reserva existe para la lluvia
+         fuerte y para nada más. */
+      if (petalo.deReserva) {
+        (reservaPorPlano[petalo.plano] =
+          reservaPorPlano[petalo.plano] || []).push(petalo);
+        continue;
+      }
       todoElArea += coste(petalo);
       (porPlano[petalo.plano] = porPlano[petalo.plano] || []).push(petalo);
     }
@@ -538,12 +650,23 @@
        que sobreviven son los PRIMEROS de cada plano, en el orden en que se
        crearon — que es aleatorio en tamaño, así que el plano conserva su
        reparto de grandes y chicos y sigue leyéndose como lo que es. */
+    /* Base primero, reserva después. La fracción siempre se mide contra
+       el largo de la BASE, así que mientras no pase de 1 esto lee
+       exactamente los mismos pétalos que leía antes de que la reserva
+       existiera — y las cuentas documentadas más arriba siguen valiendo
+       al pie de la letra. Pasando de 1, los índices sobrantes caen en la
+       reserva sin ninguna rama aparte. */
+    const completa = {};
+    for (const plano of planos) {
+      completa[plano] = porPlano[plano].concat(reservaPorPlano[plano] || []);
+    }
+
     const areaCon = (fraccion) => {
       let area = 0;
       for (const plano of planos) {
         const cuantos = Math.max(1, Math.ceil(porPlano[plano].length * fraccion));
-        for (let i = 0; i < cuantos && i < porPlano[plano].length; i++) {
-          area += coste(porPlano[plano][i]);
+        for (let i = 0; i < cuantos && i < completa[plano].length; i++) {
+          area += coste(completa[plano][i]);
         }
       }
       return area;
@@ -559,13 +682,40 @@
       fraccion = f;
     }
 
+    /* ⚡ Y SI ALGUIEN PIDIÓ QUE LLUEVA MÁS, SE BUSCA DE NUEVO MÁS ARRIBA.
+       Va como una segunda pasada y NUNCA por debajo de lo que dio la
+       primera: el piso de la calidad queda intacto y esto solo puede
+       sumar. Cuando nadie pide nada —el caso de siempre, y el de todas
+       las visitas que no ven el ritual— este bloque no se ejecuta y la
+       función se comporta exactamente como antes. */
+    const pedido = intensidadDeLaLluvia();
+    if (pedido > 1) {
+      const techoDeLluvia = todoElArea *
+        Math.min(TECHO_DE_AREA_CON_LLUVIA_POR_CALIDAD[calidad] ?? 1,
+                 presupuesto * pedido);
+      /* 80 pasos y no 20 como la primera pasada: acá la resolución de la
+         grilla ES la suavidad de la escalera. Con 20 la fracción saltaba
+         de a 0,08 —medio pétalo del plano del fondo por escalón— y la
+         subida se sentía a tirones; con 80 salta de a 0,02 y los pétalos
+         se encienden de a uno. Cuesta cuarenta sumas más, y solo en los
+         pocos cuadros en que el pedido cambió de verdad. */
+      const MAXIMA = 1 + RESERVA_RELATIVA;
+      for (let paso = 0; paso <= 80; paso++) {
+        const f = MAXIMA - paso * (MAXIMA / 80);
+        if (f <= fraccion) break;
+        if (areaCon(f) <= techoDeLluvia) { fraccion = f; break; }
+      }
+    }
+
     for (const plano of planos) {
       const cuantos = Math.max(1, Math.ceil(porPlano[plano].length * fraccion));
-      for (let i = 0; i < porPlano[plano].length; i++) {
-        const petalo = porPlano[plano][i];
+      for (let i = 0; i < completa[plano].length; i++) {
+        const petalo = completa[plano][i];
         const activo = i < cuantos;
         if (petalo.activo !== activo) {
           petalo.activo = activo;
+          /* Encender sin esto es hacerlo aparecer donde durmió. */
+          if (activo) entrarPorArriba(petalo);
           /* Con el lienzo alcanza con la marca: el canvas saltea los
              apagados. El <div> solo existe en el camino viejo. */
           if (petalo.elemento) petalo.elemento.style.display = activo ? '' : 'none';
@@ -1049,6 +1199,17 @@
       return;
     }
     ultimoMovimiento = momentoActual;
+
+    /* ⚡ ¿CAMBIÓ CUÁNTO LLUEVE? Una lectura de un número por tick, y se
+       recalcula solo cuando cambió de verdad. Se cuantiza a 1/50 para que
+       una subida de veinte segundos dé unas pocas decenas de recalculadas
+       en total —no una por cuadro— y para que los pétalos se despierten
+       de a uno, escalonados, en vez de todos en el mismo instante. */
+    const cuantoLlueve = Math.round(Math.min(intensidadDeLaLluvia(), 4) * 50);
+    if (cuantoLlueve !== ultimaLluvia) {
+      ultimaLluvia = cuantoLlueve;
+      ajustarCantidadDePetalos(calidadDeLosPetalos);
+    }
 
     /* ⚠️ EL MARCO NACE DESPUÉS QUE ESTO, ASÍ QUE HAY QUE ESPERARLO.
        07-marco-y-enredaderas.js construye las plantas cuando se monta la
