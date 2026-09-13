@@ -184,53 +184,6 @@
   box-shadow: 0 0 18px rgba(201, 168, 76, .35);
 }
 
-/* ── RETROCEDER Y AVANZAR ──────────────────────────────────────────────
-
-   Los dos hermanos del play. Se distinguen de él a propósito: sin círculo
-   ni relleno, porque el play es la acción principal y estos dos son
-   ayudas. Si los tres fueran botones dorados iguales, la fila perdería
-   jerarquía y habría que leerla en vez de mirarla.
-
-   Sin `flex-shrink`, el contenedor los apretaría antes que al texto. */
-.reproductor__saltar {
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border: 0;
-  background: none;
-  border-radius: 50%;
-  color: var(--color-oro-claro);
-  font-size: .82rem;
-  line-height: 1;
-  opacity: .62;
-  cursor: pointer;
-  transition: opacity .2s, transform .2s;
-}
-.reproductor__saltar:hover {
-  opacity: 1;
-  transform: scale(1.12);
-}
-.reproductor__saltar:focus-visible {
-  outline: 1px solid var(--borde-oro-fuerte);
-  outline-offset: 2px;
-  opacity: 1;
-}
-/* Un pulso corto al saltar, para que se note que hizo algo aunque la
-   canción suene parecida en los dos puntos. */
-.reproductor__saltar.saltando {
-  opacity: 1;
-  transform: scale(.86);
-  transition: transform .08s;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .reproductor__saltar,
-  .reproductor__saltar:hover,
-  .reproductor__saltar.saltando { transition: none; transform: none; }
-}
-
 /* Los dos renglones de texto van apretados: en 2.9rem de alto no entran
    con el interlineado normal, y separados se leen como dos cosas. */
 .reproductor__info {

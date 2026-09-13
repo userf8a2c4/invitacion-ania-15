@@ -99,6 +99,7 @@
          tocar la noche sin necesidad. */
       oscurecidoFijo: 0.09,
       profundidadDeSombra: 0.40,
+      sombraDelBorde: 0,
     },
     {
       hora: 13,  // MEDIODIA: el NEUTRO. Luz plana, sin caracter.
@@ -122,6 +123,7 @@
       // así que es donde menos oscurecido fijo hace falta.
       oscurecidoFijo: 0.05,
       profundidadDeSombra: 0.28,
+      sombraDelBorde: 0,
     },
     {
       hora: 18,  // HORA DORADA: el momento mas caracteristico
@@ -144,6 +146,7 @@
       deNoche: 0.35,
       oscurecidoFijo: 0.10,
       profundidadDeSombra: 0.45,
+      sombraDelBorde: 0,
     },
     {
       hora: 20,  // crepusculo malva: evita el gris al cruzar de calido a frio
@@ -162,6 +165,7 @@
       // Transición hacia la noche: ya bastante más oscuro que de día.
       oscurecidoFijo: 0.16,
       profundidadDeSombra: 0.70,
+      sombraDelBorde: 0,
     },
     {
       hora: 23,  // NOCHE: oscura de verdad. La luna apenas insinua.
@@ -183,6 +187,7 @@
       // no para aclararla.
       oscurecidoFijo: 0.20,
       profundidadDeSombra: 1.00,
+      sombraDelBorde: 0,
     },
   ];
 
@@ -206,6 +211,7 @@
     // de la noche, dentro del permiso del usuario de que se vea más oscuro.
     oscurecidoFijo: 0.24,
     profundidadDeSombra: 1.05,
+    sombraDelBorde: 0,
   };
 
   /* Y el espejo del crepusculo, para el cruce frio -> calido del amanecer. */
@@ -226,6 +232,7 @@
     // Transición entre la madrugada profunda y el amanecer.
     oscurecidoFijo: 0.16,
     profundidadDeSombra: 0.75,
+    sombraDelBorde: 0,
   };
 
 /**
@@ -358,7 +365,15 @@
    * @param {number} t     - 0 = `desde`, 1 = `hasta`.
    * @returns {void}
    */
-  function aplicarMomento(desde, hasta, t) {
+  /**
+   * @param {object} desde
+   * @param {object} hasta
+   * @param {number} t
+   * @param {boolean} [sinElFondo] - Saltarse las dos escrituras de
+   *   #capa-fondo. Ver la nota grande de abajo, junto a ellas.
+   * @returns {void}
+   */
+  function aplicarMomento(desde, hasta, t, sinElFondo) {
     const color = clave => mezclar(desde[clave], hasta[clave], t);
     // Mezcla NÚMEROS simples (no colores) entre los dos momentos — se usa
     // para anguloDelSol/largoDelHaz/etc. más abajo, y para las dos capas
@@ -402,7 +417,29 @@
 
        Las velas siguen cálidas encima, y ese contraste —sala fría, fuego
        tibio— es lo que hace bonita una escena nocturna a la luz de vela. */
-    const fondo = document.getElementById('capa-fondo');
+    /* ⚡ LAS DOS ESCRITURAS DE #capa-fondo SON LAS CARAS, Y POR ESO SE
+     *   PUEDEN SALTAR (2026-09-12)
+     *
+     * Medido en el navegador con la escena quieta, contra un control de
+     * 66,7 ms por cuadro:
+     *
+     *     --oscurecido-fijo / --velo-de-la-hora (#capa-fondo) … +165 ms
+     *     --profundidad-de-sombra (#penumbra-profunda) ……………… +17 ms
+     *     opacidad de #sombra-del-borde ………………………………………………… +0 ms
+     *
+     * ⚠️ Y EL MOTIVO NO ES EL TAMAÑO, ES EL RUIDO. #capa-fondo lleva
+     * cuatro fondos superpuestos y el primero es un filtro SVG de
+     * turbulencia (el papel antiguo). Cambiar CUALQUIER cosa de esa capa
+     * obliga a volver a generar la turbulencia sobre 125svh enteros.
+     *
+     * Al reloj no le importa: escribe una vez cada diez minutos. Al
+     * eclipse sí: escribe cuarenta veces en sesenta segundos. Por eso
+     * 28-eclipse.js pide estas dos con menos frecuencia que el resto —ver
+     * ESCALONES_DEL_FONDO allá— y para eso existe este parámetro.
+     *
+     * Sin el parámetro, todo sigue igual que siempre: el reloj llama sin
+     * él y escribe las catorce perillas. */
+    const fondo = sinElFondo ? null : document.getElementById('capa-fondo');
     if (fondo) fondo.style.setProperty('--velo-de-la-hora', veloDeLaSala(desde, hasta, t));
 
     /* ── EL VELO DE PROFUNDIDAD, TEÑIDO ──
@@ -422,6 +459,25 @@
        del array MOMENTOS. */
     if (fondo) fondo.style.setProperty('--oscurecido-fijo', mezclarNumero('oscurecidoFijo').toFixed(3));
     if (penumbra) penumbra.style.setProperty('--profundidad-de-sombra', mezclarNumero('profundidadDeSombra').toFixed(3));
+
+    /* ⚡ LA TERCERA QUE RESTA LUZ: EL BORDE, DETRÁS DEL MARCO (2026-09-12)
+     *
+     * Las dos de arriba oscurecen superficies enteras. Esta oscurece SOLO
+     * el borde de la pantalla, por detrás del marco victoriano.
+     *
+     * ⚠️ Y SE ESCRIBE LA OPACIDAD DIRECTA, NO UNA VARIABLE CSS, Y NO ES
+     * UN DESCUIDO. Las otras trece perillas mueven colores y números que
+     * obligan a repintar; se pagan una vez cada diez minutos y no duelen.
+     * Esta se mueve cuarenta veces en el minuto del eclipse, así que tiene
+     * que ser gratis: `opacity` sobre una capa ya promovida la mueve el
+     * compositor sin repintar un solo píxel. Medido: 0 ms de sobrecosto,
+     * contra +133 ms de la misma idea hecha con box-shadow.
+     *
+     * El elemento existe solo durante el eclipse —lo monta y lo saca
+     * codigo/28-eclipse.js— y todas las horas del reloj valen 0, así que
+     * el resto del día acá no pasa nada. */
+    const borde = document.getElementById('sombra-del-borde');
+    if (borde) borde.style.opacity = mezclarNumero('sombraDelBorde').toFixed(3);
 
     /* ── LO QUE LEEN LOS BUCLES QUE YA EXISTEN ──
        Estos tres no son colores: son NÚMEROS que cambian el comportamiento

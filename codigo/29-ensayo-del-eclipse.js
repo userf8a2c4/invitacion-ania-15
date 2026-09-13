@@ -224,6 +224,17 @@
           '<button type="button" class="ensayo__boton" id="ensayo-cortar">Cortar</button>' +
         '</div>' +
 
+        /* Retroceder, pausar y avanzar: los tres para mirar un momento
+           concreto sin esperar a que la secuencia pase por él. Van con
+           SALTO de diez segundos, que es el paso que pidió Carlos. */
+        '<div class="ensayo__fila">' +
+          '<button type="button" class="ensayo__boton" id="ensayo-atras" ' +
+                  'aria-label="Retroceder diez segundos">« 10 s</button>' +
+          '<button type="button" class="ensayo__boton" id="ensayo-pausa">Pausa</button>' +
+          '<button type="button" class="ensayo__boton" id="ensayo-adelante" ' +
+                  'aria-label="Avanzar diez segundos">10 s »</button>' +
+        '</div>' +
+
         '<p class="ensayo__rotulo">Saltar a</p>' +
         '<div class="ensayo__fases" id="ensayo-fases"></div>' +
 
@@ -302,9 +313,10 @@
    * Corre la secuencia desde un milisegundo dado, avisando si no se puede.
    *
    * @param {number} desde
+   * @param {boolean} [congelado] - Dibujar un cuadro y quedarse ahí.
    * @returns {void}
    */
-  function correr(desde) {
+  function correr(desde, congelado) {
     var trabas = loQueLoImpide();
     var aviso = document.getElementById('ensayo-aviso');
 
@@ -320,7 +332,7 @@
     }
 
     aviso.hidden = true;
-    window.ECLIPSE.correr(desde, velocidadElegida);
+    window.ECLIPSE.correr(desde, velocidadElegida, congelado);
   }
 
 
@@ -341,6 +353,29 @@
     return nombre;
   }
 
+  /**
+   * Pone el botón de pausa en el estado que corresponde.
+   *
+   * Dice la ACCIÓN, no el estado —«Pausa» cuando va a pausar, «Seguir»
+   * cuando va a seguir—, que es como se leen los botones de cualquier
+   * reproductor. Y se apaga cuando no hay nada corriendo, porque pausar
+   * algo detenido no significa nada.
+   *
+   * @returns {void}
+   */
+  function pintarElBotonDePausa() {
+    var boton = document.getElementById('ensayo-pausa');
+    if (!boton) return;
+
+    var corriendo = window.ECLIPSE.enCurso();
+    var pausado = corriendo && window.ECLIPSE.estaEnPausa();
+
+    boton.textContent = pausado ? 'Seguir' : 'Pausa';
+    boton.disabled = !corriendo;
+    boton.classList.toggle('ensayo__boton--activo', pausado);
+  }
+
+
   /* El reloj se refresca con un setInterval de 100 ms y NO con
      requestAnimationFrame, a propósito: el eclipse ya está consumiendo
      todos los cuadros que puede, y este panel no tiene por qué competirle
@@ -350,6 +385,11 @@
     reloj = setInterval(function () {
       var caja = document.getElementById('ensayo-reloj');
       if (!caja) return;
+
+      /* Acá y no solo al hacer clic: la secuencia puede terminarse sola
+         —llega al segundo 60, o alguien aprieta Cortar— y el botón tiene
+         que dejar de decir «Seguir» cuando ya no hay nada que seguir. */
+      pintarElBotonDePausa();
 
       if (!window.ECLIPSE.enCurso()) {
         caja.textContent = 'Detenido';
@@ -758,6 +798,53 @@
 
     document.getElementById('ensayo-cortar')
       .addEventListener('click', function () { window.ECLIPSE.cortar(); });
+
+    /* ── RETROCEDER, PAUSAR Y AVANZAR ───────────────────────────
+     *
+     * ⚠️ SALTAR ES VOLVER A CORRER DESDE OTRO MILISEGUNDO, y tiene que
+     * serlo. La secuencia tiene pestillos de una sola vez —el scratch del
+     * frenazo, la mártir que se arranca, el destello— que ya dispararon
+     * cuando uno retrocede. Reposicionar el reloj a secas los dejaría
+     * gastados y el tramo se vería mudo. `correr()` pasa por terminar() y
+     * empezar(), que los reinician: es el mismo camino que usan los
+     * botones de «Saltar a» y el cambio de velocidad.
+     *
+     * ⚠️ Y SI ESTABA EN PAUSA, SIGUE EN PAUSA. Es el caso de uso entero:
+     * congelar, moverse diez segundos, mirar. Se vuelve a pausar recién
+     * después de DOS cuadros —uno para que el nuevo `t` se dibuje, otro
+     * para que llegue a pantalla—; pausar en el mismo cuadro dejaría
+     * congelada la imagen vieja. */
+    var SALTO = 10000;
+
+    function saltar(cuanto) {
+      if (!window.ECLIPSE.enCurso()) { correr(cuanto > 0 ? cuanto : 0); return; }
+
+      var estabaEnPausa = window.ECLIPSE.estaEnPausa();
+      var destino = window.ECLIPSE.dondeVa() + cuanto;
+      /* ⚠️ `duracion` ES UNA PROPIEDAD, NO UNA FUNCIóN. Llamarla lanzaba
+         dentro del manejador del clic, y el botón se quedaba mudo sin que
+         nada lo dijera: solo se notaba que no saltaba. */
+      var tope = window.ECLIPSE.duracion - 500;
+
+      if (destino < 0) destino = 0;
+      if (destino > tope) destino = tope;
+
+      correr(destino, estabaEnPausa);
+    }
+
+    document.getElementById('ensayo-atras')
+      .addEventListener('click', function () { saltar(-SALTO); });
+
+    document.getElementById('ensayo-adelante')
+      .addEventListener('click', function () { saltar(SALTO); });
+
+    document.getElementById('ensayo-pausa')
+      .addEventListener('click', function () {
+        if (!window.ECLIPSE.enCurso()) return;
+        if (window.ECLIPSE.estaEnPausa()) window.ECLIPSE.seguir();
+        else window.ECLIPSE.pausar();
+        pintarElBotonDePausa();
+      });
 
     /* El botón hace dos cosas según en qué momento esté: mide, y una vez
        que hay informe, lo copia. Un solo botón porque el panel es angosto
