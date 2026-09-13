@@ -503,6 +503,7 @@
    */
   function devolverLaLuzDelEclipse() {
     horaDeAntes = null;
+    scrollDelCuadroAnterior = null;
     ultimoEscalonDeLuz = -1;
     ultimoEscalonDelFondo = -1;
     try {
@@ -1011,6 +1012,27 @@
    * Es la misma conversión que `acomodarLaCopia()` ya hace unas líneas más
    * abajo para colocar la jaula del nombre. */
   var altarEnElDocumento = 0;
+
+  /* ⚡ LOS PÉTALOS CAEN EN LA PÁGINA, NO EN EL VIDRIO (2026-09-13)
+   *
+   * Carlos: «los pétalos siguen en la pantalla sin importar si scrolleas, no
+   * caen en el espacio del marco sino en el espacio de la pantalla».
+   *
+   * El lienzo es `position: fixed`, así que sus coordenadas son de VENTANA: la
+   * página se movía debajo y los pétalos quedaban pegados al vidrio. Y eso
+   * contradice lo que la escena dice — caen DENTRO del marco victoriano, que
+   * vive en el documento y mide 4726 px de alto.
+   *
+   * ⚠️ LA CORRECCIÓN NO TOCA LA FÍSICA, Y ES A PROPÓSITO. Pasar todo a
+   * coordenadas de documento obligaría a convertir también el altar, los
+   * radios y cada término de la atracción — mucha superficie para romper algo
+   * que ya funciona. Alcanza con esto: si el scroll se movió Δ, los pétalos
+   * se corren −Δ. Quedan anclados al documento y la física sigue viviendo en
+   * coordenadas de ventana, que es donde la necesita.
+   *
+   * Se usa el scroll cacheado, no `window.scrollY`: leerlo dentro del bucle
+   * es el forced reflow que 02-utilidades.js documenta. */
+  var scrollDelCuadroAnterior = null;
 
   function medirElAltar() {
     var caja = nombre.getBoundingClientRect();
@@ -3530,9 +3552,30 @@
       pincel.drawImage(mapaDeLaRosa, -l / 2, -l / 2, l, l);
 
       if (drenado > 0.01) {
+        /* ⛔ EL PRIMER INTENTO LA DEJÓ HECHA CENIZA (2026-09-13)
+         *
+         * Carlos: «la flor muerta parece ceniza, no tiene definición,
+         * cámbiala a un rojo casi negro que tenga definición».
+         *
+         * Eran dos errores en la misma línea:
+         *
+         * 1. EL ALFA. Un relleno plano al 82 % sobre el mapa de bits
+         *    COMPRIME EL RANGO: se come las luces y las sombras propias de
+         *    la rosa y deja una silueta pareja. Definición es contraste
+         *    local, así que la mitad del arreglo es dejar pasar la
+         *    estructura de abajo. A 0,62 sobrevive el 38 % del dibujo, que
+         *    alcanza para que se le sigan viendo los pétalos.
+         *
+         * 2. EL COLOR. Gris pardo era la lectura literal de «se le fue la
+         *    sangre», y en pantalla eso es ceniza. Un cadáver reciente no
+         *    es gris: es rojo oscurecido, casi negro. Se usa el belladona
+         *    que Carlos dio para la paleta del eclipse —#28050B—, o sea el
+         *    mismo mundo de color, no uno inventado.
+         *
+         * Se sigue drenando: pierde el rojo VIVO, no el rojo. */
         pincel.globalCompositeOperation = 'source-atop';
-        pincel.globalAlpha = alfa * Math.min(drenado, 1) * 0.82;
-        pincel.fillStyle = 'rgb(46,38,36)';
+        pincel.globalAlpha = alfa * Math.min(drenado, 1) * 0.62;
+        pincel.fillStyle = 'rgb(40,5,11)';
         pincel.fillRect(-l / 2, -l / 2, l, l);
       }
     } else {
@@ -3776,6 +3819,14 @@
       dibujarLaOfrenda();
     }
 
+    /* Cuánto se movió la página desde el cuadro anterior. La primera vuelta
+       no corre nada: no hay con qué comparar todavía. */
+    var scrollAhora = scrollActualY();
+    var corrimiento = (scrollDelCuadroAnterior === null)
+      ? 0
+      : scrollAhora - scrollDelCuadroAnterior;
+    scrollDelCuadroAnterior = scrollAhora;
+
     /* ── Los pétalos, arrastrados por la gravedad nueva ── */
     /* Baja por la misma rampa que el estiramiento y que las rosas: la
        gravedad no le devuelve el mando de un tirón, se lo va soltando. */
@@ -3789,8 +3840,12 @@
     for (var p = 0; p < petalos.length; p++) {
       var pt = petalos[p];
 
-      /* El posado no tiene física: está apoyado. Se dibuja y ya. */
+      /* El posado no tiene física: está apoyado. Se dibuja y ya.
+         Pero el corrimiento SÍ lo toca: está apoyado sobre el NOMBRE, que
+         vive en la página. Sin esto, al scrollear se quedaría flotando
+         donde el nombre ya no está. */
       if (pt.posada) {
+        if (corrimiento) pt.y -= corrimiento;
         pincel.save();
         pincel.translate(pt.x, pt.y);
         pincel.rotate(pt.giro);
@@ -3916,6 +3971,7 @@
       }
 
       pt.x += pt.vx; pt.y += pt.vy;
+      if (corrimiento) pt.y -= corrimiento;   // anclado a la página, no al vidrio
       if (!enShock) pt.giro += pt.giroVel;
 
       pincel.save();

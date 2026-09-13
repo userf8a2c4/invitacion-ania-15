@@ -2428,6 +2428,65 @@ comprobar('y el de la reliquia usa la misma trama',
     '02-utilidades.js documenta como el 37,5 % de un perfil');
 }
 
+/* ⚡ LOS PETALOS CAEN EN LA PAGINA, NO EN EL VIDRIO (2026-09-13)
+ *
+ * Carlos: «los petalos siguen en la pantalla sin importar si scrolleas, no
+ * caen en el espacio del marco sino en el espacio de la pantalla». El lienzo
+ * es `position: fixed`, asi que sus coordenadas son de VENTANA.
+ *
+ * La correccion deliberadamente NO toca la fisica: si el scroll se movio
+ * delta, los petalos se corren -delta. Quedan anclados al documento y la
+ * atraccion sigue viviendo en coordenadas de ventana, que es donde la
+ * necesita. Pasar todo a coordenadas de documento habria obligado a convertir
+ * tambien el altar, los radios y cada termino de la atraccion — mucha
+ * superficie para romper algo que ya funciona.
+ */
+{
+  comprobar('los petalos se anclan a la pagina al scrollear',
+    /if \(corrimiento\) pt\.y -= corrimiento;/.test(eclipseCodigo),
+    'con el lienzo fijo, sin esto quedan pegados al vidrio mientras la ' +
+    'pagina se mueve debajo');
+
+  comprobar('y el posado tambien, que esta apoyado sobre el nombre',
+    (eclipseCodigo.match(/if \(corrimiento\) pt\.y -= corrimiento;/g) || []).length >= 2,
+    'el petalo posado descansa sobre el NOMBRE, que vive en la pagina: sin ' +
+    'esto flota donde el nombre ya no esta');
+
+  comprobar('y usa el scroll cacheado, no el del navegador',
+    /var scrollAhora = scrollActualY\(\);/.test(eclipseCodigo),
+    'window.scrollY dentro del bucle es el forced reflow que 02-utilidades ' +
+    'documenta como el 37,5 % de un perfil');
+
+  comprobar('y el primer cuadro no corre nada',
+    /scrollDelCuadroAnterior === null/.test(eclipseCodigo),
+    'sin referencia previa, el primer delta seria el scroll entero y los ' +
+    'petalos saltarian fuera de pantalla');
+}
+
+/* ⚡ Y LA ROSA MUERTA TIENE DEFINICION (2026-09-13)
+ *
+ * Carlos: «la flor muerta parece ceniza, no tiene definicion, cambiala a un
+ * rojo casi negro que tenga definicion». Eran dos errores en una linea: un
+ * relleno plano al 82 % COMPRIME EL RANGO —se come las luces y sombras
+ * propias de la rosa— y el gris pardo era la lectura literal de «se le fue la
+ * sangre», que en pantalla es ceniza. Un cadaver reciente no es gris: es rojo
+ * oscurecido, casi negro.
+ */
+{
+  const cuerpoDeLaRosa =
+    (eclipseCodigo.match(/function dibujarUnaRosa[\s\S]*?\n  \}/) || [''])[0];
+
+  comprobar('la rosa muerta conserva su estructura',
+    /Math\.min\(drenado, 1\) \* 0\.62/.test(cuerpoDeLaRosa),
+    'a 0,82 el relleno plano aplana el dibujo y queda una silueta pareja; ' +
+    'definicion es contraste local');
+
+  comprobar('y el tinte es rojo casi negro, no ceniza',
+    /fillStyle = 'rgb\(40,5,11\)'/.test(cuerpoDeLaRosa),
+    'es el belladona que Carlos dio para la paleta del eclipse: mismo mundo ' +
+    'de color, no uno inventado');
+}
+
 /* ⚡ LOS PETALOS SE OSCURECEN COMO TODO LO DEMAS (2026-09-13)
  *
  * Carlos: «los petalos parecen estar por sobre la penumbra, no veo que se
