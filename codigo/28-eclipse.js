@@ -852,6 +852,54 @@
        con otro cuerpo. Se hace UNA vez, no por cuadro. */
     copiarLosEstilosResueltos(nombre, copiaDelNombre);
 
+    /* ⛔ Y SE LE MATA LA ANIMACIÓN DE ENTRADA, O EL NOMBRE PARPADEA AL
+     *   ARRANCAR EL MINUTO (2026-09-13)
+     *
+     * Carlos: «al iniciar la secuencia el nombre de Ania parece tener un
+     * glitch, peor aún, con animación de entrada — no podemos ser tan
+     * obvios en algo que será lo primero que vean».
+     *
+     * La causa no era una capa mal puesta. `.portada__nombre` trae, de la
+     * portada, `opacity: 0` más `animation: aparecer-desde-abajo .9s 1.15s`
+     * (estilos/04-portada.css:493-494). El clon hereda la CLASE, así que la
+     * animación arranca de cero otra vez: el nombre se apaga, espera 1,15 s
+     * y vuelve a subir desde abajo. Justo en el primer segundo del ritual.
+     *
+     * ⚠️ Y COPIAR `opacity` Y `transform` NO ALCANZA —los dos están en
+     * ESTILOS_DEL_NOMBRE y aun así se veía—: una animación en curso gana
+     * sobre el estilo en línea en la cascada. Hay que apagar la animación,
+     * no pisarle el resultado.
+     *
+     * Se hace sobre la copia Y sus descendientes: el <h1> lleva adentro el
+     * «XV AÑOS», que tiene su propia entrada escalonada.
+     *
+     * Esto no viola la regla del nombre. La regla dice que el nombre no
+     * REACCIONA al eclipse; acá se está impidiendo que reaccione. Es la
+     * misma intención, defendida en el único sitio donde se podía perder. */
+    copiaDelNombre.style.animation = 'none';
+    var dentroDeLaCopia = copiaDelNombre.querySelectorAll('*');
+    for (var c = 0; c < dentroDeLaCopia.length; c++) {
+      dentroDeLaCopia[c].style.animation = 'none';
+    }
+
+    /* ⚠️ Y SE LE FUERZA EL ESTADO FINAL, QUE NO ES LO MISMO QUE APAGARLA.
+     *
+     * Apagar la animación sola tiene un borde peligroso: si el eclipse
+     * arranca MIENTRAS la entrada de la portada está corriendo —entre el
+     * segundo 1,15 y el 2,05 de la carga, o en cualquier momento en que el
+     * navegador la haya reiniciado— el original está en `opacity: 0` con un
+     * `translateY(20px)`, y eso es lo que la copia se lleva. Sin la
+     * animación para sacarla de ahí, el nombre quedaría INVISIBLE los
+     * sesenta segundos. Sería peor que el parpadeo que se está arreglando.
+     *
+     * Medido en el navegador: `getAnimations()` sobre el original devolvió
+     * `aparecer-desde-abajo` en estado `running` con `currentTime: 0`.
+     *
+     * El nombre es la deidad. Tiene que estar. Esto no es hacerlo
+     * reaccionar: es garantizar que simplemente ES, que es la regla. */
+    copiaDelNombre.style.opacity = '1';
+    copiaDelNombre.style.transform = 'none';
+
     copiaDelNombre.style.margin = '0';
 
     /* ⚠️ LA ÚNICA ESCRITURA QUE EL NOMBRE RECIBE EN TODO EL MINUTO.
@@ -1561,10 +1609,24 @@
       x: copiarDe ? copiarDe.x + copiarDe['tamaño'] / 2 : Math.random() * window.innerWidth,
       y: copiarDe ? copiarDe.y + copiarDe['tamaño'] / 2 : Math.random() * window.innerHeight,
       vx: 0, vy: 0,
-      tam: copiarDe ? copiarDe['tamaño'] / 2 : tamanoDeUnPetalo(),
+      /* `tam` es el RADIO: se dibuja de -tam a +tam, así que el lado es el
+         doble. El tope se expresa en LADO —que es lo que devuelve
+         `ladoRealDeLaFlor()` para las rosas—, de ahí la mitad. */
+      tam: topeDelPetalo
+        ? Math.min(copiarDe ? copiarDe['tamaño'] / 2 : tamanoDeUnPetalo(),
+                   topeDelPetalo / 2)
+        : (copiarDe ? copiarDe['tamaño'] / 2 : tamanoDeUnPetalo()),
       giro: copiarDe ? (copiarDe.angulo || 0) * Math.PI / 180
                      : Math.random() * Math.PI * 2,
-      giroVel: (Math.random() - 0.5) * 0.05,
+      /* ⚡ CASI NO GIRAN SOBRE SÍ MISMOS (2026-09-13)
+         Carlos: «quizás no girando sino flotando lentamente alrededor».
+         Tenía razón, y lo que no encajaba era el giro, no la órbita: un
+         pétalo que voltea sobre sí mismo se lee como BASURA —hojas en una
+         alcantarilla— y lo que sobra no adora nada. Lo que flota quieto se
+         lee como suspendido, y lo suspendido se lee como atento.
+         De 0,05 a 0,006: queda una deriva apenas perceptible, lo justo para
+         que no parezcan pegados al vidrio. */
+      giroVel: (Math.random() - 0.5) * 0.006,
       cual: (Math.random() * 3) | 0,
       posada: false,
 
@@ -1579,7 +1641,20 @@
          para que no sea una hilera, lo poco para que siga siendo UNA
          figura. Con la dispersión de antes (0,75 a 2,2) se leía como caos. */
       radio: 1.06 + Math.random() * 0.36,     // × altar.radio
-      prisa: 0.88 + Math.random() * 0.24,
+      /* El radio no es fijo: se acerca y algo lo devuelve. La regla 2 dice
+         que hay una distancia que nadie cruza — esto la vuelve visible sin
+         nombrarla: se ve a la congregación probando el límite. */
+      vaiven: Math.random() * Math.PI * 2,
+      /* ⚡ NI TODOS AL MISMO LADO, NI TAN RÁPIDO (2026-09-13)
+         Todos girando en el mismo sentido es un VÓRTICE, y un vórtice es
+         CLIMA. El clima es indiferente al nombre —suena a Lovecraft pero
+         acá está mal—: los pétalos no están siendo soplados, están siendo
+         atraídos. Un remolino dice «hay viento»; esto tiene que decir «hay
+         algo ahí».
+         Un tercio va al revés y todos van a menos de la mitad de la
+         velocidad anterior. Deja de ser una corriente y pasa a ser una
+         congregación retenida: no un vórtice, un ASEDIO. */
+      prisa: (Math.random() < 0.35 ? -1 : 1) * (0.34 + Math.random() * 0.16),
       fase: Math.random() * Math.PI * 2
     };
   }
@@ -1607,7 +1682,61 @@
    * superficie pintada por cuadro, que es la condición que Carlos puso por
    * encima de todo lo demás.
    */
+  /* El lado máximo que puede tener un pétalo, en píxeles. Se mide una vez
+     por corrida, en la siembra. 0 = sin tope (no se pudo medir). */
+  var topeDelPetalo = 0;
+
+  /**
+   * Mide las rosas del marco y fija el techo de los pétalos.
+   *
+   * ⚡ LA VARA ES LA ROSA MEDIANA, Y ES MÁS ESTRICTA QUE LA DE LA WEB
+   *   (2026-09-13)
+   *
+   * Carlos: «ningún pétalo puede ser tan o más grande que una rosa».
+   *
+   * 06-petalos-con-fisica.js ya resuelve esto para la lluvia de siempre,
+   * pero contra la rosa MÁS GRANDE (`EL_MAS_GRANDE_CONTRA_LA_ROSA = 1.05`,
+   * 06:146). Esa regla deja pasar pétalos que superan a la MITAD de las
+   * rosas del marco, y son justamente los que se ven mal: al lado de una
+   * rosa chica, un pétalo del tamaño de la rosa más grande parece un error
+   * de escala.
+   *
+   * Medido en el panel antes de este cambio: rosas mediana 15,4 · p90 19,3 ·
+   * mayor 25,3, contra un pétalo mayor de 26,6. O sea que el mayor superaba
+   * hasta a la rosa más grande.
+   *
+   * Se usa `ladoRealDeLaFlor()` —la misma de 02-utilidades.js que usa el
+   * informe— y no la caja de pantalla, que exageraba un 18 % en la mediana.
+   *
+   * @returns {void}
+   */
+  function medirElTopeDelPetalo() {
+    topeDelPetalo = 0;
+    try {
+      if (typeof ladoRealDeLaFlor !== 'function') return;
+      var moviles = document.querySelectorAll('.flor-de-enredadera__movil');
+      var lados = [];
+      for (var i = 0; i < moviles.length; i++) {
+        var lado = ladoRealDeLaFlor(moviles[i]);
+        if (lado > 0) lados.push(lado);
+      }
+      if (!lados.length) return;
+      lados.sort(function (a, b) { return a - b; });
+      /* ⚠️ UN PELO POR DEBAJO DE LA MEDIANA, Y LA LETRA IMPORTA. Carlos
+         dijo «ningún pétalo puede ser TAN o más grande que una rosa»: igualar
+         a la rosa mediana también está prohibido. Medido con el tope exacto,
+         el mayor quedaba en 1,00× clavado. Con 0,92 el pétalo más grande se
+         lee claramente más chico que una rosa cualquiera, que es el punto:
+         un pétalo es un PEDAZO de flor, no otra flor. */
+      topeDelPetalo = lados[Math.floor((lados.length - 1) * 0.5)] * 0.92;
+    } catch (e) {
+      topeDelPetalo = 0;
+    }
+  }
+
   function sembrarLosPetalos() {
+    medirElTopeDelPetalo();
+
     prepararLosPetalos();
     petalos.length = 0;
 
@@ -1632,18 +1761,34 @@
       petalos.push(unPetalo(heredados[h], 0));
     }
 
-    /* Y los que la tormenta va sumando. */
-    var tope = esAlta ? 50 : 28;
-    var cuantosFaltan = Math.max(0, tope - petalos.length);
-    for (var i = 0; i < cuantosFaltan; i++) {
-      petalos.push(unPetalo(null, 1200 + (i / Math.max(1, cuantosFaltan)) * 11000));
-    }
-
-    /* Si no había ni invitación ni sitio para sumar —el ensayo con los
-       pétalos apagados para medir— igual tiene que haber tormenta. */
-    if (!petalos.length) {
-      for (var k = 0; k < 24; k++) petalos.push(unPetalo(null, k * 400));
-    }
+    /* ⛔ ACÁ SE INVENTABAN PÉTALOS DE LA NADA (2026-09-13)
+     *
+     * Carlos, dos veces: «al activar la secuencia se dibujan pétalos de la
+     * nada, no, usemos los que ya existen» y «al iniciar la secuencia
+     * aparecen varios pétalos de la nada».
+     *
+     * Había un relleno hasta un tope fijo —50 en calidad alta, 28 en el
+     * resto— que creaba los que faltaran en posiciones al azar de la
+     * pantalla. Con la invitación aportando 19, eran 31 inventados: más
+     * inventados que heredados. Entraban con un fundido, pero no venían de
+     * ningún lado, y eso se ve.
+     *
+     * Y no es solo prolijidad. La premisa de la sección dice que los
+     * pétalos de la invitación «se desvanecen y estos ocupan su lugar,
+     * atraídos por el altar en vez de por el suelo: la gravedad cambió de
+     * dueño». Un pétalo que nace de la nada no cambió de dueño: nunca tuvo
+     * uno. Rompe la única frase que explica por qué esta capa existe.
+     *
+     * Ahora la población es exactamente la que la invitación tenía viva en
+     * el instante de arrancar. En una pantalla ancha son bastantes más que
+     * los 19 de una ventana angosta, y en todos los casos son pétalos con
+     * historia: venían cayendo desde antes de que empezara nada.
+     *
+     * ⚠️ SIN RESPALDO QUE INVENTE. Si no hay ninguno que heredar —el ensayo
+     * con los pétalos apagados para medir, o `?petalos=dom`— el eclipse
+     * corre SIN halo. Es correcto: no hay pétalos porque no los había, y
+     * fabricarlos para que la escena no se vea vacía es exactamente lo que
+     * se está quitando. */
   }
 
 
@@ -1793,6 +1938,34 @@
     return signo;
   }
 
+  /**
+   * Distancia, en unidades locales, de la unión con el tallo al eje de giro.
+   *
+   * Se lee del `transform-origin` que 07 ya dejó escrito, en vez de repetir
+   * su cuenta: si 07 cambia el largo del pedúnculo, esto lo sigue solo.
+   * Con `transform-box: fill-box` el origen se expresa desde la esquina de
+   * la caja de contenido, así que hay que devolverle el desplazamiento de la
+   * caja para llegar a coordenadas locales.
+   *
+   * @param {Element} nodo
+   * @returns {number} 0 si no se puede medir, que desactiva la compensación
+   *   sin romper nada.
+   */
+  function cuelloDeLaFlor(nodo) {
+    try {
+      var origen = nodo.style.transformOrigin;
+      if (!origen || origen.indexOf('%') !== -1) return 0;   // '50% 100%': la red de seguridad de 07
+      var oy = parseFloat(origen.split(/\s+/)[1]);
+      if (!isFinite(oy)) return 0;
+      var caja = nodo.getBBox();
+      if (!caja) return 0;
+      var cuello = oy + caja.y;
+      return (isFinite(cuello) && cuello > 0) ? cuello : 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
   function tomarLasFloresReales() {
     var todas = document.querySelectorAll('.flor-de-enredadera__movil');
 
@@ -1823,10 +1996,29 @@
 
       floresReales.push({
         nodo: nodo,
-        /* Lo que tenía puesto 07 en el momento de entrar. Se guarda para
-           devolvérselo tal cual: si el eclipse lo borrara, la flor quedaría
-           quieta hasta que el mouse volviera a pasarle por al lado. */
-        antes: nodo.style.transform || '',
+        /* ⚡ EL CUELLO: A QUÉ DISTANCIA DEL TALLO ESTÁ EL EJE DE GIRO
+         *   (2026-09-13)
+         *
+         * 07 le pone a cada flor un `transform-origin` que NO está en la
+         * unión con el tallo, sino un poco por debajo — `6 + 34 × escala`
+         * unidades, el largo del pedúnculo (07:1861-1867). Para un GIRO eso
+         * es correcto y es el gesto que se busca: la cabeza se inclina sobre
+         * su cuello.
+         *
+         * ⛔ PERO PARA UNA ESCALA NO. Agrandar alrededor de un punto que no
+         * es la unión ALEJA la unión de su sitio: con la cabeza creciendo un
+         * 38 %, el punto donde la flor se engancha al tallo se corre
+         * `cuello × 0,38` — entre 3 y 5 píxeles de pantalla sobre una flor de
+         * 17. Y 07 nunca escala las flores: esa traslación la introduce el
+         * eclipse y solo el eclipse. Es la causa que se ve en calidad baja.
+         *
+         * Guardando el cuello acá —una lectura por flor, en la toma, no por
+         * cuadro— la escritura puede compensarla exactamente. Ver la cuenta
+         * donde se escribe.
+         *
+         * La unión con el tallo está en el (0,0) local: el `translate(x y)`
+         * del padre ya la puso sobre la punta del brote (07:704). */
+        cuello: cuelloDeLaFlor(nodo),
         haciaElNombre: giro,
         /* 1 o -1. Las flores del lado derecho del marco viven dentro de un
            contenedor reflejado y hay que escribirles el ángulo al revés
@@ -2024,16 +2216,42 @@
       while (haciaElNombre > 180) haciaElNombre -= 360;
       while (haciaElNombre < -180) haciaElNombre += 360;
 
-      /* El pivote va en la BASE del nudo —abajo, al centro—, que es por
-         donde la rama se une al tallo. Girarlo desde su centro haría que
-         la rama flotara; desde la base, se dobla. */
-      try {
-        nudo.style.transformBox = 'fill-box';
-        nudo.style.transformOrigin = '50% 100%';
-      } catch (e) { continue; }
+      /* ⛔ ESTO PISABA EL PIVOTE QUE YA ESTABA PUESTO (2026-09-13)
+       *
+       * El pivote va en la BASE del nudo, que es por donde la rama se une al
+       * tallo: girarlo desde su centro haría que la rama flotara. Eso sigue
+       * siendo cierto — y es exactamente lo que
+       * 07-marco-y-enredaderas.js:1723-1729 ya hace, y mejor: pone
+       * `view-box` con el pivote REAL del recorrido del tallo, medido punto
+       * por punto al generar la planta.
+       *
+       * Esto lo reemplazaba por un `50% 100%` sobre la caja de contenido del
+       * nudo entero — 82 × 124 px que incluyen hojas, zarcillos, flores y los
+       * nudos hijos. El centro-abajo de ESA caja puede quedar a decenas de
+       * unidades del nudo verdadero.
+       *
+       * ⚠️ Y CAMBIAR EL ORIGEN CON UNA ROTACIÓN YA APLICADA ES UN SALTO. 07
+       * sigue rotando estos nudos mientras tanto (07:2473), así que desde el
+       * instante en que el eclipse los tomaba, cada articulación pegaba un
+       * tirón y a partir de ahí recorría el arco equivocado. Es la causa de
+       * que las plantas se vieran romperse por los tallos.
+       *
+       * Ahora solo se pone un pivote si NO hay ninguno — caso posible, porque
+       * 07 prepara las flores por tandas y una planta puede no haber llegado
+       * todavía. Y se anota quién lo puso, para devolver exactamente lo que
+       * se tomó y nada más. */
+      var pusimosElPivote = false;
+      if (!nudo.style.transformOrigin) {
+        try {
+          nudo.style.transformBox = 'fill-box';
+          nudo.style.transformOrigin = '50% 100%';
+          pusimosElPivote = true;
+        } catch (e) { continue; }
+      }
 
       ramas.push({
         nodo: nudo,
+        pusimosElPivote: pusimosElPivote,
         haciaElNombre: haciaElNombre,
         /* La mitad derecha del marco está reflejada y ahí los ángulos van
            al revés: 40 de 80 nudos se retorcían apartándose del nombre.
@@ -2059,8 +2277,16 @@
       try {
         r.nodo.style.removeProperty('rotate');
         r.nodo.style.removeProperty('scale');
-        r.nodo.style.removeProperty('transform-box');
-        r.nodo.style.removeProperty('transform-origin');
+
+        /* ⚠️ EL PIVOTE SOLO SE BORRA SI LO PUSIMOS NOSOTROS. Antes se
+           borraba siempre, y como no hay ninguna regla CSS que respalde a
+           `.nudo-del-tallo`, los nudos quedaban con el default — el centro
+           del viewBox entero — mientras 07 los seguía rotando. El desajuste
+           sobrevivía al eclipse y no se iba hasta recargar. */
+        if (r.pusimosElPivote) {
+          r.nodo.style.removeProperty('transform-box');
+          r.nodo.style.removeProperty('transform-origin');
+        }
       } catch (e) { /* nada */ }
     }
     ramas.length = 0;
@@ -2196,6 +2422,10 @@
     var lado = f.ladoReal || f.tamano;
     muerte.escala = (lado * (f.creceAhora || 1)) / (LADO * tintaDeLaRosa);
 
+    /* El tamaño con el que sale, para poder desinflarla mientras viaja sin
+       perder la referencia. Ver el drenaje, en el viaje. */
+    muerte.escala0 = muerte.escala;
+
     /* Y sale girada como estaba ella: el giro que el dibujo trae puesto
        más el gesto con el que estaba estirando, los dos en grados de
        pantalla (de ahí el `espejo` sobre el primero: el del gesto ya lo
@@ -2265,14 +2495,18 @@
     ];
 
     dibujarUnaRosa(pincelDeLaOfrenda, muerte.x, muerte.y,
-                   muerte.escala, muerte.giro, 1, muerte.espejo);
+                   muerte.escala, muerte.giro, 1, muerte.espejo,
+                   muerte.drenado);
   }
 
   function devolverLasFloresReales() {
     for (var i = 0; i < floresReales.length; i++) {
       var f = floresReales[i];
-      if (f.antes) f.nodo.style.transform = f.antes;
-      else         f.nodo.style.removeProperty('transform');
+      /* ⚠️ NO SE TOCA `transform`: es de 07 y el eclipse ya no escribe ahí.
+         Devolverle una foto vieja borraría lo que 07 tenga puesto AHORA. */
+      f.nodo.style.removeProperty('rotate');
+      f.nodo.style.removeProperty('scale');
+      f.nodo.style.removeProperty('translate');
 
       /* El hueco de la mártir se vuelve a llenar en el frenazo, con todo
          lo demás y en el mismo cuadro. La flor vuelve a su tallo como si
@@ -3265,7 +3499,26 @@
    *   después del giro para que el orden sea el mismo que en el DOM:
    *   primero se refleja el dibujo, después se lo gira.
    */
-  function dibujarUnaRosa(pincel, x, y, escala, giro, alfa, espejo) {
+  /**
+   * @param {number} [drenado] - 0 a 1. Cuánto se le fue la vida.
+   *
+   * ⚡ LO QUE SEPARA UN CADÁVER DE UNA ROSA ROJA (2026-09-13)
+   *
+   * Carlos: «no como rosa roja, sino que es literalmente un cadáver,
+   * busquemos darle ese matiz».
+   *
+   * ⚠️ Y NO SE OSCURECE COMO EL RESTO. Esa distinción es todo el punto.
+   * Todo lo demás en la escena se oscurece porque MURIÓ EL SOL. Ella se
+   * drena porque MURIÓ ELLA. Es lo único del cuadro que cambia de color por
+   * motivo propio, y eso es exactamente lo que separa un cuerpo de un objeto
+   * en sombra. La regla sigue en pie —la oscuridad no la toca— porque esto
+   * no es la oscuridad: es ella.
+   *
+   * El tinte va a un ceniza tibio, no a un rojo más oscuro: lo que se pierde
+   * al morir no es el brillo, es la SANGRE. Un rojo apagado sigue siendo una
+   * rosa de noche; un gris pardo ya no es una flor.
+   */
+  function dibujarUnaRosa(pincel, x, y, escala, giro, alfa, espejo, drenado) {
     pincel.save();
     pincel.globalAlpha = alfa;
     pincel.translate(x, y);
@@ -3275,6 +3528,13 @@
     if (mapaDeLaRosa) {
       var l = LADO * escala;
       pincel.drawImage(mapaDeLaRosa, -l / 2, -l / 2, l, l);
+
+      if (drenado > 0.01) {
+        pincel.globalCompositeOperation = 'source-atop';
+        pincel.globalAlpha = alfa * Math.min(drenado, 1) * 0.82;
+        pincel.fillStyle = 'rgb(46,38,36)';
+        pincel.fillRect(-l / 2, -l / 2, l, l);
+      }
     } else {
       /* Respaldo: si la rosa de verdad no se pudo rasterizar, siluetas.
          Se pierde el detalle, no la escena — y la portada de Hysteria
@@ -3292,7 +3552,64 @@
     pincel.restore();
   }
 
-  function dibujar(t) {
+  /**
+   * Oscurece el pétalo recién dibujado, en su propio sitio.
+   *
+   * ⛔ POR QUÉ HACÍA FALTA (2026-09-13). Carlos: «los pétalos parecen estar
+   * por sobre la penumbra, no veo que se oscurezcan, deben oscurecerse como
+   * todo lo demás». No era una impresión: era imposible que lo hicieran.
+   *
+   * Este lienzo vive en z-index 2147482999, por encima de #penumbra-profunda
+   * (65) y de todo lo demás. El comentario de la capa decía lo contrario —«va
+   * DEBAJO de los velos, se oscurecen como todo»— y era cierto cuando los
+   * velos existían. Al borrarlos, el oscurecimiento se mudó al sistema de la
+   * hora, que escribe variables CSS sobre elementos del DOM y NO PUEDE TOCAR
+   * UN CANVAS DIBUJADO ENCIMA.
+   *
+   * ⚠️ Y NO SE RESUELVE BAJANDO EL ALFA. Bajar la opacidad DESVANECE: el
+   * pétalo se vuelve transparente y se ve el fondo a través. Oscurecer es
+   * otra cosa — sigue estando ahí, sólido, pero le llegó menos luz. Por eso
+   * se pinta ENCIMA con `source-atop`, que solo moja los píxeles que el
+   * pétalo ya ocupó y deja intacto lo de alrededor.
+   *
+   * El color no se inventa: de día tira a un azul de acero muy oscuro —el
+   * mismo frío que `coloresEn()` aplica a la escena antes de la totalidad— y
+   * en la totalidad vira al tinte de sala del eclipse, `tinteDeSala` de
+   * HORA_DEL_ECLIPSE. Una sola fuente de verdad para la paleta.
+   *
+   * Cuesta un fillRect por pétalo sobre su propia caja: con menos de treinta
+   * pétalos en pantalla, es ruido frente a los drawImage.
+   *
+   * @param {CanvasRenderingContext2D} pincel - ya trasladado y girado al pétalo
+   * @param {number} tam - radio del pétalo
+   * @param {number} frio - 0..1, cuánto se enfrió la escena
+   * @param {number} sangre - 0..1, cuánto rojo hay
+   * @returns {void}
+   */
+  function oscurecerElPetalo(pincel, tam, frio, sangre) {
+    var cuanto = frio * 0.78 + sangre * 0.42;
+    if (cuanto <= 0.01) return;
+    if (cuanto > 0.92) cuanto = 0.92;
+
+    /* Del frío al tinte de sala, según cuánta sangre haya. */
+    var haciaLaSangre = SANGRE_MAXIMA ? sangre / SANGRE_MAXIMA : 0;
+    if (haciaLaSangre > 1) haciaLaSangre = 1;
+
+    var sala = HORA_DEL_ECLIPSE.tinteDeSala;
+    var r = Math.round(12 + (sala[0] - 12) * haciaLaSangre);
+    var g = Math.round(16 + (sala[1] - 16) * haciaLaSangre);
+    var b = Math.round(26 + (sala[2] - 26) * haciaLaSangre);
+
+    pincel.globalCompositeOperation = 'source-atop';
+    pincel.globalAlpha = cuanto;
+    pincel.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+    pincel.fillRect(-tam, -tam, tam * 2, tam * 2);
+  }
+
+  function dibujar(t, color) {
+    /* Red de seguridad: si alguien llamara a dibujar() sin la luz del
+       momento, el oscurecimiento se apaga solo en vez de tirar. */
+    if (!color) color = { frio: 0, sangre: 0, corona: 0 };
     /* ⚡ SE BORRA SOLO DONDE HUBO ALGO (2026-09-11)
      *
      * Acá había un `clearRect` de la pantalla entera. En la ronda pasada
@@ -3426,6 +3743,22 @@
                  - Math.sin(viaje * Math.PI) * 26;   // un cuerpo describe un arco
       muerte.giro = muerte.giro0 + viaje * 1.1;
 
+      /* ⚡ SE VA DRENANDO MIENTRAS VIAJA (2026-09-13)
+       *
+       * No llega muerta: se muere en el camino. Para cuando se apoya en el
+       * filo de las letras ya no queda rojo, y el espectador no vio el
+       * momento en que dejó de ser una flor — solo sabe que lo que hay
+       * apoyado ahí arriba ya no lo es.
+       *
+       * Empieza en el 20 % del viaje: el arranque tiene que verse todavía
+       * como una rosa, o el desgarro pierde a quién le pasó. */
+      muerte.drenado = suave(limitar((viaje - 0.2) / 0.65, 0, 1));
+
+      /* Y se desinfla un poco. Un cuerpo pierde tensión: es la diferencia
+         entre algo que se sostiene y algo que ya no. Un 7 %, que no se ve
+         como un cambio de tamaño sino como una pérdida. */
+      muerte.escala = muerte.escala0 * (1 - muerte.drenado * 0.07);
+
       /* 54,0 en adelante: resbala del nombre y cae. Se le acabó el
          permiso, como a todas. 900 px/s², que es una caída creíble a
          cualquier tamaño de pantalla. */
@@ -3465,6 +3798,11 @@
         var mapaPosado = mapasDePetalos[pt.cual];
         if (mapaPosado && mapaPosado.listo) {
           pincel.drawImage(mapaPosado, -pt.tam, -pt.tam, pt.tam * 2, pt.tam * 2);
+          /* El posado también se oscurece. La regla dice que en todo el minuto
+             hay exactamente DOS cosas que la oscuridad no toca: el nombre y la
+             rosa que se ofreció — y la rosa vive en otra capa. Este pétalo no
+             está en esa lista. */
+          oscurecerElPetalo(pincel, pt.tam, color.frio, color.sangre);
         } else {
           pincel.beginPath();
           pincel.ellipse(0, 0, pt.tam * 0.5, pt.tam * 0.28, 0, 0, Math.PI * 2);
@@ -3519,7 +3857,20 @@
        * ⚠️ LA REGLA 2 SIGUE INTACTA. El radio prohibido deja de ser un
        * carril y vuelve a ser lo que era: un tope duro. Ningún pétalo cruza
        * `altar.radio`, y el que lo intenta se frena ahí. */
-      if (!enSumision) {
+      /* ⚡ EN EL SHOCK TAMBIÉN SE DETIENEN (2026-09-13)
+       *
+       * Los dos segundos de shock son el único tramo del minuto en que todo
+       * se queda quieto —y el propio archivo lo llama «vacío absoluto»—, pero
+       * los pétalos seguían derivando y rompían el congelamiento. Quietos,
+       * suspendidos en el aire, con el nombre sin enterarse: es el plano más
+       * ceremonial de los sesenta segundos.
+       *
+       * Y es gratis dos veces: no se integra física, y como no se mueven,
+       * las cajas repintadas del cuadro siguiente son las mismas. */
+      if (enShock) {
+        pt.vx = 0;
+        pt.vy = 0;
+      } else if (!enSumision) {
         /* ⚡ ERA CAOS, NO UNA CORRIENTE (2026-09-11)
          *
          * La ronda anterior le dio a cada pétalo su propio radio (de 0,75
@@ -3534,7 +3885,9 @@
          * caos: es UNA figura con variación pequeña. Todos orbitan a un
          * radio parecido y a una velocidad parecida; lo que los separa es
          * un 18 % de diferencia, no un 200 %. */
-        var suRadio = altar.radio * pt.radio;
+        /* El radio respira: se acercan un poco y algo los devuelve. */
+        var respira = 1 + Math.sin(t / 2600 + pt.vaiven) * 0.08;
+        var suRadio = altar.radio * pt.radio * respira;
 
         /* Hacia su radio, no hacia el centro: lo que los ordena es la
            corriente, no una atracción pareja. */
@@ -3562,7 +3915,8 @@
         }
       }
 
-      pt.x += pt.vx; pt.y += pt.vy; pt.giro += pt.giroVel;
+      pt.x += pt.vx; pt.y += pt.vy;
+      if (!enShock) pt.giro += pt.giroVel;
 
       pincel.save();
       pincel.translate(pt.x, pt.y);
@@ -3573,6 +3927,7 @@
       if (mapa && mapa.listo) {
         // El dibujo de verdad, centrado en su punto.
         pincel.drawImage(mapa, -pt.tam, -pt.tam, pt.tam * 2, pt.tam * 2);
+        oscurecerElPetalo(pincel, pt.tam, color.frio, color.sangre);
       } else {
         // Mientras el SVG no terminó de decodificar, la silueta de antes.
         pincel.beginPath();
@@ -3790,7 +4145,12 @@
 
       if (fervor <= 0.001) {
         // Todavía dócil: se la deja exactamente como la dejó 07.
-        if (f.tocada) { f.nodo.style.transform = f.antes; f.tocada = false; }
+        if (f.tocada) {
+          f.nodo.style.removeProperty('rotate');
+          f.nodo.style.removeProperty('scale');
+          f.nodo.style.removeProperty('translate');
+          f.tocada = false;
+        }
         continue;
       }
       f.tocada = true;
@@ -3905,10 +4265,49 @@
          marco es la izquierda reflejada, y dentro de un espejo los
          ángulos se invierten: sin esto, 94 de 198 flores se apartaban del
          nombre en vez de estirar hacia él. Ver sentidoDeLaPantalla(). */
-      f.nodo.style.transform =
-        (f.antes ? f.antes + ' ' : '') +
-        'rotate(' + (enCentesimas / 100).toFixed(2) + 'deg) ' +
-        'scale(' + (enMilesimas / 1000).toFixed(3) + ')';
+      /* ⚡ SE ESCRIBE EN `rotate`/`scale`, NO EN `transform` (2026-09-13)
+       *
+       * ⛔ ANTES SE ESCRIBÍA `style.transform`, QUE ES LA MISMA PROPIEDAD QUE
+       * 07 ESCRIBE EN CADA CUADRO (07:2591). Se pisaban alternadamente: un
+       * cuadro la flor tenía el gesto del eclipse, el siguiente el de 07 sin
+       * escala. Y `f.antes` era una foto de un valor que 07 seguía cambiando,
+       * así que si el mouse había rozado esa flor antes de la toma, el desvío
+       * congelado se volvía a aplicar los sesenta segundos.
+       *
+       * Las propiedades independientes SE COMPONEN en vez de pisar: el orden
+       * es translate → rotate → scale → transform, así que 07 conserva su
+       * canal y el eclipse tiene el suyo. Es exactamente el patrón que este
+       * mismo archivo ya usa para las llamas y para las ramas, y por el mismo
+       * motivo.
+       *
+       * ⚡ Y EL `translate` COMPENSA LA ESCALA. Ver la nota del `cuello` en
+       * tomarLasFloresReales(). Escalar por k alrededor de un eje que está a
+       * `cuello` de la unión mueve la unión `cuello × (k-1)` a lo largo del
+       * eje de la flor; después el giro la lleva de paseo. El vector que lo
+       * cancela es:
+       *
+       *     Tx = (1-k) · cuello · sen(θ)
+       *     Ty = (k-1) · cuello · cos(θ)
+       *
+       * Comprobación a θ=0: la escala movió la unión a (0, cuello·(1-k)) y la
+       * compensación suma (0, cuello·(k-1)). Da cero. La cabeza crece, la
+       * unión no se mueve, el tallo no se abre.
+       *
+       * Con `cuello = 0` —flor sin medir— los dos términos son cero y esto se
+       * comporta como si no existiera. */
+      var giroEnGrados = enCentesimas / 100;
+      var crecimiento  = enMilesimas / 1000;
+
+      f.nodo.style.rotate = giroEnGrados.toFixed(2) + 'deg';
+      f.nodo.style.scale  = crecimiento.toFixed(3);
+
+      if (f.cuello) {
+        var radianes = giroEnGrados * Math.PI / 180;
+        var corrido  = (crecimiento - 1) * f.cuello;
+        f.nodo.style.translate =
+          (-corrido * Math.sin(radianes)).toFixed(2) + 'px ' +
+          ( corrido * Math.cos(radianes)).toFixed(2) + 'px';
+      }
     }
 
     moverLasRamas(t, retirada);
@@ -4264,7 +4663,10 @@
        Ver arrancarALaMartir(). */
     moverLasFloresReales(t);
     moverLasLlamas(t);
-    dibujar(t);
+    /* ⚡ EL COLOR SE PASA, NO SE RECALCULA (2026-09-13). `coloresEn(t)` ya
+       corrió arriba en este mismo cuadro y su resultado se usaba solo para
+       el mundo; los pétalos quedaban afuera y por eso no se oscurecían. */
+    dibujar(t, color);
     ajustarElSonido(t);
 
     pedidoDeCuadro = requestAnimationFrame(cuadro);
@@ -4305,6 +4707,7 @@
     muerte.x = 0; muerte.y = 0; muerte.vx = 0; muerte.vy = 0;
     muerte.x0 = 0; muerte.y0 = 0; muerte.giro0 = 0;
     muerte.giro = 0; muerte.giroVel = 0; muerte.suelta = false;
+    muerte.drenado = 0; muerte.escala0 = 0;
     muerte.escala = 0.5; muerte.espejo = 1;
     laQueMuere = null;
     ultimoCuadro = 0;

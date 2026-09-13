@@ -1143,10 +1143,24 @@ comprobar('en el shock contienen el aliento',
   /enShock \? 0 : fervor \* fervor/.test(eclipseCodigo),
   'los dos segundos de vacío valen para la marea y para las plantas');
 
+/* ⚡ LA MISMA INTENCIÓN, POR MEJOR VÍA (2026-09-13)
+ *
+ * Esto exigía la línea literal `f.nodo.style.transform = f.antes`. La
+ * intención sigue siendo la de siempre —una flor dócil tiene que verse
+ * dócil, no congelada a medio gesto— pero el mecanismo cambió y es más
+ * fiel: `f.antes` era una FOTO de `style.transform` tomada al entrar, y 07
+ * sigue escribiendo esa misma propiedad en cada cuadro. Devolverle la foto
+ * le borraba lo que 07 tuviera puesto en ese momento.
+ *
+ * Ahora el eclipse escribe en `rotate`/`scale`/`translate` —que se componen
+ * en vez de pisar— y al soltar simplemente las quita. La flor queda con lo
+ * que 07 tenga AHORA, que es exactamente lo que la regla pedía. */
 comprobar('la flor que no despertó queda como la dejó 07',
-  /if \(f\.tocada\) \{ f\.nodo\.style\.transform = f\.antes; f\.tocada = false; \}/
-    .test(eclipseCodigo),
-  'una flor dócil tiene que verse dócil, no congelada a medio gesto');
+  /if \(f\.tocada\) \{[\s\S]{0,260}?removeProperty\('rotate'\)[\s\S]{0,200}?f\.tocada = false;/
+    .test(eclipseCodigo) &&
+  !/f\.nodo\.style\.transform =/.test(eclipseCodigo),
+  'una flor dócil tiene que verse dócil, no congelada a medio gesto — y el ' +
+  'eclipse no puede escribir en `transform`, que es el canal de 07');
 
 
 /* ─── 10. Que la calidad alta LLEGUE A USARSE ──────────────────────────
@@ -1414,11 +1428,46 @@ comprobar('el nombre ya no tiene una luz que el eclipse le mueva',
   const escrituras = [...sinComentarios(eclipseCodigo)
     .matchAll(/copiaDelNombre\.style[.[][^\n]*/g)].map(m => m[0]);
 
-  comprobar('al clon se le escribe UNA sola vez, al crearlo',
-    escrituras.length === 2 &&
-    escrituras.some(e => /margin/.test(e)) &&
-    escrituras.some(e => /--luz-x/.test(e)),
-    'escrituras encontradas: ' + (escrituras.join(' | ') || 'ninguna'));
+  /* ⚡ SE COMPRUEBA DÓNDE, NO CUÁNTAS (2026-09-13)
+   *
+   * Esto exigía exactamente dos escrituras. La regla de verdad nunca fue el
+   * número: es que al clon se le escriba SOLO al crearlo y nunca durante el
+   * minuto. Contar invitaba a dos errores opuestos — romper la prueba por
+   * agregar una escritura legítima de creación, y dejar pasar una escritura
+   * por cuadro si alguien borraba otra a cambio.
+   *
+   * La tercera escritura que obligó a revisar esto es `animation = 'none'`:
+   * el clon hereda la clase `.portada__nombre`, que trae la animación de
+   * entrada de la portada, y volvía a dispararla al arrancar el minuto.
+   * Carlos lo vio como «un glitch, peor aún, con animación de entrada». */
+  {
+    const cuerpoDeCoronar = (sinComentarios(eclipseCodigo)
+      .match(/function coronarElNombre\(\)[\s\S]*?\n  \}/) || [''])[0];
+
+    const fuera = escrituras.filter(e => cuerpoDeCoronar.indexOf(e) === -1);
+
+    comprobar('al clon se le escribe SOLO al crearlo',
+      escrituras.length > 0 && fuera.length === 0,
+      'escrituras fuera de coronarElNombre: ' +
+      (fuera.join(' | ') || 'ninguna') +
+      ' — después de crear el clon, el nombre simplemente ES');
+
+    comprobar('y entre ellas se le apaga la animación de entrada',
+      escrituras.some(e => /animation = 'none'/.test(e)),
+      'sin esto el clon hereda `animation: aparecer-desde-abajo .9s 1.15s` ' +
+      'de su clase y el nombre se apaga y vuelve a subir al arrancar');
+
+    /* ⚠️ APAGARLA NO ALCANZA. Si el eclipse arranca MIENTRAS la entrada
+       de la portada corre, el original esta en opacity 0 con un
+       translateY(20px), y sin animacion que lo saque de ahi la copia
+       quedaria invisible los sesenta segundos: peor que el parpadeo.
+       Medido: getAnimations() sobre el original devolvio la animacion en
+       estado `running` con currentTime 0. */
+    comprobar('y se le fuerza el estado final, no solo el apagado',
+      escrituras.some(e => /opacity = '1'/.test(e)) &&
+      escrituras.some(e => /transform = 'none'/.test(e)),
+      'el nombre es la deidad: tiene que estar, siempre');
+  }
 
   comprobar('y ninguna es una animación por cuadro',
     !escrituras.some(e => /\bt\b|recorrido|toFixed\(4\)/.test(e)),
@@ -1753,10 +1802,14 @@ comprobar('y hay respaldo si el marco nació tarde y nadie acumuló nada',
   const cuerpoDeUnCuadro = (eclipseCodigo.match(
     /function unCuadro\(ahora, t\) \{[\s\S]*?\n  \}/) || [''])[0];
 
+  /* El `dibujar(` sin cerrar el paréntesis: desde 2026-09-13 recibe también
+     la luz del momento —`dibujar(t, color)`— para que los pétalos se
+     oscurezcan. Lo que esta comprobación protege es el ORDEN, no la firma. */
   comprobar('las plantas se mueven ANTES de dibujar el lienzo',
     cuerpoDeUnCuadro.indexOf('moverLasFloresReales(t);') > 0 &&
+    cuerpoDeUnCuadro.indexOf('dibujar(t') > 0 &&
     cuerpoDeUnCuadro.indexOf('moverLasFloresReales(t);') <
-    cuerpoDeUnCuadro.indexOf('dibujar(t);'),
+    cuerpoDeUnCuadro.indexOf('dibujar(t'),
     'al revés, el relevo de la mártir tendría un cuadro de hueco vacío');
 }
 
@@ -2375,6 +2428,111 @@ comprobar('y el de la reliquia usa la misma trama',
     '02-utilidades.js documenta como el 37,5 % de un perfil');
 }
 
+/* ⚡ LOS PETALOS SE OSCURECEN COMO TODO LO DEMAS (2026-09-13)
+ *
+ * Carlos: «los petalos parecen estar por sobre la penumbra, no veo que se
+ * oscurezcan». No era una impresion: era IMPOSIBLE que lo hicieran. El lienzo
+ * esta en z-index 2147482999, por encima de #penumbra-profunda (65), y el
+ * oscurecimiento vive en el sistema de la hora, que escribe variables CSS
+ * sobre elementos del DOM y no puede tocar un canvas dibujado encima.
+ *
+ * El comentario de la capa decia lo contrario y era cierto cuando existian los
+ * velos. Al borrarlos quedo mintiendo.
+ */
+{
+  comprobar('dibujar() recibe la luz del momento',
+    /function dibujar\(t, color\)/.test(eclipseCodigo) &&
+    /dibujar\(t, color\);/.test(eclipseCodigo),
+    'coloresEn(t) ya se calculaba cada cuadro y se tiraba: los petalos ' +
+    'quedaban afuera y por eso no se oscurecian');
+
+  /* ⚠️ OSCURECER NO ES DESVANECER. Bajar el alfa vuelve al petalo
+     transparente y se ve el fondo a traves. Oscurecer es que siga solido pero
+     le llegue menos luz. Por eso `source-atop`, que solo moja los pixeles que
+     el petalo ya ocupo y deja intacto lo de alrededor. */
+  comprobar('y los oscurece de verdad, no bajandoles el alfa',
+    /globalCompositeOperation = 'source-atop'/.test(eclipseCodigo),
+    'bajar la opacidad los desvanece, que es otra cosa y se lee como un bug');
+
+  comprobar('y el tinte sale de la paleta del eclipse, no inventado',
+    /HORA_DEL_ECLIPSE\.tinteDeSala/.test(
+      (eclipseCodigo.match(/function oscurecerElPetalo[\s\S]*?\n  \}/) || [''])[0]),
+    'dos paletas para la misma escena terminan desincronizandose');
+
+  comprobar('y se aplica a los que vuelan Y al posado',
+    (eclipseCodigo.match(/oscurecerElPetalo\(pincel/g) || []).length >= 2,
+    'el posado tambien esta bajo el eclipse: los dos unicos exentos son el ' +
+    'nombre y la rosa que se ofrecio, y la rosa vive en otra capa');
+}
+
+/* ⚡ LA FLOR NO SE DESPEGA DE SU TALLO (2026-09-13)
+ *
+ * Carlos: «los tallos de las flores durante el eclipse se separan, eso no
+ * puede pasar». Eran CUATRO causas encadenadas, y hasta hoy no había ni una
+ * sola prueba sobre pivotes, cuellos ni uniones en todo este archivo.
+ *
+ * En calidad baja la que se ve es la segunda —la escala— porque ahí el bucle
+ * de 07 se va por su guarda y no hay guerra de escrituras. Las otras tres
+ * muerden en media y alta.
+ */
+{
+  /* CAUSA 1 · El pivote del nudo lo pone 07, midiendo el recorrido real del
+     tallo punto por punto (07:1723-1729). El eclipse lo reemplazaba por un
+     `50% 100%` sobre una caja de 82x124 que incluye hojas y nudos hijos.
+     Cambiar el origen con una rotacion ya aplicada es un salto instantaneo,
+     y desde ahi todo el arco es el equivocado. */
+  comprobar('el eclipse no pisa el pivote que puso 07',
+    /if \(!nudo\.style\.transformOrigin\) \{/.test(eclipseCodigo),
+    'sin la guarda vuelve a reemplazarlo siempre, y cada articulacion pega ' +
+    'un tiron en el instante en que el eclipse toma las ramas');
+
+  /* CAUSA 2 · Y solo devuelve lo que tomo. Antes lo borraba siempre; como no
+     hay ninguna regla CSS que respalde a .nudo-del-tallo, los nudos quedaban
+     con el default —el centro del viewBox entero— mientras 07 los seguia
+     rotando. El desajuste SOBREVIVIA al eclipse. */
+  comprobar('y solo borra el pivote si lo puso el',
+    /if \(r\.pusimosElPivote\) \{/.test(eclipseCodigo),
+    'borrarlo siempre deja el desajuste puesto despues del minuto, y no se ' +
+    'va hasta que alguien recargue');
+
+  /* CAUSA 3 · `transform` es el canal de 07 (07:2591, cada cuadro). Las
+     propiedades independientes se COMPONEN en vez de pisar. Es el patron que
+     este mismo archivo ya usa para llamas y ramas. */
+  comprobar('la flor se mueve con rotate/scale, no con transform',
+    /f\.nodo\.style\.rotate =/.test(eclipseCodigo) &&
+    /f\.nodo\.style\.scale  =/.test(eclipseCodigo) &&
+    !/f\.nodo\.style\.transform =/.test(eclipseCodigo),
+    'escribir transform es pelearle a 07 por la misma propiedad, cuadro a ' +
+    'cuadro, y perder la mitad de las veces');
+
+  /* CAUSA 4 · El eje de giro esta a `6 + 34 x escala` unidades POR DEBAJO de
+     la union (07:1861-1867). Para un giro eso es correcto: la cabeza se
+     inclina sobre su cuello. Para una ESCALA no: agrandar alrededor de un
+     punto que no es la union aleja la union de su sitio. 07 nunca escala las
+     flores; esa traslacion la introduce el eclipse. */
+  comprobar('y la escala se compensa para que la union no se mueva',
+    /function cuelloDeLaFlor\(nodo\)/.test(eclipseCodigo) &&
+    /f\.nodo\.style\.translate =/.test(eclipseCodigo) &&
+    /\(crecimiento - 1\) \* f\.cuello/.test(eclipseCodigo),
+    'sin compensar, con la cabeza creciendo 38 % la union se corre entre 3 y ' +
+    '5 px sobre una flor de 17: el tallo se abre a la vista');
+
+  /* ⚠️ Y LA COMPENSACION TIENE QUE SEGUIR AL GIRO. El vector que cancela el
+     desplazamiento apunta a lo largo del eje de la flor, que rota con ella.
+     Una compensacion fija en Y solo funciona con la flor derecha. */
+  comprobar('y la compensacion gira con la flor',
+    /Math\.sin\(radianes\)/.test(eclipseCodigo) &&
+    /Math\.cos\(radianes\)/.test(eclipseCodigo),
+    'a 52 grados, una correccion que no gira deja la mitad del error puesta');
+
+  /* Red de seguridad: si el cuello no se pudo medir, la compensacion se apaga
+     sola en vez de escribir NaN. */
+  comprobar('y si no se puede medir el cuello, no rompe nada',
+    /if \(f\.cuello\) \{/.test(eclipseCodigo) &&
+    /return 0;/.test((eclipseCodigo.match(/function cuelloDeLaFlor[\s\S]*?\n  \}/) || [''])[0]),
+    'un translate con NaN manda la flor a ninguna parte');
+}
+
 /* ⚡ EL INSTRUMENTO, ANTES QUE LA OPTIMIZACIÓN (2026-09-13)
  *
  * Un perfil real en la máquina de Carlos —HD 4600, 2560×1277— durante el
@@ -2579,10 +2737,57 @@ comprobar('los que se suman entran de a uno',
   /var entrando = limitar\(\(t - pt\.nace\) \/ 1200, 0, 1\);/.test(eclipseCodigo),
   'la tormenta se forma a lo largo de doce segundos');
 
-comprobar('y son menos que antes, no más',
-  /var tope = esAlta \? 50 : 28;/.test(eclipseCodigo) &&
-  !/var cuantos = esAlta \? 90 : 40;/.test(eclipseCodigo),
-  'eran 90: menos objetos y menos superficie por cuadro');
+/* ⚡ Y NINGUNO ES TAN GRANDE COMO UNA ROSA (2026-09-13)
+ *
+ * Carlos: «ningun petalo puede ser tan o mas grande que una rosa». Medido en
+ * el panel antes del cambio: rosas mediana 15,4 - p90 19,3 - mayor 25,3,
+ * contra un petalo mayor de 26,6. Superaba hasta a la rosa mas grande.
+ *
+ * La vara es la rosa MEDIANA, no el p90 ni la mayor. Anclarlo arriba -que es
+ * lo que hace 06-petalos-con-fisica.js con EL_MAS_GRANDE_CONTRA_LA_ROSA-
+ * deja pasar petalos que superan a la mitad de las rosas del marco, y son
+ * justo los que se ven mal.
+ */
+comprobar('ningun petalo supera a la rosa mediana',
+  /function medirElTopeDelPetalo\(\)/.test(eclipseCodigo) &&
+  /topeDelPetalo = lados\[Math\.floor\(\(lados\.length - 1\) \* 0\.5\)\] \* 0\.92;/
+    .test(eclipseCodigo),
+  'contra el p90 o contra la mayor, un petalo puede superar a la mitad de ' +
+  'las rosas y sigue pareciendo un error de escala');
+
+comprobar('y se mide con el lado real, no con la caja de pantalla',
+  /ladoRealDeLaFlor\(moviles\[i\]\)/.test(eclipseCodigo),
+  'la caja de pantalla exageraba un 18 % en la mediana');
+
+comprobar('y el tope se aplica a los heredados tambien',
+  /Math\.min\(copiarDe \? copiarDe\['tamaño'\] \/ 2 : tamanoDeUnPetalo\(\),/
+    .test(eclipseCodigo),
+  'hoy TODOS los petalos son heredados: un tope que solo mirara a los ' +
+  'inventados no toparia ninguno');
+
+comprobar('y si no se pueden medir las rosas, no rompe nada',
+  /topeDelPetalo\s*\?/.test(eclipseCodigo),
+  'sin marco todavia construido, el tope queda en 0 y se ignora');
+
+/* ⚡ Y NINGUNO SE INVENTA (2026-09-13)
+ *
+ * Esto exigía un tope de 50/28 y comprobaba que ya no fueran 90. Carlos lo
+ * pidió dos veces más fuerte: «al activar la secuencia se dibujan pétalos de
+ * la nada, no, usemos los que ya existen».
+ *
+ * Había un relleno hasta ese tope que creaba los que faltaran en posiciones
+ * al azar. Con la invitación aportando 19, eran 31 inventados: más
+ * inventados que heredados.
+ *
+ * ⚠️ Y NO ES SOLO PROLIJIDAD. La premisa de la sección dice que los pétalos
+ * de la invitación «se desvanecen y estos ocupan su lugar, atraídos por el
+ * altar en vez de por el suelo: la gravedad cambió de dueño». Un pétalo que
+ * nace de la nada no cambió de dueño: nunca tuvo uno. */
+comprobar('y ninguno se inventa: son los que la invitacion ya tenia',
+  !/var tope = esAlta/.test(eclipseCodigo) &&
+  !/unPetalo\(null/.test(eclipseCodigo),
+  'un petalo que nace de la nada rompe la unica frase que explica por que ' +
+  'esta capa existe');
 
 
 /* ─── 14m. CAOS ALREDEDOR DEL RELICARIO ─────────────────────────────── */
