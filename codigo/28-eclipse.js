@@ -3054,18 +3054,49 @@
 
   var lienzosDePetalos = [];
 
+  /* ⚡ Y CUANDO TERMINAN DE DESVANECERSE, SALEN DEL COMPOSITOR
+   *   (2026-09-13)
+   *
+   * `opacity: 0` los saca de la VISTA, no del trabajo. Un lienzo a
+   * pantalla completa con opacidad cero se sigue componiendo en cada
+   * cuadro: en el monitor de Carlos —2560 × 1277— son 3,27 Mpx por cuadro,
+   * durante los sesenta segundos enteros, por algo que nadie puede ver.
+   * El informe del panel lo mostró como una de las capas a pantalla
+   * completa que quedan vivas en plena totalidad.
+   *
+   * ⚠️ PERO NO DE GOLPE: se desvanecen en 0,9 s, y un `display: none`
+   * inmediato sería un corte en vez de un fundido. Se espera a que el
+   * fundido termine.
+   *
+   * ⚠️ Y EL RELOJ SE CANCELA AL DEVOLVERLOS. Si el eclipse se corta
+   * durante ese segundo —«Cortar», un salto, una excepción— el reloj
+   * seguiría vivo y escondaría los pétalos DESPUÉS de haberlos devuelto:
+   * la invitación se quedaría sin pétalos hasta que alguien recargara.
+   *
+   * Es seguro para la geometría: 24-lienzo-de-petalos.js se mide con
+   * `window.innerWidth/innerHeight` y no con el elemento (:242), y
+   * 06-petalos-con-fisica.js dejó de tocar el DOM a propósito (:693). Un
+   * lienzo oculto no les cambia ninguna cuenta. */
+  var DURA_EL_FUNDIDO = 1000;
+
   function apagarLosPetalosDeSiempre() {
     var todos = document.querySelectorAll('.lienzo-de-petalos');
     for (var i = 0; i < todos.length; i++) {
-      lienzosDePetalos.push({ nodo: todos[i], antes: todos[i].style.opacity });
+      var ficha = { nodo: todos[i], antes: todos[i].style.opacity, reloj: 0 };
+      lienzosDePetalos.push(ficha);
       todos[i].style.transition = 'opacity .9s linear';
       todos[i].style.opacity = '0';
+      ficha.reloj = setTimeout((function (f) {
+        return function () { f.reloj = 0; f.nodo.style.display = 'none'; };
+      })(ficha), DURA_EL_FUNDIDO);
     }
   }
 
   function devolverLosPetalosDeSiempre() {
     for (var i = 0; i < lienzosDePetalos.length; i++) {
       var l = lienzosDePetalos[i];
+      if (l.reloj) { clearTimeout(l.reloj); l.reloj = 0; }
+      l.nodo.style.display = '';
       l.nodo.style.transition = '';
       l.nodo.style.opacity = l.antes;
     }
@@ -3779,8 +3810,42 @@
          los tramos lentos casi ninguna flor cambia de un cuadro al
          siguiente, y armar la cadena y escribirla cuesta lo mismo dé
          igual o no. Medido: 9,08 ms de cuadro bajan a 1,97. */
-      var enCentesimas = Math.round(f.espejo * gesto * 100);
-      var enMilesimas  = Math.round(crece * 1000);
+      /* ⚡ EL PASO SE MIDE EN PÍXELES, NO EN DECIMALES (2026-09-13)
+       *
+       * Esto redondeaba a la CENTÉSIMA de grado y a la MILÉSIMA de escala.
+       * Es muchísimo más fino de lo que la pantalla puede mostrar, y cada
+       * valor distinto es una escritura de `style.transform`, o sea una
+       * invalidación de SVG.
+       *
+       * ⚠️ LA CUENTA, SOBRE UNA FLOR REAL. Medido en el navegador: el
+       * `<g class="flor-de-enredadera__movil">` mide 20 × 17 px. Para un
+       * giro alrededor de su centro, lo que se mueve el píxel más lejano
+       * es `radio × ángulo_en_radianes`, con un radio de unos 13 px:
+       *
+       *     0,01° → 13 × 0,000175 = 0,002 px     (lo que había)
+       *     0,25° → 13 × 0,004363 = 0,057 px     (lo que hay)
+       *
+       * Y para la escala, sobre 20 px de ancho:
+       *
+       *     0,001 → 0,02 px     (lo que había)
+       *     0,004 → 0,08 px     (lo que hay)
+       *
+       * Los dos nuevos siguen MUY por debajo de un píxel, así que el
+       * rasterizador redondea a los mismos píxeles y no hay forma de que se
+       * vea escalonado. Lo que cambia es cuántas flores cruzan un escalón
+       * en un cuadro dado: con el paso 25 veces más grande en el giro,
+       * muchas menos, y cada una que no lo cruza es una invalidación de
+       * SVG que no ocurre.
+       *
+       * ⛔ NO SUBIRLO MÁS SIN VOLVER A HACER LA CUENTA. El límite no es el
+       * gusto, es el píxel: en cuanto `radio × ángulo` pase de ~0,5 px, el
+       * movimiento empieza a saltar de píxel en píxel y ahí SÍ se ve. Con
+       * radio 13 eso ocurre pasando los 2,2°. */
+      var PASO_DEL_GIRO  = 25;   // centésimas de grado → 0,25°
+      var PASO_DEL_CRECE = 4;    // milésimas de escala → 0,004
+
+      var enCentesimas = Math.round(f.espejo * gesto * 100 / PASO_DEL_GIRO) * PASO_DEL_GIRO;
+      var enMilesimas  = Math.round(crece * 1000 / PASO_DEL_CRECE) * PASO_DEL_CRECE;
       if (enCentesimas === f.ultimoGesto && enMilesimas === f.ultimoCrece) continue;
       f.ultimoGesto = enCentesimas;
       f.ultimoCrece = enMilesimas;

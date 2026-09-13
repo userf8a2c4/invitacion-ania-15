@@ -1591,7 +1591,11 @@ comprobar('y se mide por el DETERMINANTE, no por la palabra scaleX',
    redondeo y no en la del `style`. Lo que importa es que esté en la
    cuenta, no en qué renglón. */
 for (const [que, quien] of [
-  ['las flores',  /Math\.round\(f\.espejo \* gesto \* 100\)/],
+  /* El paso del redondeo se ajustó (2026-09-13) y la expresión dejó de ser
+     literal: ahora divide por PASO_DEL_GIRO y vuelve a multiplicar. El
+     espejo sigue donde tiene que estar —dentro de la cuenta del ángulo— y
+     eso es lo único que esta comprobación protege. */
+  ['las flores',  /Math\.round\(f\.espejo \* gesto \* 100 \/ PASO_DEL_GIRO\) \* PASO_DEL_GIRO/],
   ['las ramas',   /Math\.round\(r\.espejo \* \(dobla \+ tiembla \+ latigazo\) \* 100\)/],
   ['las llamas',  /l\.espejo \* \(l\.ladeo \* atraccion \+ vaiven\)/],
 ]) {
@@ -2270,6 +2274,33 @@ comprobar('y el de la reliquia usa la misma trama',
      nada. */
 }
 
+
+/* ⚡ LOS PÉTALOS APAGADOS SALEN DEL COMPOSITOR (2026-09-13)
+ *
+ * `opacity: 0` los saca de la vista, no del trabajo: un lienzo a pantalla
+ * completa con opacidad cero se compone igual en cada cuadro. A 2560 × 1277
+ * son 3,27 Mpx por cuadro durante el minuto entero por algo invisible.
+ *
+ * Las dos mitades son igual de importantes: esconderlos DESPUÉS del
+ * fundido —si no, es un corte— y cancelar el reloj al devolverlos —si no,
+ * esconde los pétalos de la invitación después de que el eclipse terminó—. */
+{
+  const apagar = (eclipseCodigo.match(/function apagarLosPetalosDeSiempre\(\)[\s\S]*?\n  \}/) || [''])[0];
+  const devolver = (eclipseCodigo.match(/function devolverLosPetalosDeSiempre\(\)[\s\S]*?\n  \}/) || [''])[0];
+
+  comprobar('los petalos apagados salen del compositor',
+    /display = 'none'/.test(apagar),
+    'con opacity 0 la capa se sigue componiendo entera en cada cuadro');
+
+  comprobar('pero despues del fundido, no de golpe',
+    /setTimeout\(/.test(apagar) && /DURA_EL_FUNDIDO/.test(apagar),
+    'se desvanecen en 0,9 s; esconderlos ya seria un corte en vez de un fundido');
+
+  comprobar('y el reloj se cancela al devolverlos',
+    /clearTimeout\(l\.reloj\)/.test(devolver) && /display = ''/.test(devolver),
+    'sin esto, un corte a mitad del fundido esconde los petalos de la ' +
+    'invitacion DESPUES de que el eclipse termino, y no vuelven');
+}
 
 /* ─── 14j. EL ORDEN DE LAS CAPAS ─────────────────────────
    La regla de fotografía de la escena entera, dicha con z-index.
