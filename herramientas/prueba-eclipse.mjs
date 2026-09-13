@@ -960,8 +960,43 @@ comprobar('sin AudioContext el eclipse sigue igual',
 
 console.log('\nLos módulos cerrados siguen cerrados\n');
 
-for (const archivo of ['06-petalos-con-fisica.js', '07-marco-y-enredaderas.js',
-                       '10-reproductor-de-musica.js']) {
+/* ⚡ 06 Y 07 PASAN AL MISMO CRITERIO QUE LOS OTROS TRES (2026-09-13)
+ *
+ * La regla era más estricta acá: ni la PALABRA «eclipse» podía aparecer, ni
+ * siquiera en un comentario. Era un alambre de tropiezo deliberado y cumplió
+ * su trabajo — frenó esta misma edición y obligó a justificarla.
+ *
+ * Lo que cambió: un perfil real en la máquina objetivo mostró que estos dos
+ * módulos siguen animándose el minuto entero debajo de la secuencia, y que
+ * 07 le escribe `transform` a LOS MISMOS nodos que el eclipse está moviendo
+ * —dos motores empujando las mismas piezas—, que es la causa de que los
+ * tallos se vieran separarse.
+ *
+ * ⚠️ LO QUE NO CAMBIÓ ES LA DISCIPLINA. La bandera es GENÉRICA: dice
+ * «quedáte quieto», no «hay un eclipse», y ninguno de los dos archivos la
+ * nombra en su CÓDIGO. Es exactamente el trato que ya tenían
+ * 23-lienzo-de-luz.js, 24-lienzo-de-petalos.js y 19-velas.js, y el motivo de
+ * que exista `sinComentarios`: los comentarios SÍ tienen que poder explicar
+ * de dónde salió el número.
+ *
+ * 10-reproductor-de-musica.js NO se relaja: sigue con la regla dura, porque
+ * ahí no hay nada que pausar y el silencio de una canción no se recupera. */
+for (const archivo of ['06-petalos-con-fisica.js', '07-marco-y-enredaderas.js']) {
+  const codigo = sinComentarios(leer('codigo', archivo));
+
+  comprobar(archivo + ' se puede pausar sin saber quien lo pausa',
+    /laEscenaEstaQuieta/.test(codigo) && !/eclipse/i.test(codigo),
+    'la bandera dice «quedate quieto», no «hay un eclipse»');
+
+  /* El `[\s\S]` y no `[^)]`: la guarda de estos dos archivos ya trae otras
+     llamadas antes —`hayAlgoQueMirar()`—, así que un patrón que no pueda
+     cruzar un paréntesis nunca llega hasta la bandera. */
+  comprobar('y su guard mira la bandera de verdad · ' + archivo,
+    /if\s*\([\s\S]{0,160}?laEscenaEstaQuieta\(\)/.test(codigo),
+    'sin un `if` que la lea, la bandera es decorativa');
+}
+
+for (const archivo of ['10-reproductor-de-musica.js']) {
   const texto = leer('codigo', archivo);
   comprobar(archivo + ' no sabe que el eclipse existe',
     !/eclipse/i.test(texto),
@@ -2300,6 +2335,141 @@ comprobar('y el de la reliquia usa la misma trama',
     /clearTimeout\(l\.reloj\)/.test(devolver) && /display = ''/.test(devolver),
     'sin esto, un corte a mitad del fundido esconde los petalos de la ' +
     'invitacion DESPUES de que el eclipse termino, y no vuelven');
+}
+
+/* ⚡ EL ALTAR NO SE MIDE POR CUADRO (2026-09-13)
+ *
+ * Era el único generador real de Layout del minuto: tres lecturas forzadas
+ * más un objeto `Range`, sesenta veces por segundo —unas 10.800 lecturas y
+ * 3.600 objetos— y caían justo después de hasta doscientas escrituras de
+ * `transform` sobre SVG, con lo cual el navegador tenía que resolver todo ese
+ * layout sucio antes de contestar.
+ *
+ * Por cuadro alcanza con seguirle el scroll: de todo lo que medía, lo único
+ * que cambia con el scroll es la Y.
+ */
+{
+  const cuerpoDelCuadro = (eclipseCodigo.match(/function unCuadro\([\s\S]*?\n  \}/) || [''])[0];
+
+  comprobar('el altar no se mide en el bucle',
+    !/medirElAltar\(\)/.test(cuerpoDelCuadro),
+    'tres lecturas forzadas y un Range por cuadro, justo despues de escribir ' +
+    'doscientos transform: es el peor orden posible');
+
+  comprobar('pero se le sigue el scroll',
+    /seguirElAltar\(\)/.test(cuerpoDelCuadro) &&
+    /altar\.y = altarEnElDocumento - scrollActualY\(\);/.test(eclipseCodigo),
+    'sin esto la orbita se queda donde estaba el relicario y el visitante ' +
+    'puede scrollear a mitad del minuto');
+
+  /* ⚠️ Y LOS DOS EXTREMOS. Sacarla del bucle solo vale si algo la vuelve a
+     llamar cuando el layout cambia de tamaño; si no, la orbita se queda con
+     el radio de la ventana anterior. */
+  comprobar('y el resize la vuelve a medir',
+    /function alRedimensionar\(\)[\s\S]{0,600}?medirElAltar\(\);/.test(eclipseCodigo),
+    'por cuadro solo se sigue el scroll: el tamaño hay que volver a tomarlo');
+
+  comprobar('y usa el scroll cacheado, no el del navegador',
+    !/function seguirElAltar[\s\S]{0,400}?window\.scrollY/.test(eclipseCodigo),
+    'leer window.scrollY dentro del bucle es el forced reflow que ' +
+    '02-utilidades.js documenta como el 37,5 % de un perfil');
+}
+
+/* ⚡ EL INSTRUMENTO, ANTES QUE LA OPTIMIZACIÓN (2026-09-13)
+ *
+ * Un perfil real en la máquina de Carlos —HD 4600, 2560×1277— durante el
+ * minuto dio: Layerize 28,4 %, Recalculate style 15,3 %, Paint 10,1 %,
+ * Layout 7,5 %. Todo el JavaScript del eclipse junto: 1,6 %. El costo no lo
+ * pone la secuencia, lo ponen los módulos que siguen animándose debajo.
+ *
+ * Carlos puso la condición: «solo lo que no se ve», y medir antes de pausar.
+ * Estas comprobaciones protegen el instrumento que hace eso posible.
+ */
+{
+  const MODULOS = [
+    ['joyas',  'codigo', '17-joyas-colgantes.js'],
+    ['marco',  'codigo', '07-marco-y-enredaderas.js'],
+    ['haces',  'codigo', '14-haces-de-luz.js'],
+    ['fisica', 'codigo', '06-petalos-con-fisica.js'],
+    ['cursor', 'codigo', '05-cursor-personalizado.js'],
+  ];
+
+  for (const [llave, carpeta, archivo] of MODULOS) {
+    const codigo = leer(carpeta, archivo);
+
+    comprobar('el modulo ' + archivo + ' se puede pausar',
+      /function laEscenaEstaQuieta\(\)/.test(codigo) &&
+      new RegExp('registro\\.' + llave).test(codigo),
+      'sin la bandera no hay forma de MEDIR cuanto cuesta antes de decidir ' +
+      'si se pausa');
+
+    /* ⚠️ LECTURA DEFENSIVA. El registro puede no existir todavia segun el
+       orden de carga. Un modulo que se cae por esto seria peor que el costo
+       que ahorra. */
+    comprobar('y lo lee sin romperse si el registro no existe',
+      /var registro = window\.PausaDeEscena;/.test(codigo) &&
+      /return !!\(registro && registro\./.test(codigo),
+      'leer window.PausaDeEscena.x directo tira si el registro no esta');
+
+    /* ⚠️ CONGELA EN EL SITIO, NO APAGA. Se engancha en la guarda que cada
+       archivo YA tiene para la pestaña oculta: el bucle sigue vivo, el reloj
+       al dia, las piezas con su ultimo valor. Si alguien lo convirtiera en un
+       `return` seco, el modulo no retomaria nunca. */
+    comprobar('y congela sin matar el bucle · ' + archivo,
+      /laEscenaEstaQuieta\(\)[\s\S]{0,220}?requestAnimationFrame\(/.test(codigo),
+      'tiene que seguir pidiendo cuadros, o al soltar la bandera no vuelve');
+  }
+
+  /* El panel tiene que poder apagar los cinco, o medir antes de pausar es
+     una promesa que no se puede cumplir. */
+  {
+    const panelDiag = leer('codigo', '29-ensayo-del-eclipse.js');
+
+    comprobar('el panel puede detener modulos, no solo esconderlos',
+      /function porModulo\(llave\)/.test(panelDiag),
+      'porSelector() usa display:none y mide PINTURA; el costo de las joyas ' +
+      'es Recalculate style, que ocurre igual con el nodo escondido');
+
+    comprobar('y el diagnostico mide los cinco',
+      ['joyas', 'marco', 'haces', 'fisica', 'cursor']
+        .every(k => new RegExp("porModulo\\('" + k + "'\\)").test(panelDiag)),
+      'el que no este en la lista se decide a ojo');
+  }
+}
+
+/* ⚡ EL INFORME MEDIA LA POBLACION EQUIVOCADA (2026-09-13)
+ *
+ * `medirLasProporciones()` leia `LienzoDePetalos.planos`, que son los petalos
+ * de la INVITACION. Los del ECLIPSE viven en otro array, en 28-eclipse.js, y
+ * no aparecian. Carlos leyo «petalo/rosa 1,06x» creyendo que describia el
+ * minuto del eclipse, y describia la lluvia de siempre.
+ */
+{
+  const panelDiag = leer('codigo', '29-ensayo-del-eclipse.js');
+
+  comprobar('el eclipse sabe decir cuanto miden sus petalos',
+    /ladosDeLosPetalos: function/.test(eclipseCodigo) &&
+    /petalos\[i\]\.tam \* 2/.test(eclipseCodigo),
+    '`tam` es el RADIO; el informe compara contra lados de rosa, asi que ' +
+    'devolverlo sin el x2 era un factor de dos escondido');
+
+  comprobar('y el informe mide ESA poblacion',
+    /window\.ECLIPSE\.ladosDeLosPetalos\(\)/.test(panelDiag),
+    'medir los petalos de la web y llamarlos los del eclipse es peor que ' +
+    'no medir: da un numero que parece una respuesta');
+
+  /* ⚠️ LA VARA ES LA ROSA MEDIANA. Carlos: «ningun petalo puede ser tan o
+     mas grande que una rosa». Anclarlo a la rosa MAYOR —que es lo que hace
+     06-petalos-con-fisica.js— deja pasar petalos que superan a la mitad de
+     las rosas del marco, que es justo lo que se ve mal. */
+  comprobar('y la vara del petalo es la rosa mediana',
+    /razonContraMediana[\s\S]{0,80}?q\(petalos, 1\) \/ q\(lados, 0\.5\)/.test(panelDiag),
+    'contra el p90 o contra la mayor, un petalo puede superar a la mitad ' +
+    'de las rosas y el informe lo da por bueno');
+
+  comprobar('y el informe avisa cuando se pasa',
+    /se pasa/.test(panelDiag),
+    'un numero sin umbral hay que interpretarlo; con umbral, se lee');
 }
 
 /* ─── 14j. EL ORDEN DE LAS CAPAS ─────────────────────────

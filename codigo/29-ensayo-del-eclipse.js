@@ -555,6 +555,31 @@
     };
   }
 
+  /* ⚡ MEDIR UN MÓDULO QUE NO ES DEL ECLIPSE (2026-09-13)
+   *
+   * `porSelector()` esconde nodos con `display:none`. Sirve para medir lo que
+   * cuesta PINTAR algo, y no sirve para lo que hay que medir acá: el mayor
+   * costo del perfil de Carlos era `Recalculate style` de
+   * 17-joyas-colgantes.js —cinco escrituras de `transform` por cuadro sobre
+   * nodos promovidos—, y esas escrituras siguen ocurriendo aunque el nodo
+   * esté escondido.
+   *
+   * Así que esto no esconde: DETIENE el bucle del módulo, con la bandera que
+   * cada uno lee al tope de su guarda de pestaña oculta. Congela en el sitio
+   * y suelta sin salto.
+   *
+   * El registro se crea acá si no existe: los módulos lo leen a la
+   * defensiva, así que el orden de carga no importa. */
+  function porModulo(llave) {
+    var registro = window.PausaDeEscena ||
+                   (window.PausaDeEscena = {});
+    return {
+      apagar: function () { registro[llave] = true; },
+      encender: function () { registro[llave] = false; },
+      cuantos: 1
+    };
+  }
+
   function porEclipse(que) {
     return {
       apagar: function () { window.ECLIPSE.apagarParaMedir(que, true); },
@@ -575,17 +600,36 @@
     }
     lados.sort(function (a, b) { return a - b; });
 
-    var petalos = [];
+    /* ⚡ DOS POBLACIONES, Y ANTES SE MEDÍA LA QUE NO ERA (2026-09-13)
+     *
+     * `LienzoDePetalos.planos` son los pétalos de la INVITACIÓN. Los del
+     * ECLIPSE son otro array, dentro de 28-eclipse.js, y no aparecían acá.
+     * Carlos leyó «pétalo/rosa 1,06×» creyendo que describía el minuto del
+     * eclipse, y describía la lluvia de siempre.
+     *
+     * Los de la web vienen en RADIO (`tamaño`), los del eclipse en LADO
+     * (`ladosDeLosPetalos()` ya hace el ×2). Se normaliza a lado, que es lo
+     * que devuelve `ladoRealDeLaFlor()` para las rosas: comparar un radio
+     * con un lado era, además, un factor de dos escondido. */
+    var petalosWeb = [];
     try {
       var planos = window.LienzoDePetalos && window.LienzoDePetalos.planos;
       for (var k in planos) {
         if (!Object.prototype.hasOwnProperty.call(planos, k)) continue;
         for (var j = 0; j < planos[k].length; j++) {
           var t = planos[k][j] && planos[k][j]['tamaño'];
-          if (t > 0) petalos.push(t);
+          if (t > 0) petalosWeb.push(t * 2);
         }
       }
     } catch (e) { /* sin pétalos que medir */ }
+    petalosWeb.sort(function (a, b) { return a - b; });
+
+    var petalos = [];
+    try {
+      if (window.ECLIPSE && typeof window.ECLIPSE.ladosDeLosPetalos === 'function') {
+        petalos = window.ECLIPSE.ladosDeLosPetalos();
+      }
+    } catch (e) { /* el eclipse no está corriendo */ }
     petalos.sort(function (a, b) { return a - b; });
 
     var q = function (lista, p) {
@@ -598,9 +642,19 @@
       rosaP90: q(lados, 0.9),
       rosaMayor: q(lados, 1),
       petalos: petalos.length,
+      petaloMediana: q(petalos, 0.5),
+      petaloP90: q(petalos, 0.9),
       petaloMayor: q(petalos, 1),
-      razonContraP90: q(lados, 0.9) ? q(petalos, 1) / q(lados, 0.9) : 0,
-      razonContraMediana: q(lados, 0.5) ? q(petalos, 1) / q(lados, 0.5) : 0
+      petalosWeb: petalosWeb.length,
+      petaloWebMayor: q(petalosWeb, 1),
+
+      /* ⚠️ LA VARA ES LA ROSA MEDIANA, no el p90 ni la mayor. Carlos:
+         «ningún pétalo puede ser tan o más grande que una rosa». Anclarlo a
+         la rosa MAYOR —que es lo que hace 06-petalos-con-fisica.js con su
+         EL_MAS_GRANDE_CONTRA_LA_ROSA— deja pasar pétalos que superan a la
+         mitad de las rosas del marco, que es justo lo que se ve mal. */
+      razonContraMediana: q(lados, 0.5) ? q(petalos, 1) / q(lados, 0.5) : 0,
+      razonContraP90: q(lados, 0.9) ? q(petalos, 1) / q(lados, 0.9) : 0
     };
   }
 
@@ -670,7 +724,17 @@
       ['lienzo eclipse', porEclipse('lienzo')],
       ['flores marco', porEclipse('marco')],
       ['ramas marco', porEclipse('ramas')],
-      ['llamas',      porEclipse('llamas')]
+      ['llamas',      porEclipse('llamas')],
+
+      /* Los cinco módulos que siguen animándose DEBAJO del eclipse sin
+         ninguna guarda. Ninguno se pausa todavía en el eclipse de verdad:
+         están acá para medir cuánto cuesta cada uno y decidir con el
+         número a la vista, no con una corazonada. */
+      ['joyas',       porModulo('joyas')],
+      ['marco 07',    porModulo('marco')],
+      ['haces 14',    porModulo('haces')],
+      ['física pétalos', porModulo('fisica')],
+      ['cursor',      porModulo('cursor')]
     ];
 
     var cadena = medirElCuadro(40).then(function (ms) { base = ms; });
@@ -727,10 +791,16 @@
           '   mediana ' + p.rosaMediana.toFixed(1) +
           '  p90 ' + p.rosaP90.toFixed(1) +
           '  mayor ' + p.rosaMayor.toFixed(1),
-        '  pétalos ....... ' + p.petalos +
-          '   mayor ' + p.petaloMayor.toFixed(1),
-        '  pétalo/rosa ... ' + p.razonContraP90.toFixed(2) + '× (p90)   ' +
-          p.razonContraMediana.toFixed(2) + '× (mediana)',
+        '  pétalos ECLIPSE ' + p.petalos +
+          '   mediana ' + p.petaloMediana.toFixed(1) +
+          '  p90 ' + p.petaloP90.toFixed(1) +
+          '  mayor ' + p.petaloMayor.toFixed(1),
+        '  pétalos web ... ' + p.petalosWeb +
+          '   mayor ' + p.petaloWebMayor.toFixed(1),
+        '  pétalo/rosa ... ' + p.razonContraMediana.toFixed(2) +
+          '× contra la rosa MEDIANA' +
+          (p.razonContraMediana > 1 ? '   ← se pasa' : '') +
+          '   ·   ' + p.razonContraP90.toFixed(2) + '× contra el p90',
         '',
         'ESCENA',
         '  flores ' + (r.flores || 0) + '  ramas ' + (r.ramas || 0) +

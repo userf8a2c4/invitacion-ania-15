@@ -300,13 +300,40 @@
    * @param {number} momentoActual - Marca de tiempo del navegador.
    * @returns {void}
    */
+  /* ⚡ LA PAUSA DEL ECLIPSE (2026-09-13)
+   *
+   * Un perfil real en la máquina objetivo —HD 4600, 2560×1277— durante el
+   * minuto del eclipse repartió así el cuadro: Layerize 28,4 %, Recalculate
+   * style 15,3 %, Paint 10,1 %, Layout 7,5 %. El JavaScript del eclipse
+   * entero pesaba 1,6 %. O sea que el costo no lo ponía la secuencia: lo
+   * ponían los módulos de la página que siguen animándose debajo de ella.
+   *
+   * ⚠️ ESTA BANDERA NACE DORMIDA. En esta ronda NADIE la levanta durante el
+   * eclipse de verdad: la levanta únicamente el botón Diagnóstico del panel
+   * de ensayo, para poder MEDIR cuánto cuesta cada módulo antes de decidir si
+   * se pausa. Carlos lo pidió así: «solo lo que no se ve», y para saber qué
+   * no se ve hay que medirlo primero.
+   *
+   * ⚠️ Y CONGELA EN EL SITIO, no apaga. Se engancha en la guarda que este
+   * archivo YA tiene para la pestaña oculta: el bucle sigue vivo, el reloj se
+   * mantiene al día y las piezas quedan con su último valor. Al soltar,
+   * retoman sin salto y sin recargar.
+   *
+   * Lectura defensiva: el registro puede no existir todavía según el orden de
+   * carga, y un módulo que se cae por esto sería peor que el costo que
+   * ahorra. */
+  function laEscenaEstaQuieta() {
+    var registro = window.PausaDeEscena;
+    return !!(registro && registro.haces);
+  }
+
   function animarLosHaces(momentoActual) {
     if (!animacionActiva) return;
 
     /* Sin nadie mirando —sobre todavía cerrado, pestaña de fondo, o
        animaciones apagadas— el bucle sigue vivo pero no dibuja luz. Listo
        para reanudar al instante, sin recargar. */
-    if (!hayAlgoQueMirar()) { requestAnimationFrame(animarLosHaces); return; }
+    if (!hayAlgoQueMirar() || laEscenaEstaQuieta()) { requestAnimationFrame(animarLosHaces); return; }
 
     /* ⚡ UN CUADRO MÁS DE MARGEN — esto es lo que arregla una tarea larga
        de 81ms medida por Lighthouse. medirLosHaces() ya estaba diferida
