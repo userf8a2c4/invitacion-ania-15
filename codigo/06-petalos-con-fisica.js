@@ -999,6 +999,32 @@
    * @param {number} momentoActual - Marca de tiempo que da el navegador.
    * @returns {void}
    */
+  /* ⚡ LA ESCENA SE PUEDE QUEDAR QUIETA, Y ESO NO ES ACOPLARSE (2026-09-13)
+   *
+   * Misma disciplina que ya usan 23-lienzo-de-luz.js, 24-lienzo-de-petalos.js
+   * y 19-velas.js con su `pausado`: la bandera dice «quedáte quieto», no dice
+   * «hay un eclipse». Este archivo no sabe quién la levanta ni por qué, y
+   * sigue funcionando igual si nadie la levanta nunca.
+   *
+   * DE DÓNDE SALIÓ EL NÚMERO. Un perfil real en la máquina objetivo —Intel
+   * HD 4600, 2560×1277— durante el minuto del eclipse repartió el cuadro
+   * así: Layerize 28,4 %, Recalculate style 15,3 %, Paint 10,1 %, Layout
+   * 7,5 %. Todo el JavaScript del eclipse junto pesaba 1,6 %. O sea que el
+   * costo no lo ponía la secuencia: lo ponían los módulos que seguían
+   * animándose debajo de ella, este incluido.
+   *
+   * ⚠️ CONGELA EN EL SITIO, NO APAGA. Se engancha en la guarda que este
+   * archivo YA tenía para la pestaña oculta: el bucle sigue vivo, el reloj se
+   * mantiene al día y las piezas quedan con su último valor. Al soltarla,
+   * retoman sin salto y sin recargar.
+   *
+   * Lectura defensiva: el registro puede no existir según el orden de carga,
+   * y un módulo que se cae por esto sería peor que el costo que ahorra. */
+  function laEscenaEstaQuieta() {
+    var registro = window.PausaDeEscena;
+    return !!(registro && registro.fisica);
+  }
+
   function dibujarCuadro(momentoActual) {
     if (!animacionActiva) return;   // pausa por pestaña oculta
 
@@ -1009,7 +1035,7 @@
        El reloj se adelanta igual (momentoDelCuadroAnterior) aunque no se
        mueva nada: si no, al reanudar el `dt` sería el de todo el rato que
        estuvo detenido y los pétalos aparecerían teletransportados. */
-    if (!hayAlgoQueMirar()) {
+    if (!hayAlgoQueMirar() || laEscenaEstaQuieta()) {
       momentoDelCuadroAnterior = momentoActual;
       requestAnimationFrame(dibujarCuadro);
       return;

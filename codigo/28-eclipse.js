@@ -953,6 +953,17 @@
 
   var altar = { x: 0, y: 0, radio: 0, ancho: 0, alto: 0, radioLetras: 0, radioBroche: 0 };
 
+  /* ⚡ LA POSICIÓN DEL ALTAR, EN COORDENADAS DE DOCUMENTO (2026-09-13)
+   *
+   * `altar.y` es relativo a la ventana, así que cambia con el scroll. Esta
+   * es la misma posición pero contada desde el principio del documento: no
+   * cambia nunca salvo que el layout se rehaga. Guardarla es lo que permite
+   * seguir al altar por cuadro sin volver a preguntarle al navegador.
+   *
+   * Es la misma conversión que `acomodarLaCopia()` ya hace unas líneas más
+   * abajo para colocar la jaula del nombre. */
+  var altarEnElDocumento = 0;
+
   function medirElAltar() {
     var caja = nombre.getBoundingClientRect();
     altar.x = caja.left + caja.width  / 2;
@@ -1001,6 +1012,41 @@
     altar.radioBroche = (cajaDelBroche && cajaDelBroche.width > 1)
       ? Math.max(cajaDelBroche.width, cajaDelBroche.height) / 2
       : altar.radioLetras * 3;
+
+    altarEnElDocumento = altar.y + scrollActualY();
+  }
+
+  /* ⚡ SEGUIR AL ALTAR SIN PREGUNTARLE AL NAVEGADOR (2026-09-13)
+   *
+   * ⛔ ESTO SE LLAMABA `medirElAltar()` EN CADA CUADRO, y era el único
+   * generador real de Layout del minuto. Hacía TRES lecturas forzadas
+   * —`nombre.getBoundingClientRect()`, el rect del broche y un `Range` sobre
+   * el contenido del <h1>— más un objeto `Range` nuevo, sesenta veces por
+   * segundo: unas 10.800 lecturas y 3.600 objetos en el minuto.
+   *
+   * ⚠️ Y CAÍAN EN EL PEOR MOMENTO POSIBLE. El cuadro anterior acababa de
+   * escribir hasta doscientos `transform` sobre nodos SVG, así que el
+   * navegador tenía que resolver todo ese layout sucio antes de contestar.
+   * Es el patrón que 02-utilidades.js ya documenta como «el 37,5 % del
+   * tiempo total» en un perfil anterior del proyecto.
+   *
+   * ⚠️ DE TODO LO QUE MEDÍA, LO ÚNICO QUE CAMBIA CON EL SCROLL ES LA Y. El
+   * ancho, el alto, los tres radios y la caja entintada son los mismos
+   * mientras el layout no se rehaga —y cuando se rehace hay un `resize`, que
+   * es donde se vuelve a medir—. Así que por cuadro alcanza con una resta
+   * contra el scroll cacheado.
+   *
+   * ⚠️ Y ES LO QUE MANTIENE LA ÓRBITA PEGADA AL RELICARIO si el visitante
+   * scrollea a mitad del minuto. Medir una sola vez y olvidarse habría
+   * dejado a los pétalos girando alrededor de un punto que ya no está ahí.
+   *
+   * Sobre el caché: `scrollActualY()` arranca en 0 y se actualiza con el
+   * evento. Si la página cargara ya scrolleada y nadie tocara nada, el valor
+   * sería viejo —pero el mismo valor viejo entra en `altarEnElDocumento` y
+   * sale en la resta, así que se cancela. Lo que importa es el cambio, y el
+   * cambio siempre llega por el evento. */
+  function seguirElAltar() {
+    altar.y = altarEnElDocumento - scrollActualY();
   }
 
   var broche = null;
@@ -4173,7 +4219,7 @@
     /* A quién le toca moverse en este cuadro. Ver la nota de LOS TURNOS. */
     tandaDeEsteCuadro = (tandaDeEsteCuadro + 1) % TANDAS;
 
-    medirElAltar();          // la página puede haberse movido
+    seguirElAltar();         // la página puede haberse movido
 
     /* ── LA LUZ DEL MINUTO, EN UN SOLO NÚMERO ──
 
@@ -4384,6 +4430,11 @@
     function alRedimensionar() {
       medirElLienzo();
       acomodarLaCopia();
+      /* ⚠️ Y EL ALTAR SE VUELVE A MEDIR ACÁ, que es el otro extremo de
+         sacarlo del bucle: por cuadro solo se le sigue el scroll, así que si
+         el layout cambia de tamaño hay que volver a tomarle las medidas o la
+         órbita queda con el radio de la ventana anterior. */
+      medirElAltar();
       /* ⚠️ LA LUZ NO SE ENTERA DEL RESIZE, y es correcto: sus catorce
          perillas no dependen del tamaño de la ventana. */
     }
@@ -4576,6 +4627,32 @@
       pausar: pausar,
       seguir: seguir,
       estaEnPausa: function () { return enPausa; },
+
+      /**
+       * El lado en píxeles de cada pétalo del eclipse.
+       *
+       * ⚠️ HACÍA FALTA PORQUE EL INFORME MEDÍA LA POBLACIÓN EQUIVOCADA
+       *   (2026-09-13)
+       *
+       * `medirLasProporciones()` del panel lee `LienzoDePetalos.planos`, que
+       * son los pétalos de la INVITACIÓN. Los del eclipse viven en este
+       * archivo, en otro array, y eran invisibles para el informe: Carlos
+       * leyó «pétalo/rosa 1,06×» creyendo que describía lo que veía en el
+       * minuto, y describía otra cosa.
+       *
+       * `tam` es el RADIO —se dibuja `drawImage(mapa, -tam, -tam, tam*2,
+       * tam*2)`— así que el lado es el doble. Se devuelve en lado para que
+       * se pueda comparar con `ladoRealDeLaFlor()` sin convertir nada.
+       *
+       * @returns {number[]}
+       */
+      ladosDeLosPetalos: function () {
+        var lados = [];
+        for (var i = 0; i < petalos.length; i++) {
+          if (petalos[i] && petalos[i].tam > 0) lados.push(petalos[i].tam * 2);
+        }
+        return lados;
+      },
 
       enCurso: function () { return vivo; },
 
