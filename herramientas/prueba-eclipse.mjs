@@ -88,7 +88,15 @@ for (const [que, patron] of [
   ['en una pestaña de fondo',            /document\.hidden/],
   ['con movimiento reducido pedido',     /prefers-reduced-motion/],
   ['con alguien escribiendo en un campo', /INPUT'.*TEXTAREA|TEXTAREA'/s],
-  ['si la escena no está montada',       /portada__nombre/],
+  /* ⛔ ESTA COMPROBACIÓN BLINDABA UNA GUARDA QUE NO GUARDABA NADA
+     (2026-09-14). Exigía `/portada__nombre/` — pero ese elemento es
+     marcado estático de index.html (línea 1895): está desde el primer
+     byte, con el sobre abierto o cerrado. La condición era verdadera
+     siempre, y la prueba pasaba mirando que existiera el texto, no que
+     funcionara.
+     Lo que sí distingue las dos situaciones es la clase `sobre-visible`,
+     que 03-sobre-de-apertura.js pone mientras está cerrado. */
+  ['si el sobre sigue cerrado',          /sobre-visible/],
 ]) {
   comprobar('no se dispara ' + que, patron.test(vigia));
 }
@@ -3159,9 +3167,125 @@ console.log('\nEl sobre, después de abrirse\n');
 console.log('\nLlegar con el minuto empezado\n');
 
 const vigiaEntero = sinComentarios(leer('index.html'));
-comprobar('al cargar se pregunta si el eclipse ya va corriendo',
-  /yaVaEmpezado < 0 && yaVaEmpezado > -DURA/.test(vigiaEntero),
-  'el sondeo duerme hasta 60 s: quien llegaba tarde se lo perdía entero');
+/* ⚡ ESTO DEJÓ DE SER UN CASO ESPECIAL (2026-09-14)
+ *
+ * Antes había una rama aparte que solo corría AL CARGAR
+ * (`yaVaEmpezado < 0 && yaVaEmpezado > -DURA`), y tenía un defecto propio:
+ * marcaba `yaSePidio = true` SIN el re-armado que sí tiene `mirar()`. Con
+ * una guarda en contra, esa pestaña quedaba muerta para siempre — y una
+ * pestaña dejada abierta 24 horas no disparaba el eclipse del día
+ * siguiente.
+ *
+ * Ahora es una sola función, `intentarAhora()`, que sirve para los tres
+ * momentos: al cargar, en cada reintento del minuto, y al volver la
+ * pestaña al frente. Y marca el flag SOLO si de verdad pidió el archivo. */
+comprobar('hay una sola forma de arrancar, y sirve para llegar tarde',
+  /function intentarAhora\(\) \{/.test(vigiaEntero) &&
+  /if \(falta > AVISO\) return;/.test(vigiaEntero),
+  'el sondeo duerme hasta 60 s: quien llega tarde tiene que poder entrar');
+
+{
+  /* ⚠️ SE COMPARA EL ORDEN, no un texto. Un regex literal acá se rompe con
+     cualquier comentario al final de una línea, y lo que importa no es
+     cómo está escrito sino QUÉ PASA PRIMERO: consultar las guardas, y
+     recién después marcar el flag. Al revés, el disparo del día se
+     consume aunque las guardas digan que no — que es exactamente lo que
+     pasó el 14 de septiembre. */
+  const cuerpoDeIntentar =
+    (vigiaEntero.match(/function intentarAhora\(\)[\s\S]*?\n    \}/) || [''])[0];
+  const consulta = cuerpoDeIntentar.indexOf('if (!sePuede()) return;');
+  const marca    = cuerpoDeIntentar.indexOf('yaSePidio = true;');
+
+  comprobar('y consulta las guardas ANTES de marcar el flag',
+    consulta >= 0 && marca > consulta,
+    'marcarlo antes consume el disparo del día aunque las guardas digan ' +
+    'que no: es lo que pasó el 14 de septiembre');
+
+  comprobar('y en ningún lado se marca sin haber pedido el archivo',
+    !/yaSePidio = true;[\s\S]{0,80}?if \(sePuede\(\)\)/.test(vigiaEntero),
+    'el camino de «entrar a mitad» lo hacía, y encima sin re-armado: esa ' +
+    'pestaña quedaba muerta para siempre');
+}
+
+/* ⛔ EL REINTENTO ES LO QUE CONVIERTE «no se pudo» EN «todavía no». */
+comprobar('y se reintenta cada segundo mientras quede minuto',
+  /if \(!yaSePidio\) \{ setTimeout\(mirar, 1000\); return; \}/.test(vigiaEntero),
+  'con una sola muestra 25 s antes, una pestaña de fondo pierde el día ' +
+  'entero aunque vuelva diez segundos después');
+
+/* ⛔ Y EN UNA PESTAÑA DE FONDO EL REINTENTO NO CORRE: el navegador congela
+   los temporizadores. Estas escuchas son lo que convierte «volví» en
+   «arranca ahora». Son DOS porque iOS usa bfcache y restaura la página sin
+   disparar `visibilitychange` — mismo problema que ya se comió el
+   reproductor de música. */
+comprobar('y volver al frente es un intento más',
+  /addEventListener\('visibilitychange'[\s\S]{0,140}?intentarAhora\(\)/
+    .test(vigiaEntero) &&
+  /addEventListener\('pageshow', intentarAhora\)/.test(vigiaEntero),
+  'sin las dos, una pestaña de fondo no se entera nunca');
+
+comprobar('y abrir el sobre también',
+  /addEventListener\('sobre-abierto', intentarAhora\)/.test(vigiaEntero),
+  'con el sobre cerrado la escena no existe: el eclipse correría sobre ' +
+  'una página vacía');
+
+/* ⛔ UN PEDIDO FALLIDO TIENE QUE PODER REINTENTARSE. El `onerror` era un
+   cuerpo vacío: un 404 o un corte de red mataban el eclipse sin rastro. */
+comprobar('un pedido fallido suelta el flag para reintentar',
+  /s\.onerror = function \(\) \{\s*\n\s*yaSePidio = false;/.test(vigiaEntero),
+  'con el cuerpo vacío, un corte de red mataba el eclipse del día sin ' +
+  'dejar rastro');
+
+/* ⛔ Y UNA PESTAÑA ABIERTA DESDE AYER NO SE ENTERA DE NADA. Medido contra
+   aniaxv.com el 14 de septiembre: la red servía v314 y el navegador
+   ejecutaba v258. */
+/* ⚠️ SE MIRA QUE LA LLAMADA EXISTA DENTRO DE LA GUARDA, no el renglón
+   entero. Escrito literal, este assert se cayó el mismo día que se
+   agregó `revisarLaHora(true)` al lado —y no porque algo se hubiera
+   roto—. Un assert que falla cuando el código mejora enseña a
+   ignorar los assert. */
+comprobar('la pestaña comprueba su versión antes de la hora',
+  /function revisarLaVersion\(\)/.test(vigiaEntero) &&
+  /if \(falta <= REVISAR_ANTES\)[^\n]*revisarLaVersion\(\)/.test(vigiaEntero),
+  'una pestaña sigue corriendo para siempre la versión con la que cargó');
+
+/* ⚡ Y LA HORA SE PREGUNTA EN EL MISMO MOMENTO (2026-09-14, Fase 2).
+   La hora del eclipse la controla Lucila desde el panel, así que una
+   pestaña abierta tiene que poder enterarse de que cambió. Se pregunta
+   saltándose la vigencia —`true`— porque es el único momento del día
+   en que de verdad importa. */
+comprobar('y la hora también',
+  /function revisarLaHora\(/.test(vigiaEntero) &&
+  /if \(falta <= REVISAR_ANTES\)[^\n]*revisarLaHora\(true\)/.test(vigiaEntero),
+  'sin esto, cambiar la hora en el panel no le llega nunca a una pestaña ' +
+  'que ya estaba abierta');
+
+/* ⛔ Y LA HORNEADA TIENE QUE SEGUIR AHÍ. Es el respaldo para quien no
+   tiene señal, para la primera visita de un teléfono nuevo, y para el
+   día que eclipse.php no esté subido. */
+comprobar('la hora horneada sigue siendo el respaldo',
+  /var HORA_UTC = \d+, MINUTO_UTC = \d+;/.test(vigiaEntero),
+  'un homenaje que depende de que un PHP conteste es peor que uno que no');
+
+comprobar('y no recarga encima de un formulario a medio llenar',
+  /function sePuedeRecargar\(\)/.test(vigiaEntero) &&
+  /campo\.value \|\| ''\) !== \(campo\.defaultValue/.test(vigiaEntero),
+  'una recarga se lleva lo escrito: es la única forma en que esto puede ' +
+  'hacerle daño real a alguien');
+
+/* ⛔ Y LA PUERTA TIENE QUE COMPENSAR EL ATRASO. Un setTimeout en pestaña
+   de fondo puede llegar un minuto tarde; `empezar(0)` a secas corría la
+   secuencia entera desplazada. */
+comprobar('la puerta mide cuánto llegó tarde, en vez de arrancar de cero',
+  /var elInstante = Date\.now\(\) \+ faltan;/.test(eclipseCodigo) &&
+  /var tarde = Date\.now\(\) - elInstante;/.test(eclipseCodigo) &&
+  /empezar\(tarde > 0 \? tarde : 0\);/.test(eclipseCodigo),
+  'sin esto, despertar tarde corre el minuto entero corrido y termina ' +
+  'después de la hora');
+
+comprobar('y si el minuto ya pasó del todo, no corre nada',
+  /if \(tarde >= DURACION\) return;/.test(eclipseCodigo),
+  'un ritual que empieza cuando ya terminó no es el ritual');
 
 /* ─── 16. LA MITOLOGÍA, QUE ES LO QUE NINGUNA RONDA PUEDE ROMPER ─────
 

@@ -2515,10 +2515,10 @@
      que pesa un 80% menos. Acá abajo se pide la copia liviana; el
      original comentado sigue intacto en codigo/, es el que se edita.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/produccion/01-configuracion.js?v=315"></script>
-<script defer src="codigo/produccion/02-utilidades.js?v=315"></script>
-<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=315"></script>
-<script defer src="codigo/produccion/04-invitado-personalizado.js?v=315"></script>
+<script defer src="codigo/produccion/01-configuracion.js?v=316"></script>
+<script defer src="codigo/produccion/02-utilidades.js?v=316"></script>
+<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=316"></script>
+<script defer src="codigo/produccion/04-invitado-personalizado.js?v=316"></script>
 
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda) — es MARCADO, no script.
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
@@ -2576,7 +2576,7 @@
      para EXISTIR, solo para reaccionar al clic — y ese clic no puede
      llegar antes de que la lista termine de bajar el archivo 20. -->
 <script type="application/json" id="scripts-de-la-escena">
-["codigo/produccion/10-reproductor-de-musica.js?v=315", "codigo/produccion/05-cursor-personalizado.js?v=315", "codigo/produccion/24-lienzo-de-petalos.js?v=315", "codigo/produccion/06-petalos-con-fisica.js?v=315", "codigo/produccion/07-marco-y-enredaderas.js?v=315", "codigo/produccion/08-efectos-de-scroll.js?v=315", "codigo/produccion/09-cuenta-regresiva.js?v=315", "codigo/produccion/11-formulario-confirmacion.js?v=315", "codigo/produccion/12-pase-de-acceso.js?v=315", "codigo/produccion/13-agregar-al-calendario.js?v=315", "codigo/produccion/23-lienzo-de-luz.js?v=315", "codigo/produccion/27-fauna-nocturna.js?v=315", "codigo/produccion/14-haces-de-luz.js?v=315", "codigo/produccion/15-registro-de-confirmaciones.js?v=315", "codigo/produccion/16-volver-arriba.js?v=315", "codigo/produccion/17-joyas-colgantes.js?v=315", "codigo/produccion/18-motas-de-polvo.js?v=315", "codigo/produccion/19-velas.js?v=315", "codigo/produccion/20-boton-de-animaciones.js?v=315", "codigo/produccion/21-monitor-de-rendimiento.js?v=315", "codigo/produccion/22-luz-de-la-hora.js?v=315", "codigo/produccion/25-preguntas-frecuentes.js?v=315", "codigo/produccion/26-mapa-a-pedido.js?v=315"]
+["codigo/produccion/10-reproductor-de-musica.js?v=316", "codigo/produccion/05-cursor-personalizado.js?v=316", "codigo/produccion/24-lienzo-de-petalos.js?v=316", "codigo/produccion/06-petalos-con-fisica.js?v=316", "codigo/produccion/07-marco-y-enredaderas.js?v=316", "codigo/produccion/08-efectos-de-scroll.js?v=316", "codigo/produccion/09-cuenta-regresiva.js?v=316", "codigo/produccion/11-formulario-confirmacion.js?v=316", "codigo/produccion/12-pase-de-acceso.js?v=316", "codigo/produccion/13-agregar-al-calendario.js?v=316", "codigo/produccion/23-lienzo-de-luz.js?v=316", "codigo/produccion/27-fauna-nocturna.js?v=316", "codigo/produccion/14-haces-de-luz.js?v=316", "codigo/produccion/15-registro-de-confirmaciones.js?v=316", "codigo/produccion/16-volver-arriba.js?v=316", "codigo/produccion/17-joyas-colgantes.js?v=316", "codigo/produccion/18-motas-de-polvo.js?v=316", "codigo/produccion/19-velas.js?v=316", "codigo/produccion/20-boton-de-animaciones.js?v=316", "codigo/produccion/21-monitor-de-rendimiento.js?v=316", "codigo/produccion/22-luz-de-la-hora.js?v=316", "codigo/produccion/25-preguntas-frecuentes.js?v=316", "codigo/produccion/26-mapa-a-pedido.js?v=316"]
 </script>
 
 <!-- ══════════════════════════════════════════════════════════════════
@@ -2605,7 +2605,77 @@
      ══════════════════════════════════════════════════════════════════ -->
 <script>
   (function vigiaDelEclipse() {
-    var HORA_UTC = 12, MINUTO_UTC = 30;   // 06:30 en Toluca
+    /* ⚡ LA HORA YA NO ESTÁ ESCRITA A MANO (2026-09-14)
+     *
+     * Carlos: «pon en la app un control específico para controlar la hora
+     * de trigger». Hasta hoy esto era una constante: cambiarla obligaba a
+     * editar el archivo, empaquetar y subir, o sea que no era un control.
+     *
+     * Ahora hay TRES fuentes, en este orden, y la de más abajo siempre
+     * funciona:
+     *
+     *   1. Lo que dijo el servidor en ESTA visita (eclipse.php, o el
+     *      campo `eclipse_utc` que invitacion.php ya manda de regalo).
+     *   2. Lo que dijo la última vez, guardado en localStorage. Se lee
+     *      SINCRÓNICO, antes de la primera resta: no hay un instante en
+     *      que el vigía crea la hora equivocada.
+     *   3. Esto de acá, horneado en el archivo.
+     *
+     * ⚠️ LA HORNEADA NO ES UNA EMERGENCIA, ES EL CASO NORMAL. Sin señal,
+     * con la base caída, con eclipse.php sin subir, en la primera visita
+     * de un teléfono nuevo: el vigía corre con estos dos números y se
+     * comporta exactamente igual que antes de este cambio. Un homenaje
+     * que depende de que un PHP conteste es peor que uno que no.
+     *
+     * ⚠️ MANTENERLA AL DÍA ES UN PASO MANUAL, Y SE AVISA SOLO.
+     * subir-version.mjs compara esta hora contra la que Lucila tiene
+     * puesta y avisa si se separaron. */
+    var HORA_UTC = 12, MINUTO_UTC = 30;   // 06:30 en Toluca · el respaldo
+
+    /** Dónde se recuerda la hora que dijo el servidor. */
+    var LLAVE_DE_LA_HORA = 'ania-hora-eclipse';
+
+    /** Cada cuánto se le vuelve a preguntar al servidor. */
+    var VIGENCIA_DE_LA_HORA = 3600000;    // una hora
+
+    /** Una hora en UTC tiene que ser HH:MM, de 00:00 a 23:59. */
+    var FORMA_DE_LA_HORA = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+
+    /**
+     * Adopta una hora "HH:MM" si tiene forma de hora. Devuelve si cambió.
+     *
+     * ⛔ NO LLAMA A clearTimeout NI CANCELA NADA, Y ES A PROPÓSITO.
+     * Cancelar la mirada en curso parece lo prolijo, pero `mirar()` ya
+     * duerme como mucho 60 s de una vez (el Math.min de abajo), así que
+     * el plan se reacomoda solo en menos de un minuto sin una sola línea
+     * más. Y hay una razón más fuerte: `clearTimeout` NO está entre lo
+     * que herramientas/prueba-vigia-reloj.mjs le inyecta al vigía, así
+     * que adentro del banco caería al de Node, no cancelaría nada, y
+     * una mordida sobre esa línea pasaría siempre. Código que el banco
+     * no puede medir es código que no está probado.
+     *
+     * @param {*} texto
+     * @returns {boolean}
+     */
+    function adoptarLaHora(texto) {
+      if (typeof texto !== 'string' || !FORMA_DE_LA_HORA.test(texto)) return false;
+
+      var h = parseInt(texto.slice(0, 2), 10);
+      var m = parseInt(texto.slice(3, 5), 10);
+      if (h === HORA_UTC && m === MINUTO_UTC) return false;
+
+      HORA_UTC = h;
+      MINUTO_UTC = m;
+      return true;
+    }
+
+    /* Lo que dijo el servidor la última vez. Sincrónico y gratis: pasa
+       antes de que nadie haga una resta. Si no hay nada, o si quedó algo
+       con forma rara, se sigue con la horneada. */
+    try {
+      var recordada = localStorage.getItem(LLAVE_DE_LA_HORA);
+      if (recordada) adoptarLaHora(String(recordada).split('|')[0]);
+    } catch (e) { /* modo privado: se sigue con la horneada */ }
     var DURA     = 60000;
     /* ⚡ VEINTICINCO SEGUNDOS, NO DIEZ (2026-09-13)
 
@@ -2622,7 +2692,16 @@
        momento sigue sin bajarlo, sin parsearlo y sin ejecutarlo. Son los
        mismos bytes, quince segundos antes, y solo para quien ya está. */
     var AVISO    = 25000;                 // cuánto antes se pide el archivo
-    var ARCHIVO  = 'codigo/produccion/28-eclipse.js?v=315';
+    var ARCHIVO  = 'codigo/produccion/28-eclipse.js?v=316';
+
+    /** El día UTC (AAAA-MM-DD) en que esta pestaña ya vio el eclipse. */
+    var ELDIAQUEYACORRIO = '';
+
+    /** El día UTC de un instante, como texto comparable. */
+    function diaUtcDe(ms) {
+      var d = new Date(ms);
+      return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
+    }
 
     /** Milisegundos hasta el próximo arranque. Negativo = ya empezó. */
     function faltaPara() {
@@ -2630,8 +2709,25 @@
       var hoy = new Date(ahora);
       var cuando = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate(),
                             HORA_UTC, MINUTO_UTC, 0, 0);
+
       // Si el de hoy ya terminó, el próximo es el de mañana.
       if (ahora >= cuando + DURA) cuando += 86400000;
+
+      /* ⛔ Y SI YA CORRIÓ HOY, TAMPOCO (2026-09-14)
+       *
+       * La guarda de arriba sola no alcanza desde que la hora se puede
+       * cambiar en caliente. El caso concreto: el eclipse corre a las
+       * 12:30, y a las 13:00 Lucila mueve la hora a las 14:00 pensando
+       * en mañana. `cuando` pasa a ser hoy 14:00, que todavía no pasó,
+       * así que la guarda de arriba lo deja quieto — y el homenaje
+       * ocurre DOS VECES el mismo día.
+       *
+       * Un homenaje que se repite deja de ser un homenaje. Si esta
+       * pestaña ya lo vio hoy, el próximo es mañana y punto. */
+      if (ELDIAQUEYACORRIO && diaUtcDe(cuando) === ELDIAQUEYACORRIO) {
+        cuando += 86400000;
+      }
+
       return cuando - ahora;
     }
 
@@ -2730,6 +2826,86 @@
     var MI_VERSION = (ARCHIVO.match(/[?&]v=(\d+)/) || [])[1] || '';
 
     var yaSeRevisoLaVersion = false;
+
+    /* ─── LA HORA, PREGUNTADA AL SERVIDOR ───────────────────────────
+     *
+     * Dos caminos, y el barato cubre a casi todos:
+     *
+     *   · GRATIS · invitacion.php ya se pide cuando la dirección trae
+     *     ?i=TOKEN (codigo/04-invitado-personalizado.js:207), ya abre su
+     *     PDO y ya lee la tabla `ajustes`. Ahora manda `eclipse_utc` en
+     *     la misma respuesta. Con las invitaciones repartidas por
+     *     WhatsApp, por ahí entra casi todo el mundo: cero requests
+     *     nuevos para esa gente.
+     *
+     *   · eclipse.php · para quien abre la invitación pelada, sin token.
+     *     Ése no le pide NADA al servidor en toda la visita, así que no
+     *     tiene por dónde enterarse. Son ~200 bytes, después de cargar,
+     *     y como mucho una vez por hora.
+     *
+     * ⚠️ POR QUÉ NO SE PIDE SIEMPRE. La regla del vigía es que la
+     * invitación no puede pesar ni un gramo más. Una hora de vigencia
+     * sobre el valor guardado hace que abrir, mirar y cerrar —que es lo
+     * que hace la mayoría— no pida nada la segunda vez.
+     * -------------------------------------------------------------- */
+
+    var yaSePreguntoLaHora = false;
+
+    /** Guarda la hora con su fecha, para saber después si sigue fresca. */
+    function recordarLaHora(texto) {
+      try {
+        localStorage.setItem(LLAVE_DE_LA_HORA, texto + '|' + Date.now());
+      } catch (e) { /* modo privado: se pregunta de nuevo la próxima vez */ }
+    }
+
+    /** ¿Lo guardado es de hace menos de una hora? */
+    function laHoraSigueFresca() {
+      try {
+        var crudo = localStorage.getItem(LLAVE_DE_LA_HORA);
+        if (!crudo) return false;
+        var cuando = parseInt(String(crudo).split('|')[1], 10);
+        return !!cuando && (Date.now() - cuando) < VIGENCIA_DE_LA_HORA;
+      } catch (e) { return false; }
+    }
+
+    /**
+     * Le pregunta la hora a eclipse.php y la adopta si cambió.
+     *
+     * @param {boolean} igualSiEstaFresca - saltarse la vigencia.
+     * @returns {void}
+     */
+    function revisarLaHora(igualSiEstaFresca) {
+      if (yaSePreguntoLaHora) return;
+      if (!igualSiEstaFresca && laHoraSigueFresca()) return;
+      yaSePreguntoLaHora = true;
+
+      try {
+        fetch('eclipse.php?mirando=' + Date.now(), { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (datos) {
+            if (!datos || !datos.utc) return;
+            recordarLaHora(datos.utc);
+            /* Adoptar no recarga la página: por eso esto funciona aunque
+               haya un formulario a medio llenar, que es la ventaja grande
+               frente a resolverlo con un número de versión. `mirar()`
+               duerme 60 s como mucho, así que el plan se reacomoda solo. */
+            adoptarLaHora(datos.utc);
+          })
+          .catch(function () { /* sin red: se sigue con la que hay */ });
+      } catch (e) { /* nada */ }
+    }
+
+    /* ⚡ Y SI LA INVITACIÓN PERSONAL YA LO PREGUNTÓ, SE APROVECHA.
+       Llega antes que nada y no costó un solo byte extra. */
+    document.addEventListener('invitacion-lista', function (evento) {
+      var datos = evento && evento.detail;
+      var texto = datos && datos.eclipse_utc;
+      if (typeof texto === 'string' && FORMA_DE_LA_HORA.test(texto)) {
+        yaSePreguntoLaHora = true;      // ya no hace falta pedir eclipse.php
+        recordarLaHora(texto);
+        adoptarLaHora(texto);
+      }
+    });
 
     /**
      * Si el servidor tiene otra versión, esta pestaña se recarga una vez.
@@ -2928,8 +3104,12 @@
       var falta = faltaPara();
 
       /* Unos minutos antes de la hora, esta pestaña comprueba que está
-         corriendo la versión que sirve el servidor. Ver revisarLaVersion. */
-      if (falta <= REVISAR_ANTES) revisarLaVersion();
+         corriendo la versión que sirve el servidor, y que la hora que
+         cree sigue siendo la hora. Ver revisarLaVersion y revisarLaHora.
+
+         ⚠️ Acá la hora se pregunta SALTÁNDOSE la vigencia: es el único
+         momento en que de verdad importa, y es una vez al día. */
+      if (falta <= REVISAR_ANTES) { revisarLaVersion(); revisarLaHora(true); }
 
       if (falta <= AVISO) {
         /* ⛔ ESTE try/catch ES LA DIFERENCIA ENTRE PERDER UN DÍA Y PERDER
@@ -2951,9 +3131,23 @@
 
         /* Ya arrancó: se duerme hasta pasado el minuto y se rearma para
            mañana. `falta` es negativo si el minuto ya empezó, así que esta
-           suma da lo que queda de ritual más el margen. */
-        setTimeout(function () { yaSePidio = false; mirar(); },
-                   Math.max(1000, falta + DURA + 2000));
+           suma da lo que queda de ritual más el margen.
+
+           ⛔ ACÁ SE REARMA TODO LO QUE ES «UNA VEZ POR DÍA», Y HASTA HOY
+           SE REARMABA UNA SOLA COSA. `yaSeRevisoLaVersion` y
+           `yaSePreguntoLaHora` se marcaban una vez y no volvían nunca:
+           una pestaña abierta tres días comprobaba su versión UNA vez en
+           su vida, y no se enteraba de un cambio de hora jamás. Era el
+           mismo defecto que se acababa de arreglar con `yaSePidio`,
+           repetido dos veces al lado. */
+        ELDIAQUEYACORRIO = diaUtcDe(Date.now());
+
+        setTimeout(function () {
+          yaSePidio = false;
+          yaSeRevisoLaVersion = false;
+          yaSePreguntoLaHora = false;
+          mirar();
+        }, Math.max(1000, falta + DURA + 2000));
         return;
       }
 
@@ -2986,6 +3180,14 @@
     document.addEventListener('sobre-abierto', intentarAhora);
 
     mirar();
+
+    /* ⚡ Y AL CARGAR SE PREGUNTA LA HORA, PERO AL FINAL DE LA FILA.
+       Es lo que hace que un cambio de hora llegue AL DÍA SIGUIENTE a
+       cualquiera que abra la invitación con señal, en vez de solo a las
+       pestañas que justo estén vivas cerca de la hora vieja.
+       Va después de mirar() y con la vigencia puesta, para no competir
+       con nada de lo que la página está cargando. */
+    setTimeout(function () { revisarLaHora(false); }, 2000);
   })();
 </script>
 

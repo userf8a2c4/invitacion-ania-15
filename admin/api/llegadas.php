@@ -540,15 +540,31 @@ function lugaresDeLaPuerta($confirmacionId) {
         if (!existeTabla($tabla)) return [];
     }
 
+    /* ⚡ EN EL ORDEN QUE ELIGIÓ LUCILA (2026-09-14)
+       Quien recibe a la familia en la puerta lee los nombres en el orden
+       en que Lucila los va a cantar, no en el que se fueron cargando.
+
+       Los cuatro existeTabla() de arriba ya garantizan la tabla; falta
+       la columna, que la agrega el instalador y puede no estar todavía.
+
+       ⚠️ LA CONSULTA PASA A COMILLAS DOBLES. Con comillas simples,
+       $porOrden viajaría a MySQL como texto literal y la consulta
+       fallaría entera — justo en la pantalla de la noche del evento.
+       Es interpolación de un valor que sale de esta misma función, con
+       dos resultados posibles y ninguno de fuera: no hay nada que
+       inyectar acá. */
+    $porOrden = in_array('orden', columnasDe('acompanantes'), true)
+        ? 'a.orden, a.id' : 'a.id';
+
     $filas = consultarTodo(
-        'SELECT a.nombre, COALESCE(mp.nombre, mf.nombre) AS mesa
+        "SELECT a.nombre, COALESCE(mp.nombre, mf.nombre) AS mesa
            FROM acompanantes a
            LEFT JOIN asignacion_mesas_persona ap ON ap.acompanante_id = a.id
            LEFT JOIN mesas mp                    ON mp.id = ap.mesa_id
            LEFT JOIN asignacion_mesas af         ON af.confirmacion_id = a.confirmacion_id
            LEFT JOIN mesas mf                    ON mf.id = af.mesa_id
           WHERE a.confirmacion_id = :c
-          ORDER BY a.id',
+          ORDER BY $porOrden",
         [':c' => (int) $confirmacionId]
     );
 

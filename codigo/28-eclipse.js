@@ -5693,8 +5693,31 @@
        ritual: es lo único de esta secuencia que ocurre antes del minuto.
        Ver la sección 16b. */
     arrancarElPreludio(faltan);
-    if (faltan > 0) setTimeout(function () { empezar(0); }, faltan);
-    else            empezar(-faltan);      // ya había empezado: se entra en curso
+
+    if (faltan > 0) {
+      /* ⛔ ANTES ESTO ERA `setTimeout(function () { empezar(0); }, faltan)`
+       * Y NO COMPENSABA NADA (2026-09-14)
+       *
+       * Un `setTimeout` en una pestaña de fondo puede llegar hasta un
+       * minuto tarde: el navegador agrupa los despertares. Con `empezar(0)`
+       * a secas, la secuencia arrancaba desde el milisegundo cero CUANDO
+       * SEA que despertara — o sea, el minuto entero corrido, terminando
+       * después de la hora y desfasado de todo lo demás.
+       *
+       * Ahora se guarda el instante ABSOLUTO del arranque y al despertar se
+       * mide cuánto se llegó tarde. Si el minuto ya pasó del todo, no se
+       * corre nada: un ritual que empieza cuando ya terminó no es el
+       * ritual. */
+      var elInstante = Date.now() + faltan;
+
+      setTimeout(function () {
+        var tarde = Date.now() - elInstante;
+        if (tarde >= DURACION) return;        // llegó después del final
+        empezar(tarde > 0 ? tarde : 0);
+      }, faltan);
+    } else {
+      empezar(-faltan);                        // ya había empezado: se entra en curso
+    }
   });
 
   /* ─── 18. LA PUERTA DEL ENSAYO · SOLO EN PBE ────────────────────────
