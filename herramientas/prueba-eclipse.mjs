@@ -3575,6 +3575,164 @@ comprobar('el temporizador del preludio se puede cortar',
     'la invitación, que es justo lo que el vigía existe para evitar');
 }
 
+/* ─── LA OSCURIDAD DE ABAJO ────────────────────────────────────────
+ *
+ * Carlos: «en las partes más bajas de la invitación, haz que sea casi
+ * negro, esa parte es la "parte de abajo", porque está lejos de la luz es
+ * que tenemos candelabros; durante el eclipse, haz que la luz apenas se
+ * note y oscurece "abajo" casi por completo».
+ *
+ * Y la regla que lo acota, suya también: «las otras 23 horas y 59 minutos
+ * será para que los invitados lean la información».
+ *
+ * O sea que hay DOS cosas que comprobar, y la segunda es la que importa:
+ * que el minuto se hunda, y que el resto del día no se haya movido.
+ * ---------------------------------------------------------------- */
+
+console.log('\nLa oscuridad de abajo\n');
+
+{
+  const luz = leer('codigo', '22-luz-de-la-hora.js');
+  const velos = leer('estilos', '12-haces-de-luz.css');
+
+  const degradado = velos.slice(
+    velos.indexOf('linear-gradient(\n      to bottom'),
+    velos.indexOf('100%);') + 6).replace(/\s+/g, ' ');
+
+  /* Los coeficientes salen del CSS, no escritos a mano acá: si alguien los
+     cambia, estas cuentas cambian con él y siguen diciendo la verdad. */
+  const coeficiente = (donde) => {
+    const m = degradado.match(new RegExp(
+      'calc\\( ?\\.(\\d+) \\* var\\(--profundidad-de-sombra, 1\\)' +
+      /* ⚠️ El respaldo `, 0` se acepta OPCIONAL acá, a propósito. Si se
+         exigiera, quitarlo del CSS reventaría la lectura del degradado
+         entera y la falla diría «no se pudo leer» en vez de nombrar el
+         problema. Que el respaldo exista lo comprueba su propia
+         aserción, unas líneas más abajo. */
+      '(?: ?\\+ ?\\.(\\d+) \\* var\\(--hundimiento-del-fondo(?:, 0)?\\))?\\)\\) ' +
+      donde));
+    return m ? { prof: Number('.' + m[1]), hund: m[2] ? Number('.' + m[2]) : 0 }
+             : null;
+  };
+
+  const arriba = coeficiente('calc\\(var\\(--alto-fijo, 100svh\\) \\* 0\\.90\\)');
+  const medio  = coeficiente('calc\\(var\\(--alto-fijo, 100svh\\) \\* 1\\.70\\)');
+  const pie    = coeficiente('100%');
+
+  comprobar('el degradado del velo se puede leer entero',
+    !!(arriba && medio && pie),
+    'si cambió su forma, las comprobaciones de abajo no dicen nada');
+
+  if (arriba && medio && pie) {
+    /* ⛔ LA QUE PROTEGE EL SIGNIFICADO, NO EL NÚMERO.
+     *
+     * «Abajo está lejos de la luz, por eso tenemos candelabros.» Si el
+     * hundimiento se repartiera parejo entre las tres paradas, el
+     * resultado sería un baño negro uniforme y esa frase dejaría de ser
+     * cierta: no habría un abajo. Tiene que estar cargado al pie. */
+    comprobar('el hundimiento está cargado abajo, no repartido',
+      arriba.hund === 0 && pie.hund > medio.hund * 2,
+      'arriba ' + arriba.hund + ' · medio ' + medio.hund + ' · pie ' +
+      pie.hund + ' — repartido parejo deja de haber un «abajo» y pasa a ' +
+      'ser un baño negro uniforme');
+
+    /* ⚠️ «TODAS», NO «ALGUNA». La primera versión de esto usaba un `.test()`
+       suelto, que devuelve true si ENCUENTRA UNA. Como la perilla aparece en
+       dos paradas del degradado, quitarle el respaldo a una sola dejaba la
+       comprobación en verde: la mordida no mordía. Se cuentan las dos. */
+    {
+      const apariciones = (degradado.match(/--hundimiento-del-fondo/g) || []).length;
+      const conRespaldo = (degradado.match(/--hundimiento-del-fondo, 0\)/g) || []).length;
+
+      comprobar('y la variable trae 0 como respaldo en TODAS sus paradas',
+        apariciones > 0 && conRespaldo === apariciones,
+        conRespaldo + ' de ' + apariciones + ' la traen — sin el respaldo, ' +
+        'un navegador que no reciba la variable oscurecería de más las ' +
+        'otras 23 horas');
+    }
+
+    /* Las horas del día, leídas del archivo. */
+    const delDia = [...luz.matchAll(
+      /profundidadDeSombra:\s*([\d.]+),\s*\n\s*sombraDelBorde: 0,\s*\n\s*hundimientoDelFondo: ([\d.]+),/g)]
+      .map((m) => ({ prof: Number(m[1]), hund: Number(m[2]) }));
+
+    comprobar('las horas del día tienen la perilla en cero, todas',
+      delDia.length >= 5 && delDia.every((h) => h.hund === 0),
+      'encontré ' + delDia.length + ' momentos y ' +
+      delDia.filter((h) => h.hund !== 0).length + ' con la perilla levantada');
+
+    const profEclipse = Number((eclipse.match(
+      /profundidadDeSombra:\s*([\d.]+)/) || [])[1]);
+    const hundEclipse = Number((eclipse.match(
+      /hundimientoDelFondo:\s*([\d.]+)/) || [])[1]);
+
+    const opacidadDelPie = (h) =>
+      Math.min(1, pie.prof * h.prof + pie.hund * h.hund);
+
+    const peorDelDia = Math.max(...delDia.map(opacidadDelPie));
+    const enElMinuto = opacidadDelPie({ prof: profEclipse, hund: hundEclipse });
+
+    /* ⛔ ÉSTA ES LA QUE CUIDA LAS 23:59. El comentario del CSS dice, de la
+       ronda anterior: «NUNCA llega al negro, solo se apaga» y «tope ~.62
+       para que se lea sin esfuerzo entre charco y charco de luz». Eso
+       sigue valiendo para el día; lo que se rompió es solo el minuto. */
+    comprobar('el pie sigue legible las otras 23 horas y 59 minutos',
+      peorDelDia <= 0.45,
+      'lo más oscuro que llega el pie en todo el día es ' +
+      peorDelDia.toFixed(3) + ' — si esto sube, la invitación deja de ' +
+      'poder leerse y eso NO es lo que se pidió');
+
+    comprobar('y durante el minuto se hunde casi a negro',
+      enElMinuto >= 0.9,
+      'llega a ' + enElMinuto.toFixed(3) + ' de 1 — «oscurece abajo casi ' +
+      'por completo»');
+
+    comprobar('y el minuto es mucho más oscuro que la noche más oscura',
+      enElMinuto > peorDelDia * 2,
+      'minuto ' + enElMinuto.toFixed(3) + ' contra ' + peorDelDia.toFixed(3) +
+      ' de la peor hora: si no se distingue, el gesto no existe');
+  }
+
+  /* ⚠️ Y QUE SE ESCRIBA DONDE NO CUESTA. Las dos variables van sobre
+     `#penumbra-profunda` en la MISMA llamada, así que comparten la
+     invalidación y la segunda sale gratis. Medido: esa capa cuesta +17 ms
+     por aplicación y son 40 en todo el minuto. */
+  comprobar('las dos perillas del velo se escriben juntas',
+    /--profundidad-de-sombra[\s\S]{0,900}?--hundimiento-del-fondo/.test(luz),
+    'separarlas en dos llamadas duplica una invalidación de +17 ms');
+
+  /* ⚠️ Y QUE LAS VELAS NO SE APAGUEN. Es lo que hace que la frase de
+     Carlos —«está lejos de la luz, por eso tenemos candelabros»— se
+     sostenga: la penumbra está en z-index 65 y el lienzo de las velas en
+     66, así que los charcos perforan la negrura por más negra que sea. */
+  /* ⚠️ EL Z-INDEX LO LLEVA EL CONTENEDOR, NO EL LIENZO. `#lienzo-de-velas`
+     no declara ninguno: vive DENTRO de `#luz-de-velas`, que es el que está
+     en 66. La primera versión de esta comprobación miraba el lienzo y daba
+     rojo sobre un código correcto. */
+  {
+    const zDe = (sel) => {
+      const i = velos.indexOf(sel);
+      if (i < 0) return null;
+      const m = velos.slice(i, i + 400).match(/z-index:\s*(\d+)/);
+      return m ? Number(m[1]) : null;
+    };
+    const penumbra = zDe('#penumbra-profunda {');
+    const velas = zDe('#luz-de-velas {');
+
+    comprobar('la luz de las velas sigue por encima de la penumbra',
+      penumbra !== null && velas !== null && velas > penumbra,
+      'penumbra z' + penumbra + ' · velas z' + velas + ' — si la penumbra ' +
+      'quedara encima, el minuto apagaría los candelabros, y son lo único ' +
+      'que justifica que abajo esté oscuro');
+
+    comprobar('y el lienzo está dentro de ese contenedor, sin z propio',
+      velos.indexOf('#luz-de-velas {') < velos.indexOf('#lienzo-de-velas {') &&
+      zDe('#lienzo-de-velas {') === null,
+      'si el lienzo se llevara un z-index propio dejaría de heredar el ' +
+      'lugar del contenedor y podría caer debajo del velo');
+  }
+}
+
 console.log('');
 if (fallos) {
   console.log('✗ ' + fallos + ' comprobación(es) fallaron.\n');
