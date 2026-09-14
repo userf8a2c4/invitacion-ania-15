@@ -527,6 +527,9 @@
   function devolverLaLuzDelEclipse() {
     horaDeAntes = null;
     scrollDelCuadroAnterior = null;
+    proximoCuadroDeCine = 0;
+    costoDelCuadro = 0;
+    baseMedida = 0;
     ultimoEscalonDeLuz = -1;
     ultimoEscalonDelFondo = -1;
     try {
@@ -612,12 +615,60 @@
    * dibuja un único objeto y no tiene sentido tocar el resto. Y no se ata
    * al documento hasta el segundo 38,5: hasta entonces no hay nada que
    * poner en él y una capa de compositor vacía se paga igual. */
+  /* ⚡ Y ES DEL TAMAÑO DE LA ROSA, NO DE LA PANTALLA (2026-09-13)
+   *
+   * Esto era `inset: 0` con el bitmap del viewport entero: a 2560×1277 son
+   * 3,27 megapíxeles de capa de compositor para dibujar UN objeto de unos
+   * 90 px de lado. Y no es solo memoria: atar esa capa al documento en
+   * mitad de la secuencia —a los 38,5 s— obliga al navegador a componer
+   * una superficie nueva de ese tamaño en el peor momento posible. El
+   * comentario de `lienzoDeLaReliquia` ya sabía que «reservar un lienzo del
+   * tamaño de la pantalla cuesta un cuadro» y lo resolvía escondiéndolo en
+   * un momento donde no se notara. Esto lo hace innecesario.
+   *
+   * Ahora el lienzo mide lo que mide la rosa y SE MUEVE con ella. Mover una
+   * capa ya compuesta es gratis —lo hace el compositor con la textura que
+   * ya tiene—; lo caro es rasterizarla, y eso no cambia con la posición. */
   var lienzoDeLaOfrenda = document.createElement('canvas');
   lienzoDeLaOfrenda.className = 'eclipse-capa';
-  lienzoDeLaOfrenda.style.cssText = 'position:fixed;inset:0;pointer-events:none;' +
-                                    'z-index:2147483003;';
+  lienzoDeLaOfrenda.style.cssText = 'position:fixed;left:0;top:0;' +
+                                    'pointer-events:none;z-index:2147483003;';
   var pincelDeLaOfrenda = lienzoDeLaOfrenda.getContext('2d');
-  var cajaAnteriorDeLaOfrenda = null;
+
+  /** El lado del lienzo de la ofrenda, en píxeles CSS. 0 = sin medir. */
+  var ladoDeLaOfrenda = 0;
+
+  /* El margen de la diagonal: una rosa girada ocupa más que su lado. Es el
+     mismo 1,45 que ya usaba el borrado por caja, y el mismo criterio de
+     24-lienzo-de-petalos.js. Quedarse corto recorta la rosa al girar. */
+  var MARGEN_DE_LA_DIAGONAL = 1.45;
+
+  /**
+   * Mide el lienzo de la ofrenda contra el tamaño MÁXIMO que va a tener la
+   * rosa, una sola vez por corrida.
+   *
+   * ⚠️ SE MIDE CONTRA `escala0`, NO CONTRA `escala`. La rosa solo se
+   * achica mientras se drena (ver muerte.escala), nunca crece, así que el
+   * máximo es el del arranque. Redimensionar el lienzo por cuadro lo
+   * BORRARÍA entero cada vez y costaría más que el ahorro.
+   *
+   * @returns {void}
+   */
+  function medirElLienzoDeLaOfrenda() {
+    if (!pincelDeLaOfrenda) return;
+    var radio = LADO * (muerte.escala0 || muerte.escala || 1) * 0.75 *
+                MARGEN_DE_LA_DIAGONAL;
+    var ladoCss = Math.max(24, Math.ceil(radio * 2));
+    if (ladoCss === ladoDeLaOfrenda) return;
+
+    ladoDeLaOfrenda = ladoCss;
+    var tramaPropia = dpr * ESCALA_DEL_LIENZO;
+    lienzoDeLaOfrenda.width  = Math.ceil(ladoCss * tramaPropia);
+    lienzoDeLaOfrenda.height = Math.ceil(ladoCss * tramaPropia);
+    lienzoDeLaOfrenda.style.width  = ladoCss + 'px';
+    lienzoDeLaOfrenda.style.height = ladoCss + 'px';
+    pincelDeLaOfrenda.setTransform(tramaPropia, 0, 0, tramaPropia, 0, 0);
+  }
 
   /* Densidad de píxeles: se topa en 2. Un teléfono con 3x pintaría más
      del doble de píxeles por el mismo resultado visible. */
@@ -731,23 +782,20 @@
     lienzo.style.height = altoCss  + 'px';
     pincel.setTransform(trama, 0, 0, trama, 0, 0);
 
-    lienzoDeLaOfrenda.width  = lienzo.width;
-    lienzoDeLaOfrenda.height = lienzo.height;
-    lienzoDeLaOfrenda.style.width  = anchoCss + 'px';
-    lienzoDeLaOfrenda.style.height = altoCss  + 'px';
-    pincelDeLaOfrenda.setTransform(trama, 0, 0, trama, 0, 0);
-    cajaAnteriorDeLaOfrenda = null;
+    /* ⚡ LOS OTROS DOS YA NO SIGUEN A LA PANTALLA: siguen a su objeto.
+       Lo único que les cambia un resize o un escalón del gobernador es la
+       TRAMA, así que se los vuelve a medir con su propia cuenta —chica— en
+       vez de darles el bitmap del viewport. Ver medirElLienzoDeLaOfrenda. */
+    ladoDeLaOfrenda = 0;
+    medirElLienzoDeLaOfrenda();
 
     /* La reliquia nace en el segundo 42, después de esta función, así que
-       puede no existir todavía. Cuando existe, se la re-mide acá con todo
-       lo demás: si no, un escalón del gobernador o un resize la dejaban a
-       otra escala que el lienzo del mundo y la rosa saltaba de tamaño. */
+       puede no existir todavía. Cuando existe se la re-mide acá con todo lo
+       demás: si no, un escalón del gobernador o un resize la dejaban a otra
+       escala que el lienzo del mundo y la rosa saltaba de tamaño. */
     if (lienzoDeLaReliquia && pincelDeLaReliquia) {
-      lienzoDeLaReliquia.width  = lienzo.width;
-      lienzoDeLaReliquia.height = lienzo.height;
-      lienzoDeLaReliquia.style.width  = anchoCss + 'px';
-      lienzoDeLaReliquia.style.height = altoCss  + 'px';
-      pincelDeLaReliquia.setTransform(trama, 0, 0, trama, 0, 0);
+      ladoDeLaReliquia = 0;
+      medirElLienzoDeLaReliquia();
     }
 
     /* Asignar el ancho de un canvas lo BORRA entero, así que las cajas del
@@ -2186,7 +2234,31 @@
     for (var i = 0; i < turnosPorRaiz.length; i++) {
       if (turnosPorRaiz[i].raiz === raiz) return turnosPorRaiz[i].turno;
     }
-    var turno = turnosPorRaiz.length % 8;   // 8 turnos posibles, se usan los primeros TANDAS
+    /* ⛔ ACÁ HABÍA UN `% 8`, Y ERA EL DIAL ROTO DEL GOBERNADOR
+     *   (2026-09-13)
+     *
+     * Decía `turnosPorRaiz.length % 8`: las raíces se repartían en OCHO
+     * cubetas fijas y después `esSuTurno` hacía `turno % TANDAS`. Con 28
+     * raíces eso daba, para el peor cuadro:
+     *
+     *     TANDAS 4 → cubetas 0 y 4 juntas, 1 y 5, … → 4 grupos de 7
+     *     TANDAS 6 → cubetas 0 y 6 juntas, 1 y 7  → grupos de 7, 7, 3, 3, 3, 3
+     *
+     * O sea: el peor cuadro era SIETE RAÍCES con TANDAS 4 y también siete
+     * con TANDAS 6. Subir tandas —lo único que el gobernador podía hacer
+     * antes de tocar la escala del lienzo— no bajaba el pico ni un punto;
+     * solo volvía el movimiento más irregular. Cuatro de sus seis escalones
+     * no hacían nada.
+     *
+     * Sin el módulo, los turnos son 0, 1, 2, 3… y `turno % TANDAS` reparte
+     * parejo de verdad: con 28 raíces y TANDAS 6, grupos de 5, 5, 5, 5, 4 y
+     * 4. El peor cuadro pasa de 7 a 5.
+     *
+     * El `% 8` estaba para que el turno asignado sobreviviera a que el
+     * gobernador cambiara TANDAS a mitad de corrida. Eso se sigue
+     * cumpliendo: el turno es un entero estable y quien cambia es el
+     * divisor. */
+    var turno = turnosPorRaiz.length;
     turnosPorRaiz.push({ raiz: raiz, turno: turno });
     return turno;
   }
@@ -2535,22 +2607,25 @@
   function dibujarLaOfrenda() {
     if (!pincelDeLaOfrenda) return;
 
+    medirElLienzoDeLaOfrenda();
+
     if (!lienzoDeLaOfrenda.parentNode) {
       document.body.appendChild(lienzoDeLaOfrenda);
     }
 
-    if (cajaAnteriorDeLaOfrenda) {
-      pincelDeLaOfrenda.clearRect(
-        cajaAnteriorDeLaOfrenda[0], cajaAnteriorDeLaOfrenda[1],
-        cajaAnteriorDeLaOfrenda[2], cajaAnteriorDeLaOfrenda[3]);
-    }
+    /* El lienzo mide lo que la rosa, así que se borra entero: son unos
+       90 px de lado contra los 3,27 megapíxeles de antes. */
+    pincelDeLaOfrenda.clearRect(0, 0, ladoDeLaOfrenda, ladoDeLaOfrenda);
 
-    var radio = LADO * muerte.escala * 0.75;
-    cajaAnteriorDeLaOfrenda = [
-      muerte.x - radio, muerte.y - radio, radio * 2, radio * 2
-    ];
+    /* ⚡ LA ROSA SE DIBUJA SIEMPRE EN EL CENTRO Y LO QUE VIAJA ES EL
+       LIENZO. Un `translate3d` sobre una capa ya compuesta no obliga a
+       rasterizar nada: el compositor mueve la textura que ya tiene. */
+    var medio = ladoDeLaOfrenda / 2;
+    lienzoDeLaOfrenda.style.transform =
+      'translate3d(' + (muerte.x - medio).toFixed(1) + 'px,' +
+                       (muerte.y - medio).toFixed(1) + 'px,0)';
 
-    dibujarUnaRosa(pincelDeLaOfrenda, muerte.x, muerte.y,
+    dibujarUnaRosa(pincelDeLaOfrenda, medio, medio,
                    muerte.escala, muerte.giro, 1, muerte.espejo,
                    muerte.drenado);
   }
@@ -2610,6 +2685,35 @@
   var reliquia = null;
   var lienzoDeLaReliquia = null;
   var pincelDeLaReliquia = null;
+
+  /** El lado del lienzo de la reliquia, en píxeles CSS. 0 = sin medir. */
+  var ladoDeLaReliquia = 0;
+
+  /**
+   * Mide el lienzo de la reliquia contra el pétalo que va a llevar.
+   *
+   * ⚡ ESTO BORRABA LA PANTALLA ENTERA, CADA CUADRO, DURANTE NUEVE
+   * SEGUNDOS. El `clearRect(0, 0, innerWidth, innerHeight)` de `pintar()`
+   * limpiaba 3,27 megapíxeles a 2560×1277 para dejar sitio a un pétalo de
+   * unos 40 px. Con el lienzo del tamaño del pétalo, el borrado es de su
+   * propia caja y el lienzo viaja con un transform.
+   *
+   * @returns {void}
+   */
+  function medirElLienzoDeLaReliquia() {
+    if (!lienzoDeLaReliquia || !pincelDeLaReliquia || !reliquia) return;
+    var ladoCss = Math.max(24,
+      Math.ceil(reliquia.tam * 2 * MARGEN_DE_LA_DIAGONAL));
+    if (ladoCss === ladoDeLaReliquia) return;
+
+    ladoDeLaReliquia = ladoCss;
+    var tramaPropia = dpr * ESCALA_DEL_LIENZO;
+    lienzoDeLaReliquia.width  = Math.ceil(ladoCss * tramaPropia);
+    lienzoDeLaReliquia.height = Math.ceil(ladoCss * tramaPropia);
+    lienzoDeLaReliquia.style.width  = ladoCss + 'px';
+    lienzoDeLaReliquia.style.height = ladoCss + 'px';
+    pincelDeLaReliquia.setTransform(tramaPropia, 0, 0, tramaPropia, 0, 0);
+  }
   var relojDeLaReliquia = 0;
 
   function elegirLaReliquia() {
@@ -2645,27 +2749,24 @@
     reliquia = mejor;
 
     /* El lienzo se reserva ACÁ, en el segundo 42, y no en el frenazo.
-       Reservar un lienzo del tamaño de la pantalla cuesta un cuadro, y en
-       el segundo 60 ese cuadro se vería: es EL cuadro. Acá, en mitad de la
-       totalidad, no lo nota nadie. */
+       ⚠️ Ese motivo ya no aplica —el lienzo pasó a medir lo que el pétalo,
+       así que reservarlo no cuesta un cuadro—, pero se lo deja donde está:
+       es acá donde se sabe QUÉ pétalo va a quedar, y por lo tanto de qué
+       tamaño tiene que ser. */
     try {
       lienzoDeLaReliquia = document.createElement('canvas');
       lienzoDeLaReliquia.className = 'eclipse-capa';
       lienzoDeLaReliquia.style.cssText =
-        'position:fixed;inset:0;pointer-events:none;z-index:2147483001;';
+        'position:fixed;left:0;top:0;pointer-events:none;z-index:2147483001;';
+      pincelDeLaReliquia = lienzoDeLaReliquia.getContext('2d');
       /* Misma trama que el lienzo del mundo: es la misma decisión y por el
          mismo motivo. Ver la nota de ESCALA_DEL_LIENZO. */
-      var tramaDeLaReliquia = dpr * ESCALA_DEL_LIENZO;
-      lienzoDeLaReliquia.width  = Math.floor(window.innerWidth  * tramaDeLaReliquia);
-      lienzoDeLaReliquia.height = Math.floor(window.innerHeight * tramaDeLaReliquia);
-      /* El tamaño CSS, que es lo que faltaba en los tres. Ver medirElLienzo. */
-      lienzoDeLaReliquia.style.width  = window.innerWidth  + 'px';
-      lienzoDeLaReliquia.style.height = window.innerHeight + 'px';
-      pincelDeLaReliquia = lienzoDeLaReliquia.getContext('2d');
-      pincelDeLaReliquia.setTransform(tramaDeLaReliquia, 0, 0, tramaDeLaReliquia, 0, 0);
+      ladoDeLaReliquia = 0;
+      medirElLienzoDeLaReliquia();
     } catch (e) {
       lienzoDeLaReliquia = null;
       pincelDeLaReliquia = null;
+      ladoDeLaReliquia = 0;
     }
   }
 
@@ -2743,9 +2844,20 @@
         return;
       }
 
-      pincelPropio.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      /* ⚡ SU PROPIA CAJA, NO LA PANTALLA. Antes eran 3,27 megapíxeles por
+         cuadro durante hasta nueve segundos, para un pétalo de unos 40 px. */
+      var ladoPropio = ladoDeLaReliquia;
+      var medioPropio = ladoPropio / 2;
+      pincelPropio.clearRect(0, 0, ladoPropio, ladoPropio);
+
+      /* Lo que viaja es el lienzo, con un transform que el compositor
+         resuelve sin rasterizar nada. */
+      lienzoPropio.style.transform =
+        'translate3d(' + (x - medioPropio).toFixed(1) + 'px,' +
+                         (y - medioPropio).toFixed(1) + 'px,0)';
+
       pincelPropio.save();
-      pincelPropio.translate(x, y);
+      pincelPropio.translate(medioPropio, medioPropio);
       pincelPropio.rotate(giro);
       pincelPropio.globalAlpha = 0.75;
 
@@ -3379,8 +3491,30 @@
       ? Math.min(1, t / TOTALIDAD)
       : 1 - tramo(t, FRENESI, FRENESI + 600);
 
+    /* ⚡ LOS DOS SEGUNDOS DE VACÍO SON VACÍO TAMBIÉN PARA EL OÍDO
+     *   (2026-09-13)
+     *
+     * El código llama a este tramo «dos segundos de vacío» y la escena lo
+     * cumple: las flores se congelan, la marea se detiene, el temblor se va
+     * a cero. Pero la música seguía sonando ahí abajo, ahogada al 65 %.
+     *
+     * No había un solo instante de silencio en los sesenta segundos. Y el
+     * silencio es material: un corte de sonido hace más fuerte lo que viene
+     * después que cualquier cosa que se pueda agregar encima.
+     *
+     * ⛔ SE TOCA LA GANANCIA, NUNCA EL GRAFO. `createMediaElementSource()`
+     * solo se puede llamar una vez por elemento, y desconectar el grafo
+     * deja la canción muda para siempre. Ver la nota de engancharElSonido.
+     *
+     * Y entra y sale con una rampa de 250 ms: un corte a cero instantáneo
+     * chasquea. Vuelve JUSTO con el frenesí, que empieza en SHOCK. */
+    var elVacio =
+        (t >= TOTALIDAD && t < SHOCK) ? limitar((t - TOTALIDAD) / 250, 0, 1)
+      : (t >= SHOCK && t < SHOCK + 250) ? 1 - (t - SHOCK) / 250
+      : 0;
+
     sonido.filtro.frequency.value = 20000 - hundimiento * 19100;
-    sonido.ganancia.gain.value    = 1 - hundimiento * 0.35;
+    sonido.ganancia.gain.value    = (1 - hundimiento * 0.35) * (1 - elVacio);
 
     /* La curva se recalcula pocas veces, no en cada cuadro: armar 256
        valores sesenta veces por segundo no cambia nada que se oiga. */
@@ -4221,8 +4355,32 @@
       /* El lanzamiento, que se pasa del tope. */
       empuje = -0.9 + 1.9 * suave((fase - 0.20) / 0.32);
     } else {
-      /* Lo que queda del ciclo, cediendo hasta el siguiente envión. */
-      empuje = 1 - suave((fase - 0.52) / 0.48);
+      /* ⚡ SE LANZA Y SE QUEDA: LA QUIETUD ES PARTE DE LA EMBESTIDA
+       *   (2026-09-13)
+       *
+       * Acá decía `1 - suave((fase - 0.52) / 0.48)`: el empuje cedía de a
+       * poco durante el 48 % restante del ciclo. O sea que el ángulo de las
+       * doscientas y pico de flores cambiaba TODOS LOS CUADROS, de punta a
+       * punta del frenesí.
+       *
+       * ⛔ Y ESO APAGA EL AHORRO CENTRAL DEL ARCHIVO. La cuantización de
+       * `moverLasFloresReales` no reescribe lo que no cambió —medido:
+       * 9,08 ms de cuadro bajan a 1,97— pero para que sirva TIENE QUE HABER
+       * cuadros en los que nada cambie. Con una cesión continua no había ni
+       * uno en los diez segundos del frenesí. Ahí estaban los 2 117 ms que
+       * Carlos midió a los 51,1 s.
+       *
+       * Ahora frena rápido y SE DETIENE: del 52 % al 66 % del ciclo cae a
+       * cero, y del 66 % al 100 % vale cero exacto. Ese último tercio son
+       * cuadros en los que el tirón no aporta nada nuevo y la flor no se
+       * reescribe.
+       *
+       * Y no es solo rendimiento. Un cuerpo que se lanza y se congela da
+       * más miedo que uno que vibra: la vibración se lee como un motor, la
+       * embestida con pausa se lee como voluntad. Es lo que pide «o lo dan
+       * todo o no lo hacen». */
+      var frenada = (fase - 0.52) / 0.14;
+      empuje = frenada >= 1 ? 0 : 1 - suave(frenada);
     }
 
     return { u: u, fase: fase, empuje: empuje * desvanece };
@@ -4743,10 +4901,50 @@
         acá también se fue: la marea son rosas, y las rosas no son lastre.
   */
 
+  /* ⚡ CADENCIA DE CINE: 24 CUADROS POR SEGUNDO (2026-09-13)
+   *
+   * Carlos: «un minuto parejo a 24 se lee como CINE; uno que promedia 20
+   * con dos congelamientos de dos segundos se lee como una computadora
+   * sufriendo».
+   *
+   * ⚠️ EN UNA PANTALLA DE 60 Hz, 24 NO ES UN DIVISOR. Los cuadros caen en
+   * un patrón de 2 y 3 vsyncs alternados —33 ms, 50 ms, 33, 50…— cuyo
+   * promedio es exactamente 41,67. Eso es literalmente el 3:2 pulldown con
+   * el que se pasa cine por televisión desde siempre, con su judder
+   * incluido. Es el aspecto que se pidió, no un defecto de esto.
+   *
+   * ⚠️ Y NO ES UN AHORRO EN LA MÁQUINA DE CARLOS. Ahí el ritual entrega
+   * entre 1 y 18 fps: el tope de 24 no llega a morder nunca. Donde sirve
+   * es en un equipo holgado —un iPhone— que hoy quema batería dibujando
+   * 60 cuadros de una coreografía lenta, y sobre todo donde sirve es en la
+   * EVENIDAD: un equipo que podría dar 45 fps fluctuantes entrega 24
+   * parejos. */
+  var MS_DE_CINE = 1000 / 24;
+
+  /** Cuándo toca el próximo cuadro de cine. 0 = todavía no arrancó. */
+  var proximoCuadroDeCine = 0;
+
+  /* ⛔ LO QUE MIDE EL GOBERNADOR CAMBIÓ, Y ERA OBLIGATORIO (2026-09-13)
+   *
+   * Medía el INTERVALO entre cuadros. Con la cadencia fija ese intervalo es
+   * siempre 41,7 ms pase lo que pase, así que el gobernador habría dejado
+   * de ver que el equipo sufre — y el Diagnóstico del panel, que lee el
+   * mismo número, le habría contado a Carlos que todo anda bien mientras la
+   * escena se arrastra.
+   *
+   * Ahora mide el TRABAJO: cuánto tarda `unCuadro()` de principio a fin.
+   * Es más honesto incluso sin cadencia fija, porque el intervalo incluye
+   * todo lo que hace el navegador que no es esta secuencia. */
+  var costoDelCuadro = 0;
+
   var ultimoCuadro = 0, promedio = 16.7;
   var cuadrosVistos = 0;
 
   /** Los cuadros que se tiran antes de creerle nada al equipo. */
+  /** La mediana de trabajo de los cuadros 21-60. Informativa: el objetivo
+      ya no depende de ella, pero el Diagnóstico la muestra. */
+  var baseMedida = 0;
+
   var CALENTAMIENTO = 20;
   /** Hasta acá se junta la muestra; recién después se juzga. */
   var CUADROS_PARA_JUZGAR = 60;
@@ -4799,7 +4997,9 @@
 
   function gobernar(ahora, t) {
     if (ultimoCuadro) {
-      var intervalo = ahora - ultimoCuadro;
+      /* El trabajo del cuadro ANTERIOR, medido de punta a punta de
+         unCuadro(). Ver la nota de costoDelCuadro. */
+      var intervalo = costoDelCuadro;
       promedio += (intervalo - promedio) * 0.08;
       cuadrosVistos++;
 
@@ -4809,7 +5009,22 @@
       }
 
       if (!objetivoDeCuadro && cuadrosVistos > CUADROS_PARA_JUZGAR) {
-        objetivoDeCuadro = Math.max(28, (medianaDe(muestrasDeLaBase) || 16.7) * 1.15);
+        /* ⛔ UN PISO ABSOLUTO, NO UN OBJETIVO RELATIVO (2026-09-13)
+         *
+         * Decía `Math.max(28, mediana × 1,15)`. Eso SE CALIBRA CONTRA LA
+         * LENTITUD QUE ENCUENTRA: en la máquina de Carlos la mediana dio
+         * 86,4 ms, así que el objetivo quedaba en 99 y el gobernador
+         * aceptaba 10 fps como normal. Cuanto peor andaba el equipo, más
+         * tolerante se volvía — exactamente al revés de para qué existe.
+         *
+         * Ahora el objetivo es una fracción del presupuesto de cine y no
+         * depende del equipo: si el trabajo del cuadro se come más del
+         * 80 % de los 41,7 ms, no queda margen para el resto de la página
+         * y hay que ceder algo. La mediana se sigue midiendo porque el
+         * Diagnóstico la muestra, pero ya no manda.
+         */
+        objetivoDeCuadro = MS_DE_CINE * 0.8;
+        baseMedida = medianaDe(muestrasDeLaBase) || 0;
         muestrasDeLaBase.length = 0;
       }
 
@@ -4844,11 +5059,30 @@
      *
      * Un homenaje que puede romper la invitación no vale la pena. Ante
      * cualquier error, se limpia todo y no pasó nada. */
+    /* ⚡ EL PRÓXIMO CUADRO SE PIDE SIEMPRE, se pinte éste o no: el bucle
+       no puede depender de que el trabajo llegue a hacerse. Si unCuadro()
+       revienta, terminar() cancela este pedido. */
+    pedidoDeCuadro = requestAnimationFrame(cuadro);
+
+    /* ── LA CADENCIA DE CINE ──
+       Se saltean los cuadros que llegan antes de tiempo. El reloj se
+       adelanta de a un cuadro exacto para que el promedio sea 24 clavados;
+       si el equipo se atrasó tanto que ya perdió uno entero, se
+       resincroniza en vez de intentar recuperar la deuda — perseguir
+       cuadros perdidos es como se llega a una espiral. */
+    if (!proximoCuadroDeCine) proximoCuadroDeCine = ahora;
+    if (ahora < proximoCuadroDeCine) return;
+    proximoCuadroDeCine += MS_DE_CINE;
+    if (proximoCuadroDeCine < ahora) proximoCuadroDeCine = ahora + MS_DE_CINE;
+
+    var empiezaElTrabajo = performance.now();
     try {
       unCuadro(ahora, t);
     } catch (error) {
       terminar();
+      return;
     }
+    costoDelCuadro = performance.now() - empiezaElTrabajo;
     return;
   }
 
@@ -4908,8 +5142,6 @@
        el mundo; los pétalos quedaban afuera y por eso no se oscurecían. */
     dibujar(t, color);
     ajustarElSonido(t);
-
-    pedidoDeCuadro = requestAnimationFrame(cuadro);
   }
 
   /* ─── 16. EMPEZAR Y TERMINAR ────────────────────────────────────── */
@@ -5295,7 +5527,8 @@
     [capaDelEclipse, lienzo, lienzoDeLaOfrenda].forEach(function (c) {
       if (c.parentNode) c.parentNode.removeChild(c);
     });
-    cajaAnteriorDeLaOfrenda = null;
+    /* Que la proxima corrida lo vuelva a medir contra SU rosa. */
+    ladoDeLaOfrenda = 0;
 
     /* ⚠️ Y LA LUZ VUELVE AL RELOJ, PASE LO QUE PASE. Si el eclipse muriera
        por una excepción con la luz a mitad de camino, la invitación
@@ -5509,7 +5742,12 @@
              se está repartiendo el marco. El presupuesto de un cuadro a
              60 Hz son 16,7 ms: si `msPorCuadro` se va de ahí, la escena le
              está costando a la página. */
+          /* ⚠️ ES EL TRABAJO DEL CUADRO, no el intervalo entre cuadros.
+             Con la cadencia de cine el intervalo es siempre 41,7 ms y no
+             diría nada del equipo. Ver la nota de costoDelCuadro. */
           msPorCuadro: promedio,
+          msDeCine: MS_DE_CINE,
+          baseMedida: baseMedida,
           tandas: TANDAS,
           /* Lo unico que el gobernador puede haber cedido. La escena
              siempre esta completa: ya no hay degradacion por recorte. */
