@@ -535,7 +535,7 @@ function buscarConfirmacionPorCodigo($codigo) {
  * @param int $confirmacionId
  * @return array
  */
-function lugaresDeLaPuerta($confirmacionId) {
+function lugaresDeLaPuerta($confirmacionId, $cuantosCaben = 0) {
     foreach (['acompanantes', 'mesas', 'asignacion_mesas', 'asignacion_mesas_persona'] as $tabla) {
         if (!existeTabla($tabla)) return [];
     }
@@ -568,6 +568,39 @@ function lugaresDeLaPuerta($confirmacionId) {
         [':c' => (int) $confirmacionId]
     );
 
+    /* ⛔ LA PUERTA LISTABA MÁS GENTE DE LA QUE LA INVITACIÓN TENÍA
+     *    (2026-09-14)
+     *
+     * Visto en el escáner: la tarjeta de Paolo Solis Reyes decía
+     * «1 persona» en grande y abajo «Mesa 11: Paolo Solis Reyes y
+     * Acompañante». Dos nombres para un lugar.
+     *
+     * Los dos números salen de sitios distintos y pueden separarse: el
+     * grande es `adultos + ninos` de `confirmaciones`; la lista son las
+     * filas de `acompanantes`. Cuando una invitación baja de dos lugares
+     * a uno, la fila sobrante de la persona que ya no viene puede quedar
+     * ahí —el panel la limpia al editar desde la ficha
+     * (invitaciones.php, reconciliarPersonasDelGrupo), pero no todos los
+     * caminos pasan por ahí—.
+     *
+     * ⚠️ ES EL MISMO TIPO DE BUG QUE EL «(5 DE 4)» DEL CUPO: dos verdades
+     * para la misma familia, ninguna de las dos marcada como la buena.
+     *
+     * Y en la puerta se paga caro: quien recibe lee la lista y deja pasar
+     * a quien esté nombrado. Un nombre fantasma es una persona de más
+     * adentro del salón, con su silla y su plato.
+     *
+     * Por eso la lista se corta en lo que de verdad cabe. Se corta por el
+     * FINAL y respetando el orden que eligió Lucila, así que lo que se
+     * pierde es lo último que alguien agregó —que es justo lo que suele
+     * sobrar—, nunca el primero de la familia.
+     *
+     * ⚠️ NO ARREGLA EL DATO, PROTEGE LA PUERTA. La fila fantasma sigue en
+     * la base; lo que no hace es dejar pasar a nadie de más. */
+    if ($cuantosCaben > 0 && count($filas) > $cuantosCaben) {
+        $filas = array_slice($filas, 0, $cuantosCaben);
+    }
+
     /* Solo nombre y mesa. Ni menús ni alergias por persona: la entrada es
        el cuello de botella de la noche y la tarjeta ya trae el total, las
        alergias del grupo y los menús. Un dato más por persona, y nada
@@ -595,7 +628,12 @@ function datosParaLaPuerta($fila) {
            en la puerta, y son dato viejo apenas se sientan. */
         'mesa'            => $fila['mesa'] ?? '',
         // Quién va a qué mesa, cuando no todos van a la misma.
-        'lugares'         => lugaresDeLaPuerta((int) $fila['id']),
+        /* Cuántos caben de verdad, para que la lista de nombres no
+           contradiga al número grande de la tarjeta. */
+        'lugares'         => lugaresDeLaPuerta(
+            (int) $fila['id'],
+            (int) ($fila['adultos'] ?? 0) + (int) ($fila['ninos'] ?? 0)
+        ),
         'resumen_menus'   => $fila['resumen_menus'] ?? '',
         'ya_llego'        => !empty($fila['llegada_en']),
         'llegada_en'      => $fila['llegada_en'] ?? null,
