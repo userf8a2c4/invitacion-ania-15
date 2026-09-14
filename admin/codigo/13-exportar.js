@@ -866,7 +866,14 @@ async function exportarInvitados(formato) {
     return;
   }
 
-  const visibles = INVITADOS.filter(invitadoPasaElFiltro);
+  /* Se baja EN EL MISMO ORDEN QUE SE VE (2026-09-14). El filtro ya se
+     respetaba acá desde siempre; que el orden no lo hiciera sería media
+     promesa: uno ordena por «Personas · más primero», toca Descargar, y
+     el archivo sale en otro orden sin que nada lo avise.
+     enElOrdenElegido() vive en 08-vista-invitados.js — mismo scope
+     global, sin import, como todo el panel, y ese archivo se carga antes
+     (admin/index.html:382 contra :391). */
+  const visibles = enElOrdenElegido(INVITADOS.filter(invitadoPasaElFiltro));
 
   /* ⚠️ LA VENTANA DEL PDF SE ABRE ACÁ, ANTES DE ESPERAR NADA.
      Abajo se le piden los menús al servidor, y después de ese `await` el

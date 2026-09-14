@@ -170,13 +170,33 @@ if (!$inv) {
 $personas = [];
 if ($inv['confirmacion_id']) {
     try {
+        /* ⚡ EL ORDEN QUE ELIGIÓ LUCILA (2026-09-14)
+           Acá es donde el cambio se VE: esta es la lista que la familia
+           lee en su invitación y sobre la que tilda quién viene.
+
+           ⚠️ EL RESPALDO NO ES DECORATIVO. Este archivo tiene su propia
+           conexión PDO (ver la nota 4 de la cabecera) y no puede usar
+           columnasDe(): no carga admin/api/_lib/bd.php. Si la columna
+           todavía no está —los archivos se suben a mano, el instalador se
+           corre después— este prepare() lanza. Y si eso dejara $personas
+           vacío, el bloque de abajo (línea 197, `if (!$personas)`)
+           SINTETIZARÍA los lugares y la familia vería «Adulto 2», «Niño
+           1» en vez de los nombres que Lucila ya cargó. Así que el fallo
+           de la columna vuelve a pedir lo de siempre, y sólo un fallo de
+           verdad de la base deja la lista vacía. */
         // alergias: cada persona lleva la suya (ver la nota grande en
         // confirmar.php, sección "PERSONAS DEL GRUPO").
-        $stmtP = $pdo->prepare(
-            'SELECT id, nombre, tipo, menu, alergias FROM acompanantes WHERE confirmacion_id = :c ORDER BY id ASC'
-        );
-        $stmtP->execute([':c' => $inv['confirmacion_id']]);
-        $personas = $stmtP->fetchAll();
+        $sqlPersonas = 'SELECT id, nombre, tipo, menu, alergias FROM acompanantes
+                         WHERE confirmacion_id = :c ORDER BY ';
+        try {
+            $stmtP = $pdo->prepare($sqlPersonas . 'orden, id');
+            $stmtP->execute([':c' => $inv['confirmacion_id']]);
+            $personas = $stmtP->fetchAll();
+        } catch (PDOException $sinColumna) {
+            $stmtP = $pdo->prepare($sqlPersonas . 'id');
+            $stmtP->execute([':c' => $inv['confirmacion_id']]);
+            $personas = $stmtP->fetchAll();
+        }
     } catch (PDOException $e) {
         error_log('[Ania XV · invitacion.php] No se pudieron leer las personas: ' . $e->getMessage());
     }
@@ -256,6 +276,39 @@ try {
     if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $valorF)) $fechaLimiteIso = $valorF;
 } catch (PDOException $e) { /* tabla ajustes puede no existir todavía; se usa el respaldo */ }
 
+/* ─── LA HORA DEL ECLIPSE, DE REGALO ──────────────────────────────────
+ *
+ * ⚡ (2026-09-14) Esto es lo más barato del proyecto: la conexión YA está
+ * abierta, la tabla `ajustes` YA se está leyendo tres líneas más arriba,
+ * y el arreglo que se serializa YA viaja. Agregar la hora cuesta un
+ * SELECT sobre una clave primaria y una clave más en el json_encode.
+ * Cero archivos nuevos, cero requests nuevos, cero procesos PHP nuevos.
+ *
+ * POR QUÉ ACÁ, SI YA EXISTE eclipse.php
+ * Porque son dos públicos distintos y ninguno cubre al otro:
+ *
+ *   · Esta respuesta le llega a quien abre su link personal (?i=TOKEN),
+ *     que con las invitaciones repartidas por WhatsApp es por donde
+ *     entra prácticamente todo el mundo. Y le llega SIN pedir nada
+ *     extra, en el mismo viaje que ya hacía.
+ *
+ *   · eclipse.php es para quien abre la invitación pelada, sin token:
+ *     ése no le pide NADA al servidor en toda la visita
+ *     (codigo/04-invitado-personalizado.js:207 solo corre con token).
+ *
+ * ⚠️ NO SE VALIDA ACÁ. Viaja tal como está en la base y lo valida el
+ * navegador con la misma expresión que usa eclipse.php. Es a propósito:
+ * si algún día el formato cambia, un servidor viejo no tiene que
+ * entenderlo para dejarlo pasar.
+ * -------------------------------------------------------------------- */
+$eclipseUtc = '';
+try {
+    $stmtE = $pdo->prepare("SELECT valor FROM ajustes WHERE clave = 'hora_eclipse_utc' LIMIT 1");
+    $stmtE->execute();
+    $filaE = $stmtE->fetch();
+    $eclipseUtc = trim((string) ($filaE['valor'] ?? ''));
+} catch (PDOException $e) { /* sin hora: el navegador sigue con la suya */ }
+
 $yaRespondio = in_array($inv['estado'], ['confirmada', 'declinada'], true);
 $yaPaso = date('Y-m-d') > $fechaLimiteIso;
 // Cerrado = ya respondió Y ya pasó la fecha. Una respuesta tardía pero
@@ -294,6 +347,10 @@ echo json_encode([
        panel; si esta base todavía no la tiene, viaja en 0 y no se muestra
        nada — nunca rompe. */
     'veces_respondida'  => (int) ($inv['veces_respondida'] ?? 0),
+    /* La hora del minuto, en UTC ("12:30"), para que esta pestaña no
+       tenga que preguntarla aparte. Viaja vacía si no está configurada;
+       ahí el vigía se queda con la que trae horneada. */
+    'eclipse_utc'       => $eclipseUtc,
     /* Solo en el entorno de pruebas: habilita el botón de reinicio. La
        decisión la toma el SERVIDOR, no el navegador, para que en el sitio
        real ese botón no pueda existir aunque alguien lo fuerce. */

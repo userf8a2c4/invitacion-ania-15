@@ -54,6 +54,60 @@ const FILTROS_DE_GENTE = [
 /** Qué se escribió en el buscador. */
 let BUSQUEDA_INVITADOS = '';
 
+/* ══════════════════════════════════════════════════════════════════════
+   EL ORDEN DE LA LISTA (2026-09-14, a pedido de Carlos: «haz que la
+   lista pueda organizarse ya sea por nombre, cantidad de invitados,
+   confirmación o código»)
+
+   ⚠️ NO SE GUARDA EN localStorage, Y ES A PROPÓSITO.
+   FILTRO_INVITADOS y BUSQUEDA_INVITADOS tampoco se guardan: al recargar
+   el panel vuelven a su valor inicial. El orden se comporta igual. Los
+   tres son la misma clase de cosa —cómo estoy mirando la lista AHORA— y
+   que uno sobreviviera a la recarga y los otros dos no sería una
+   inconsistencia que solo se descubre tocando. Sí sobreviven a irse a
+   Dinero y volver, porque viven en este archivo y dibujarGente() las
+   vuelve a leer al dibujar.
+
+   ⚠️ POR ESO MISMO NO VAN EN olvidarSeleccionDeGente(): eso limpia el
+   modo selección al salir de Gente, y el filtro no se limpia ahí. El
+   orden tampoco.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Cómo se ordena: 'natural', 'nombre', 'personas', 'estado', 'codigo'. */
+let ORDEN_INVITADOS = 'natural';
+
+/** Si el orden va al revés — segundo toque en el chip que ya estaba. */
+let ORDEN_INVERTIDO = false;
+
+/** Los chips de orden: [clave, rótulo, cómo va, cómo va al revés].
+ *
+ *  Los dos últimos se pegan al rótulo SOLO en el chip encendido, con el
+ *  mismo ' · ' que ya usa «Sin responder · 12»
+ *  (actualizarElNumeroDeQuienFalta()). Son PALABRAS y no una flechita
+ *  porque una flecha sola no dice nada: ↓ en «Nombre», ¿es A→Z o Z→A?
+ *  Con «Nombre · A→Z» no hay nada que adivinar, y de paso se aprende
+ *  que el chip se puede tocar de nuevo sin tener que probarlo.
+ *
+ *  ⚠️ EL CHIP DICE «Personas», NO «Invitados». En esta app «invitación»
+ *  es la FILA y «persona» es la cabeza que come y ocupa silla — esa
+ *  distinción se peleó el 2026-09-08 en ponerTituloDeInvitados(), y el
+ *  pie de cada fila ya dice «4 personas». Un chip que dijera
+ *  «Invitados» ordenaría por algo que la pantalla llama de otra forma.
+ *
+ *  ⚠️ 'natural' NO es «sin orden»: es el que manda el servidor
+ *  (confirmaciones.php?accion=listar ordena por `fecha_hora` DESC, o por
+ *  id DESC si esa columna no existiera). Es el que se ve hoy, y por eso
+ *  es el de arranque: nadie pidió que la lista cambiara sola al abrir.
+ *  Invertido da «las más viejas primero», que responde a «¿a quién
+ *  cargué al principio y nunca le mandé nada?». */
+const ORDENES_DE_GENTE = [
+  ['natural',  'Recientes',    'nuevas primero', 'viejas primero'],
+  ['nombre',   'Nombre',       'A→Z',            'Z→A'],
+  ['personas', 'Personas',     'más primero',    'menos primero'],
+  ['estado',   'Confirmación', 'falta → listo',  'listo → falta'],
+  ['codigo',   'Código',       'A→Z',            'Z→A'],
+];
+
 /** Si está activo el modo de selección múltiple (Fase 5 del rediseño). */
 let SELECCION_ACTIVA = false;
 
@@ -371,6 +425,29 @@ async function dibujarInvitados() {
       ).join('') +
     '</div>' +
 
+    /* ⚡ ORDENAR LA LISTA (2026-09-14)
+       Va pegado a los filtros y ARRIBA de «Crear invitación», porque
+       filtrar y ordenar son la misma idea —qué estoy mirando— y los
+       botones de abajo son la otra —qué estoy haciendo—. Juntar las dos
+       que se parecen, y separarlas de las que no, es lo que evita tocar
+       una creyendo tocar la otra.
+
+       El rótulo «Ordenar por» no es decoración: son dos renglones de
+       chips idénticos, y sin él «Confirmaron» (filtro) y «Confirmación»
+       (orden) quedan uno encima del otro sin nada que los distinga.
+
+       ⚠️ Los chips salen PELADOS —solo el rótulo—. Quién está encendido
+       y hacia dónde va lo decide refrescarLosChipsDeOrden(), que corre
+       enseguida al enganchar. Un solo sitio que sabe cómo se lee un chip
+       de orden: si se pintara también acá, un día dirían cosas
+       distintas. */
+    '<p class="detalle__rotulo" style="margin:0 0 4px">Ordenar por</p>' +
+    '<div class="filtros filtros--una-linea" id="orden-invitados">' +
+      ORDENES_DE_GENTE.map(o =>
+        '<button class="filtro" data-orden="' + o[0] + '">' + o[1] + '</button>'
+      ).join('') +
+    '</div>' +
+
     /* ⚡ "AGREGAR INVITADO" SUBIÓ ACÁ, ANTES DE LA LISTA (2026-09-03).
        Estaba al fondo, después de la lista COMPLETA y del botón de fecha
        límite. O sea que el costo de dar de alta a alguien crecía con cada
@@ -413,6 +490,17 @@ async function dibujarInvitados() {
       '<button class="boton" style="flex:1" id="inv-seleccionar">Seleccionar</button>' +
       '<button class="boton" style="flex:1" id="inv-descargar">Descargar</button>' +
     '</div>' +
+
+    /* ⚠️ RENGLÓN PROPIO, Y NO UN TERCER BOTÓN ARRIBA. En un teléfono,
+       «Crear invitación» + «Fecha límite» + éste no entran en una línea:
+       se parten y quedan tres botones de dos renglones cada uno.
+       ⚠️ Y HOJA PROPIA, no colgada del Guardar de «Fecha límite»: esa
+       hoja ya guarda dos cosas de una vez, y una tercera haría que
+       corregir el texto de la invitación reescribiera además la hora
+       del eclipse. */
+    '<button class="boton boton--ancho" id="inv-eclipse" ' +
+            'style="margin-bottom:var(--esp-2)">' +
+      '🌑 Eclipse de Sangre</button>' +
 
     /* ⚠️ ANTES DE REPARTIR, NO DESPUÉS (2026-09-09)
        El otro extremo del link personal: una invitación cuyo link abre la
@@ -552,6 +640,10 @@ function engancharInvitados(vista) {
     abrirConfiguracionDeInvitaciones();
   });
 
+  buscar('#inv-eclipse', vista).addEventListener('click', () => {
+    abrirLaHoraDelEclipse();
+  });
+
   const botonRevisarLinks = buscar('#inv-revisar-links', vista);
   if (botonRevisarLinks) {
     botonRevisarLinks.addEventListener('click', () =>
@@ -579,11 +671,26 @@ function engancharInvitados(vista) {
     pintarListaDeInvitados();
   });
 
-  buscarTodos('.filtro', vista).forEach(boton => {
+  /* ⛔ ESTE SELECTOR TIENE QUE SER `[data-filtro]` Y NO `.filtro`
+     (2026-09-14, al agregar el orden)
+
+     Los chips de ORDEN que se agregan más abajo usan la misma clase
+     `.filtro` —es la que les da los 44 px y el dorado del encendido—,
+     así que con el selector viejo este `forEach` también los
+     enganchaba: tocar «Nombre» hacía `FILTRO_INVITADOS = undefined`,
+     apagaba los ocho chips de filtro de un saque (`otro === boton` es
+     falso para todos) y dejaba la lista mostrando todo sin un solo chip
+     encendido. O sea: elegir un orden reseteaba el filtro en silencio,
+     que es la misma familia del chip que mentía el 2026-09-03.
+
+     `[data-filtro]` es además lo que este código YA leía en el renglón
+     de abajo (`boton.dataset.filtro`): ahora el selector dice lo mismo
+     que el cuerpo. */
+  buscarTodos('[data-filtro]', vista).forEach(boton => {
     boton.addEventListener('click', () => {
       FILTRO_INVITADOS = boton.dataset.filtro;
 
-      buscarTodos('.filtro', vista).forEach(otro => {
+      buscarTodos('[data-filtro]', vista).forEach(otro => {
         otro.classList.toggle('activo', otro === boton);
       });
 
@@ -605,6 +712,60 @@ function engancharInvitados(vista) {
   buscar('#sel-recordar', vista).addEventListener('click', () => recordarEnLote());
   buscar('#sel-mesa', vista).addEventListener('click', () => asignarMesaEnLote());
   buscar('#sel-llegada', vista).addEventListener('click', () => marcarLlegadaEnLote());
+
+  /* ⚡ LOS CHIPS DE ORDEN (2026-09-14)
+     El MISMO chip otra vez da vuelta el orden; OTRO chip lo cambia y
+     vuelve a su dirección natural.
+
+     ⚠️ ESE RESETEO IMPORTA. Sin él, venir de «Personas · menos primero»
+     y tocar «Nombre» daría Z→A sin que nadie lo haya pedido. El chip lo
+     diría, pero a esa altura ya nadie lo está leyendo: tocó «Nombre»
+     esperando la A arriba. La dirección invertida es una decisión sobre
+     UNA columna, no un estado del panel. */
+  buscarTodos('[data-orden]', vista).forEach(boton => {
+    boton.addEventListener('click', () => {
+      if (ORDEN_INVITADOS === boton.dataset.orden) {
+        ORDEN_INVERTIDO = !ORDEN_INVERTIDO;
+      } else {
+        ORDEN_INVITADOS = boton.dataset.orden;
+        ORDEN_INVERTIDO = false;
+      }
+
+      refrescarLosChipsDeOrden(vista);
+      pintarListaDeInvitados();
+    });
+  });
+
+  /* Acá, y no en el molde: el chip encendido se DEDUCE del estado, no se
+     escribe a mano en el HTML. Es la lección del 2026-09-03 con «Todos»,
+     que venía con la clase `activo` puesta y mentía cada vez que se
+     entraba desde Hoy con el filtro ya cambiado. */
+  refrescarLosChipsDeOrden(vista);
+}
+
+/**
+ * Pone al día los chips de orden: cuál está encendido y hacia dónde va.
+ *
+ * Se usa textContent y no innerHTML porque lo único que entra son las
+ * palabras de ORDENES_DE_GENTE, que son nuestras — exactamente como
+ * actualizarElNumeroDeQuienFalta() escribe «Sin responder · 12». Y se
+ * actualiza el chip en su sitio en vez de rehacer el renglón entero,
+ * porque rehacerlo se llevaría puestos los addEventListener de arriba.
+ *
+ * @param {Element} [donde]
+ * @returns {void}
+ */
+function refrescarLosChipsDeOrden(donde) {
+  buscarTodos('[data-orden]', donde).forEach(chip => {
+    const fila = ORDENES_DE_GENTE.find(o => o[0] === chip.dataset.orden);
+    if (!fila) return;
+
+    const encendido = ORDEN_INVITADOS === chip.dataset.orden;
+    const comoVa    = ORDEN_INVERTIDO ? fila[3] : fila[2];
+
+    chip.classList.toggle('activo', encendido);
+    chip.textContent = fila[1] + (encendido && comoVa ? ' · ' + comoVa : '');
+  });
 }
 
 
@@ -757,7 +918,16 @@ function pintarListaDeInvitados() {
 
   actualizarElNumeroDeQuienFalta();
 
-  const visibles = INVITADOS.filter(invitadoPasaElFiltro);
+  /* ⚡ EL ORDEN VA DESPUÉS DEL FILTRO Y DE LA BÚSQUEDA (2026-09-14)
+     No puede ser al revés: ordenar primero y filtrar después da el mismo
+     resultado pero comparando filas que enseguida se tiran, y sobre todo
+     deja el orden escrito en un arreglo que no es el que se pinta. Acá
+     se ordena exactamente lo que se va a ver.
+
+     ⚠️ ponerTituloDeInvitados() vuelve a filtrar por su cuenta y NO
+     ordena, y está bien así: ese solo cuenta gente, y a una suma el
+     orden no le cambia nada. No hay que tocarlo. */
+  const visibles = enElOrdenElegido(INVITADOS.filter(invitadoPasaElFiltro));
 
   if (!visibles.length) {
     if (!INVITADOS.length) {
@@ -944,6 +1114,205 @@ function invitadoPasaElFiltro(fila) {
   return pajar.includes(aguja);
 }
 
+
+/* ══════════════════════════════════════════════════════════════════════
+   EL ORDEN, QUE SE APLICA DESPUÉS DEL FILTRO Y DE LA BÚSQUEDA
+
+   Está acá abajo de invitadoPasaElFiltro() a propósito: se lee en el
+   mismo orden en que se aplica. Primero se descarta, después se acomoda
+   lo que quedó.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Los cuatro estados, en el orden del recorrido de una invitación.
+ *
+ *  ⚠️ ES UNA SECUENCIA, NO UNA CUARTA TABLA DE PALABRAS. Los nombres
+ *  siguen saliendo de un solo sitio, COMO_SE_LEE_EL_ESTADO
+ *  (06-piezas.js): acá no hay ni un texto que pueda contradecir al de la
+ *  fila. Es justo por eso que el 2026-09-08 se borró
+ *  TEXTO_CORTO_DE_ESTADO_INV — tres listas de nombres para una sola cosa
+ *  es cómo se llega a que la pantalla diga «Confirmó» y «Sin enviar» a
+ *  la vez.
+ *
+ *  Y el orden tampoco se inventó acá: es el que ya está escrito en la
+ *  cabecera de comoEstaLaAsistencia() —«sin enviar → enviada → confirmó
+ *  / no viene»— y en su @returns. La lista ordenada por «Confirmación»
+ *  sale, de arriba abajo:
+ *
+ *    Sin enviar     falta mandarla. Es 100 % de este lado del teléfono y
+ *                   es lo más barato de resolver: se manda y listo.
+ *    Sin responder  está en la calle. Hay que insistir, pero ya depende
+ *                   de alguien más.
+ *    Confirmó       cerrado. Cuenta para la comida y las sillas.
+ *    No viene       cerrado. No cuenta.
+ *
+ *  O sea: arriba las dos que piden trabajo, abajo las dos que ya no.
+ *  Tocando el chip de nuevo quedan arriba las cerradas, que es la lista
+ *  con la que se cuenta para el salón. */
+const ORDEN_DE_LOS_ESTADOS = ['sin_enviar', 'enviada', 'confirmo', 'no_viene'];
+
+/**
+ * Cuánta gente MUESTRA una fila. No cuánta guarda la base.
+ *
+ * ⚠️ SALE DE `adultos + ninos`, NO DE `invitacion_pases`. Son dos
+ * números distintos y ya se desincronizaron de verdad: el 2026-09-13 la
+ * ficha de Carolina Leyva decía «(5 DE 4)». `pases` es el cupo de la
+ * invitación; `adultos + ninos` es lo que la fila escribe en su pie con
+ * filaDeInvitado() («4 personas») y lo que suma el título. Ordenar por
+ * uno y mostrar el otro es cómo se llega a una lista donde el 5 está
+ * arriba del 6. (Tampoco sale de la columna `total`, que existe en
+ * $EDITABLES de confirmaciones.php y no la lee ni una línea del panel.)
+ *
+ * ⚠️ Y VALE 0 CUANDO `asiste` NO ES 1, por lo mismo: la fila solo
+ * escribe «N personas» si `asiste`. Una fila que no muestra gente no
+ * puede quedar por encima de una que muestra cinco.
+ *
+ * ⚠️ `asiste` no es «confirmó» —el sistema lo pone en 1 al crear la
+ * invitación, ver la nota del 2026-09-08—. Acá se usa igual, a
+ * propósito, porque `asiste` es exactamente lo que decide el pie.
+ *
+ * @param {Object} fila
+ * @returns {number}
+ */
+function cuantasPersonasMuestra(fila) {
+  if (Number(fila.asiste) !== 1) return 0;
+  return (Number(fila.adultos) || 0) + (Number(fila.ninos) || 0);
+}
+
+/**
+ * Compara dos nombres como los lee alguien que habla español.
+ *
+ * ⚠️ localeCompare CON 'es', Y NO paraBuscar(). paraBuscar() aplasta los
+ * acentos para BUSCAR, y ahí está bien —escribir «maria» tiene que
+ * encontrar a «María»—, pero para ORDENAR convierte la ñ en n y manda a
+ * Peña a mezclarse entre Pena y Penagos. En español la ñ es una letra
+ * aparte y va después de toda la n; el colador de 'es' ya lo sabe.
+ *
+ * `sensitivity: 'base'` deja «José» y «Jose» pegados en vez de mandar a
+ * uno al final, que es lo que uno espera al bajar con el dedo buscando a
+ * alguien. Los empates quedan en el orden en que ya venían: sort() es
+ * estable, así que nada salta de lugar por su cuenta.
+ *
+ * ⚠️ SIN `numeric: true`, aunque tiente: los códigos de pase usan esta
+ * misma comparación, y «XV-9…» / «XV-10…» son texto, no números — con
+ * numeric quedarían en un orden que la pantalla no muestra. Una sola
+ * regla de comparación para todo el archivo.
+ *
+ * ⚠️ Y CON 'es' ESCRITO ACÁ, no CONFIGURACION.dinero.region: esa
+ * constante está documentada como «cómo se escribe 1,500.50» — es una
+ * decisión sobre NÚMEROS. Si algún día se pasa a dólares, el abecedario
+ * de la lista de gente no tiene por qué moverse.
+ *
+ * Los sin nombre se comparan por «Sin nombre», que es literalmente lo
+ * que la fila escribe: caen entre las S, justo donde se los va a buscar.
+ *
+ * @param {Object} a
+ * @param {Object} b
+ * @returns {number}
+ */
+function compararNombres(a, b) {
+  return String(a.nombre || 'Sin nombre')
+    .localeCompare(String(b.nombre || 'Sin nombre'), 'es', { sensitivity: 'base' });
+}
+
+/**
+ * Compara dos filas según el chip de orden que esté puesto.
+ *
+ * Lee ORDEN_INVITADOS y ORDEN_INVERTIDO de arriba, igual que
+ * invitadoPasaElFiltro() lee FILTRO_INVITADOS y BUSQUEDA_INVITADOS.
+ *
+ * @param {Object} a
+ * @param {Object} b
+ * @returns {number}
+ */
+function compararInvitados(a, b) {
+  let r = 0;
+
+  if (ORDEN_INVITADOS === 'nombre') {
+    r = compararNombres(a, b);
+
+  } else if (ORDEN_INVITADOS === 'personas') {
+    /* DE MÁS A MENOS, y no al revés. La pregunta que se le hace a una
+       lista de invitados es «¿cuáles son los grupos grandes?» —los que
+       llenan una mesa, los que pesan en la cuenta del salón—. Con el
+       orden ascendente esa respuesta queda al FONDO, después de las
+       treinta filas de 1 y 2: escondida detrás de un scroll, que es
+       justo lo que uno abrió el orden para no hacer. El segundo toque da
+       la otra pregunta buena: quién viene solo y completa la mesa a la
+       que le sobran dos sillas. */
+    r = cuantasPersonasMuestra(b) - cuantasPersonasMuestra(a);
+    if (r === 0) r = compararNombres(a, b);
+
+  } else if (ORDEN_INVITADOS === 'estado') {
+    /* El desempate por nombre no es adorno: sin él, los treinta «Sin
+       responder» vuelven en orden de carga, que dentro del bloque se lee
+       igual que no tener orden.
+
+       Si algún día comoEstaLaAsistencia() devolviera un estado nuevo,
+       indexOf da -1 y esa fila queda ARRIBA DE TODO: un estado que este
+       archivo no conoce conviene tenerlo a la vista, no escondido al
+       final. */
+    r = ORDEN_DE_LOS_ESTADOS.indexOf(comoEstaLaAsistencia(a)) -
+        ORDEN_DE_LOS_ESTADOS.indexOf(comoEstaLaAsistencia(b));
+    if (r === 0) r = compararNombres(a, b);
+
+  } else if (ORDEN_INVITADOS === 'codigo') {
+    /* ⚠️ COMO TEXTO, Y NO HAY NADA MÁS LISTO QUE HACER. Los códigos
+       vienen en dos formas, las dos medidas en el proyecto:
+
+         · XV-0F7695     'XV-' + 6 hex
+                         (admin/api/confirmaciones.php:403 y
+                          admin/api/instalar.php:480)
+         · XV-1F4A-K3P9  'XV-' + 4 hex + '-' + 4 en base 36
+                         (codigo/12-pase-de-acceso.js:50, el sitio
+                          público; el placeholder de mi-pase.php dice
+                          XV-0000-0000)
+
+       Ninguna de las dos es una cuenta ni una fecha: el primer pedazo es
+       la suma de los códigos de las letras del nombre y el segundo un
+       trozo de Date.now(). Un código «mayor» no es más nuevo ni más
+       grande. Interpretarlo como número sería inventarle un significado
+       que no tiene; como texto ordena igual que el ojo cuando recorre
+       una columna de códigos buscando el que tiene en la mano, que es
+       para lo único que se ordena por código.
+
+       Los que no tienen quedan primero (la cadena vacía va antes que
+       todo), y al invertir quedan últimos. No se los aparta: al revés,
+       «Código · Z→A» termina siendo «quiénes no tienen pase todavía». */
+    r = String(a.codigo || '').localeCompare(String(b.codigo || ''), 'es',
+                                             { sensitivity: 'base' });
+  }
+
+  /* Se da vuelta TODO, desempate incluido. Una sola regla: el segundo
+     toque muestra la misma lista al revés, sin excepciones que haya que
+     recordar. Que dentro de «No viene» los nombres queden de la Z a la A
+     no lo va a notar nadie; una regla con asteriscos, sí. */
+  return ORDEN_INVERTIDO ? -r : r;
+}
+
+/**
+ * Devuelve las filas en el orden que pide el chip.
+ *
+ * ⚠️ NUNCA ORDENA EN EL SITIO. `sort()` reordena el arreglo original, y
+ * si algún día se le pasara INVITADOS —y no la copia que devuelve
+ * filter()— quedaría reordenada la lista maestra de la que también leen
+ * ponerTituloDeInvitados(), novedadesDesdeLaUltimaVisita(),
+ * recordarLaUltimaRespuestaVista() y exportarInvitados(). Con cincuenta
+ * filas la copia no se siente; ese bug sí se sentiría.
+ *
+ * 'natural' no compara nada: devuelve lo que mandó el servidor
+ * (confirmaciones.php ya viene ORDER BY fecha_hora DESC). Invertido, lo
+ * da vuelta — que es el otro extremo exacto de la misma lista.
+ *
+ * @param {Object[]} filas
+ * @returns {Object[]}
+ */
+function enElOrdenElegido(filas) {
+  if (ORDEN_INVITADOS === 'natural') {
+    return ORDEN_INVERTIDO ? filas.slice().reverse() : filas;
+  }
+  return filas.slice().sort(compararInvitados);
+}
+
 /**
  * El HTML de una fila de la lista.
  *
@@ -973,6 +1342,24 @@ function filaDeInvitado(fila) {
   // ⚡ (2026-08-28) Visible sin tener que abrir la ficha: si todavía no
   // tiene link, no hay forma de mandarle la invitación.
   if (!fila.invitacion_id) pie.push('Sin link');
+
+  /* ⚡ ORDENANDO POR CÓDIGO, EL CÓDIGO SE VE (2026-09-14)
+     El código vive en el hueco de la derecha, pero ahí solo aparece si
+     `fila.codigo && asiste && !SELECCION_ACTIVA`, y encima lo pierde
+     contra «Pendiente» y contra «Alergia», que van antes en la misma
+     cadena de tres. O sea que con el orden por código puesto, la mayoría
+     de las filas quedarían ordenadas por algo que no se ve en ninguna
+     parte: la lista se vería barajada al azar y no habría forma de darse
+     cuenta de que no lo está.
+
+     Es la misma familia de bug que este archivo ya arregló dos veces —el
+     chip que mentía (2026-09-03) y los dos puntos de color
+     (2026-09-08)—: la pantalla no puede ordenar por lo que no muestra.
+
+     Va en el pie y no en el hueco de la derecha para no quitarle el
+     lugar a «Alergia», que es lo único de esta fila que puede terminar
+     en el hospital. */
+  if (ORDEN_INVITADOS === 'codigo') pie.push(fila.codigo || 'Sin pase');
 
   const marcado = SELECCIONADOS.has(Number(fila.id));
 
@@ -1897,6 +2284,20 @@ function avisoDePorQueNoHayWhatsApp(fila) {
 
 
 /* ─── 5. LOS NOMBRES DE CADA ACOMPAÑANTE ───────────────────────────── */
+/* ⚡ LOS GUARDADOS DE ORDEN VAN DE A UNO, EN FILA (2026-09-14)
+ *
+ * Cada toque de flecha manda la lista completa. Si Lucila toca ▲ tres
+ * veces seguidas —que es lo normal para subir a alguien desde el final—
+ * salen tres peticiones, y fetch NO garantiza en qué orden llegan. Si la
+ * segunda aterriza después de la tercera, la base se queda con un orden
+ * intermedio y la pantalla muestra otro: el clásico «lo acomodé y se
+ * volvió a desacomodar».
+ *
+ * Encadenarlas cuesta una línea y el resultado final es siempre el
+ * último toque. El .catch(() => {}) del medio es para que una que falla
+ * no corte la cadena y deje las siguientes sin mandarse nunca.
+ */
+let ORDEN_EN_VUELO = Promise.resolve();
 
 /**
  * Pide y pinta la lista de acompañantes nombrados de una confirmación.
@@ -1967,6 +2368,22 @@ async function dibujarAcompanantes(confirmacionId, cupo, contenedor) {
  * "Dejar sin nombre"), hay una línea que explica la diferencia, y la
  * confirmación dice qué pasa con el lugar.
  *
+ * ⚡ Y DESDE EL 2026-09-14 EL ORDEN TAMBIÉN SE ELIGE DESDE ACÁ. Carlos:
+ * «que lucila pueda modificar el orden de los nombres en la app y esto se
+ * vea reflejado en la invitacion». Hasta hoy el orden era el de carga —el
+ * orden en que Lucila se fue acordando de cada quien—, y esa misma lista
+ * es la que la familia lee en su invitación. Las flechas ▲▼ mueven a una
+ * persona un lugar y mandan la lista COMPLETA al servidor.
+ *
+ * ⚠️ ACOMODAR NO MUEVE NINGÚN NÚMERO. No toca el cupo, ni los adultos, ni
+ * los niños, ni los pases. Sólo la columna `orden`. Por eso esta es la
+ * única acción de la sección que NO ensucia 'resumen'.
+ *
+ * ⚠️ Y NO PUEDE PISARLE NADA A UN INVITADO QUE ESTÁ CONTESTANDO:
+ * confirmar.php guarda menú y alergias por id, no por posición
+ * (confirmar.php:464-467). Acomodar mientras alguien tiene su formulario
+ * abierto le cambia el renglón, nunca el dato.
+ *
  * @param {number} confirmacionId
  * @param {number} cupo
  * @param {Object[]} filas
@@ -1975,6 +2392,14 @@ async function dibujarAcompanantes(confirmacionId, cupo, contenedor) {
  */
 function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
   const puedeAgregarMas = filas.length < cupo;
+  /* ⚡ SI SE PUEDE ACOMODAR, LO DICEN LOS DATOS (2026-09-14)
+     No hace falta un campo nuevo en la respuesta ni preguntar nada más:
+     'listar' hace SELECT * (acompanantes.php:48), así que si la columna
+     `orden` existe en esta base, viene en cada fila. Si el instalador del
+     panel todavía no se corrió, no viene, y las flechas sencillamente no
+     se dibujan — la ficha sigue funcionando exactamente igual que antes.
+     Con una sola persona no hay nada que acomodar. */
+  const sePuedeOrdenar = filas.length > 1 && !!filas[0] && filas[0].orden !== undefined;
   const sinNombre = Math.max(0, cupo - filas.length);
 
   /* ⛔ MÁS GENTE QUE LUGARES: NO SE DIBUJA COMO SI FUERA NORMAL
@@ -2024,11 +2449,16 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
         : '.') +
       '<br>Cambiar los nombres no cambia cuántos lugares tienen: eso se ' +
       'edita en la invitación.' +
+      (sePuedeOrdenar
+        ? '<br>Con <strong>▲▼</strong> los acomodas: así, en ese orden, ' +
+          'los ve esta familia en su invitación.'
+        : '') +
     '</p>' +
 
     (filas.length
-      ? filas.map(a =>
-          '<div class="fila-adjunto" style="padding:var(--esp-1) 0;' +
+      ? filas.map((a, i) =>
+          '<div class="fila-adjunto" data-fila-acomp="' + a.id + '" ' +
+               'style="padding:var(--esp-1) 0;' +
                'border-top:1px solid var(--borde)">' +
             '<div style="display:flex;align-items:center;justify-content:space-between">' +
               '<span>' + seguro(a.nombre) +
@@ -2039,6 +2469,29 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
                 /* Los rótulos dicen la acción, no la categoría. "Editar"
                    y "Quitar" podían leerse como "editar al invitado" y
                    "sacarlo del evento", que es lo que NO hacen. */
+                /* ⚡ FLECHAS, NO ARRASTRAR (2026-09-14)
+                   Lucila usa esto en un teléfono. El arrastre nativo del
+                   navegador no existe en táctil: habría que escribirlo a
+                   mano con pointer events, fantasma de arrastre y
+                   autoscroll, en un archivo que arma todo concatenando
+                   texto. Y las familias son de 1 a 6 personas: el peor
+                   caso real son cuatro toques. Una flecha es un objetivo
+                   quieto; un arrastre, en un colectivo, no.
+
+                   Las de las puntas van apagadas en vez de ausentes: si
+                   aparecieran y desaparecieran, los otros botones de la
+                   fila se correrían de lugar entre toque y toque. */
+                (sePuedeOrdenar
+                  ? '<button class="boton boton--chico" data-subir-acomp="' + a.id + '"' +
+                            (i === 0 ? ' disabled' : '') +
+                            ' aria-label="Subir a ' + seguro(a.nombre) + '"' +
+                            ' title="Sube un lugar en la lista que ve esta familia">▲</button>' +
+                    '<button class="boton boton--chico" data-bajar-acomp="' + a.id + '"' +
+                            (i === filas.length - 1 ? ' disabled' : '') +
+                            ' aria-label="Bajar a ' + seguro(a.nombre) + '"' +
+                            ' title="Baja un lugar en la lista que ve esta familia">▼</button>'
+                  : '') +
+
                 '<button class="boton boton--chico" data-editar-acomp="' + a.id + '" ' +
                         'title="Corregir cómo se escribe su nombre">Cambiar nombre</button>' +
                 '<button class="boton boton--chico" data-quitar-acomp="' + a.id + '" ' +
@@ -2098,6 +2551,89 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
 
   filas.forEach(a => {
     pintarEtiquetasDe('acompanante', a.id, buscar('#etiquetas-acomp-' + a.id, contenedor));
+  });
+
+  /**
+   * Sube o baja una persona un lugar.
+   *
+   * ⛔ POR QUÉ MUEVE EL NODO Y NO VUELVE A DIBUJAR (2026-09-14)
+   *
+   * Lo natural sería reordenar el arreglo y llamar a pintarAcompanantes()
+   * otra vez. No se puede: al final de esa función hay un
+   * filas.forEach(pintarEtiquetasDe(...)) (línea 2099), y
+   * pintarEtiquetasDe() hace DOS peticiones por persona (06-piezas.js:
+   * 2138-2141). Una familia de cinco = diez GET por cada toque de flecha,
+   * y subir a alguien desde el final son cuatro toques: cuarenta
+   * peticiones para acomodar una familia.
+   *
+   * Este panel YA se comió un 429 del hosting por hacer veinte peticiones
+   * al arrancar (ver la nota de listar_todos en acompanantes.php:73-81, y
+   * la de 20-arranque.js). Volver a caer en eso por un cambio cosmético
+   * sería no haber aprendido nada.
+   *
+   * insertBefore() MUEVE el nodo que ya está: las etiquetas pintadas
+   * viajan con él, no se pide nada, y la pantalla responde en el mismo
+   * cuadro que el toque.
+   */
+  function acomodar(id, cuanto) {
+    const desde = filas.findIndex(a => Number(a.id) === Number(id));
+    const hasta = desde + cuanto;
+    if (desde < 0 || hasta < 0 || hasta >= filas.length) return;
+
+    const nodo   = buscar('[data-fila-acomp="' + filas[desde].id + '"]', contenedor);
+    const vecino = buscar('[data-fila-acomp="' + filas[hasta].id + '"]', contenedor);
+    if (!nodo || !vecino) { dibujarAcompanantes(confirmacionId, cupo, contenedor); return; }
+
+    // Primero la pantalla, que es lo que la persona está mirando.
+    if (cuanto < 0) vecino.parentNode.insertBefore(nodo, vecino);
+    else            vecino.parentNode.insertBefore(vecino, nodo);
+
+    // Y el arreglo local, que es de donde sale la lista que se manda.
+    filas.splice(hasta, 0, filas.splice(desde, 1)[0]);
+
+    /* Las puntas: sólo el primer ▲ y el último ▼ se apagan. Se recorre
+       entero porque después de un movimiento cambiaron como mucho dos. */
+    const arriba = buscarTodos('[data-subir-acomp]', contenedor);
+    const abajo  = buscarTodos('[data-bajar-acomp]', contenedor);
+    arriba.forEach((b, n) => { b.disabled = n === 0; });
+    abajo.forEach((b, n)  => { b.disabled = n === abajo.length - 1; });
+
+    /* ⚠️ VA LA LISTA COMPLETA, NO «SUBÍ A FULANO». Mandar el orden entero
+       hace que reenviarlo no cambie nada (la cola de escrituras sin señal
+       lo puede reenviar solo: 03-servidor.js:331-346). Un «subilo uno»
+       reenviado dos veces lo subiría dos lugares. */
+    const idsEnOrden = filas.map(a => Number(a.id));
+
+    ORDEN_EN_VUELO = ORDEN_EN_VUELO.catch(() => {}).then(() =>
+      mandar('acompanantes.php?accion=ordenar', {
+        confirmacion_id: confirmacionId,
+        ids: idsEnOrden,
+      })
+        .then(() => {
+          /* La ficha de arriba lista a las mismas personas
+             (invitaciones.php:533). Sin esto, el orden nuevo está abajo y
+             el viejo tres renglones más arriba — la mitad del problema.
+             NO se ensucia 'resumen': acomodar no cambia ningún número. */
+          ensuciarVistas('invitados');
+        })
+        .catch(error => {
+          /* Se dice qué pasó y se vuelve a traer del servidor: la pantalla
+             ya se había movido de forma optimista y ahora no coincide con
+             la base. Se muestra lo que la base dice, no lo que se quiso. */
+          avisar(error.message, true);
+          dibujarAcompanantes(confirmacionId, cupo, contenedor);
+        })
+    );
+
+    registrarEvento('accion', 'acomodar_acompanante');
+  }
+
+  buscarTodos('[data-subir-acomp]', contenedor).forEach(boton => {
+    boton.addEventListener('click', () => acomodar(boton.dataset.subirAcomp, -1));
+  });
+
+  buscarTodos('[data-bajar-acomp]', contenedor).forEach(boton => {
+    boton.addEventListener('click', () => acomodar(boton.dataset.bajarAcomp, +1));
   });
 
   buscarTodos('[data-editar-acomp]', contenedor).forEach(boton => {

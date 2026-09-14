@@ -195,6 +195,29 @@ $agregarColumna('invitaciones', 'veces_respondida', 'INT NOT NULL DEFAULT 0');
  * filas —nunca hubo pantalla que la escribiera— así que no molesta. */
 $agregarColumna('invitaciones', 'apodo', "VARCHAR(150) NOT NULL DEFAULT ''");
 $agregarColumna('acompanantes', 'apodo', "VARCHAR(150) NOT NULL DEFAULT ''");
+/* EL ORDEN DE LOS NOMBRES DE UNA FAMILIA (2026-09-14)
+ *
+ * Carlos: «que lucila pueda modificar el orden de los nombres en la app
+ * y esto se vea reflejado en la invitacion».
+ *
+ * Hasta hoy el orden era el de creación —ORDER BY id en tres consultas—,
+ * o sea el orden en que Lucila fue tecleando. Eso no es una decisión: es
+ * el rastro de en qué orden se acordó de cada quien. La familia ve esa
+ * lista en su invitación, y ahí sí importa.
+ *
+ * ⚡ POR QUÉ 0 Y NO 50 (como grupos_invitados.orden, migracion.sql:562)
+ * Porque 0 significa «esta familia nunca se acomodó a mano», y con
+ * ORDER BY orden, id eso devuelve EXACTAMENTE el orden de hoy. Cero
+ * migración, cero backfill, cero riesgo de dejar medio evento acomodado
+ * y medio no. Las 51 familias de Ania siguen viéndose igual hasta que
+ * alguien toque una flecha.
+ *
+ * ⚡ Y POR QUÉ LOS NUEVOS SE ANOTAN CON max+1 (ver acompanantes.php,
+ * acción 'agregar'): si un nombre nuevo entrara con el 0 de fábrica,
+ * saltaría al PRINCIPIO de una familia ya acomodada. Con max+1 cae al
+ * final, que es donde lo espera quien lo acaba de escribir.
+ */
+$agregarColumna('acompanantes', 'orden', 'INT NOT NULL DEFAULT 0');
 
 // Fijar una asignación de mesa para que la autoasignación no la toque.
 $agregarColumna('asignacion_mesas', 'fijada', 'TINYINT(1) NOT NULL DEFAULT 0');

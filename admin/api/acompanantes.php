@@ -19,6 +19,7 @@
      POST ?accion=agregar                    uno nuevo
      POST ?accion=editar                     corrige uno que ya existe
      POST ?accion=borrar                     saca uno de la lista
+     POST ?accion=ordenar                    en qué orden se ven los nombres
    ══════════════════════════════════════════════════════════════════════ */
 
 require_once __DIR__ . '/_lib/bd.php';
@@ -45,7 +46,25 @@ case 'listar':
     if ($confirmacionId < 1) responderMal('Falta decir de qué confirmación.', 400);
 
     $filas = consultarTodo(
-        'SELECT * FROM acompanantes WHERE confirmacion_id = :c ORDER BY id',
+    /* ⚡ EL ORDEN LO ELIGE LUCILA, NO EL TECLADO (2026-09-14)
+       Antes era ORDER BY id: el orden en que se fueron cargando. La
+       familia ve esa misma lista en su invitación (invitacion.php:176),
+       así que ahí no es un detalle interno.
+
+       ⚠️ El pedazo de SQL sale de una comparación contra dos textos
+       fijos escritos acá, NUNCA de lo que mandó nadie: no hay forma de
+       que entre algo por esta puerta. Mismo patrón defensivo que `apodo`
+       más abajo (líneas 189 y 286): la columna puede no existir todavía
+       si aún no se corrió el instalador del panel, y en ese caso esto
+       tiene que seguir contestando lo de siempre, no romperse. */
+    $porOrden = in_array('orden', columnasDe('acompanantes'), true)
+        ? 'orden, id'
+        : 'id';
+
+    $filas = consultarTodo(
+        "SELECT * FROM acompanantes WHERE confirmacion_id = :c ORDER BY $porOrden",
+        [':c' => $confirmacionId]
+    );
         [':c' => $confirmacionId]
     );
 
@@ -107,10 +126,16 @@ case 'listar_todos':
     $conMenus = ($_GET['con_menus'] ?? '') === '1';
     $columnasExtra = $conMenus ? ', menu, alergias' : '';
 
+    // Mismo criterio que 'listar': el orden que eligió Lucila manda, y
+    // la columna puede no existir todavía.
+    $porOrden = in_array('orden', columnasDe('acompanantes'), true)
+        ? 'orden, id'
+        : 'id';
+
     $filas = consultarTodo(
         "SELECT confirmacion_id, nombre, tipo$columnasExtra
            FROM acompanantes
-          ORDER BY confirmacion_id, id"
+          ORDER BY confirmacion_id, $porOrden"
     );
 
     responderBien(['filas' => $filas]);
@@ -188,6 +213,23 @@ case 'agregar':
     // El apodo interno, si la columna ya está (la agrega el instalador).
     if (in_array('apodo', columnasDe('acompanantes'), true)) {
         $fila['apodo'] = campoTexto($datos, 'apodo', 150);
+    }
+    /* ⚡ UN NOMBRE NUEVO ENTRA AL FINAL (2026-09-14)
+       La columna trae 0 de fábrica, y 0 ordena PRIMERO. Sin esto, cada
+       persona que se agregara a una familia ya acomodada saltaría al
+       principio de la lista — y quien la acaba de escribir la busca
+       abajo, que es donde la puso.
+
+       max(orden) de una familia sin acomodar es 0, así que el primer
+       agregado se lleva el 1 y cae igual al final: el caso normal
+       funciona sin que nadie haya acomodado nada nunca. */
+    if (in_array('orden', columnasDe('acompanantes'), true)) {
+        $ultimo = consultarUno(
+            'SELECT COALESCE(MAX(orden), 0) AS tope FROM acompanantes
+              WHERE confirmacion_id = :c',
+            [':c' => $confirmacionId]
+        );
+        $fila['orden'] = (int) ($ultimo['tope'] ?? 0) + 1;
     }
 
     $id = insertar('acompanantes', $fila);
@@ -338,6 +380,108 @@ case 'borrar':
     responderBien(['mensaje' => 'Quitado.']);
     break;
 
+
+/* ─── ORDENAR ──────────────────────────────────────────────────────────
+ *
+ * ⚡ (2026-09-14) Carlos: «que lucila pueda modificar el orden de los
+ * nombres en la app y esto se vea reflejado en la invitacion».
+ *
+ * ⚠️ LLEGA LA LISTA ENTERA, NO «SUBÍ A FULANO». Y eso es lo que hace
+ * que esto sea seguro de reenviar. mandar() encola las escrituras
+ * cuando no hay servidor (03-servidor.js:331-346) y las manda solas más
+ * tarde: si esto fuera «subir uno», reenviarlo dos veces movería a la
+ * persona dos lugares. Mandando el orden completo, reenviarlo diez
+ * veces deja lo mismo que una.
+ *
+ * ⛔ TODO O NADA. Sin la transacción, cortarse la señal a mitad de un
+ * grupo de seis dejaría tres personas con orden nuevo y tres con el
+ * viejo — o sea dos personas en el mismo renglón y un hueco. Es el mismo
+ * idioma de guardarPlanDeMesas() (_lib/mesas.php:714-812), incluido el
+ * intentando(): sin él, insertar/ejecutar salen por responderMal(), que
+ * hace exit, y la transacción queda abierta hasta que el motor la
+ * deshace al morir la conexión — sin rollBack propio y sin log.
+ *
+ * ⚠️ NO TOCA NI UN DATO DEL INVITADO. Sólo `orden`. confirmar.php pega
+ * menú y alergias por id (confirmar.php:464-467, WHERE id AND
+ * confirmacion_id), nunca por posición, así que acomodar mientras
+ * alguien tiene su formulario abierto no le puede mover nada de lo que
+ * está contestando.
+ * ------------------------------------------------------------------ */
+case 'ordenar':
+    exigirMetodo('POST');
+    $datos = cuerpoJson();
+
+    $confirmacionId = campoEntero($datos, 'confirmacion_id', 0);
+    if ($confirmacionId < 1) responderMal('Falta decir de qué familia.', 400);
+
+    if (!in_array('orden', columnasDe('acompanantes'), true)) {
+        responderMal(
+            'Esta base todavía no guarda el orden de los nombres. ' .
+            'Corre el instalador del panel y vuelve a intentar.', 409);
+    }
+
+    /* Los ids tal como los mandó la pantalla, limpiados: enteros, sin
+       repetidos, con tope. 60 es el mismo criterio que campoListaDeDetalle
+       (responder.php:463) y que el array_slice(…, 50) de confirmar.php:457. */
+    $crudos = is_array($datos['ids'] ?? null) ? $datos['ids'] : [];
+    $ids = [];
+    foreach ($crudos as $unId) {
+        $n = (int) $unId;
+        if ($n > 0 && !in_array($n, $ids, true)) $ids[] = $n;
+        if (count($ids) >= 60) break;
+    }
+    if (!$ids) responderMal('No mandaste ningún orden.', 400);
+
+    /* ⛔ LA LISTA TIENE QUE SER ESTA FAMILIA, NI UNO MÁS NI UNO MENOS
+       Dos cosas a la vez: que nadie pueda mandar el id de una persona de
+       OTRA familia (mismo cuidado que el `AND confirmacion_id` de
+       confirmar.php:466), y que un pedido que quedó encolado sin señal no
+       resucite un orden viejo sobre una familia a la que después le
+       agregaron o le quitaron gente. Si no coincide, no se escribe nada y
+       la pantalla se vuelve a cargar. */
+    $actuales = array_map('intval', array_column(consultarTodo(
+        'SELECT id FROM acompanantes WHERE confirmacion_id = :c',
+        [':c' => $confirmacionId]
+    ), 'id'));
+
+    $pedidos = $ids;
+    sort($pedidos);
+    sort($actuales);
+    if ($pedidos !== $actuales) {
+        responderMal(
+            'La lista de esta familia cambió mientras la acomodabas, así ' .
+            'que no se guardó nada. Fíjate cómo quedó y acomódala otra vez.',
+            409);
+    }
+
+    bd()->beginTransaction();
+    try {
+        intentando(function () use ($ids, $confirmacionId) {
+            $posicion = 0;
+            foreach ($ids as $unId) {
+                $posicion++;
+                ejecutar(
+                    'UPDATE acompanantes SET orden = :o
+                      WHERE id = :id AND confirmacion_id = :c',
+                    [':o' => $posicion, ':id' => $unId, ':c' => $confirmacionId]
+                );
+            }
+        });
+        bd()->commit();
+    } catch (Exception $e) {
+        // inTransaction() antes de deshacer: si lo que falló fue el propio
+        // commit, la transacción ya no está y rollBack() tiraría una
+        // segunda excepción, esta sí sin nadie que la atrape.
+        if (bd()->inTransaction()) bd()->rollBack();
+        error_log('[Ania XV · acompanantes] Falló el orden: ' . $e->getMessage());
+        responderMal('No se pudo guardar el orden. Quedó como estaba.', 500);
+    }
+
+    anotarEnBitacora($yo, 'acomodó los nombres', 'confirmaciones',
+                     $confirmacionId, count($ids) . ' personas');
+
+    responderBien(['mensaje' => 'Orden guardado.']);
+    break;
 
 default:
     responderMal('Acción desconocida.', 404);

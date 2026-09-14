@@ -121,6 +121,22 @@ case 'guardar':
         }
     }
 
+    /* ⚡ LA HORA DEL ECLIPSE, CON EL MISMO CRITERIO (2026-09-14).
+       Es el argumento de arriba otra vez: el formulario valida por
+       comodidad, la API valida por defensa. Y acá pesa más, porque este
+       valor no lo lee una pantalla del panel: lo lee el vigía de
+       index.html en el teléfono de cada invitado. Un valor con forma
+       rara no rompe nada —el navegador lo vuelve a validar y lo
+       descarta— pero deja a Lucila creyendo que cambió la hora cuando
+       en realidad la apagó.
+
+       Se admite vacío: es cómo se vuelve a la hora horneada. */
+    if ($clave === 'hora_eclipse_utc' && $valor !== '') {
+        if (!preg_match('/^([01][0-9]|2[0-3]):[0-5][0-9]$/', $valor)) {
+            responderMal('La hora tiene que ser HH:MM en UTC, de 00:00 a 23:59.', 400);
+        }
+    }
+
     $existe = consultarUno('SELECT clave FROM ajustes WHERE clave = :c', [':c' => $clave]);
     if ($existe) {
         ejecutar('UPDATE ajustes SET valor = :v WHERE clave = :c',

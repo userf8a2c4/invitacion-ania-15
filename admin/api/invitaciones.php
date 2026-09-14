@@ -525,12 +525,17 @@ case 'listar':
         . ($hayAcompanantes && in_array('apodo', columnasDe('acompanantes'), true)
             ? ', apodo' : '');
 
+    // Mismo orden que ve la familia en su invitación: si el panel y la
+    // invitación listan distinto, son dos verdades para la misma gente.
+    $porOrden = in_array('orden', columnasDe('acompanantes'), true)
+        ? 'orden, id' : 'id';
+
     foreach ($filas as &$fila) {
         $fila['link'] = linkDeInvitacion($fila['token']);
         $fila['personas'] = ($hayAcompanantes && $fila['confirmacion_id'])
             ? consultarTodo(
                 "SELECT $columnasPersona
-                 FROM acompanantes WHERE confirmacion_id = :c ORDER BY id ASC",
+                 FROM acompanantes WHERE confirmacion_id = :c ORDER BY $porOrden",
                 [':c' => $fila['confirmacion_id']])
             : [];
     }
