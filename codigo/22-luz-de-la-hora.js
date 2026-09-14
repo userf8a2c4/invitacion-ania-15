@@ -100,6 +100,7 @@
       oscurecidoFijo: 0.09,
       profundidadDeSombra: 0.40,
       sombraDelBorde: 0,
+      hundimientoDelFondo: 0,
     },
     {
       hora: 13,  // MEDIODIA: el NEUTRO. Luz plana, sin caracter.
@@ -124,6 +125,7 @@
       oscurecidoFijo: 0.05,
       profundidadDeSombra: 0.28,
       sombraDelBorde: 0,
+      hundimientoDelFondo: 0,
     },
     {
       hora: 18,  // HORA DORADA: el momento mas caracteristico
@@ -147,6 +149,7 @@
       oscurecidoFijo: 0.10,
       profundidadDeSombra: 0.45,
       sombraDelBorde: 0,
+      hundimientoDelFondo: 0,
     },
     {
       hora: 20,  // crepusculo malva: evita el gris al cruzar de calido a frio
@@ -166,6 +169,7 @@
       oscurecidoFijo: 0.16,
       profundidadDeSombra: 0.70,
       sombraDelBorde: 0,
+      hundimientoDelFondo: 0,
     },
     {
       hora: 23,  // NOCHE: oscura de verdad. La luna apenas insinua.
@@ -188,6 +192,7 @@
       oscurecidoFijo: 0.20,
       profundidadDeSombra: 1.00,
       sombraDelBorde: 0,
+      hundimientoDelFondo: 0,
     },
   ];
 
@@ -212,6 +217,7 @@
     oscurecidoFijo: 0.24,
     profundidadDeSombra: 1.05,
     sombraDelBorde: 0,
+    hundimientoDelFondo: 0,
   };
 
   /* Y el espejo del crepusculo, para el cruce frio -> calido del amanecer. */
@@ -233,6 +239,7 @@
     oscurecidoFijo: 0.16,
     profundidadDeSombra: 0.75,
     sombraDelBorde: 0,
+    hundimientoDelFondo: 0,
   };
 
 /**
@@ -459,6 +466,20 @@
        del array MOMENTOS. */
     if (fondo) fondo.style.setProperty('--oscurecido-fijo', mezclarNumero('oscurecidoFijo').toFixed(3));
     if (penumbra) penumbra.style.setProperty('--profundidad-de-sombra', mezclarNumero('profundidadDeSombra').toFixed(3));
+
+    /* ⚡ Y CUÁNTO SE HUNDE EL PIE, QUE SOLO EL ECLIPSE LEVANTA (2026-09-13)
+     *
+     * Vale 0 en las catorce horas del día, así que fuera del minuto este
+     * `setProperty` escribe el mismo 0 que ya estaba y el degradado
+     * calcula exactamente lo de siempre. Ver la nota grande de
+     * estilos/12-haces-de-luz.css.
+     *
+     * ⚠️ VA PEGADO AL DE ARRIBA A PROPÓSITO. Las dos escriben sobre
+     * `#penumbra-profunda` en la misma llamada, así que comparten la
+     * invalidación: la segunda cuesta cero. Medido para esta capa: +17 ms
+     * por aplicación, y son 40 en todo el minuto. Separarlas en dos
+     * llamadas las duplicaría. */
+    if (penumbra) penumbra.style.setProperty('--hundimiento-del-fondo', mezclarNumero('hundimientoDelFondo').toFixed(3));
 
     /* ⚡ LA TERCERA QUE RESTA LUZ: EL BORDE, DETRÁS DEL MARCO (2026-09-12)
      *

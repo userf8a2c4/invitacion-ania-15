@@ -379,6 +379,29 @@
      * página no cambia ni un píxel. */
     sombraDelBorde: 0.92,
 
+    /* ⚡ Y EL PIE SE HUNDE CASI A NEGRO (2026-09-13)
+     *
+     * Carlos: «en las partes más bajas de la invitación, haz que sea casi
+     * negro… durante el eclipse, haz que la luz apenas se note y oscurece
+     * "abajo" casi por completo». Y la regla que lo acota: «las otras 23
+     * horas y 59 minutos será para que los invitados lean la información.
+     * En estos 60 segundos el usuario y lo que quiera no importan».
+     *
+     * Así que abajo del todo la penumbra llega a 0,98 —prácticamente
+     * opaca— y el formulario, el pase y el pie quedan tapados. Está bien:
+     * nadie llena un formulario mientras pasa el ritual.
+     *
+     * Las otras catorce horas la dejan en 0, igual que `sombraDelBorde`,
+     * así que fuera del minuto la invitación no cambia ni un píxel.
+     *
+     * ⚠️ NO APAGA LAS VELAS, Y ESO ES EL PUNTO. `#lienzo-de-velas` vive
+     * en z-index 66, por encima de esta capa (65). Los 8 candelabros
+     * —que están justo en la mitad de abajo— siguen perforando la
+     * negrura con la misma intensidad de siempre (`fuerzaDeVelas: 1.18`,
+     * acá arriba). Lo que cambia no es la luz: es que deja de haber
+     * ambiente alrededor. Se vuelve local. */
+    hundimientoDelFondo: 1,
+
     /* El sol está tapado: el haz se acorta y baja. */
     anguloDelSol: -14,
     largoDelHaz:   1.05,
