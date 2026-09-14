@@ -53,11 +53,49 @@ const MARCA_FIN    = '  # ── fin de la CSP generada ──';
  * @returns {string[]}
  */
 function hashesDe(html) {
+  /* ⛔ LOS COMENTARIOS HTML SE TAPAN ANTES DE BUSCAR (2026-09-14)
+   *
+   * Esta función buscaba `<script…>` sobre el HTML crudo, y `index.html`
+   * tiene DOS comentarios que contienen esa palabra escrita a mano:
+   *
+   *     <!-- ⚠️ ACÁ NO VA NINGÚN <script> DE TERCEROS… -->
+   *     <!-- … ⚠️ ESTO YA NO SON 23 <script defer>. SON UNA LISTA… -->
+   *
+   * La regex mordía ahí, y tomaba como «contenido del script» el resto
+   * del comentario más el principio del script de verdad. Resultado: DOS
+   * de los seis hashes estaban mal, y los dos mal eran el del rescate de
+   * carga y —el grave— el de la LISTA QUE INYECTA LOS 23 ARCHIVOS DE LA
+   * ESCENA.
+   *
+   * ⚠️ POR QUÉ NO SE NOTÓ NUNCA. La CSP se sirve como `-Report-Only`, así
+   * que el navegador solo lo anota en la consola. Y `--verificar` daba
+   * verde porque comparaba sus propios hashes equivocados contra el
+   * .htaccess que él mismo había escrito con esos mismos hashes
+   * equivocados: consistente consigo mismo, y mintiendo. Medido contra
+   * aniaxv.com el 14 de septiembre con el navegador de verdad, que
+   * hashea los <script> reales.
+   *
+   * El día que alguien le quite el «-Report-Only» —y el .htaccess de la
+   * línea 233 explica cómo hacerlo— el navegador bloquearía la lista de
+   * módulos y la invitación se quedaría SIN ESCENA: sin marco, sin
+   * flores, sin eclipse. Nada.
+   *
+   * ⚠️ SE TAPAN CON ESPACIOS, NO SE BORRAN. Hay que conservar las
+   * posiciones para poder cortar el contenido del ORIGINAL: si se
+   * borraran, los índices se correrían y se hashearían bytes que no son
+   * los que el navegador va a ver. El hash es de los bytes exactos. */
+  const tapado = html.replace(/<!--[\s\S]*?-->/g,
+    (comentario) => ' '.repeat(comentario.length));
+
   const hashes = [];
   const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
   let m;
-  while ((m = re.exec(html)) !== null) {
-    hashes.push("'sha256-" + createHash('sha256').update(m[1], 'utf8').digest('base64') + "'");
+  while ((m = re.exec(tapado)) !== null) {
+    /* El contenido se corta del HTML ORIGINAL, en las mismas posiciones. */
+    const desde = m.index + m[0].indexOf('>') + 1;
+    const hasta = desde + m[1].length;
+    const cuerpo = html.slice(desde, hasta);
+    hashes.push("'sha256-" + createHash('sha256').update(cuerpo, 'utf8').digest('base64') + "'");
   }
   return hashes;
 }

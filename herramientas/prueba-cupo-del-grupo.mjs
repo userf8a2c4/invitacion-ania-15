@@ -80,9 +80,17 @@ comprobar('los pases nunca bajan de 1',
   'una invitación de 0 lugares no es una invitación');
 
 /* Una confirmación puede no tener invitación (las que entraron por el
-   formulario abierto, sin token). Ahí no hay `pases` que mover. */
+   formulario abierto, sin token). Ahí no hay `pases` que mover.
+
+   ⚡ ESTA COMPROBACIÓN PEDÍA EL BUG (2026-09-14)
+   Hasta hoy exigía `if (!$inv) return;` con el punto y coma pegado, o
+   sea el `return` pelado en persona. Estaba escrita para cuidar que la
+   salida EXISTIERA —que no reventara con una confirmación sin token— y
+   de paso congeló la forma exacta que la rompía: mientras el bug estuvo
+   puesto, esta línea daba «ok». Ahora se pide la salida Y que devuelva
+   éxito. */
 comprobar('aguanta una confirmación sin invitación',
-  mover.includes('WHERE confirmacion_id = :c') && /if \(!\$inv\) return;/.test(mover),
+  mover.includes('WHERE confirmacion_id = :c') && /if \(!\$inv\) return true;/.test(mover),
   'las que entraron sin token no tienen fila en invitaciones');
 
 /* ─── 2. Pasarse del cupo sigue siendo un error, salvo a pedido ──── */
@@ -186,11 +194,79 @@ comprobar('y si no se pudo reservar el lugar, NO se agrega a nadie',
   /responderMal\(\s*\n?\s*'No se pudo reservar el lugar de m\u00e1s/.test(api),
   'insertar igual es exactamente cómo se llega a «5 de 4»');
 
-comprobar('y ninguna de sus salidas devuelve algo que parezca éxito',
-  !/function moverElCupo\([\s\S]*?\n    if \(!existeTabla\('confirmaciones'\)\) return;/
-    .test(api),
-  'un `return` pelado es `undefined`, que en un `if` es falso por ' +
-  'casualidad y no por diseño');
+/* ⛔ EL CONTRATO DE moverElCupo(), BLINDADO SALIDA POR SALIDA (2026-09-14)
+ *
+ * Acá había una comprobación que miraba UNA sola puerta —la primera, la
+ * de `existeTabla('confirmaciones')`— y pedía que no fuera un `return`
+ * pelado. Nunca lo fue. Las dos que sí lo eran quedaban fuera del foco:
+ *
+ *   · `if (!$inv) return;` — la confirmación sin invitación, las que
+ *     entraron por el formulario abierto, sin token.
+ *   · y el final de la función, que no tenía `return` ninguno. En PHP,
+ *     caer al final devuelve null igual que un `return;` — y ese era el
+ *     camino de éxito NORMAL, el de una familia CON invitación, que son
+ *     casi todas.
+ *
+ * Las dos devolvían null; el llamador pregunta `if (!moverElCupo(...))`, y
+ * null es falso. Contestaba 409 «no se pudo reservar el lugar de más, así
+ * que no se agregó a nadie» DESPUÉS de haber movido el cupo en las dos
+ * tablas. El dato cambiaba y la pantalla decía que no — y el mensaje
+ * invita a reintentar, así que cada intento volvía a subir el cupo.
+ *
+ * Por eso esto ya no busca una línea conocida: enumera TODAS las salidas
+ * del cuerpo y exige que cada una devuelva un bool escrito a mano. Una
+ * comprobación que nombra la forma exacta del bug solo atrapa ese bug;
+ * esta atrapa la clase entera.
+ * ---------------------------------------------------------------- */
+
+/* El cuerpo se saca por balanceo de llaves, no cortando hasta la
+   siguiente función: así sigue valiendo si mañana alguien mete otra
+   función en el medio o reordena el archivo. Se corre sobre `apiLimpia`
+   —sin comentarios— para que una llave dentro de una explicación no
+   cuente como bloque. */
+const cuerpoDeLaFuncion = (texto, nombre) => {
+  const ini = texto.indexOf('function ' + nombre);
+  if (ini === -1) return null;
+  const abre = texto.indexOf('{', ini);
+  if (abre === -1) return null;
+  let prof = 0, i = abre;
+  for (; i < texto.length; i++) {
+    const c = texto[i];
+    if (c === "'" || c === '"') {      // una llave dentro de una cadena
+      const cierre = c;                // no abre ningún bloque
+      i++;
+      while (i < texto.length && texto[i] !== cierre) {
+        if (texto[i] === '\\') i++;
+        i++;
+      }
+      continue;
+    }
+    if (c === '{') prof++;
+    else if (c === '}' && --prof === 0) break;
+  }
+  return prof === 0 && i < texto.length ? texto.slice(abre + 1, i) : null;
+};
+
+const cuerpoMover = cuerpoDeLaFuncion(apiLimpia, 'moverElCupo');
+
+comprobar('se puede leer el cuerpo entero de moverElCupo()',
+  cuerpoMover !== null && cuerpoMover.includes("actualizar('invitaciones'"),
+  'si esto falla, las dos comprobaciones de abajo no están mirando nada ' +
+  'y darían «ok» con el archivo roto');
+
+const salidas = [...(cuerpoMover || '').matchAll(/\breturn\b([^;]*);/g)]
+  .map(m => m[1].trim());
+
+comprobar('ninguna salida de moverElCupo() es un `return` pelado',
+  salidas.length > 0 && salidas.every(v => v === 'true' || v === 'false'),
+  'devuelve [' + salidas.map(v => v === '' ? '⛔ PELADO' : v).join(', ') + '] — ' +
+  'un `return;` es null, que en un `if` es falso por casualidad y no por ' +
+  'diseño: el llamador contesta 409 con el cupo ya movido');
+
+comprobar('y tampoco se cae por el final sin devolver nada',
+  /\breturn\s+(true|false)\s*;\s*$/.test((cuerpoMover || '').trimEnd()),
+  'caer al final también devuelve null, y ese era justo el camino de la ' +
+  'familia CON invitación: el éxito normal contestaba 409');
 
 /* ⛔ Y LO QUE YA QUEDÓ TORCIDO NO SE ENDEREZA SOLO. Arreglar la causa
    impide que vuelva a pasar; las fichas guardadas siguen como están. */
