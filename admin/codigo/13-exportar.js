@@ -846,7 +846,21 @@ function oGuion(valor) {
  * @returns {string}
  */
 function menusPersonaPorPersona(personas, respaldo) {
-  if (!personas || !personas.length) return oGuion(respaldo);
+  /* ⛔ ANTES ESTO DEVOLVÍA EL RESUMEN DEL GRUPO A SECAS (2026-09-14)
+   *
+   * Y eso hacía imposible distinguir dos situaciones muy distintas:
+   * una familia que eligió plato por plato, y una de la que no sabemos
+   * quién come qué. Las dos salían en la misma columna con la misma
+   * pinta. Carlos, mirando el PDF: «necesito detalle de quién elige qué
+   * plato… damos datos imprecisos cuando tenemos los detalles».
+   *
+   * Ahora el resumen sale MARCADO. Si dice «sin desglose» es que esa
+   * familia no tiene filas por persona —no que el informe se haya
+   * quedado corto—, y se sabe a quién hay que preguntarle. */
+  if (!personas || !personas.length) {
+    const r = (respaldo || '').trim();
+    return r ? r + '  ·  (sin desglose por persona)' : '—';
+  }
 
   const detalle = personas.map(p => {
     const nombre = (p.nombre || '').trim() || (p.tipo === 'nino' ? 'Niño' : 'Adulto');
@@ -893,7 +907,13 @@ function alergiasPersonaPorPersona(personas, respaldo) {
     }))
     .filter((p) => p.que && !/^(ninguna|ninguno|no|n\/a|-)$/i.test(p.que));
 
-  if (!conAlgo.length) return oGuion(respaldo);
+  if (!conAlgo.length) {
+    const r = (respaldo || '').trim();
+    if (!r || /^(ninguna|ninguno|no)$/i.test(r)) return 'Ninguna';
+    /* Hay texto de familia pero nadie tiene la suya cargada: se muestra,
+       marcado, porque alguien lo escribió y perderlo sería peor. */
+    return r + (personas && personas.length ? '  ·  (del grupo)' : '');
+  }
 
   return conAlgo.map((p) => p.nombre + ': ' + p.que).join(' · ');
 }
@@ -928,13 +948,20 @@ async function exportarInvitados(formato) {
      ejemplo— la descarga sale igual con el resumen de siempre: es mejor
      un archivo con menos detalle que ningún archivo. */
   let porFamilia = {};
+  let falloElDetalle = false;
   try {
     const r = await traer('acompanantes.php?accion=listar_todos&con_menus=1');
     for (const p of (r.filas || [])) {
       (porFamilia[p.confirmacion_id] = porFamilia[p.confirmacion_id] || []).push(p);
     }
   } catch (error) {
-    avisar('No pude traer el detalle de menús; va el resumen.', true);
+    /* ⛔ ANTES ESTO SOLO SACABA UN AVISO EN PANTALLA (2026-09-14), que
+       dura tres segundos y se lo pierde cualquiera que toque Descargar y
+       mire el PDF. El archivo salía sin desglose y no había forma de
+       saber si era porque nadie eligió plato o porque la consulta falló.
+       Ahora queda escrito ADENTRO del documento. */
+    falloElDetalle = true;
+    avisar('No pude traer el detalle por persona; va el resumen.', true);
   }
 
   /* ⚡ EL ESTADO DE VERDAD, NO EL SUPUESTO (2026-09-09)
@@ -972,10 +999,18 @@ async function exportarInvitados(formato) {
     },
     {
       titulo: 'Confirmaciones',
-      encabezados: ['Nombre', 'Correo', 'Estado', 'Adultos', 'Niños', 'Total',
+      /* ⚡ EL TELÉFONO, A PEDIDO (2026-09-14). Es el dato con el que se
+         persigue a quien no contestó, y era el único que obligaba a
+         volver a la app teniendo el PDF en la mano. Sale de
+         `invitaciones.telefono`, que es el mismo que usa el botón de
+         WhatsApp —no el de las notas, que era el que mentía—. */
+      encabezados: ['Nombre', 'Teléfono', 'Correo', 'Estado',
+                    'Adultos', 'Niños', 'Total',
                     'Menús', 'Alergias', 'Notas', 'Código', 'Confirmó el'],
       filas: visibles.map(f => [
-        oGuion(f.nombre), oGuion(f.correo),
+        oGuion(f.nombre),
+        oGuion(f.invitacion_telefono),
+        oGuion(f.correo),
         comoSeLee(f),
         Number(f.adultos) || 0, Number(f.ninos) || 0,
         (Number(f.adultos) || 0) + (Number(f.ninos) || 0),
@@ -993,6 +1028,74 @@ async function exportarInvitados(formato) {
       ]),
     },
   ];
+
+  /* ══════════════════════════════════════════════════════════════════
+     UNA FILA POR PERSONA
+     ══════════════════════════════════════════════════════════════════
+
+     ⚡ (2026-09-14) Carlos: «detalle de quién elige qué plato, quién
+     tiene alergia… detalles, detalles».
+
+     El bloque de arriba es una fila por FAMILIA, y meterle el desglose
+     adentro de una celda lo volvía ilegible: «José: estándar · Ana:
+     infantil · Luis: sin elegir» en una columna de tabla, con veinte
+     familias, no se lee ni se usa.
+
+     Este bloque es la misma información con la forma que pide el uso: la
+     cocina recorre PERSONAS, no familias. Una línea por cada una, con su
+     plato, su alergia, su grupo y su mesa.
+
+     ⚠️ SOLO SALEN LAS PERSONAS QUE EXISTEN como fila en `acompanantes`.
+     Las familias que confirmaron con el formulario viejo —cuántos van +
+     menú por lugar, sin nombres— no tienen esas filas, y ahí no hay
+     detalle que mostrar: aparecen marcadas «sin desglose» en el bloque
+     de arriba, que es la señal de a quién hay que preguntarle. */
+  const deLaFamilia = {};
+  visibles.forEach(f => { deLaFamilia[f.id] = f; });
+
+  const personas = [];
+  Object.keys(porFamilia).forEach(idFamilia => {
+    const familia = deLaFamilia[idFamilia];
+    if (!familia) return;            // filtrada fuera de lo que se ve
+
+    porFamilia[idFamilia].forEach(p => {
+      const nombre = (p.nombre || '').trim();
+      personas.push([
+        nombre || (p.tipo === 'nino' ? 'Niño sin nombre' : 'Adulto sin nombre'),
+        p.tipo === 'nino' ? 'Niño' : 'Adulto',
+        oGuion((p.menu || '').trim()),
+        oGuion((p.alergias || '').trim()),
+        oGuion(familia.nombre),
+        oGuion(familia.mesa),
+        comoSeLee(familia),
+      ]);
+    });
+  });
+
+  /* Ordenadas por nombre: con el papel en la mano se busca a una persona,
+     no a una familia. El grupo va igual en su columna. */
+  personas.sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'es',
+                                                    { sensitivity: 'base' }));
+
+  if (personas.length) {
+    bloques.push({
+      titulo: 'Persona por persona (' + personas.length + ')',
+      encabezados: ['Nombre', 'Tipo', 'Menú', 'Alergias', 'Grupo', 'Mesa', 'Estado'],
+      filas: personas,
+    });
+  }
+
+  /* ⛔ Y SI EL DETALLE NO LLEGÓ, QUE SE VEA EN EL PAPEL. */
+  if (falloElDetalle) {
+    bloques.push({
+      titulo: '⚠️ Falta el detalle por persona',
+      encabezados: ['Qué pasó'],
+      filas: [['No se pudo traer quién eligió qué plato ni quién tiene ' +
+               'cada alergia. Las columnas de menús y alergias de arriba ' +
+               'traen el resumen del grupo. Probá descargar de nuevo con ' +
+               'señal.']],
+    });
+  }
 
   exportar(formato, 'invitados-ania-xv', 'Invitados · Ania XV', bloques, {
     ventana: ventana,

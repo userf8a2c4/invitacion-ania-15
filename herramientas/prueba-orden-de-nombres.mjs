@@ -109,7 +109,37 @@ for (const [donde, fuente] of [
 }
 
 
-/* ─── 3. LA COLUMNA SE AGREGA DONDE VA ─────────────────────────────── */
+/* ─── 2b. LA PUERTA NO LISTA MÁS GENTE DE LA QUE CABE ───────────── */
+
+console.log('\nLa puerta no deja pasar fantasmas\n');
+
+/* ⛔ VISTO EN EL ESCÁNER (2026-09-14): la tarjeta de Paolo Solis Reyes
+   decía «1 persona» en grande y abajo «Mesa 11: Paolo Solis Reyes y
+   Acompañante». Dos nombres para un lugar.
+
+   El número grande sale de `adultos + ninos` de `confirmaciones`; la
+   lista, de las filas de `acompanantes`. Cuando una invitación baja de
+   dos lugares a uno, la fila sobrante puede quedar —el panel la limpia
+   al editar desde la ficha, pero no todos los caminos pasan por ahí—.
+
+   En la puerta eso es una persona de más adentro del salón, con su
+   silla y su plato. Es el mismo tipo de bug que el «(5 DE 4)» del cupo:
+   dos verdades para la misma familia, ninguna marcada como la buena. */
+comprobar('lugaresDeLaPuerta recibe cuántos caben',
+  /function lugaresDeLaPuerta\(\$confirmacionId, \$cuantosCaben/.test(lleg),
+  'sin ese dato no puede saber que le sobran nombres');
+
+comprobar('y corta la lista en ese número',
+  /array_slice\(\$filas, 0, \$cuantosCaben\)/.test(lleg),
+  'la lista de nombres no puede contradecir al número grande de la misma ' +
+  'tarjeta');
+
+comprobar('y quien la llama le pasa adultos + niños',
+  /lugaresDeLaPuerta\([\s\S]{0,200}?adultos[\s\S]{0,80}?ninos/.test(lleg),
+  'si se la llama sin el número, el corte nunca ocurre');
+
+
+/* ─── 3. LA COLUMNA SE AGREGA DONDE VA ───────────────────────── */
 
 console.log('\nLa columna se agrega donde va\n');
 
