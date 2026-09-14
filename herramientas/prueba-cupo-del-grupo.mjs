@@ -159,6 +159,79 @@ comprobar('y NO se ensucia si solo se nombró un lugar existente',
   panelLimpio.includes('if (subeElCupo) ensuciarVistas'),
   'nombrar no cambia ningún número: repintar todo sería gratis para nada');
 
+/* ─── EL DESFASE QUE CARLOS ENCONTRÓ (2026-09-13) ───────────────────
+ *
+ * La ficha de Carolina Leyva decía «(5 DE 4)»: cinco personas nombradas y
+ * cuatro lugares reservados. La invitación le decía 4 a la familia, y la
+ * cocina y las mesas iban a contar 4.
+ *
+ * LA CAUSA
+ * `moverElCupo()` tenía TRES salidas silenciosas —sin tabla, sin columna,
+ * sin fila— y quien la llamaba tiraba el resultado. Cuando alguna se
+ * disparaba, el acompañante se insertaba igual y la familia quedaba con
+ * más gente que lugares. Un lugar que no se pudo reservar tiene que ser un
+ * error que se ve, no un silencio que aparece tres pantallas después.
+ * ---------------------------------------------------------------- */
+
+console.log('\nEl desfase entre gente y lugares\n');
+
+comprobar('moverElCupo() dice si pudo, en vez de callarse',
+  /@return bool true solo si el cupo qued\u00f3 movido de verdad\./.test(api) ||
+  /function moverElCupo\([\s\S]*?return false;/.test(api),
+  'con tres salidas silenciosas y el resultado tirado, el acompañante se ' +
+  'inserta igual y la familia queda con más gente que lugares');
+
+comprobar('y si no se pudo reservar el lugar, NO se agrega a nadie',
+  /if \(!moverElCupo\(\$confirmacionId, \$tipoNuevo, \+1\)\) \{/.test(api) &&
+  /responderMal\(\s*\n?\s*'No se pudo reservar el lugar de m\u00e1s/.test(api),
+  'insertar igual es exactamente cómo se llega a «5 de 4»');
+
+comprobar('y ninguna de sus salidas devuelve algo que parezca éxito',
+  !/function moverElCupo\([\s\S]*?\n    if \(!existeTabla\('confirmaciones'\)\) return;/
+    .test(api),
+  'un `return` pelado es `undefined`, que en un `if` es falso por ' +
+  'casualidad y no por diseño');
+
+/* ⛔ Y LO QUE YA QUEDÓ TORCIDO NO SE ENDEREZA SOLO. Arreglar la causa
+   impide que vuelva a pasar; las fichas guardadas siguen como están. */
+comprobar('el panel avisa cuando hay más gente que lugares',
+  /const faltanLugares = Math\.max\(0, filas\.length - cupo\);/.test(panel) &&
+  /Hay ' \+ filas\.length \+ ' personas y solo ' \+ cupo/.test(panel),
+  'dibujar «(5 de 4)» sin decir nada es peor que un error: es un número ' +
+  'que se mira todos los días sin saber si importa');
+
+comprobar('y se puede cuadrar de un toque',
+  /id="cuadrar-cupo"/.test(panel) &&
+  /acompanantes\.php\?accion=cuadrar/.test(panel),
+  'sin esto, la ficha de Carolina se queda torcida para siempre');
+
+/* ⚠️ MANDA LA GENTE, NO EL NÚMERO. Los nombres los escribió alguien a
+   propósito, uno por uno; el número de adultos y niños es una declaración
+   vieja que quedó atrás. */
+comprobar('cuadrar cuenta las personas POR TIPO, no de a bulto',
+  /foreach \(\$gente as \$uno\) if \(\(\$uno\['tipo'\] \?\? ''\) === 'nino'\) \$ninos\+\+;/
+    .test(api) &&
+  /\$adultos = count\(\$gente\) - \$ninos;/.test(api),
+  'poner todo en adultos dejaría el menú de niños mal contado en la cocina');
+
+/* ⛔ Y TIENE QUE MOVER LAS DOS TABLAS, igual que moverElCupo: si solo
+   toca una, el invitado ve un número y el panel cuenta otro. Es la misma
+   trampa que este archivo existe para cuidar. */
+comprobar('y cuadrar mueve las DOS tablas, no una',
+  /case 'cuadrar':[\s\S]*?actualizar\('confirmaciones', \$confirmacionId, \$cambios\);[\s\S]*?actualizar\('invitaciones', \(int\) \$inv\['id'\], \['pases' => \$adultos \+ \$ninos\]\);/
+    .test(api),
+  'mover una sola deja al invitado viendo un número y al panel contando otro');
+
+comprobar('y el panel refresca también la ficha de arriba',
+  /accion=cuadrar[\s\S]{0,900}?ensuciarVistas\('invitados'\);/.test(panel),
+  'sin esto el desfase desaparece de la sección y sigue estando tres ' +
+  'renglones más arriba, en «PERSONAS 4 (2 adultos, 2 niños)»');
+
+comprobar('y listar dice cuánta gente hay, para poder compararlo',
+  /'personas' => count\(\$filas\),/.test(api),
+  'el panel tiene que poder detectar el desfase sin adivinarlo');
+
+
 /* ─── Resultado ──────────────────────────────────────────────────── */
 
 if (fallos) {
