@@ -17,6 +17,7 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 import { readFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -4184,6 +4185,90 @@ console.log('\nLo que no viaja al hosting\n');
     'pedirlo de produccion/ después de excluirlo es un 404: el panel de ' +
     'ensayo no abriría en PBE');
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   LA CSP NO PUEDE BLOQUEAR EL VIGÍA NI LA LISTA DE MÓDULOS
+   ══════════════════════════════════════════════════════════════════════
+
+   ⛔ MEDIDO CONTRA aniaxv.com EL 14 DE SEPTIEMBRE DE 2026, con el
+   navegador de verdad: DOS de los seis hashes de la CSP estaban mal.
+
+   `csp-publica.mjs` buscaba `<script…>` sobre el HTML crudo, y este
+   index.html tiene dos comentarios que contienen esa palabra escrita a
+   mano («ACÁ NO VA NINGÚN <script> DE TERCEROS», «YA NO SON 23 <script
+   defer>»). La regex mordía ahí dentro.
+
+   Los dos hashes mal eran el del rescate de carga y —el grave— el de la
+   LISTA QUE INYECTA LOS 23 ARCHIVOS DE LA ESCENA. Con la CSP en modo
+   estricto, la invitación se quedaría sin marco, sin flores y sin
+   eclipse.
+
+   No se notó nunca porque la CSP se sirve como `-Report-Only` y porque
+   `--verificar` comparaba sus propios hashes equivocados contra el
+   .htaccess que él mismo había escrito con esos mismos hashes: verde,
+   consistente consigo mismo, y mintiendo.
+
+   ⚠️ POR ESO ESTA COMPROBACIÓN NO LLAMA A csp-publica.mjs. Calcula los
+   hashes con una implementación INDEPENDIENTE —tapando los comentarios
+   con espacios para conservar las posiciones— y los compara contra el
+   .htaccess. Dos implementaciones que tienen que coincidir; una sola no
+   se puede auditar a sí misma.
+   ══════════════════════════════════════════════════════════════════════ */
+
+{
+  const htaccess = leer('.htaccess');
+  const paginaHtml = leer('index.html');
+
+  /* Los comentarios se TAPAN con espacios, no se borran: hay que
+     conservar las posiciones para cortar del original. El hash es de los
+     bytes exactos que va a ver el navegador. */
+  const tapado = paginaHtml.replace(/<!--[\s\S]*?-->/g,
+    (c) => ' '.repeat(c.length));
+
+  const enLinea = [];
+  const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+  let m;
+  while ((m = re.exec(tapado)) !== null) {
+    const desde = m.index + m[0].indexOf('>') + 1;
+    enLinea.push(paginaHtml.slice(desde, desde + m[1].length));
+  }
+
+  const hashDe = (texto) =>
+    createHash('sha256').update(texto, 'utf8').digest('base64');
+
+  comprobar('la página tiene los scripts en línea que se esperan',
+    enLinea.length === 6,
+    'se encontraron ' + enLinea.length + ' y no 6. Si se agregó o se sacó ' +
+    'uno a propósito, hay que mover este número y regenerar la CSP');
+
+  const sinHash = enLinea
+    .map((t, i) => ({ i: i + 1, h: hashDe(t), ini: t.replace(/\s+/g, ' ').trim().slice(0, 40) }))
+    .filter((x) => !htaccess.includes(x.h));
+
+  comprobar('y el .htaccess tiene el hash de TODOS ellos',
+    sinHash.length === 0,
+    sinHash.map((x) => 'el nº' + x.i + ' («' + x.ini + '…») hashea ' + x.h +
+      ' y ese hash no está').join(' · ') +
+    '. Con la CSP en estricto, el navegador bloquea ese script');
+
+  /* ⛔ Y LA COMPROBACIÓN QUE HABRÍA CAZADO EL BUG: que tapar los
+     comentarios CAMBIE el resultado. Si no lo cambiara, sería que este
+     archivo dejó de tener comentarios con `<script` adentro y alguien
+     podría «simplificar» el tapado de vuelta sin que nada se queje. */
+  const sinTapar = [];
+  const re2 = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+  while ((m = re2.exec(paginaHtml)) !== null) sinTapar.push(hashDe(m[1]));
+
+  const iguales = sinTapar.length === enLinea.length &&
+    sinTapar.every((h, i) => h === hashDe(enLinea[i]));
+
+  comprobar('y tapar los comentarios cambia el resultado, como tiene que ser',
+    !iguales,
+    'este index.html tiene comentarios HTML con la palabra «<script» ' +
+    'adentro: si tapar deja de importar, es que desaparecieron, y ' +
+    'conviene saberlo antes de simplificar csp-publica.mjs');
+}
+
 
 console.log('');
 if (fallos) {
