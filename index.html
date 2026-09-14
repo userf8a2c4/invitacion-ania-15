@@ -2515,10 +2515,10 @@
      que pesa un 80% menos. Acá abajo se pide la copia liviana; el
      original comentado sigue intacto en codigo/, es el que se edita.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/produccion/01-configuracion.js?v=320"></script>
-<script defer src="codigo/produccion/02-utilidades.js?v=320"></script>
-<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=320"></script>
-<script defer src="codigo/produccion/04-invitado-personalizado.js?v=320"></script>
+<script defer src="codigo/produccion/01-configuracion.js?v=322"></script>
+<script defer src="codigo/produccion/02-utilidades.js?v=322"></script>
+<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=322"></script>
+<script defer src="codigo/produccion/04-invitado-personalizado.js?v=322"></script>
 
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda) — es MARCADO, no script.
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
@@ -2576,7 +2576,7 @@
      para EXISTIR, solo para reaccionar al clic — y ese clic no puede
      llegar antes de que la lista termine de bajar el archivo 20. -->
 <script type="application/json" id="scripts-de-la-escena">
-["codigo/produccion/10-reproductor-de-musica.js?v=320", "codigo/produccion/05-cursor-personalizado.js?v=320", "codigo/produccion/24-lienzo-de-petalos.js?v=320", "codigo/produccion/06-petalos-con-fisica.js?v=320", "codigo/produccion/07-marco-y-enredaderas.js?v=320", "codigo/produccion/08-efectos-de-scroll.js?v=320", "codigo/produccion/09-cuenta-regresiva.js?v=320", "codigo/produccion/11-formulario-confirmacion.js?v=320", "codigo/produccion/12-pase-de-acceso.js?v=320", "codigo/produccion/13-agregar-al-calendario.js?v=320", "codigo/produccion/23-lienzo-de-luz.js?v=320", "codigo/produccion/27-fauna-nocturna.js?v=320", "codigo/produccion/14-haces-de-luz.js?v=320", "codigo/produccion/15-registro-de-confirmaciones.js?v=320", "codigo/produccion/16-volver-arriba.js?v=320", "codigo/produccion/17-joyas-colgantes.js?v=320", "codigo/produccion/18-motas-de-polvo.js?v=320", "codigo/produccion/19-velas.js?v=320", "codigo/produccion/20-boton-de-animaciones.js?v=320", "codigo/produccion/21-monitor-de-rendimiento.js?v=320", "codigo/produccion/22-luz-de-la-hora.js?v=320", "codigo/produccion/25-preguntas-frecuentes.js?v=320", "codigo/produccion/26-mapa-a-pedido.js?v=320"]
+["codigo/produccion/10-reproductor-de-musica.js?v=322", "codigo/produccion/05-cursor-personalizado.js?v=322", "codigo/produccion/24-lienzo-de-petalos.js?v=322", "codigo/produccion/06-petalos-con-fisica.js?v=322", "codigo/produccion/07-marco-y-enredaderas.js?v=322", "codigo/produccion/08-efectos-de-scroll.js?v=322", "codigo/produccion/09-cuenta-regresiva.js?v=322", "codigo/produccion/11-formulario-confirmacion.js?v=322", "codigo/produccion/12-pase-de-acceso.js?v=322", "codigo/produccion/13-agregar-al-calendario.js?v=322", "codigo/produccion/23-lienzo-de-luz.js?v=322", "codigo/produccion/27-fauna-nocturna.js?v=322", "codigo/produccion/14-haces-de-luz.js?v=322", "codigo/produccion/15-registro-de-confirmaciones.js?v=322", "codigo/produccion/16-volver-arriba.js?v=322", "codigo/produccion/17-joyas-colgantes.js?v=322", "codigo/produccion/18-motas-de-polvo.js?v=322", "codigo/produccion/19-velas.js?v=322", "codigo/produccion/20-boton-de-animaciones.js?v=322", "codigo/produccion/21-monitor-de-rendimiento.js?v=322", "codigo/produccion/22-luz-de-la-hora.js?v=322", "codigo/produccion/25-preguntas-frecuentes.js?v=322", "codigo/produccion/26-mapa-a-pedido.js?v=322"]
 </script>
 
 <!-- ══════════════════════════════════════════════════════════════════
@@ -2692,7 +2692,7 @@
        momento sigue sin bajarlo, sin parsearlo y sin ejecutarlo. Son los
        mismos bytes, quince segundos antes, y solo para quien ya está. */
     var AVISO    = 25000;                 // cuánto antes se pide el archivo
-    var ARCHIVO  = 'codigo/produccion/28-eclipse.js?v=320';
+    var ARCHIVO  = 'codigo/produccion/28-eclipse.js?v=322';
 
     /** El día UTC (AAAA-MM-DD) en que esta pestaña ya vio el eclipse. */
     var ELDIAQUEYACORRIO = '';
@@ -2878,21 +2878,94 @@
       if (yaSePreguntoLaHora) return;
       if (!igualSiEstaFresca && laHoraSigueFresca()) return;
       yaSePreguntoLaHora = true;
+      preguntarle(function () { yaSePreguntoLaHora = false; });
+    }
 
+    /* ─── EL DISPARO A MANO ──────────────────────────────────────────
+     *
+     * ⚡ (2026-09-14) Carlos: «que cuando Lucila lo presione, lance la
+     * secuencia del eclipse directamente».
+     *
+     * El panel guarda el instante en que se apretó. Acá se pregunta, y
+     * si ese instante todavía cae dentro del minuto, el ritual arranca
+     * con el desfase que corresponda —el mismo camino de «entrar a
+     * mitad» que ya existía—.
+     *
+     * ⚠️ SE PREGUNTA CADA 15 s, PERO SOLO CON LA PESTAÑA A LA VISTA.
+     * Es el precio de que el botón funcione y ya: una página no tiene
+     * línea directa con el servidor, así que para enterarse tiene que
+     * preguntar. De fondo no pregunta nada —y de fondo el eclipse tampoco
+     * corre, así que no se pierde nada—. Son unos 40 bytes cada vez, y
+     * solo mientras alguien de verdad está mirando la invitación.
+     *
+     * ⚠️ SE MIDE CONTRA EL RELOJ DEL SERVIDOR, no contra el del teléfono.
+     * Un teléfono con la hora corrida media hora haría que un disparo vivo
+     * pareciera viejo, o al revés. Por eso eclipse.php manda su `ahora`.
+     * -------------------------------------------------------------- */
+
+    /** Cada cuánto se pregunta, con la pestaña a la vista. */
+    var CADA_CUANTO_SE_PREGUNTA = 15000;
+
+    /** El último disparo ya corrido, para no repetirlo. */
+    var elDisparoYaCorrido = 0;
+
+    /**
+     * Le pregunta a eclipse.php la hora y si hay un disparo vivo.
+     *
+     * @param {Function} [siFalla]
+     * @returns {void}
+     */
+    function preguntarle(siFalla) {
       try {
         fetch('eclipse.php?mirando=' + Date.now(), { cache: 'no-store' })
           .then(function (r) { return r.ok ? r.json() : null; })
           .then(function (datos) {
-            if (!datos || !datos.utc) return;
-            recordarLaHora(datos.utc);
-            /* Adoptar no recarga la página: por eso esto funciona aunque
-               haya un formulario a medio llenar, que es la ventaja grande
-               frente a resolverlo con un número de versión. `mirar()`
-               duerme 60 s como mucho, así que el plan se reacomoda solo. */
-            adoptarLaHora(datos.utc);
+            if (!datos) { if (siFalla) siFalla(); return; }
+
+            if (datos.utc) {
+              recordarLaHora(datos.utc);
+              /* Adoptar no recarga la página: por eso funciona aunque haya
+                 un formulario a medio llenar, que es la ventaja grande
+                 frente a resolverlo con un número de versión. */
+              adoptarLaHora(datos.utc);
+            }
+
+            mirarElDisparo(datos);
           })
-          .catch(function () { /* sin red: se sigue con la que hay */ });
-      } catch (e) { /* nada */ }
+          .catch(function () { if (siFalla) siFalla(); });
+      } catch (e) { if (siFalla) siFalla(); }
+    }
+
+    /**
+     * Si hay un disparo vivo, arranca el ritual con su desfase.
+     *
+     * @param {Object} datos - La respuesta de eclipse.php.
+     * @returns {void}
+     */
+    function mirarElDisparo(datos) {
+      var cuando = Number(datos && datos.disparo) || 0;
+      if (!cuando || cuando === elDisparoYaCorrido) return;
+
+      var deAhora = Number(datos.ahora) || 0;
+      var haceCuanto = deAhora ? (deAhora - cuando) : 0;
+
+      if (haceCuanto < 0 || haceCuanto >= DURA) return;   // ya terminó
+      if (yaSePidio) return;                              // ya va corriendo
+      if (!sePuede()) return;                             // una guarda dice que no
+
+      elDisparoYaCorrido = cuando;
+      yaSePidio = true;
+
+      /* `pedirElArchivo` espera cuánto FALTA: negativo = ya empezó. */
+      pedirElArchivo(-haceCuanto);
+
+      setTimeout(function () { yaSePidio = false; }, DURA + 2000);
+    }
+
+    /** Pregunta cada 15 s, y solo con la pestaña a la vista. */
+    function vigilarElDisparo() {
+      if (!document.hidden) preguntarle();
+      setTimeout(vigilarElDisparo, CADA_CUANTO_SE_PREGUNTA);
     }
 
     /* ⚡ Y SI LA INVITACIÓN PERSONAL YA LO PREGUNTÓ, SE APROVECHA.
@@ -3188,6 +3261,9 @@
        Va después de mirar() y con la vigencia puesta, para no competir
        con nada de lo que la página está cargando. */
     setTimeout(function () { revisarLaHora(false); }, 2000);
+
+    /* Y de ahí en más, se queda mirando si alguien apretó el botón. */
+    setTimeout(vigilarElDisparo, CADA_CUANTO_SE_PREGUNTA);
   })();
 </script>
 

@@ -274,7 +274,10 @@ console.log('\nEl botón para revisarlos\n');
 const gente        = leer('admin', 'codigo', '08-vista-invitados.js');
 const invitacionesJs = leer('admin', 'codigo', '48-invitaciones.js');
 
-comprobar('hay un botón en Gente', /id="inv-revisar-links"/.test(gente));
+/* ⚡ (2026-09-14) SE MUDÓ A LA HOJA DE «Más», con los otros seis que
+   estaban antes de la lista. Lo que se comprueba es lo mismo: que haya
+   un camino para llegar y que esté enganchado. */
+comprobar('hay un botón en Gente', /['"]mas-links['"]/.test(gente));
 comprobar('el botón está enganchado', /revisarTodosLosLinks\(/.test(gente));
 
 /* El panel NO se empaqueta: una función anidada no la ve nadie, y el

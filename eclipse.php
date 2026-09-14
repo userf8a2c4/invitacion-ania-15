@@ -6,7 +6,11 @@
    Devuelve la hora del eclipse, en UTC, tal como la dejó Lucila en el
    panel. Nada más. Es el archivo público más chico del proyecto.
 
-       GET eclipse.php  →  {"ok":true,"utc":"12:30"}
+       GET eclipse.php  →  {"ok":true,"utc":"12:30","ahora":1789…}
+
+   Y, cuando Lucila acaba de apretar el botón de lanzarlo a mano, también
+   `"disparo"` con el instante en que lo apretó. Solo viaja mientras
+   todavía podría estar corriendo: uno de ayer no le sirve a nadie.
 
    POR QUÉ EXISTE, SI YA HAY UNA HORA ESCRITA EN index.html
    Porque index.html es HTML estático —cero <?php, y así tiene que
@@ -88,6 +92,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
    tenías» y no pasa nada. Nunca un 500: un error acá no puede ser una
    excusa para que el navegador haga algo raro. */
 $utc = null;
+$disparo = null;
 
 try {
     $DB_HOST     = getenv('DB_HOST')     ?: 'localhost';
@@ -105,9 +110,32 @@ try {
          PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]
     );
 
-    $stmt = $pdo->prepare("SELECT valor FROM ajustes WHERE clave = 'hora_eclipse_utc' LIMIT 1");
+    /* ⚡ EL DISPARO MANUAL VIAJA EN EL MISMO VIAJE (2026-09-14)
+       Carlos pidió un botón que lance el eclipse ahora. Se guarda como el
+       instante en milisegundos en que se apretó; el navegador decide si
+       todavía está vivo. Una sola consulta para las dos claves: es la
+       misma tabla y la misma conexión. */
+    $stmt = $pdo->prepare(
+        "SELECT clave, valor FROM ajustes
+          WHERE clave IN ('hora_eclipse_utc', 'eclipse_disparo')"
+    );
     $stmt->execute();
-    $fila = $stmt->fetch();
+
+    $leidos = [];
+    foreach ($stmt->fetchAll() as $f) {
+        $leidos[(string) $f['clave']] = (string) $f['valor'];
+    }
+
+    /* El disparo solo viaja si es un número y si todavía podría estar
+       corriendo. Uno de ayer no tiene por qué llegar al navegador. */
+    $cuando = isset($leidos['eclipse_disparo'])
+        ? (int) $leidos['eclipse_disparo'] : 0;
+    if ($cuando > 0 && (microtime(true) * 1000 - $cuando) < 120000) {
+        $disparo = $cuando;
+    }
+
+    $fila = isset($leidos['hora_eclipse_utc'])
+        ? ['valor' => $leidos['hora_eclipse_utc']] : null;
 
     $valor = trim((string) ($fila['valor'] ?? ''));
 
@@ -124,9 +152,16 @@ try {
        por cada una, el día que la base tenga un mal rato, llena el disco
        sin decir nada que no se sepa. */
     $utc = null;
+    $disparo = null;
 }
 
 $salida = ['ok' => true];
 if ($utc !== null) $salida['utc'] = $utc;
+if ($disparo !== null) $salida['disparo'] = $disparo;
+
+/* El reloj del SERVIDOR. El navegador lo usa para medir la antigüedad del
+   disparo sin depender del suyo: un teléfono con la hora corrida media
+   hora haría que un disparo vivo pareciera viejo, o al revés. */
+$salida['ahora'] = (int) round(microtime(true) * 1000);
 
 echo json_encode($salida, JSON_UNESCAPED_UNICODE);

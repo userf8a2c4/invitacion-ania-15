@@ -100,12 +100,21 @@ let ORDEN_INVERTIDO = false;
  *  es el de arranque: nadie pidió que la lista cambiara sola al abrir.
  *  Invertido da «las más viejas primero», que responde a «¿a quién
  *  cargué al principio y nunca le mandé nada?». */
+/* ⚠️ LA QUINTA COLUMNA ES PARA QUE NO HAYA QUE TOCAR PARA AVERIGUAR.
+   «Personas» a secas no dice si pone los grupos grandes arriba o abajo:
+   hay que tocarlo, mirar, y volver atrás si no era. Una frase corta al
+   lado ahorra ese viaje, y es lo que se lee en la hoja de ordenar. */
 const ORDENES_DE_GENTE = [
-  ['natural',  'Recientes',    'nuevas primero', 'viejas primero'],
-  ['nombre',   'Nombre',       'A→Z',            'Z→A'],
-  ['personas', 'Personas',     'más primero',    'menos primero'],
-  ['estado',   'Confirmación', 'falta → listo',  'listo → falta'],
-  ['codigo',   'Código',       'A→Z',            'Z→A'],
+  ['natural',  'Recientes',    'nuevas primero', 'viejas primero',
+   'Como se fueron cargando. Es como viene la lista.'],
+  ['nombre',   'Nombre',       'A→Z',            'Z→A',
+   'Alfabético, para buscar a alguien con el dedo.'],
+  ['personas', 'Personas',     'más primero',    'menos primero',
+   'Los grupos grandes primero: los que llenan mesa.'],
+  ['estado',   'Confirmación', 'falta → listo',  'listo → falta',
+   'Lo que falta hacer arriba: sin enviar, y después sin responder.'],
+  ['codigo',   'Código',       'A→Z',            'Z→A',
+   'Por el código del pase. Sirve con uno en la mano.'],
 ];
 
 /** Si está activo el modo de selección múltiple (Fase 5 del rediseño). */
@@ -423,7 +432,6 @@ async function dibujarInvitados() {
         '<button class="filtro' + (FILTRO_INVITADOS === f[0] ? ' activo' : '') + '" ' +
                 'data-filtro="' + f[0] + '">' + f[1] + '</button>'
       ).join('') +
-    '</div>' +
 
     /* ⚡ ORDENAR LA LISTA (2026-09-14)
        Va pegado a los filtros y ARRIBA de «Crear invitación», porque
@@ -441,11 +449,29 @@ async function dibujarInvitados() {
        enseguida al enganchar. Un solo sitio que sabe cómo se lee un chip
        de orden: si se pintara también acá, un día dirían cosas
        distintas. */
-    '<p class="detalle__rotulo" style="margin:0 0 4px">Ordenar por</p>' +
-    '<div class="filtros filtros--una-linea" id="orden-invitados">' +
-      ORDENES_DE_GENTE.map(o =>
-        '<button class="filtro" data-orden="' + o[0] + '">' + o[1] + '</button>'
-      ).join('') +
+    /* ⚡ EL ORDEN PASÓ DE UNA FILA DE CINCO A UN SOLO CHIP (2026-09-14)
+     *
+     * Carlos, mirando la pantalla: «estamos saturando a Lucila». Y tenía
+     * razón —medido sobre su captura: el primer invitado empezaba a 560
+     * píxeles de 744, o sea que tres cuartos de pantalla eran controles—.
+     *
+     * Eran ONCE filas antes de ver a una persona. La de «Ordenar por»
+     * costaba dos (el rótulo y los cinco chips) para una decisión que se
+     * toma cada tanto, y que ya se ve escrita en el chip encendido.
+     *
+     * Ahora es UN chip al final de la misma línea de los filtros, que
+     * dice a qué orden está y abre una hoja con los cinco. Se acabó el
+     * problema que el rótulo venía a resolver —«Confirmaron» (filtro) y
+     * «Confirmación» (orden) uno encima del otro— porque ya no hay dos
+     * filas que confundir: hay una.
+     *
+     * ⚠️ VA AL FINAL DE LA LÍNEA, NO AL PRINCIPIO. Los filtros se leen de
+     * izquierda a derecha y «Todos» tiene que ser lo primero que se ve.
+     * El separador lo despega para que no parezca un filtro más. */
+    '<span style="display:inline-block;width:1px;height:22px;' +
+           'background:var(--borde);margin:0 var(--esp-1);' +
+           'vertical-align:middle"></span>' +
+    '<button class="filtro" id="inv-orden" type="button"></button>' +
     '</div>' +
 
     /* ⚡ "AGREGAR INVITADO" SUBIÓ ACÁ, ANTES DE LA LISTA (2026-09-03).
@@ -479,16 +505,29 @@ async function dibujarInvitados() {
        Lo que se crea es una invitación —con su link, su cupo y su gente
        adentro—, no una persona. El rótulo viejo hacía pensar que para
        una familia de cuatro había que tocarlo cuatro veces. */
+    /* ⚡ SIETE BOTONES PASARON A SER DOS (2026-09-14)
+     *
+     * Acá había, uno debajo del otro: Crear invitación, Fecha límite,
+     * Seleccionar, Descargar, Eclipse de Sangre, Revisar links y Revisar
+     * teléfonos. Cinco filas enteras, todas del mismo tamaño, para cosas
+     * de frecuencias completamente distintas: «Crear invitación» se usa
+     * mientras se arma la lista, y «Fecha límite» se toca una vez en la
+     * vida. Darles el mismo peso hacía que costara lo mismo encontrar
+     * las dos, y que la lista empezara después del pliegue.
+     *
+     * Las notas de abajo cuentan cómo llegamos acá: entre el 3 y el 9 de
+     * septiembre TODO se fue subiendo arriba de la lista, uno por uno y
+     * cada vez por una buena razón. El error no fue ninguno de esos
+     * movimientos: fue que nadie miró la suma.
+     *
+     * Ahora queda lo que se usa seguido —crear— y un engranaje con lo
+     * demás. Nada se borró; todo está a un toque. */
     '<div style="display:flex;gap:var(--esp-2);margin-bottom:var(--esp-2)">' +
-      '<button class="boton boton--principal" style="flex:2" id="inv-nuevo">' +
+      '<button class="boton boton--principal" style="flex:1" id="inv-nuevo">' +
         'Crear invitación</button>' +
-      '<button class="boton" style="flex:1" id="inv-fecha-limite">' +
-        '⚙️ Fecha límite</button>' +
-    '</div>' +
-
-    '<div style="display:flex;gap:var(--esp-2);margin-bottom:var(--esp-2)">' +
-      '<button class="boton" style="flex:1" id="inv-seleccionar">Seleccionar</button>' +
-      '<button class="boton" style="flex:1" id="inv-descargar">Descargar</button>' +
+      '<button class="boton" style="flex:none;min-width:56px" id="inv-mas" ' +
+              'title="Ajustes y herramientas" aria-label="Ajustes y herramientas">' +
+        '⚙️</button>' +
     '</div>' +
 
     /* ⚠️ RENGLÓN PROPIO, Y NO UN TERCER BOTÓN ARRIBA. En un teléfono,
@@ -498,20 +537,14 @@ async function dibujarInvitados() {
        hoja ya guarda dos cosas de una vez, y una tercera haría que
        corregir el texto de la invitación reescribiera además la hora
        del eclipse. */
-    '<button class="boton boton--ancho" id="inv-eclipse" ' +
-            'style="margin-bottom:var(--esp-2)">' +
-      '🌑 Eclipse de Sangre</button>' +
+
 
     /* ⚠️ ANTES DE REPARTIR, NO DESPUÉS (2026-09-09)
        El otro extremo del link personal: una invitación cuyo link abre la
        de otra persona no es un bug, es un invitado que no puede confirmar
        — y del lado del panel no se ve nada raro, hay que abrir el link
        para enterarse. */
-    '<button type="button" class="boton boton--ancho" id="inv-revisar-links" ' +
-            'style="margin-bottom:var(--esp-2)">' +
-      'Revisar que todos los links abran la invitación correcta' +
-    '</button>' +
-    '<div id="inv-revision-links"></div>' +
+
 
     /* ⛔ LA MISMA FICHA MOSTRABA DOS TELÉFONOS (2026-09-14)
        Uno en TELÉFONO y otro en NOTAS, como «Contacto: +504 33…». El
@@ -519,11 +552,7 @@ async function dibujarInvitados() {
        la planilla; corregir el de la ficha arreglaba solo uno. Lucila no
        tenía forma de saber a cuál llamar. El importador ya no lo crea;
        esto es para las fichas que YA lo tienen. */
-    '<button type="button" class="boton boton--ancho" id="inv-limpiar-contactos" ' +
-            'style="margin-bottom:var(--esp-2)">' +
-      'Revisar teléfonos repetidos en las notas' +
-    '</button>' +
-    '<div id="inv-revision-contactos"></div>' +
+
 
     /* El cartel de "qué cambió desde la última vez". Va vacío en el
        molde y se llena más abajo, porque las novedades se calculan
@@ -644,30 +673,10 @@ async function dibujarInvitados() {
  */
 function engancharInvitados(vista) {
 
-  buscar('#inv-descargar', vista).addEventListener('click', () => {
-    abrirHojaDeFormatos('Descargar invitados', exportarInvitados);
-  });
+  buscar('#inv-mas', vista).addEventListener('click', abrirMasDeInvitados);
 
-  buscar('#inv-fecha-limite', vista).addEventListener('click', () => {
-    abrirConfiguracionDeInvitaciones();
-  });
-
-  buscar('#inv-eclipse', vista).addEventListener('click', () => {
-    abrirLaHoraDelEclipse();
-  });
-
-  const botonRevisarLinks = buscar('#inv-revisar-links', vista);
-  if (botonRevisarLinks) {
-    botonRevisarLinks.addEventListener('click', () =>
-      revisarTodosLosLinks(botonRevisarLinks, buscar('#inv-revision-links', vista)));
-  }
-
-  const botonContactos = buscar('#inv-limpiar-contactos', vista);
-  if (botonContactos) {
-    botonContactos.addEventListener('click', () =>
-      revisarTelefonosRepetidos(botonContactos,
-                                buscar('#inv-revision-contactos', vista)));
-  }
+  buscar('#inv-orden', vista).addEventListener('click',
+    () => abrirElOrdenDeLaLista(vista));
 
   buscar('#inv-nuevo', vista).addEventListener('click', () => {
     if (!INVITADOS_EDITABLES) {
@@ -717,14 +726,6 @@ function engancharInvitados(vista) {
     });
   });
 
-  const botonSeleccionar = buscar('#inv-seleccionar', vista);
-  botonSeleccionar.addEventListener('click', () => {
-    SELECCION_ACTIVA = !SELECCION_ACTIVA;
-    if (!SELECCION_ACTIVA) SELECCIONADOS.clear();
-    botonSeleccionar.textContent = SELECCION_ACTIVA ? 'Cancelar selección' : 'Seleccionar';
-    pintarListaDeInvitados();
-    actualizarBarraSeleccion();
-  });
 
   buscar('#sel-cancelar', vista).addEventListener('click', salirDeSeleccion);
 
@@ -741,19 +742,6 @@ function engancharInvitados(vista) {
      diría, pero a esa altura ya nadie lo está leyendo: tocó «Nombre»
      esperando la A arriba. La dirección invertida es una decisión sobre
      UNA columna, no un estado del panel. */
-  buscarTodos('[data-orden]', vista).forEach(boton => {
-    boton.addEventListener('click', () => {
-      if (ORDEN_INVITADOS === boton.dataset.orden) {
-        ORDEN_INVERTIDO = !ORDEN_INVERTIDO;
-      } else {
-        ORDEN_INVITADOS = boton.dataset.orden;
-        ORDEN_INVERTIDO = false;
-      }
-
-      refrescarLosChipsDeOrden(vista);
-      pintarListaDeInvitados();
-    });
-  });
 
   /* Acá, y no en el molde: el chip encendido se DEDUCE del estado, no se
      escribe a mano en el HTML. Es la lección del 2026-09-03 con «Todos»,
@@ -775,16 +763,152 @@ function engancharInvitados(vista) {
  * @returns {void}
  */
 function refrescarLosChipsDeOrden(donde) {
-  buscarTodos('[data-orden]', donde).forEach(chip => {
-    const fila = ORDENES_DE_GENTE.find(o => o[0] === chip.dataset.orden);
-    if (!fila) return;
+  const chip = buscar('#inv-orden', donde);
+  if (!chip) return;
 
-    const encendido = ORDEN_INVITADOS === chip.dataset.orden;
-    const comoVa    = ORDEN_INVERTIDO ? fila[3] : fila[2];
+  const fila = ORDENES_DE_GENTE.find(o => o[0] === ORDEN_INVITADOS);
+  if (!fila) return;
 
-    chip.classList.toggle('activo', encendido);
-    chip.textContent = fila[1] + (encendido && comoVa ? ' · ' + comoVa : '');
+  const comoVa = ORDEN_INVERTIDO ? fila[3] : fila[2];
+
+  /* ⚠️ LA FLECHITA NO ES ADORNO: es lo único que distingue este chip de
+     los ocho filtros que tiene al lado. Sin ella, «Nombre» acá y
+     «Confirmaron» allá se leen como dos filtros, y tocar uno esperando
+     lo otro es exactamente la molestia que se quiere evitar. */
+  chip.textContent = '⇅ ' + fila[1] + (comoVa ? ' · ' + comoVa : '');
+
+  /* Encendido solo cuando NO es el orden de arranque: así el chip no
+     compite por atención mientras la lista está como siempre. */
+  chip.classList.toggle('activo', ORDEN_INVITADOS !== 'natural');
+}
+
+
+/**
+ * La hoja para elegir el orden.
+ *
+ * ⚡ ANTES ERAN CINCO CHIPS EN UNA FILA PROPIA (2026-09-14). Costaban dos
+ * renglones —el rótulo «Ordenar por» y los chips— de los once que había
+ * antes de ver a la primera persona.
+ *
+ * ⚠️ CADA ORDEN DICE QUÉ HACE, no solo cómo se llama. «Personas» a secas
+ * obliga a tocarlo para averiguar si pone los grupos grandes arriba o
+ * abajo; «Los grupos grandes primero» no obliga a nada.
+ *
+ * @param {Element} vista
+ * @returns {void}
+ */
+function abrirElOrdenDeLaLista(vista) {
+  const cuerpo = abrirHoja('Ordenar la lista',
+    ORDENES_DE_GENTE.map(o => {
+      const puesto = ORDEN_INVITADOS === o[0];
+      return '' +
+        '<button class="boton boton--ancho" data-orden="' + seguro(o[0]) + '" ' +
+                'style="margin-bottom:var(--esp-2);text-align:left' +
+                (puesto ? ';border-color:var(--oro)' : '') + '">' +
+          '<div style="font-weight:600">' +
+            (puesto ? '✓ ' : '') + seguro(o[1]) +
+          '</div>' +
+          '<div class="vacio__texto" style="margin-top:2px">' +
+            seguro(o[4] || '') +
+          '</div>' +
+        '</button>';
+    }).join('') +
+
+    '<p class="vacio__texto">Tocá el que ya está puesto para darlo vuelta ' +
+    '(de la A a la Z, o al revés).</p>'
+  );
+
+  buscarTodos('[data-orden]', cuerpo).forEach(boton => {
+    boton.addEventListener('click', () => {
+      if (ORDEN_INVITADOS === boton.dataset.orden) {
+        ORDEN_INVERTIDO = !ORDEN_INVERTIDO;
+      } else {
+        ORDEN_INVITADOS = boton.dataset.orden;
+        ORDEN_INVERTIDO = false;
+      }
+
+      cerrarHoja(true);
+      refrescarLosChipsDeOrden(vista);
+      pintarListaDeInvitados();
+    });
   });
+}
+
+
+/**
+ * La hoja de «Más»: lo que no se usa todos los días.
+ *
+ * ⚡ (2026-09-14) Carlos, mirando la pantalla: «estamos saturando a
+ * Lucila». Había SIETE botones del mismo tamaño antes de la lista, para
+ * cosas de frecuencias completamente distintas.
+ *
+ * ⚠️ CADA COSA DICE QUÉ HACE. Un engranaje pelado con seis nombres
+ * adentro obliga a abrir para adivinar, y a abrirlo de nuevo la próxima
+ * vez porque no se recuerda dónde estaba «Descargar». Una línea de
+ * explicación por ítem cuesta un renglón y ahorra ese viaje.
+ *
+ * ⚠️ Y VAN AGRUPADAS POR LO QUE SON. «Descargar» y «Fecha límite» no se
+ * parecen en nada; ponerlas seguidas y sin título obliga a leerlas todas
+ * para encontrar una.
+ *
+ * @returns {void}
+ */
+function abrirMasDeInvitados() {
+  const item = (id, titulo, explicacion) => '' +
+    '<button class="boton boton--ancho" id="' + id + '" ' +
+            'style="margin-bottom:var(--esp-2);text-align:left">' +
+      '<div style="font-weight:600">' + titulo + '</div>' +
+      '<div class="vacio__texto" style="margin-top:2px">' +
+        seguro(explicacion) +
+      '</div>' +
+    '</button>';
+
+  const cuerpo = abrirHoja('Más',
+    '<div class="tarjeta__titulo">La lista</div>' +
+    item('mas-seleccionar', 'Seleccionar varios',
+         'Para mandarles algo a muchas invitaciones de una vez.') +
+    item('mas-descargar', 'Descargar la lista',
+         'En PDF, Excel o CSV, con el filtro y el orden que tenés puestos.') +
+
+    '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">' +
+      'Ajustes de la invitación</div>' +
+    item('mas-fecha', 'Fecha límite para confirmar',
+         'Hasta cuándo puede cada grupo cambiar su respuesta.') +
+    item('mas-eclipse', '🌑 Eclipse de Sangre',
+         'La hora del minuto en que la invitación se transforma, y el botón para lanzarlo ahora.') +
+
+    '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">' +
+      'Comprobar que todo esté bien</div>' +
+    item('mas-links', 'Revisar los links',
+         'Que el link de cada quien abra SU invitación y no la de otro. Conviene antes de repartirlos.') +
+    item('mas-telefonos', 'Revisar teléfonos repetidos',
+         'Busca fichas que tengan dos números distintos y te deja arreglarlas.') +
+
+    '<div id="mas-resultado"></div>'
+  );
+
+  const alToque = (id, quehacer) => {
+    const b = buscar('#' + id, cuerpo);
+    if (b) b.addEventListener('click', quehacer);
+  };
+
+  alToque('mas-seleccionar', () => { cerrarHoja(true); entrarEnSeleccion(); });
+  alToque('mas-descargar', () => {
+    cerrarHoja(true);
+    abrirHojaDeFormatos('Descargar invitados', exportarInvitados);
+  });
+  alToque('mas-fecha', () => { cerrarHoja(true); abrirConfiguracionDeInvitaciones(); });
+  alToque('mas-eclipse', () => { cerrarHoja(true); abrirLaHoraDelEclipse(); });
+
+  /* Estos dos escriben su resultado DENTRO de la hoja: son revisiones,
+     no navegación, y cerrarla para mostrar una lista en otro lado haría
+     perder de vista qué se estaba revisando. */
+  alToque('mas-links', () =>
+    revisarTodosLosLinks(buscar('#mas-links', cuerpo),
+                         buscar('#mas-resultado', cuerpo)));
+  alToque('mas-telefonos', () =>
+    revisarTelefonosRepetidos(buscar('#mas-telefonos', cuerpo),
+                              buscar('#mas-resultado', cuerpo)));
 }
 
 
@@ -1047,12 +1171,32 @@ function olvidarSeleccionDeGente() {
  *
  * @returns {void}
  */
+/**
+ * Enciende el modo de selección múltiple.
+ *
+ * ⚡ (2026-09-14) Antes esto era un botón propio arriba de la lista que
+ * alternaba entre «Seleccionar» y «Cancelar selección». Ahora se
+ * enciende desde la hoja de «Más» y se apaga desde la barra que aparece
+ * abajo cuando hay algo marcado —que es donde uno la busca cuando ya
+ * está seleccionando—.
+ *
+ * @returns {void}
+ */
+function entrarEnSeleccion() {
+  SELECCION_ACTIVA = true;
+  pintarListaDeInvitados();
+  actualizarBarraSeleccion();
+}
+
+
 function salirDeSeleccion() {
   SELECCION_ACTIVA = false;
   SELECCIONADOS.clear();
 
-  const boton = buscar('#inv-seleccionar');
-  if (boton) boton.textContent = 'Seleccionar';
+  /* ⚡ (2026-09-14) Acá se le devolvía el rótulo al botón de arriba, que
+     ya no existe: la selección se enciende desde la hoja de «Más» y se
+     apaga desde la barra de abajo. El `if` lo hacía inofensivo, pero
+     dejarlo hace creer que ese botón sigue estando. */
 
   pintarListaDeInvitados();
   actualizarBarraSeleccion();
