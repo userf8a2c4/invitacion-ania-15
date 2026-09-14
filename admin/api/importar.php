@@ -316,9 +316,42 @@ case 'invitados':
             $correo = $m[0];
         }
 
+        /* ⛔ EL «Contacto:» EN LAS NOTAS LE MENTÍA A LUCILA (2026-09-14)
+         *
+         * Esta línea copiaba el contacto de la planilla a las notas
+         * SIEMPRE que no fuera un correo. Pero el teléfono de esa misma
+         * celda también se guarda, unas líneas más abajo, en
+         * `invitaciones.telefono` —que es el que usa el botón de
+         * WhatsApp—. O sea que el mismo dato quedaba en dos lugares.
+         *
+         * Y cuando después alguien corrige el teléfono desde la ficha, se
+         * corrige UNO solo: la nota se queda con el viejo. La ficha
+         * termina mostrando dos números distintos para la misma persona
+         * —visto el 2026-09-14: teléfono +52 722… y nota
+         * «Contacto: +504 33…»— y no hay forma de saber cuál llamar.
+         *
+         * Ahora la nota SOLO se escribe cuando el contacto trae algo que
+         * no es ni un correo ni un teléfono reconocible —un Instagram,
+         * un «preguntarle a su mamá»—, que es justo lo que se perdería
+         * si no se guardara. El teléfono vive en su campo y en uno solo. */
+        $hayTelefonoEnElContacto = preg_match(
+            '/(\+?\d[\d\s\-\(\)]{7,}\d)/',
+            $correo !== '' ? str_replace($correo, ' ', $contacto) : $contacto
+        );
+
+        $restoDelContacto = trim(preg_replace(
+            ['/[\w.+-]+@[\w-]+\.[\w.]+/', '/(\+?\d[\d\s\-\(\)]{7,}\d)/'],
+            ' ',
+            $contacto
+        ));
+        $restoDelContacto = trim($restoDelContacto, " \t\n\r\0\x0B/,;·-");
+
         $notas = trim(implode(' · ', array_filter([
             trim((string) ($fila['notas'] ?? '')),
-            ($contacto !== '' && $correo === '') ? 'Contacto: ' . $contacto : '',
+            ($restoDelContacto !== '' && mb_strlen($restoDelContacto) > 2)
+                ? 'Contacto: ' . $restoDelContacto
+                : (($contacto !== '' && $correo === '' && !$hayTelefonoEnElContacto)
+                    ? 'Contacto: ' . $contacto : ''),
         ])));
 
         /* ⚡ (2026-08-28) Con invitaciones nominales (token propio, cupo

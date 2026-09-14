@@ -519,6 +519,110 @@ case 'csv':
 
     fclose($salida);
     exit;
+/* ─── LIMPIAR LOS «Contacto:» QUE CONTRADICEN EL TELÉFONO ───────────────
+ *
+ * ⛔ EL 14 DE SEPTIEMBRE DE 2026, LA MISMA FICHA MOSTRABA DOS TELÉFONOS
+ *    DISTINTOS PARA LA MISMA PERSONA.
+ *
+ * Macrina Moreno tenía `+52 7223158074` en TELÉFONO y
+ * «Contacto: +504 33003680» en NOTAS. El segundo era el número de
+ * muestra que Carlos había puesto una vez en la planilla, y el importador
+ * lo copiaba a las notas de cada fila que lo trajera. Corregir el
+ * teléfono desde la ficha arregla UNO de los dos; el otro se queda ahí
+ * para siempre. Lucila no tiene forma de saber a cuál llamar.
+ *
+ * `api/importar.php` ya no crea esa nota (ver la nota grande ahí). Esto
+ * es para las que YA están.
+ *
+ * ⚠️ NO BORRA LA NOTA ENTERA, SOLO EL PEDAZO DEL TELÉFONO. Una nota puede
+ * decir «Prima de Lucila · Contacto: +504 33003680»: se queda la parte de
+ * la izquierda. Lo que no es un teléfono nunca se toca.
+ *
+ * ⚠️ Y SOLO CUANDO HAY UN TELÉFONO DE VERDAD EN `invitaciones`. Si la
+ * nota es el ÚNICO contacto que existe para esa persona, se deja: sería
+ * cambiar un dato contradictorio por ningún dato.
+ *
+ * ⚠️ SIN `aplicar=1` NO ESCRIBE NADA. La primera llamada devuelve la
+ * lista de lo que tocaría, para poder mirarla antes. Es el mismo criterio
+ * de las otras acciones que cambian datos en lote.
+ * ------------------------------------------------------------------- */
+case 'limpiar_contactos':
+    exigirMetodo('POST');
+    exigirAdministrador();
+
+    if (!existeTabla('invitaciones')) {
+        responderMal('Esta base no tiene invitaciones que comparar.', 409);
+    }
+
+    $aplicar = !empty($_GET['aplicar']);
+
+    $candidatas = consultarTodo(
+        "SELECT c.id, c.nombre, c.notas, i.telefono
+           FROM confirmaciones c
+           JOIN invitaciones i ON i.confirmacion_id = c.id
+          WHERE c.notas LIKE '%Contacto:%'
+            AND i.telefono <> ''"
+    );
+
+    /** Solo los dígitos, para comparar dos teléfonos escritos distinto. */
+    $soloDigitos = function ($t) { return preg_replace('/\D+/', '', (string) $t); };
+
+    $tocadas = [];
+
+    foreach ($candidatas as $fila) {
+        $notas = (string) $fila['notas'];
+
+        /* El pedazo «Contacto: …» hasta el separador o el final. */
+        if (!preg_match('/Contacto:\s*([^·\n]+)/u', $notas, $m)) continue;
+
+        $enLaNota = trim($m[1]);
+        $digitosNota = $soloDigitos($enLaNota);
+
+        /* Si la nota no tiene un teléfono adentro, no es de esto. */
+        if (strlen($digitosNota) < 8) continue;
+
+        $digitosCampo = $soloDigitos($fila['telefono']);
+
+        /* Se limpia tanto si es el MISMO número (está duplicado) como si
+           es OTRO (se contradicen). Los dos casos terminan en la misma
+           ficha mostrando dos cosas; la diferencia es solo cuál de las
+           dos miente. */
+        $mismo = $digitosNota !== '' && $digitosCampo !== '' &&
+                 (substr($digitosNota, -8) === substr($digitosCampo, -8));
+
+        $notasNuevas = trim(preg_replace('/\s*·?\s*Contacto:\s*[^·\n]+/u', '', $notas));
+        $notasNuevas = trim($notasNuevas, " \t\n\r\0\x0B·-");
+
+        $tocadas[] = [
+            'id'        => (int) $fila['id'],
+            'nombre'    => (string) $fila['nombre'],
+            'telefono'  => (string) $fila['telefono'],
+            'en_la_nota' => $enLaNota,
+            'coincide'  => $mismo,
+            'notas_nuevas' => $notasNuevas,
+        ];
+
+        if ($aplicar) {
+            ejecutar('UPDATE confirmaciones SET notas = :n WHERE id = :id',
+                     [':n' => $notasNuevas, ':id' => (int) $fila['id']]);
+        }
+    }
+
+    if ($aplicar && $tocadas) {
+        anotarEnBitacora($yo, 'limpió contactos duplicados en notas',
+                         'confirmaciones', 0, count($tocadas) . ' fichas');
+    }
+
+    responderBien([
+        'aplicado'      => $aplicar,
+        'cuantas'       => count($tocadas),
+        'contradicen'   => count(array_filter($tocadas, function ($t) { return !$t['coincide']; })),
+        'fichas'        => $tocadas,
+        'mensaje'       => $aplicar
+            ? 'Se limpiaron ' . count($tocadas) . ' fichas.'
+            : 'Hay ' . count($tocadas) . ' fichas con el teléfono repetido en las notas.',
+    ]);
+    break;
 
 
 default:

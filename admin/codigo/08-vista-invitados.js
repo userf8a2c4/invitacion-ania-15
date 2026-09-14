@@ -513,6 +513,18 @@ async function dibujarInvitados() {
     '</button>' +
     '<div id="inv-revision-links"></div>' +
 
+    /* ⛔ LA MISMA FICHA MOSTRABA DOS TELÉFONOS (2026-09-14)
+       Uno en TELÉFONO y otro en NOTAS, como «Contacto: +504 33…». El
+       segundo lo escribía el importador copiando la celda de contacto de
+       la planilla; corregir el de la ficha arreglaba solo uno. Lucila no
+       tenía forma de saber a cuál llamar. El importador ya no lo crea;
+       esto es para las fichas que YA lo tienen. */
+    '<button type="button" class="boton boton--ancho" id="inv-limpiar-contactos" ' +
+            'style="margin-bottom:var(--esp-2)">' +
+      'Revisar teléfonos repetidos en las notas' +
+    '</button>' +
+    '<div id="inv-revision-contactos"></div>' +
+
     /* El cartel de "qué cambió desde la última vez". Va vacío en el
        molde y se llena más abajo, porque las novedades se calculan
        después de que este HTML está armado. Vive ARRIBA de la lista: es
@@ -648,6 +660,13 @@ function engancharInvitados(vista) {
   if (botonRevisarLinks) {
     botonRevisarLinks.addEventListener('click', () =>
       revisarTodosLosLinks(botonRevisarLinks, buscar('#inv-revision-links', vista)));
+  }
+
+  const botonContactos = buscar('#inv-limpiar-contactos', vista);
+  if (botonContactos) {
+    botonContactos.addEventListener('click', () =>
+      revisarTelefonosRepetidos(botonContactos,
+                                buscar('#inv-revision-contactos', vista)));
   }
 
   buscar('#inv-nuevo', vista).addEventListener('click', () => {
@@ -2874,5 +2893,94 @@ function formularioDeAcompanante(confirmacionId, cupan, alGuardar, existente, su
     } catch (error) {
       avisar(error.message, true);
     }
+  });
+}
+
+
+/**
+ * Busca fichas donde el teléfono está repetido o contradicho en las notas.
+ *
+ * ⚠️ DOS PASOS A PROPÓSITO. El primer toque solo MIRA y muestra la lista;
+ * el segundo, que hay que confirmar, escribe. Cambiar notas de cincuenta
+ * fichas de un clic, sin ver cuáles, es la clase de acción que después no
+ * se puede deshacer.
+ *
+ * ⚠️ Y SOLO SE BORRA EL PEDAZO DEL TELÉFONO. Una nota que diga «Prima de
+ * Lucila · Contacto: +504 33…» conserva la parte de la izquierda.
+ *
+ * @param {Element} boton
+ * @param {Element} donde
+ * @returns {Promise<void>}
+ */
+async function revisarTelefonosRepetidos(boton, donde) {
+  if (!donde) return;
+
+  boton.disabled = true;
+  donde.innerHTML = '<p class="vacio__texto">Revisando…</p>';
+
+  let r;
+  try {
+    r = await mandarSinCola('confirmaciones.php?accion=limpiar_contactos', {});
+  } catch (error) {
+    donde.innerHTML = '';
+    avisar(error.message, true);
+    boton.disabled = false;
+    return;
+  }
+
+  boton.disabled = false;
+
+  if (!r || !r.cuantas) {
+    donde.innerHTML =
+      '<p class="vacio__texto">Ninguna ficha tiene el teléfono repetido ' +
+      'en las notas.</p>';
+    return;
+  }
+
+  /* Las que CONTRADICEN van primero y con su número a la vista: son las
+     que pueden hacer que alguien llame a quien no es. */
+  const fichas = (r.fichas || [])
+    .slice()
+    .sort((a, b) => (a.coincide === b.coincide ? 0 : (a.coincide ? 1 : -1)));
+
+  donde.innerHTML =
+    '<div class="tarjeta" style="margin-bottom:var(--esp-2)">' +
+      '<div class="tarjeta__titulo">' + r.cuantas + ' ficha(s) con el ' +
+        'teléfono repetido en las notas</div>' +
+      (r.contradicen
+        ? '<p class="vacio__texto"><strong>' + r.contradicen + '</strong> ' +
+          'tienen en la nota un número DISTINTO del que está en el campo ' +
+          'Teléfono. Ésas son las que pueden hacer que alguien llame a ' +
+          'quien no es.</p>'
+        : '<p class="vacio__texto">En todas, la nota repite el mismo ' +
+          'número que ya está en el campo Teléfono.</p>') +
+      '<div style="font-size:13px;line-height:1.7;margin:var(--esp-2) 0">' +
+        fichas.map(f =>
+          '<div>' +
+            (f.coincide ? '· ' : '⚠️ ') +
+            seguro(f.nombre) + ' — teléfono <strong>' + seguro(f.telefono) +
+            '</strong>, nota dice <strong>' + seguro(f.en_la_nota) + '</strong>' +
+          '</div>'
+        ).join('') +
+      '</div>' +
+      '<button class="boton boton--principal boton--ancho" ' +
+              'id="inv-limpiar-aplicar">Quitar el teléfono de las notas</button>' +
+    '</div>';
+
+  buscar('#inv-limpiar-aplicar', donde).addEventListener('click', async () => {
+    if (!await confirmarAccion(
+      'Se va a quitar el pedazo «Contacto: …» de ' + r.cuantas + ' ficha(s).\n\n' +
+      'El teléfono de cada una sigue estando en su campo Teléfono, que es ' +
+      'el que usa el botón de WhatsApp. El resto de cada nota no se toca.',
+      { confirmar: 'Quitarlo', peligro: true })) return;
+
+    try {
+      const hecho = await mandarSinCola(
+        'confirmaciones.php?accion=limpiar_contactos&aplicar=1', {});
+      donde.innerHTML = '<p class="vacio__texto">' + seguro(hecho.mensaje) + '</p>';
+      avisar(hecho.mensaje);
+      INVITADOS = null;
+      dibujarGente();
+    } catch (error) { avisar(error.message, true); }
   });
 }

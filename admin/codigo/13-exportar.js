@@ -860,6 +860,45 @@ function menusPersonaPorPersona(personas, respaldo) {
   return detalle + (ninos ? '  ·  Menú infantil: ' + ninos : '');
 }
 
+/**
+ * Las alergias, diciendo QUIÉN tiene cada una.
+ *
+ * ⛔ ANTES ACÁ IBA `oGuion(f.alergias)`, QUE ES DEL GRUPO (2026-09-14)
+ *
+ * Carlos: «en las alergias, pon por nombre QUIÉN tiene alergia a qué».
+ * Y tenía razón en que era información desperdiciada: cada persona
+ * guarda la suya en `acompanantes.alergias` —el formulario las pide una
+ * por una— y el informe las aplastaba en un solo texto de familia. En la
+ * cocina, «Acompañante: Durazno» no dice a quién no servirle durazno.
+ *
+ * ⚠️ SOLO SE NOMBRA A QUIEN TIENE ALGO. A diferencia de los menús, acá
+ * no se listan los que no tienen: una lista de alergias es corta a
+ * propósito, y meter doce «ninguna» esconde las dos que importan.
+ *
+ * ⚠️ Y SI NADIE DEL GRUPO CARGÓ NINGUNA pero la familia sí tiene el
+ * texto viejo, se muestra ese: es el respaldo de las confirmaciones que
+ * entraron antes de que existieran las alergias por persona, y perderlo
+ * sería perder un dato que alguien escribió.
+ *
+ * @param {Object[]} personas - Las de esa confirmación, con su `alergias`.
+ * @param {string} respaldo   - El texto de alergias del grupo.
+ * @returns {string}
+ */
+function alergiasPersonaPorPersona(personas, respaldo) {
+  const conAlgo = (personas || [])
+    .map((p) => ({
+      nombre: (p.nombre || '').trim() ||
+              (p.tipo === 'nino' ? 'Niño' : 'Adulto'),
+      que: (p.alergias || '').trim(),
+    }))
+    .filter((p) => p.que && !/^(ninguna|ninguno|no|n\/a|-)$/i.test(p.que));
+
+  if (!conAlgo.length) return oGuion(respaldo);
+
+  return conAlgo.map((p) => p.nombre + ': ' + p.que).join(' · ');
+}
+
+
 async function exportarInvitados(formato) {
   if (!INVITADOS || !INVITADOS.length) {
     avisar('Todavía no hay invitados que descargar.', true);
@@ -941,7 +980,8 @@ async function exportarInvitados(formato) {
         Number(f.adultos) || 0, Number(f.ninos) || 0,
         (Number(f.adultos) || 0) + (Number(f.ninos) || 0),
         menusPersonaPorPersona(porFamilia[f.id], f.resumen_menus),
-        oGuion(f.alergias), oGuion(f.notas),
+        alergiasPersonaPorPersona(porFamilia[f.id], f.alergias),
+        oGuion(f.notas),
         oGuion(f.codigo),
         /* ⚡ LA FECHA ERA LA DE ALTA, NO LA DE LA RESPUESTA (2026-09-09)
            Estaba `fecha_hora`, que es cuándo se creó la fila —o sea,

@@ -971,13 +971,10 @@ CREATE TABLE IF NOT EXISTS acompanantes (
   -- 0 sale exactamente en el orden de siempre (el de creación). Recién
   -- cuando alguien la acomoda, ESA familia pasa a 1..N; las otras
   -- cincuenta siguen en 0 sin que nadie las toque.
+  -- ⚠️ `orden` NO se agrega desde acá para las instalaciones que YA tienen
+  -- la tabla: "ADD COLUMN IF NOT EXISTS" no existe en MySQL. La agrega
+  -- api/instalar.php, que antes comprueba si ya está.
   orden            INT NOT NULL DEFAULT 0,
-
-Y en el bloque de prosa de arriba (el que empieza «LOS NOMBRES DENTRO DE CADA CONFIRMACIÓN», línea 939), agregar el mismo ⚠️ que ya llevan las líneas 866-869 y 901-903:
-
--- ⚠️ `orden` NO se agrega desde acá para las instalaciones que YA tienen
--- la tabla: "ADD COLUMN IF NOT EXISTS" no existe en MySQL. La agrega
--- api/instalar.php, que antes comprueba si ya está.
   creado_en        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY por_confirmacion (confirmacion_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
