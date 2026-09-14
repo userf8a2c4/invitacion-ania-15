@@ -103,7 +103,51 @@
    * @param {number} luzAmbiente - Lo que antes aportaba --luz-intensidad.
    * @returns {void}
    */
-  function animarLasMotas(tSegundos, ancho, alto, luzAmbiente) {
+  /* ─── EL AIRE SE DETIENE ───────────────────────────────────────────
+   *
+   * ⚡ CONGELA EN EL SITIO, NO APAGA (2026-09-13)
+   *
+   * Una mota no tiene física: su posición sale entera de `tSegundos`. Así
+   * que para dejarla suspendida no hay que tocar nada del dibujo — alcanza
+   * con que el RELOJ deje de avanzar. Mismo criterio que usan las otras
+   * cuatro banderas de `PausaDeEscena`: la escena queda con su último
+   * valor y retoma sin salto.
+   *
+   * ⚠️ Y AL SOLTARSE NO SALTA. Si al retomar se volviera al tiempo real,
+   * las motas aparecerían donde habrían estado si nunca se hubieran
+   * detenido — un salto de tantos píxeles como haya durado la pausa. Por
+   * eso se acumula el desfase y el reloj retoma DESDE DONDE SE QUEDÓ.
+   *
+   * ⚠️ Lectura defensiva: el registro puede no existir según el orden de
+   * carga, y un módulo que se cae por eso sería peor que el costo que
+   * ahorra.
+   * ---------------------------------------------------------------- */
+
+  let aireQuietoDesde = 0;
+  let desfaseDelAire = 0;
+
+  /**
+   * El reloj que ven las motas, que no siempre es el de la página.
+   *
+   * @param {number} tSegundos - segundos reales desde que arrancó.
+   * @returns {number} los segundos que corresponden al aire.
+   */
+  function relojDelAire(tSegundos) {
+    const registro = window.PausaDeEscena;
+    if (registro && registro.motas) {
+      if (!aireQuietoDesde) aireQuietoDesde = tSegundos;
+      return aireQuietoDesde - desfaseDelAire;
+    }
+    if (aireQuietoDesde) {
+      desfaseDelAire += tSegundos - aireQuietoDesde;
+      aireQuietoDesde = 0;
+    }
+    return tSegundos - desfaseDelAire;
+  }
+
+  function animarLasMotas(tSegundosReales, ancho, alto, luzAmbiente) {
+    const tSegundos = relojDelAire(tSegundosReales);
+
     for (let i = 0; i < motasDelLienzo.length; i++) {
       const m = motasDelLienzo[i];
       if (m.seDibuja === false) { m.alfa = 0; continue; }

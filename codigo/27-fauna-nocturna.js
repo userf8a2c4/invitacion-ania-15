@@ -140,6 +140,12 @@
       anguloDeEscape: 0,
       finDelSobresalto: 0,
       faseDelTembleque: numeroAlAzar(0, Math.PI * 2),
+
+      /* Cuánto tarda ESTA en animarse a volver después de un espanto
+         grande. Es lo que hace que no reaparezcan todas juntas: unas
+         asoman enseguida y otras siguen escondidas un rato largo. Ver
+         la sección 4C. */
+      demoraDelRegreso: numeroAlAzar(0, 0.85),
     });
   }
 
@@ -214,6 +220,66 @@
   const FACTOR_DE_VELOCIDAD_DEL_SOBRESALTO = 6;
   const ANGULO_DE_ALEATORIEDAD = Math.PI * 0.4;   // hasta ±72°
 
+  /* ─── 4C. EL ESPANTO GRANDE ─────────────────────────────────────────
+   *
+   * ⚡ ALGO LAS ESPANTA Y SE VAN (2026-09-13)
+   *
+   * Hasta acá el único susto venía del dedo, y era local: la criatura que
+   * tenías cerca. Esto es el otro caso — algo le pasa a la escena entera y
+   * todas se van a la vez.
+   *
+   * ⚠️ BANDERA GENÉRICA: este archivo no sabe QUÉ las espantó y no tiene
+   * por qué saberlo, igual que `PausaDeEscena` dice «quedáte quieto» sin
+   * decir por qué. Lectura defensiva: quien la escribe puede no existir.
+   *
+   * ⛔ Y ESTO ARREGLA UNA INVERSIÓN QUE NADIE HABÍA VISTO. El alfa de una
+   * criatura se multiplica por `window.LuzDeLaHora.deNoche`, y `deNoche`
+   * es la única perilla de la hora que lee este archivo. Cuando la escena
+   * se oscurece de golpe a mitad del amanecer, esa perilla sube hacia 1 —
+   * o sea que las luciérnagas se ENCENDÍAN justo en el momento en que
+   * tendrían que estar huyendo. Una luciérnaga no sale porque el cielo se
+   * tape un minuto: responde al ciclo del día, y una oscuridad repentina
+   * al amanecer la asusta, no la invita.
+   *
+   * Y al soltarse el espanto, `deNoche` vuelve sola a lo que diga la hora
+   * real del visitante. Donde sea de noche vuelven brillando; donde sea de
+   * madrugada vuelven apenas. Eso es exactamente «como es lo natural» y no
+   * hubo que escribirlo: cae solo.
+   */
+
+  /** Lo último que se leyó, para saber cuándo ARRANCA un espanto. */
+  let espantoAnterior = 0;
+
+  /**
+   * Cuánto están espantadas ahora mismo. 0 = nada; 1 = todas escondidas.
+   *
+   * @returns {number}
+   */
+  function cuantoEspanto() {
+    const pedido = window.EspantoDeLaFauna;
+    return (typeof pedido === 'number' && pedido > 0)
+      ? (pedido > 1 ? 1 : pedido)
+      : 0;
+  }
+
+  /**
+   * Manda a todas a escapar, sin importar dónde esté el dedo.
+   *
+   * Reusa el mismo estado 'sobresaltada' del susto local: el rumbo se
+   * elige al azar en vez de «lejos del dedo», porque no hay dedo.
+   *
+   * @returns {void}
+   */
+  function espantarlasATodas() {
+    for (const c of criaturas) {
+      if (!c.seDibuja) continue;
+      c.anguloDeEscape = numeroAlAzar(0, Math.PI * 2);
+      c.estado = 'sobresaltada';
+      c.finDelSobresalto = tAnterior +
+        numeroAlAzar(DURACION_MINIMA_DEL_SOBRESALTO, DURACION_MAXIMA_DEL_SOBRESALTO);
+    }
+  }
+
   /**
    * Si hay alguna criatura cerca de (xVentana, yVentana), la sobresalta.
    * @param {number} xVentana - coordenadas de VENTANA (como e.clientX).
@@ -251,6 +317,13 @@
     const dt = tAnterior ? Math.min(0.2, tSegundos - tAnterior) : 0;
     tAnterior = tSegundos;
     const scroll = scrollActualY();
+
+    /* El espanto grande. Se dispara UNA vez, en el flanco de subida: si se
+       llamara en cada cuadro, ninguna criatura llegaría nunca al final de
+       su sobresalto y volarían nerviosas para siempre. */
+    const espanto = cuantoEspanto();
+    if (espanto > 0.02 && espantoAnterior <= 0.02) espantarlasATodas();
+    espantoAnterior = espanto;
 
     for (const c of criaturas) {
       if (!c.seDibuja) { c.alfa = 0; continue; }
@@ -311,7 +384,25 @@
       // dispositivo. Multiplicar por ese número, en vez de un reloj
       // propio, de paso da un fundido suave al atardecer/amanecer.
       const deNoche = window.LuzDeLaHora ? window.LuzDeLaHora.deNoche : 0;
-      c.alfa = c.picoDeAlfa * forma * deNoche;
+
+      /* ── LO QUE LE QUEDA DE VALOR A ÉSTA ──
+         Con el espanto arriba están todas apagadas. Al aflojarse, cada una
+         espera SU demora antes de asomar, así que no reaparecen en bloque:
+         primero una, después otra, y algunas siguen escondidas cuando las
+         demás ya volvieron. Ver la sección 4C. */
+      let valor = 1;
+      if (espanto > 0) {
+        /* Cuanto MAS demora tiene, mas bajo tiene que estar el espanto
+           para que se anime: por eso se invierte. Con la resta al
+           reves, la mas miedosa volvia primero. */
+        const suUmbral = 1 - c.demoraDelRegreso;
+        valor = espanto >= 1 ? 0
+              : espanto <= suUmbral ? 1
+              : 1 - (espanto - suUmbral) / (1 - suUmbral);
+        if (valor < 0) valor = 0;
+      }
+
+      c.alfa = c.picoDeAlfa * forma * deNoche * valor;
     }
   }
 
