@@ -137,6 +137,15 @@ case 'guardar':
         }
     }
 
+    /* El disparo manual es un instante en milisegundos y nada más. Se
+       valida por lo mismo que la hora: esto lo termina leyendo el vigía
+       en el teléfono de cada invitado. */
+    if ($clave === 'eclipse_disparo' && $valor !== '') {
+        if (!preg_match('/^\d{13}$/', $valor)) {
+            responderMal('El disparo tiene que ser un instante en milisegundos.', 400);
+        }
+    }
+
     $existe = consultarUno('SELECT clave FROM ajustes WHERE clave = :c', [':c' => $clave]);
     if ($existe) {
         ejecutar('UPDATE ajustes SET valor = :v WHERE clave = :c',

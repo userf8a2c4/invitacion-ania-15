@@ -261,7 +261,12 @@ comprobar('el archivo del panel está cargado en admin/index.html',
   'el botón llamaría a una función que no existe');
 
 comprobar('y el botón que lo abre está puesto',
-  /id="inv-eclipse"/.test(leer('admin/codigo/08-vista-invitados.js')),
+  /* ⚡ (2026-09-14) EL BOTÓN SE MUDÓ A LA HOJA DE «Más». Antes era uno
+     de los siete que estaban antes de la lista; se consolidaron porque
+     el primer invitado empezaba a 560 píxeles de 744. Lo que importa
+     sigue siendo lo mismo: que exista un camino para llegar. */
+  /['"]mas-eclipse['"]/.test(leer('admin/codigo/08-vista-invitados.js')) &&
+  /abrirLaHoraDelEclipse\(\)/.test(leer('admin/codigo/08-vista-invitados.js')),
   'la hoja existiría y no habría forma de llegar a ella');
 
 

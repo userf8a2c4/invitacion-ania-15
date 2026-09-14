@@ -169,6 +169,24 @@ async function abrirLaHoraDelEclipse() {
     '<div class="tarjeta" id="ecl-espejo" ' +
          'style="font-size:13px;line-height:1.5">Preguntando…</div>' +
 
+    /* ⚡ EL DISPARO A MANO VIVE ACÁ (2026-09-14)
+       Carlos lo pidió junto a la hora, y es donde va: son la misma cosa
+       —cuándo corre el minuto—, una todos los días y otra ahora mismo.
+       Un botón propio en la pantalla de Gente habría sido un octavo
+       botón en una pantalla que ya tenía siete. */
+    '<div style="border-top:1px solid var(--borde);' +
+         'margin:var(--esp-4) 0 var(--esp-3)"></div>' +
+
+    '<div class="tarjeta__titulo">Lanzarlo ahora</div>' +
+    '<p class="vacio__texto" style="margin-bottom:var(--esp-2)">' +
+      'Corre el minuto entero en este momento, sin esperar a la hora. ' +
+      'Lo va a ver cualquier invitado que tenga la invitación abierta o ' +
+      'que la abra en ese minuto.' +
+    '</p>' +
+    '<button class="boton boton--ancho" id="ecl-ahora" ' +
+            'style="margin-bottom:var(--esp-2)">⚡ Lanzarlo ahora</button>' +
+    '<div id="ecl-ahora-dice"></div>' +
+
     pieDeFormulario('Guardar')
   );
 
@@ -192,6 +210,32 @@ async function abrirLaHoraDelEclipse() {
   repintar();
 
   mirarseAlEspejo(espejo);
+
+  buscar('#ecl-ahora', cuerpo).addEventListener('click', async () => {
+    if (!await confirmarAccion(
+      'Vas a lanzar el Eclipse AHORA.\n\n' +
+      'Durante 60 segundos, cualquier invitado que tenga la invitación ' +
+      'abierta —o que la abra en ese minuto— la va a ver transformarse.',
+      { confirmar: 'Lanzarlo', peligro: true })) return;
+
+    const dice = buscar('#ecl-ahora-dice', cuerpo);
+    dice.innerHTML = '<p class="vacio__texto">Lanzando…</p>';
+
+    try {
+      /* ⚠️ mandarSinCola, por lo mismo que la hora: un disparo encolado
+         «para cuando vuelva la señal» aterrizaría en cualquier momento. */
+      await mandarSinCola('ajustes.php?accion=guardar',
+        { clave: 'eclipse_disparo', valor: String(Date.now()) });
+
+      dice.innerHTML =
+        '<p class="vacio__texto">Lanzado. Las invitaciones que estén ' +
+        'abiertas lo arrancan en los próximos 15 segundos.</p>';
+      avisar('Eclipse lanzado.');
+    } catch (error) {
+      dice.innerHTML = '';
+      avisar(error.message, true);
+    }
+  });
 
   buscar('#pie-guardar', cuerpo).addEventListener('click', async () => {
     const utc = aUtc(campo.value);
