@@ -5142,6 +5142,45 @@
        el mundo; los pétalos quedaban afuera y por eso no se oscurecían. */
     dibujar(t, color);
     ajustarElSonido(t);
+
+    /* ── LA GRAVEDAD ──
+       Las joyas dejan de colgar hacia abajo y se quedan tirando hacia el
+       relicario, igual que los pétalos. Entra con la secta —cuando el
+       marco entero empieza a mirar al nombre— y se suelta con todo lo
+       demás en el desmayo.
+
+       ⚠️ BANDERA GENÉRICA: `GravedadHaciaElCentro` dice cuánto tira hacia
+       adentro, no «hay un eclipse». */
+    try {
+      window.GravedadHaciaElCentro =
+        limitar(tramo(t, PENUMBRA, UMBRA), 0, 1) *
+        Math.max(0, loQueLeQuedaDelGesto(t, 0));
+    } catch (error) { /* nada */ }
+
+    /* ── EL AIRE ──
+       Los dos segundos de vacío son vacío también para el aire: las motas
+       de polvo quedan suspendidas donde estaban, como si todo se hubiera
+       detenido. Es el mismo tramo en que las flores se congelan, la marea
+       se detiene y la música calla.
+
+       ⚠️ BANDERA GENÉRICA: `PausaDeEscena.motas` dice «quedáte quieto», no
+       «hay un eclipse». Y se escribe defensivo porque el registro puede no
+       existir: lo crea quien llegue primero. */
+    try {
+      var registro = window.PausaDeEscena || (window.PausaDeEscena = {});
+      registro.motas = (t >= TOTALIDAD && t < SHOCK);
+    } catch (error) { /* nada */ }
+
+    /* ── LA FAUNA ──
+       Se van con la penumbra —en los primeros segundos, mientras la luz se
+       cae— y siguen escondidas todo el minuto. Ver la sección 16c. */
+    if (t < DURACION - EMPIEZAN_A_VOLVER) {
+      espantarALaFauna(limitar(t / 2500, 0, 1));
+    } else {
+      /* Empiezan a asomar ANTES de que termine el ritual: para cuando la
+         página vuelve a ser una invitación, ya hay alguna encendida. */
+      calmarALaFauna();
+    }
   }
 
   /* ─── 16. EMPEZAR Y TERMINAR ────────────────────────────────────── */
@@ -5351,6 +5390,77 @@
     }, PULSO_DEL_PRELUDIO);
   }
 
+  /* ─── 16c. LA FAUNA SE VA ───────────────────────────────────────────
+
+     Carlos: «las luciérnagas desaparecen, huyen en ese momento». Y la
+     regla que lo acota, suya también: «las luciérnagas solo aparecen en la
+     noche, como es lo natural».
+
+     ⛔ HOY EL RITUAL LAS ENCENDÍA. El alfa de una luciérnaga se multiplica
+     por `window.LuzDeLaHora.deNoche`, que es la única perilla de la hora
+     que ese archivo lee — y HORA_DEL_ECLIPSE la lleva a 1. O sea que la
+     oscuridad del minuto las hacía brillar MÁS, justo cuando tendrían que
+     estar huyendo. En Toluca el eclipse cae 06:30, con `deNoche` en 0,26:
+     el ritual las multiplicaba casi por cuatro.
+
+     ⚠️ Y LA REGLA DE CARLOS SALE SOLA, SIN ESCRIBIRLA. Al soltarse el
+     espanto, `deNoche` vuelve a lo que diga la hora real de quien mira.
+     Donde sea de noche, vuelven brillando; en Toluca al amanecer, apenas
+     se las ve. Mismo instante absoluto, mundo distinto — igual que con los
+     pétalos.
+
+     ⚠️ BANDERA GENÉRICA, como `PausaDeEscena` y `IntensidadDeLaLluvia`.
+     `EspantoDeLaFauna` dice «algo las espantó», no «hay un eclipse».
+     ------------------------------------------------------------------ */
+
+  /** Cuánto tarda la fauna en volver, en milisegundos. */
+  var DURA_LA_CALMA_DE_LA_FAUNA = 9000;
+
+  /** Cuánto antes del final empiezan a asomar. */
+  var EMPIEZAN_A_VOLVER = 3500;
+
+  var relojDeLaFauna = 0;
+
+  /**
+   * Deja el espanto en un valor. Defensivo a propósito.
+   *
+   * @param {number} cuanto - 0 = nada, 1 = todas escondidas.
+   * @returns {void}
+   */
+  function espantarALaFauna(cuanto) {
+    try { window.EspantoDeLaFauna = cuanto; } catch (error) { /* nada */ }
+  }
+
+  /**
+   * Las deja volver, de a una y sin apuro.
+   *
+   * ⚠️ ES IDEMPOTENTE. La llama el bucle al acercarse el final y también
+   * `terminar()`, para que el espanto se suelte pase lo que pase — aunque
+   * el ritual muera por una excepción a los diez segundos. Si ya está
+   * soltándose, no se reinicia: reiniciarla haría que volvieran a
+   * esconderse justo cuando estaban asomando.
+   *
+   * @returns {void}
+   */
+  function calmarALaFauna() {
+    if (relojDeLaFauna) return;
+
+    var desde = window.EspantoDeLaFauna;
+    if (typeof desde !== 'number' || !(desde > 0)) { espantarALaFauna(0); return; }
+
+    var empieza = Date.now();
+    relojDeLaFauna = setInterval(function () {
+      var viaje = (Date.now() - empieza) / DURA_LA_CALMA_DE_LA_FAUNA;
+      if (viaje >= 1) {
+        espantarALaFauna(0);
+        clearInterval(relojDeLaFauna);
+        relojDeLaFauna = 0;
+        return;
+      }
+      espantarALaFauna(desde * (1 - viaje));
+    }, 250);
+  }
+
   function empezar(desfase, congelado) {
     if (vivo) return;
     vivo = true;
@@ -5501,6 +5611,25 @@
        al doble para siempre. */
     soltarLaLluvia();
     pedirLluvia(1);
+
+    /* ⚠️ Y LA FAUNA VUELVE, PASE LO QUE PASE. Si el ritual muriera por una
+       excepción a los diez segundos, las luciérnagas quedarían escondidas
+       para el resto de la visita. Es idempotente: si ya venían asomando
+       desde el bucle, esto no las vuelve a esconder.
+
+       ⛔ Y NO SUAVIZA EL FRENAZO. Lo que se va de golpe en el segundo 60
+       son las capas del eclipse, igual que siempre; lo que vuelve de a
+       poco es el mundo de la invitación, que es otra cosa y pasa DESPUÉS. */
+    calmarALaFauna();
+
+    /* Y el aire vuelve a correr. Si el ritual muriera durante el shock,
+       las motas quedarían suspendidas para el resto de la visita. */
+    try {
+      if (window.PausaDeEscena) window.PausaDeEscena.motas = false;
+    } catch (error) { /* nada */ }
+
+    /* Y las joyas vuelven a colgar hacia abajo. */
+    try { window.GravedadHaciaElCentro = 0; } catch (error) { /* nada */ }
 
     /* El seguro de esta corrida ya no tiene a quién cuidar. Si se dejara
        andando, cortaría la corrida SIGUIENTE del panel de ensayo. */

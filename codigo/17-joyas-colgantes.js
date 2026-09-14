@@ -131,8 +131,28 @@
       angulo: 0, velocidad: 0,
       faseDeRespiracion: Math.random() * Math.PI * 2,
       cacheDeEnvionMouse: 0,   // ver "CALIDAD GRÁFICA" más abajo
+      /* Hacia qué lado tiene el centro. Se llena unas líneas más abajo,
+         cuando ya se sabe dónde está ese centro. */
+      haciaElCentro: 0,
     };
   });
+
+  /* ─── HACIA DÓNDE ES «ADENTRO» ──────────────────────────────────────
+   *
+   * El centro se calcula con el promedio de los pivotes y no con la mitad
+   * del viewBox: así no hay que saber en qué coordenadas está expresado el
+   * pivote ni dónde tiene el SVG su origen. Con dos borlas colgando de los
+   * dos lados, el promedio cae justo en el medio.
+   * ---------------------------------------------------------------- */
+  {
+    const centro = borlas.length
+      ? borlas.reduce((suma, b) => suma + b.pivote.localX, 0) / borlas.length
+      : 0;
+    for (const borla of borlas) {
+      borla.haciaElCentro = borla.pivote.localX < centro ? 1
+                          : borla.pivote.localX > centro ? -1 : 0;
+    }
+  }
 
   /* Cadenas: cada una es una lista de eslabones ordenados de arriba hacia
      abajo. querySelectorAll los devuelve en orden del documento, y como
@@ -464,6 +484,29 @@
     return !!(registro && registro.joyas);
   }
 
+  /* ─── CUANDO LA GRAVEDAD CAMBIA DE DUEÑO ────────────────────────────
+   *
+   * ⚡ (2026-09-13) Una borla cuelga hacia abajo porque el resorte la
+   * devuelve al ángulo 0. Si el reposo deja de ser el 0 y pasa a ser un
+   * ángulo hacia adentro, la borla se queda tirando hacia el centro — no
+   * porque algo la empuje cuadro a cuadro, sino porque eso es «abajo»
+   * para ella ahora. Es la misma idea que ya gobierna a los pétalos
+   * durante el minuto: la gravedad cambió de dueño.
+   *
+   * ⚠️ BANDERA GENÉRICA. `GravedadHaciaElCentro` dice cuánto tira hacia
+   * adentro, no «hay un eclipse». Este archivo no sabe por qué.
+   *
+   * ⚠️ Y SOLO LAS BORLAS. La cadena cuelga del medio y no tiene lado: un
+   * «hacia el centro» para ella sería inventarle uno. Se la deja
+   * responder por su física, que es lo que hace bien.
+   * ---------------------------------------------------------------- */
+  function cuantoTiraElCentro() {
+    var pedido = window.GravedadHaciaElCentro;
+    return (typeof pedido === 'number' && pedido > 0)
+      ? (pedido > 1 ? 1 : pedido)
+      : 0;
+  }
+
     /* Calidad baja: ni resorte ni escritura, mismo trato que el culling de
        arriba. Ver la nota "EN CALIDAD BAJA TAMBIÉN SE CONGELA EL RESORTE"
        más arriba. */
@@ -478,6 +521,8 @@
     const tocaRecalcularElMouse = (contadorDeCuadro % saltoDelMouse === 0);
 
     /* ── a) BORLAS: péndulo rígido ── */
+    const tiraElCentro = cuantoTiraElCentro();
+
     for (const borla of borlas) {
       if (tocaRecalcularElMouse) recalcularEnvionMouse(borla, borla.pivote, caja, escala);
       const externo = envionExterno(borla);
@@ -485,8 +530,13 @@
          sin scroll ni mouse: antes era tan sutil que parecían quietas). */
       const respiracion = Math.sin(momentoActual / 1600 + borla.faseDeRespiracion) * 0.06;
 
+      /* El reposo deja de ser el 0 y se corre hacia adentro. El 0,75 es
+         para que quede por debajo del tope: una borla clavada contra su
+         límite no se lee como que tira, se lee como que está trabada. */
+      const reposo = borla.haciaElCentro * tiraElCentro * TOPE_BORLA * 0.75;
+
       const aceleracion =
-        (-borla.angulo * RIGIDEZ_BORLA) - (borla.velocidad * AMORT_BORLA)
+        (-(borla.angulo - reposo) * RIGIDEZ_BORLA) - (borla.velocidad * AMORT_BORLA)
         + externo + respiracion;
 
       borla.velocidad += aceleracion;
