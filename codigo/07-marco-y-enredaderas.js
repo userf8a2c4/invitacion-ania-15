@@ -2159,18 +2159,67 @@
   let mouseX = -9999;
   let mouseY = -9999;
 
-  /* El handler solo GUARDA las coordenadas (barato); el trabajo pesado —mecer
-     las plantas, apartar flores— vive en el bucle rAF, que ya está limitado a
-     un cuadro. Por eso no hace falta acelerarlo. Se marca passive para no
-     bloquear nunca el desplazamiento. */
-  document.addEventListener('mousemove', evento => {
+  /* Los handlers solo GUARDAN las coordenadas (barato); el trabajo pesado
+     —mecer las plantas, apartar flores— vive en el bucle rAF, que ya está
+     limitado a un cuadro. Por eso no hace falta acelerarlos. */
+  /* ⚡ PUNTEROS, Y NO `mousemove` (2026-09-13)
+   *
+   * Carlos: «¿es posible permitir el balanceo de las rosas al tacto y al
+   * scroll, así como de las joyas al scroll, sin perder calidad?».
+   *
+   * ⛔ NO ES QUE PERDIERA CALIDAD: ES QUE NO EXISTÍA. Esto escuchaba
+   * `mousemove`, que en un iPhone NO DISPARA NUNCA. Ni las rosas ni las joyas no
+   * reaccionaban al dedo en ningún nivel de calidad, en ningún teléfono.
+   * No hay nada que perder acá porque no había nada.
+   *
+   * Es el patrón de 06-petalos-con-fisica.js, que ya está probado en
+   * celular real y ya se copió una vez en 27-fauna-nocturna.js:
+   *
+   *   · UN SOLO PUNTERO A LA VEZ. Un segundo dedo pisaba las coordenadas
+   *     del primero con las suyas y el cuadro siguiente calculaba un salto
+   *     que nunca ocurrió.
+   *
+   *   · `pointercancel` ES OBLIGATORIO. En el teléfono la forma más común
+   *     de terminar un toque NO es levantar el dedo quieto: es deslizarlo
+   *     para hacer SCROLL, y ahí el navegador se queda el gesto y manda
+   *     `pointercancel`. Sin escucharlo, las coordenadas se quedan clavadas
+   *     donde estaba el dedo y las rosas y sus tallos quedan dobladas para
+   *     siempre, mirando a un dedo que ya no está.
+   *
+   *   · ⚠️ EL MOUSE NO SE SUELTA EN `pointerup`. Un clic termina en
+   *     `pointerup` y el mouse SIGUE AHÍ: soltarlo ahí haría que todo
+   *     volviera de golpe a su sitio cada vez que alguien hace clic. Solo
+   *     el dedo y el lápiz sueltan; el mouse se suelta al salirse de la
+   *     ventana, que es cuando de verdad se fue.
+   *
+   * `{ passive: true }` en todos: el dedo tiene que poder scrollear. */
+  let punteroActivo = null;
+
+  const esDedo = (evento) =>
+    evento.pointerType === 'touch' || evento.pointerType === 'pen';
+
+  const seguirElPuntero = (evento) => {
+    if (punteroActivo !== null && evento.pointerId !== punteroActivo) return;
+    punteroActivo = evento.pointerId;
     mouseX = evento.clientX;
     mouseY = evento.clientY;
-  }, { passive: true });
-  document.addEventListener('mouseleave', () => {
+  };
+
+  const soltarElPuntero = (evento) => {
+    if (evento && evento.pointerId !== undefined &&
+        punteroActivo !== null && evento.pointerId !== punteroActivo) return;
+    punteroActivo = null;
     mouseX = -9999;
     mouseY = -9999;
-  });
+  };
+
+  const soltarSiEsDedo = (evento) => { if (esDedo(evento)) soltarElPuntero(evento); };
+
+  document.addEventListener('pointermove', seguirElPuntero, { passive: true });
+  document.addEventListener('pointerdown', seguirElPuntero, { passive: true });
+  document.addEventListener('pointerup', soltarSiEsDedo, { passive: true });
+  document.addEventListener('pointercancel', soltarSiEsDedo, { passive: true });
+  document.addEventListener('mouseleave', soltarElPuntero, { passive: true });
 
   let momentoAnterior = performance.now();
   let tiempoTranscurrido = 0;
@@ -2196,10 +2245,72 @@
   const MARGEN_DE_CERCANIA_POR_CALIDAD = { 0: 500, 1: 300, 2: 150 };
 
   let calidad = nivelDeCalidad();
-  const SALTO_DEL_RESORTE_POR_CALIDAD = { 0: 1, 1: 2, 2: 3 };
+  /* ⚡ EL SALTO PASA A SER UNA TANDA, Y ESO ES TODA LA DIFERENCIA
+   *   (2026-09-13)
+   *
+   * Esto ya existía y ya salteaba cuadros, pero SALTEABA TODO JUNTO:
+   * `contadorDeCuadro % salto === 0` es la misma respuesta para las 28
+   * plantas, así que en calidad baja no había tres cuadros baratos — había
+   * dos vacíos y uno con las 28 plantas encima.
+   *
+   * ⛔ Y ESO IMPORTA PORQUE EL COSTO ES POR `<svg>` INVALIDADO. Medido en
+   * vivo sobre esta escena, con scroll continuo y 28 plantas / 104 nudos /
+   * 189 flores, contando RAÍCES SVG ensuciadas por cuadro:
+   *
+   *     hoy (0,01°, sin tandas) ………… media 10,11  ·  peor cuadro 28
+   *     solo cuantizando …………………… media  7,50  ·  peor cuadro 28
+   *     cuantizando + 2 tandas ……… media  4,79  ·  peor cuadro 14
+   *     cuantizando + 3 tandas ……… media  3,44  ·  peor cuadro 10
+   *     cuantizando + 4 tandas ……… media  2,61  ·  peor cuadro  7
+   *
+   * La columna del peor cuadro es la que se ve: hoy, en el peor cuadro, se
+   * rasterizan las 28 plantas a la vez. Ése es el tirón. La cuantización
+   * sola NO lo toca —sigue en 28— porque basta con que una de las once
+   * piezas de una planta cambie para ensuciar su raíz entera.
+   *
+   * El mismo reparto, medido por 28-eclipse.js sobre esta misma escena:
+   * en 2 tandas por ÍNDICE, −7 % (inútil); por RAÍZ SVG, −43 %; en 3, −57 %.
+   *
+   * ⚠️ AHORA HASTA CALIDAD ALTA REPARTE. Estaba en 1 —todas las plantas,
+   * todos los cuadros— y pasa a 2, o sea 30 Hz por planta en vez de 60.
+   * 28-eclipse.js ya dejó escrito por qué eso no se ve: «para un gesto
+   * orgánico es invisible». Lo que sí se ve es el pico.
+   *
+   * Cada planta guarda su propio `dt` acumulado, así que saltear cuadros
+   * no la frena: el cuadro que le toca recibe el tiempo completo. */
+  const SALTO_DEL_RESORTE_POR_CALIDAD = { 0: 2, 1: 3, 2: 4 };
+
+  /* ⚡ CUÁNTO PUEDE SALTAR CADA ÁNGULO SIN QUE SE VEA (2026-09-13)
+   *
+   * El número es divisiones por grado: 4 = pasos de 0,25°.
+   *
+   * ⛔ NO ES UNO SOLO PARA TODOS, Y ÉSE ERA EL ERROR FÁCIL. El límite no es
+   * el gusto: es el píxel. Un giro mueve `radio × ángulo`, así que el paso
+   * tolerable depende del RADIO DE GIRO de cada sistema, y acá son muy
+   * distintos. Medidos en vivo, con `getBoundingClientRect` contra el
+   * `transform-origin` real de cada pieza, y convertidos a los grados que
+   * desplazan medio píxel:
+   *
+   *     sistema    radio mediano    paso seguro (peor caso)
+   *     flores          48,5 px            0,365°
+   *     plantas        177,9 px            0,137°
+   *     nudos          442,2 px            0,043°
+   *
+   * Un nudo arrastra TODO su tallo con las flores colgando, por eso su
+   * radio es diez veces el de una cabeza de flor. 28-eclipse.js usa 0,25°
+   * y tiene razón —él mueve cabezas de flor, radio 13 px—, pero copiar ese
+   * número acá le daría al nudo seis veces más paso del que tolera:
+   * saltos visibles de hasta 2,9 px.
+   *
+   * Los tres elegidos quedan por debajo de su límite, con margen. Lo que
+   * ahorran, medido en escrituras: nudos −68 %, plantas −79 %. */
+  const DIVISIONES_POR_GRADO = {
+    planta: 10,   // 0,10°  · límite medido 0,137°
+    nudo:   25,   // 0,04°  · límite medido 0,043°
+    flor:    4    // 0,25°  · límite medido 0,365°
+  };
   let saltoDelResorte = SALTO_DEL_RESORTE_POR_CALIDAD[calidad] ?? 1;
   let contadorDeCuadro = 0;
-  let dtAcumulado = 0;
 
   /* ⚡ EN CALIDAD BAJA LAS PLANTAS DEJAN DE MECERSE, Y ES LA DECISIÓN MÁS
      IMPORTANTE DE TODO ESTE ARCHIVO (2026-09-02).
@@ -2234,7 +2345,39 @@
      ⚠️ NO CONFUNDIR CON `?sin=meneo`: aquel es un interruptor de
      diagnóstico que apaga el vaivén siempre; esto es comportamiento
      normal de la web, y solo en el nivel más bajo. */
-  const SE_MECE_POR_CALIDAD = { 0: true, 1: true, 2: false };
+  /* ⚡ Y EN CALIDAD BAJA TAMBIÉN SE MECE (2026-09-13)
+   *
+   * Carlos: «¿es posible permitir el balanceo de las rosas al tacto y al
+   * scroll… sin perder calidad? ¿Es posible hacer todo esto GANANDO calidad
+   * y fluidez?».
+   *
+   * ⛔ ESTO ESTABA EN `false` POR UNA MEDICIÓN CORRECTA. La nota de más
+   * abajo la conserva: con vaivén 7 fps, sin vaivén 60. Y el guard que
+   * cuelga de esta perilla es un `return` al tope del cuadro, así que en la
+   * máquina de Carlos no se apagaba solo el vaivén: se apagaba TAMBIÉN la
+   * reacción al mouse de nudos y flores, y la respiración. Las rosas
+   * estaban completamente inertes.
+   *
+   * Lo que cambió no es el criterio: es el costo. Midiendo en vivo raíces
+   * SVG ensuciadas por cuadro —que es la unidad de costo de esta página,
+   * no las escrituras—, sobre esta misma escena y con scroll continuo:
+   *
+   *     antes (0,01°, sin tandas) ……… media 10,11  ·  peor cuadro 28
+   *     ahora, calidad alta …………………… media  7,20  ·  peor cuadro  8
+   *     ahora, calidad media ………………… media  2,00  ·  peor cuadro  4
+   *                                    (y 30 de 60 cuadros sin escribir nada)
+   *
+   * En calidad baja el salto es 4, o sea todavía menos. El pico que producía
+   * los 7 fps era rasterizar las 28 plantas en el mismo cuadro; ahora el
+   * peor cuadro toca una fracción de eso.
+   *
+   * ⚠️ ES UNA DECISIÓN CON UN NÚMERO DETRÁS, PERO NO CON EL NÚMERO FINAL.
+   * El banco donde se midió es un panel embebido cuyo reloj no es fiable
+   * (dos corridas idénticas dieron 33 y 133 ms), así que lo que está medido
+   * es la ESTRUCTURA del costo, no los milisegundos. Si el Diagnóstico en
+   * la máquina de Carlos dice que no alcanza, volver esto a `false` es una
+   * línea y no rompe nada más. */
+  const SE_MECE_POR_CALIDAD = { 0: true, 1: true, 2: true };
   let seMece = SE_MECE_POR_CALIDAD[calidad] ?? true;
 
   document.addEventListener('calidad-cambio', evento => {
@@ -2250,13 +2393,39 @@
    * @param {number} momentoActual - Marca de tiempo del navegador.
    * @returns {void}
    */
+  /* ⚡ LA ESCENA SE PUEDE QUEDAR QUIETA, Y ESO NO ES ACOPLARSE (2026-09-13)
+   *
+   * Misma disciplina que ya usan 23-lienzo-de-luz.js, 24-lienzo-de-petalos.js
+   * y 19-velas.js con su `pausado`: la bandera dice «quedáte quieto», no dice
+   * «hay un eclipse». Este archivo no sabe quién la levanta ni por qué, y
+   * sigue funcionando igual si nadie la levanta nunca.
+   *
+   * DE DÓNDE SALIÓ EL NÚMERO. Un perfil real en la máquina objetivo —Intel
+   * HD 4600, 2560×1277— durante el minuto del eclipse repartió el cuadro
+   * así: Layerize 28,4 %, Recalculate style 15,3 %, Paint 10,1 %, Layout
+   * 7,5 %. Todo el JavaScript del eclipse junto pesaba 1,6 %. O sea que el
+   * costo no lo ponía la secuencia: lo ponían los módulos que seguían
+   * animándose debajo de ella, este incluido.
+   *
+   * ⚠️ CONGELA EN EL SITIO, NO APAGA. Se engancha en la guarda que este
+   * archivo YA tenía para la pestaña oculta: el bucle sigue vivo, el reloj se
+   * mantiene al día y las piezas quedan con su último valor. Al soltarla,
+   * retoman sin salto y sin recargar.
+   *
+   * Lectura defensiva: el registro puede no existir según el orden de carga,
+   * y un módulo que se cae por esto sería peor que el costo que ahorra. */
+  function laEscenaEstaQuieta() {
+    var registro = window.PausaDeEscena;
+    return !!(registro && registro.marco);
+  }
+
   function dibujarCuadro(momentoActual) {
     /* Pestaña oculta o animaciones apagadas: el bucle sigue vivo pero no
        mece nada. Las rosas del marco quedan quietas (siempre visibles), y
        si se encienden las animaciones con el botón, vuelven a mecerse en el
        acto, sin recargar. Se actualiza el reloj para que al reanudar no dé
        un salto por el tiempo acumulado. */
-    if (!hayAlgoQueMirar() || SIN_MENEO || !seMece) {
+    if (!hayAlgoQueMirar() || SIN_MENEO || !seMece || laEscenaEstaQuieta()) {
       momentoAnterior = momentoActual;
       requestAnimationFrame(dibujarCuadro);
       return;
@@ -2280,12 +2449,26 @@
        real, para que el torque del cuadro que sí corre represente el
        tiempo completo transcurrido y no se diluya. */
     contadorDeCuadro++;
-    dtAcumulado += dt;
-    const tocaActualizarElResorte = (contadorDeCuadro % saltoDelResorte === 0);
-    const dtParaElTorque = dtAcumulado;
-    if (tocaActualizarElResorte) dtAcumulado = 0;
 
+    /* ⚠️ YA NO HAY UN `dtAcumulado` GLOBAL: cada planta lleva el suyo.
+       Con las tandas, dos plantas distintas no se actualizan en el mismo
+       cuadro, así que un acumulador compartido le daría a una el tiempo de
+       la otra y el movimiento saldría a destiempo. */
+
+    let turnoDeLaPlanta = -1;
     for (const planta of plantas) {
+      turnoDeLaPlanta++;
+
+      /* ⚡ SU TURNO, NO EL DE TODAS. Ver la nota de
+         SALTO_DEL_RESORTE_POR_CALIDAD: repartir por raíz SVG es lo que baja
+         el peor cuadro de 28 raíces a 7. */
+      const leToca =
+        ((contadorDeCuadro + turnoDeLaPlanta) % saltoDelResorte) === 0;
+      const tocaActualizarElResorte = leToca;
+
+      planta.dtAcumulado = (planta.dtAcumulado || 0) + dt;
+      const dtParaElTorque = planta.dtAcumulado;
+      if (leToca) planta.dtAcumulado = 0;
       /* Si la planta está lejísimos de la pantalla no perdemos tiempo.
          El margen hace que ya venga meciéndose al aparecer.
 
@@ -2378,10 +2561,13 @@
            Redondear a centésimas de grado con Math.round da un ENTERO, que
            se compara sin reservar memoria. El string se arma solo cuando de
            verdad hay algo nuevo que escribir. Mismo resultado en pantalla. */
-        const giroDeLaPlanta = Math.round(planta.inclinacion * 100);
+        /* El paso sale de DIVISIONES_POR_GRADO: 0,10° para la planta, que
+           gira con un radio medido de 177,9 px. Ver su nota. */
+        const divPlanta = DIVISIONES_POR_GRADO.planta;
+        const giroDeLaPlanta = Math.round(planta.inclinacion * divPlanta);
         if (giroDeLaPlanta !== planta.ultimoGiroEscrito) {
           planta.ultimoGiroEscrito = giroDeLaPlanta;
-          planta.elemento.style.transform = `rotate(${giroDeLaPlanta / 100}deg)`;
+          planta.elemento.style.transform = `rotate(${giroDeLaPlanta / divPlanta}deg)`;
         }
       }
 
@@ -2457,7 +2643,10 @@
            solo para comparar fabricaba 120 strings por cuadro que nadie
            usaba. El pivote además se precalcula una vez al crear el nudo, en
            vez de formatearlo en cada escritura. */
-        const giroDelNudo = Math.round(nudo.flexion * 100);
+        /* 0,04° y no 0,25° como usa el eclipse: un nudo arrastra todo su
+           tallo, radio medido de 442 px contra 13 de una cabeza de flor. */
+        const divNudo = DIVISIONES_POR_GRADO.nudo;
+        const giroDelNudo = Math.round(nudo.flexion * divNudo);
         if (giroDelNudo !== nudo.ultimoGiroEscrito) {
           nudo.ultimoGiroEscrito = giroDelNudo;
 
@@ -2470,7 +2659,7 @@
              Son ~120 nudos por cuadro, y "Layout" figuraba con el 13 % del
              perfil. El pivote va en `transform-origin`, fijado una sola vez
              al crear el nudo (ver estilos/02-marco-victoriano.css). */
-          nudo.elemento.style.transform = 'rotate(' + (giroDelNudo / 100) + 'deg)';
+          nudo.elemento.style.transform = 'rotate(' + (giroDelNudo / divNudo) + 'deg)';
         }
       }
 
@@ -2585,10 +2774,14 @@
            real en vivo mostró que esa única escritura alcanzaba para
            ensuciar el layout de toda la página y encarecer las lecturas de
            scroll de 23-lienzo-de-luz.js más adelante en el mismo cuadro. */
-        const giroDeLaFlor = Math.round(flor.flexion * 100);
+        /* 0,25°, el más grueso de los tres: la flor gira sobre su cuello,
+           radio medido de 48,5 px. Es el caso para el que 28-eclipse.js
+           hizo la cuenta original. */
+        const divFlor = DIVISIONES_POR_GRADO.flor;
+        const giroDeLaFlor = Math.round(flor.flexion * divFlor);
         if (giroDeLaFlor !== flor.ultimoGiroEscrito) {
           flor.ultimoGiroEscrito = giroDeLaFlor;
-          flor.movil.style.transform = 'rotate(' + (giroDeLaFlor / 100) + 'deg)';
+          flor.movil.style.transform = 'rotate(' + (giroDeLaFlor / divFlor) + 'deg)';
         }
       }
     }

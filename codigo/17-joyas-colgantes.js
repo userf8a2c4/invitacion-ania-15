@@ -131,8 +131,28 @@
       angulo: 0, velocidad: 0,
       faseDeRespiracion: Math.random() * Math.PI * 2,
       cacheDeEnvionMouse: 0,   // ver "CALIDAD GRÁFICA" más abajo
+      /* Hacia qué lado tiene el centro. Se llena unas líneas más abajo,
+         cuando ya se sabe dónde está ese centro. */
+      haciaElCentro: 0,
     };
   });
+
+  /* ─── HACIA DÓNDE ES «ADENTRO» ──────────────────────────────────────
+   *
+   * El centro se calcula con el promedio de los pivotes y no con la mitad
+   * del viewBox: así no hay que saber en qué coordenadas está expresado el
+   * pivote ni dónde tiene el SVG su origen. Con dos borlas colgando de los
+   * dos lados, el promedio cae justo en el medio.
+   * ---------------------------------------------------------------- */
+  {
+    const centro = borlas.length
+      ? borlas.reduce((suma, b) => suma + b.pivote.localX, 0) / borlas.length
+      : 0;
+    for (const borla of borlas) {
+      borla.haciaElCentro = borla.pivote.localX < centro ? 1
+                          : borla.pivote.localX > centro ? -1 : 0;
+    }
+  }
 
   /* Cadenas: cada una es una lista de eslabones ordenados de arriba hacia
      abajo. querySelectorAll los devuelve en orden del documento, y como
@@ -188,7 +208,26 @@
   let calidad = nivelDeCalidad();
   const SALTO_DEL_MOUSE_POR_CALIDAD = { 0: 1, 1: 2, 2: 3 };
   let saltoDelMouse = SALTO_DEL_MOUSE_POR_CALIDAD[calidad] ?? 1;
-  const SE_MECE_POR_CALIDAD = { 0: true, 1: true, 2: false };
+  /* ⚡ Y LAS JOYAS TAMBIÉN, EN TODOS LOS NIVELES (2026-09-13)
+   *
+   * Mismo pedido de Carlos que en 07-marco-y-enredaderas.js, y el mismo
+   * guard: esto es un `return` al tope del cuadro, así que en calidad baja
+   * no se apagaba solo el balanceo por scroll — se apagaban también la
+   * reacción al puntero y la respiración. Colgaban muertas.
+   *
+   * ⚠️ ACÁ EL ARGUMENTO ES ESTRUCTURAL Y NO HAY MEDICIÓN EN VIVO, Y HAY QUE
+   * DECIRLO. Lo que se midió es el techo: son 5 piezas (2 borlas + 3
+   * eslabones) que comparten UNA SOLA raíz `<svg>`, así que por caro que
+   * salga un cuadro ensucian como mucho 1 raíz. Las plantas de 07 son 26 y
+   * en su peor cuadro ensuciaban las 26 a la vez: ése era el problema, y
+   * este módulo no puede tenerlo.
+   *
+   * La cuenta vieja de «15,2 ms por cuadro» es anterior al culling por
+   * posición (margen de 150 px) y a SALTO_DEL_MOUSE_POR_CALIDAD, que ya
+   * ralean la raíz cuadrada de la cercanía en media y baja.
+   *
+   * Si el Diagnóstico dice que no, volver a `false` es una línea. */
+  const SE_MECE_POR_CALIDAD = { 0: true, 1: true, 2: true };
   let seMece = SE_MECE_POR_CALIDAD[calidad] ?? true;
   let contadorDeCuadro = 0;
   document.addEventListener('calidad-cambio', evento => {
@@ -215,11 +254,64 @@
 
   let mouseX = -9999;
   let mouseY = -9999;
-  window.addEventListener('mousemove', evento => {
+  /* ⚡ PUNTEROS, Y NO `mousemove` (2026-09-13)
+   *
+   * Carlos: «¿es posible permitir el balanceo de las rosas al tacto y al
+   * scroll, así como de las joyas al scroll, sin perder calidad?».
+   *
+   * ⛔ NO ES QUE PERDIERA CALIDAD: ES QUE NO EXISTÍA. Esto escuchaba
+   * `mousemove`, que en un iPhone NO DISPARA NUNCA. Ni las joyas ni las rosas no
+   * reaccionaban al dedo en ningún nivel de calidad, en ningún teléfono.
+   * No hay nada que perder acá porque no había nada.
+   *
+   * Es el patrón de 06-petalos-con-fisica.js, que ya está probado en
+   * celular real y ya se copió una vez en 27-fauna-nocturna.js:
+   *
+   *   · UN SOLO PUNTERO A LA VEZ. Un segundo dedo pisaba las coordenadas
+   *     del primero con las suyas y el cuadro siguiente calculaba un salto
+   *     que nunca ocurrió.
+   *
+   *   · `pointercancel` ES OBLIGATORIO. En el teléfono la forma más común
+   *     de terminar un toque NO es levantar el dedo quieto: es deslizarlo
+   *     para hacer SCROLL, y ahí el navegador se queda el gesto y manda
+   *     `pointercancel`. Sin escucharlo, las coordenadas se quedan clavadas
+   *     donde estaba el dedo y las joyas y la cadena quedan dobladas para
+   *     siempre, mirando a un dedo que ya no está.
+   *
+   *   · ⚠️ EL MOUSE NO SE SUELTA EN `pointerup`. Un clic termina en
+   *     `pointerup` y el mouse SIGUE AHÍ: soltarlo ahí haría que todo
+   *     volviera de golpe a su sitio cada vez que alguien hace clic. Solo
+   *     el dedo y el lápiz sueltan; el mouse se suelta al salirse de la
+   *     ventana, que es cuando de verdad se fue.
+   *
+   * `{ passive: true }` en todos: el dedo tiene que poder scrollear. */
+  let punteroActivo = null;
+
+  const esDedo = (evento) =>
+    evento.pointerType === 'touch' || evento.pointerType === 'pen';
+
+  const seguirElPuntero = (evento) => {
+    if (punteroActivo !== null && evento.pointerId !== punteroActivo) return;
+    punteroActivo = evento.pointerId;
     mouseX = evento.clientX;
     mouseY = evento.clientY;
-  }, { passive: true });
-  window.addEventListener('mouseleave', () => { mouseX = -9999; mouseY = -9999; });
+  };
+
+  const soltarElPuntero = (evento) => {
+    if (evento && evento.pointerId !== undefined &&
+        punteroActivo !== null && evento.pointerId !== punteroActivo) return;
+    punteroActivo = null;
+    mouseX = -9999;
+    mouseY = -9999;
+  };
+
+  const soltarSiEsDedo = (evento) => { if (esDedo(evento)) soltarElPuntero(evento); };
+
+  window.addEventListener('pointermove', seguirElPuntero, { passive: true });
+  window.addEventListener('pointerdown', seguirElPuntero, { passive: true });
+  window.addEventListener('pointerup', soltarSiEsDedo, { passive: true });
+  window.addEventListener('pointercancel', soltarSiEsDedo, { passive: true });
+  window.addEventListener('mouseleave', soltarElPuntero, { passive: true });
 
 
   /* ─── 4. EL BUCLE ──────────────────────────────────────────────────── */
@@ -365,10 +457,60 @@
       return;
     }
 
+  /* ⚡ LA PAUSA DEL ECLIPSE (2026-09-13)
+   *
+   * Un perfil real en la máquina objetivo —HD 4600, 2560×1277— durante el
+   * minuto del eclipse repartió así el cuadro: Layerize 28,4 %, Recalculate
+   * style 15,3 %, Paint 10,1 %, Layout 7,5 %. El JavaScript del eclipse
+   * entero pesaba 1,6 %. O sea que el costo no lo ponía la secuencia: lo
+   * ponían los módulos de la página que siguen animándose debajo de ella.
+   *
+   * ⚠️ ESTA BANDERA NACE DORMIDA. En esta ronda NADIE la levanta durante el
+   * eclipse de verdad: la levanta únicamente el botón Diagnóstico del panel
+   * de ensayo, para poder MEDIR cuánto cuesta cada módulo antes de decidir si
+   * se pausa. Carlos lo pidió así: «solo lo que no se ve», y para saber qué
+   * no se ve hay que medirlo primero.
+   *
+   * ⚠️ Y CONGELA EN EL SITIO, no apaga. Se engancha en la guarda que este
+   * archivo YA tiene para la pestaña oculta: el bucle sigue vivo, el reloj se
+   * mantiene al día y las piezas quedan con su último valor. Al soltar,
+   * retoman sin salto y sin recargar.
+   *
+   * Lectura defensiva: el registro puede no existir todavía según el orden de
+   * carga, y un módulo que se cae por esto sería peor que el costo que
+   * ahorra. */
+  function laEscenaEstaQuieta() {
+    var registro = window.PausaDeEscena;
+    return !!(registro && registro.joyas);
+  }
+
+  /* ─── CUANDO LA GRAVEDAD CAMBIA DE DUEÑO ────────────────────────────
+   *
+   * ⚡ (2026-09-13) Una borla cuelga hacia abajo porque el resorte la
+   * devuelve al ángulo 0. Si el reposo deja de ser el 0 y pasa a ser un
+   * ángulo hacia adentro, la borla se queda tirando hacia el centro — no
+   * porque algo la empuje cuadro a cuadro, sino porque eso es «abajo»
+   * para ella ahora. Es la misma idea que ya gobierna a los pétalos
+   * durante el minuto: la gravedad cambió de dueño.
+   *
+   * ⚠️ BANDERA GENÉRICA. `GravedadHaciaElCentro` dice cuánto tira hacia
+   * adentro, no «hay un eclipse». Este archivo no sabe por qué.
+   *
+   * ⚠️ Y SOLO LAS BORLAS. La cadena cuelga del medio y no tiene lado: un
+   * «hacia el centro» para ella sería inventarle uno. Se la deja
+   * responder por su física, que es lo que hace bien.
+   * ---------------------------------------------------------------- */
+  function cuantoTiraElCentro() {
+    var pedido = window.GravedadHaciaElCentro;
+    return (typeof pedido === 'number' && pedido > 0)
+      ? (pedido > 1 ? 1 : pedido)
+      : 0;
+  }
+
     /* Calidad baja: ni resorte ni escritura, mismo trato que el culling de
        arriba. Ver la nota "EN CALIDAD BAJA TAMBIÉN SE CONGELA EL RESORTE"
        más arriba. */
-    if (!seMece) {
+    if (!seMece || laEscenaEstaQuieta()) {
       requestAnimationFrame(dibujarCuadro);
       return;
     }
@@ -379,6 +521,8 @@
     const tocaRecalcularElMouse = (contadorDeCuadro % saltoDelMouse === 0);
 
     /* ── a) BORLAS: péndulo rígido ── */
+    const tiraElCentro = cuantoTiraElCentro();
+
     for (const borla of borlas) {
       if (tocaRecalcularElMouse) recalcularEnvionMouse(borla, borla.pivote, caja, escala);
       const externo = envionExterno(borla);
@@ -386,8 +530,13 @@
          sin scroll ni mouse: antes era tan sutil que parecían quietas). */
       const respiracion = Math.sin(momentoActual / 1600 + borla.faseDeRespiracion) * 0.06;
 
+      /* El reposo deja de ser el 0 y se corre hacia adentro. El 0,75 es
+         para que quede por debajo del tope: una borla clavada contra su
+         límite no se lee como que tira, se lee como que está trabada. */
+      const reposo = borla.haciaElCentro * tiraElCentro * TOPE_BORLA * 0.75;
+
       const aceleracion =
-        (-borla.angulo * RIGIDEZ_BORLA) - (borla.velocidad * AMORT_BORLA)
+        (-(borla.angulo - reposo) * RIGIDEZ_BORLA) - (borla.velocidad * AMORT_BORLA)
         + externo + respiracion;
 
       borla.velocidad += aceleracion;

@@ -277,6 +277,37 @@
     // Avisamos que la invitación ya es visible, por si algún otro archivo
     // quiere empezar sus animaciones justo en este momento.
     dispararEventoQueQuizasLleguenTarde('invitacion-visible');
+
+    /* ⚡ Y EL SOBRE SE VA DEL DOCUMENTO (2026-09-11)
+     *
+     * `oculto` lo deja en `visibility: hidden`, que es suficiente para que
+     * no se vea pero no para que no cueste. Medido con la página abierta y
+     * el sobre ya abierto, seguían vivos:
+     *
+     *     <g  filter="url(#sob-sombra)">  ……… 0,63 Mpx
+     *     <path filter="url(#sob-fibra)"> ……… 0,39 Mpx
+     *     <path filter="url(#sob-fibra)"> ……… 0,25 Mpx
+     *
+     * 1,30 Mpx de filtros SVG —turbulencias y desenfoques, lo más caro que
+     * hay— dentro de una capa `fixed` a `z-index: 2000`, por encima de toda
+     * la escena, para siempre.
+     *
+     * Carlos lo reportó como «la web se siente pesada desde antes de
+     * siquiera empezar el eclipse», midiendo en un i5-4590T con gráficos
+     * HD 4600. En una integrada, cada filtro que el navegador decida
+     * mantener resuelto se paga en memoria compartida con la CPU.
+     *
+     * Un sobre abierto no se vuelve a cerrar nunca: no hay motivo para que
+     * siga existiendo. Se espera a que la transición termine de verdad
+     * —`oculto` puede llevar un desvanecido— y se lo saca.
+     *
+     * ⚠️ SE SACA, NO SE PONE EN `display:none`. Con `display:none` el
+     * elemento sigue en el árbol y sus recursos siguen asociados; sacarlo
+     * los libera. Y si algo guardó una referencia, la referencia sigue
+     * siendo válida: simplemente ya no está en la página. */
+    setTimeout(() => {
+      if (sobre.parentNode) sobre.parentNode.removeChild(sobre);
+    }, 1200);
   }
 
   // El sobre entero es el botón: se abre haciendo clic en cualquier parte.

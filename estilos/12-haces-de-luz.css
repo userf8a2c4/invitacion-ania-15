@@ -104,9 +104,48 @@
       rgba(8, 4, 4, 0)   0,
       rgba(8, 4, 4, 0)   calc(var(--alto-fijo, 100svh) * 0.22),
       rgba(7, 4, 4, calc(.18 * var(--profundidad-de-sombra, 1))) calc(var(--alto-fijo, 100svh) * 0.90),
-      rgba(5, 3, 3, calc(.32 * var(--profundidad-de-sombra, 1))) calc(var(--alto-fijo, 100svh) * 1.70),
-      rgba(4, 2, 2, calc(.40 * var(--profundidad-de-sombra, 1))) 100%);
+      rgba(5, 3, 3, calc(.32 * var(--profundidad-de-sombra, 1)
+                         + .12 * var(--hundimiento-del-fondo, 0))) calc(var(--alto-fijo, 100svh) * 1.70),
+      rgba(4, 2, 2, calc(.40 * var(--profundidad-de-sombra, 1)
+                         + .36 * var(--hundimiento-del-fondo, 0))) 100%);
 }
+
+/* ⚡ EL FONDO SE HUNDE, PERO SOLO DURANTE EL MINUTO (2026-09-13)
+ *
+ * Carlos: «en las partes más bajas de la invitación, haz que sea casi
+ * negro, esa parte es la "parte de abajo", porque está lejos de la luz es
+ * que tenemos candelabros; durante el eclipse, haz que la luz apenas se
+ * note y oscurece "abajo" casi por completo».
+ *
+ * Y después, la regla que lo ordena todo: «la web servirá únicamente para
+ * adorar a Ania durante esos 60 segundos; las otras 23 horas y 59 minutos
+ * será para que los invitados lean la información».
+ *
+ * Por eso son DOS variables y no una. `--profundidad-de-sombra` es la de
+ * siempre y sigue topeada donde estaba —el comentario de más arriba dice
+ * «NUNCA llega al negro, solo se apaga», y sigue siendo verdad las 23:59—.
+ * `--hundimiento-del-fondo` vale 0 en las catorce horas del día y solo el
+ * eclipse la levanta.
+ *
+ * Con la perilla en 0 este degradado calcula EXACTAMENTE los mismos
+ * valores que antes: `+ .12 * 0` y `+ .36 * 0` son cero. La invitación no
+ * cambia ni un píxel fuera del minuto.
+ *
+ * Y el reparto no es parejo a propósito. Con la perilla en 1 y la
+ * profundidad del eclipse en 1,55:
+ *
+ *     a 0,90 × alto ……  .18 × 1,55            = 0,279   (no se toca)
+ *     a 1,70 × alto ……  .32 × 1,55 + .12      = 0,616
+ *     al 100 %      ……  .40 × 1,55 + .36      = 0,980   ← casi negro
+ *
+ * Arriba casi no cambia y el pie se hunde del todo: eso es «abajo está
+ * lejos de la luz», y es lo que justifica que ahí haya candelabros.
+ *
+ * ⚠️ Y LOS CHARCOS SIGUEN PERFORÁNDOLO. `#lienzo-de-velas` está en
+ * z-index 66, por encima de esta capa (65), y dibuja con `lighter`. Por
+ * negra que se ponga la penumbra, la luz de las 8 velas sigue pasando: se
+ * vuelve LOCAL en vez de ambiental sin bajarle ni un punto de intensidad.
+ * Por eso no hace falta tocar 19-velas.js ni 23-lienzo-de-luz.js. */
 
 /* Con menos movimiento el velo se mantiene (es estático, no molesta), pero
    se atenúa un poco para no oscurecer de más a quien ya pidió sobriedad. */

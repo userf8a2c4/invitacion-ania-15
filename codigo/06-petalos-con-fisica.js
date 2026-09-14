@@ -75,6 +75,26 @@
     ? { fondo: 8,  medio: 5,  frente: 6 }
     : { fondo: 14, medio: 10, frente: 12 };
 
+  /* ⚡ UNA RESERVA DORMIDA, PARA CUANDO LLUEVA MÁS FUERTE (2026-09-13)
+
+     El reparto de arriba es el de CALIDAD ALTA, y en calidad alta están
+     todos activos. O sea que en el mejor equipo no hay ni un pétalo
+     dormido: si algo pide "que llueva más", no hay de dónde sacarlo.
+
+     Esta reserva son pétalos idénticos a los otros —mismo `crearPetalo`,
+     mismos planos, mismos rasgos— que nacen APAGADOS en todos los
+     niveles y solo se encienden cuando alguien lo pide (ver
+     `intensidadDeLaLluvia`). Mientras duermen no cuestan nada: el bucle
+     los saltea con el mismo `continue` que saltea a los que apaga la
+     calidad, y sin elemento en el DOM cuando se usa el lienzo.
+
+     Lo único que cuesta crearlos es crearlos: una vez, al cargar.
+
+     0,6 es lo que hace falta para que calidad alta pueda llegar a su
+     techo de lluvia (1,6 × el área base). Ver
+     TECHO_DE_AREA_CON_LLUVIA_POR_CALIDAD. */
+  const RESERVA_RELATIVA = 0.6;
+
   /* Cada plano tiene su propio tamaño y su propia transparencia. Eso es
      lo que hace que se lean como distancias distintas y no como tres
      grupos del mismo tamaño superpuestos. */
@@ -96,15 +116,141 @@
      proporciones entre planos en los dos casos. Costo: cero (son las
      mismas constantes de siempre) y hasta BAJA en móvil, porque hay
      menos área de pétalo para pintar por cuadro. */
-  const RASGOS_DEL_PLANO = esPantallaChica ? {
-    fondo:  { contenedor: '#petalos-fondo',  tamaño: [10, 19], opacidad: [.30, .55], caida: [14, 30] },
-    medio:  { contenedor: '#petalos-medio',  tamaño: [16, 30], opacidad: [.60, .90], caida: [18, 40] },
-    frente: { contenedor: '#petalos-frente', tamaño: [26, 46], opacidad: [.70, 1],   caida: [26, 54] },
-  } : {
-    fondo:  { contenedor: '#petalos-fondo',  tamaño: [18, 35], opacidad: [.30, .55], caida: [14, 30] },
-    medio:  { contenedor: '#petalos-medio',  tamaño: [30, 54], opacidad: [.60, .90], caida: [18, 40] },
-    frente: { contenedor: '#petalos-frente', tamaño: [48, 84], opacidad: [.70, 1],   caida: [26, 54] },
+  /* ⚡ EL TAMAÑO SALE DE LAS ROSAS, MEDIDAS. NO DEL MARCO. (2026-09-11)
+
+     Acá hubo dos intentos y los dos fallaron, cada uno por su motivo.
+
+     El primero eran dos juegos de tamaños y un `esPantallaChica`
+     eligiendo: dos escalones contra algo que encoge de forma continua.
+
+     El segundo —el mío, de la v276— lo ató a `--marco-grosor`, que es
+     `clamp(20px, 3.4vw, 72px)`. Parecía correcto: es el número que encoge
+     la enredadera. Pero ese `clamp` TOCA SU PISO en 20 px por debajo de
+     unos 588 px de ancho, y las rosas siguen encogiendo por debajo de eso.
+     O sea que justo en los teléfonos —donde Carlos lo estaba mirando— la
+     proporción dejaba de seguir a nada.
+
+     Medido en la página abierta, a 390 px, que es el ancho de su teléfono:
+
+         grosor del marco ……………………………… 20 px  ← el clamp en su piso
+         rosa del marco, mediana ……………… 11,9 px
+         pétalo de frente, mediano ………… 30 px
+         razón …………………………………………………………… 2,52 ×
+
+     Que es exactamente lo que reportó: «cerca del 100-150 % más grandes
+     que una rosa».
+
+     LA LECCIÓN, Y POR ESO ESTE BLOQUE CAMBIA DE RAÍZ: si lo que hay que
+     igualar es el tamaño de las ROSAS, hay que medir las ROSAS. No un
+     número del que se espera que las siga.
+
+     Se mide el percentil 90 del lado real de las flores del marco y el
+     pétalo más grande pasa a medir 1,15 veces eso. Los tres planos
+     conservan sus proporciones entre sí (1 : 0,64 : 0,42), así que la
+     profundidad —que es lo que da riqueza, no la cantidad— no se toca. */
+
+  /** Las proporciones entre planos, que son lo que NO se toca. */
+  const FORMA_DE_LOS_PLANOS = {
+    fondo:  [0.21, 0.42],
+    medio:  [0.36, 0.64],
+    frente: [0.57, 1.00],
   };
+
+  /** Cuánto mide el pétalo más grande, respecto del p90 de las rosas.
+   *
+   *  Apenas por encima de una rosa grande. Con 1,15 la cuenta daba 1,68
+   *  veces la rosa MEDIANA a 514 px —porque el reparto de tamaños de las
+   *  rosas no es igual en todos los anchos— y eso todavía se lee como un
+   *  pétalo que domina a las flores. Con 1,05 queda en 1,40-1,53 en los
+   *  tres anchos medidos. */
+  const EL_MAS_GRANDE_CONTRA_LA_ROSA = 1.05;
+
+  /* ⚠️ ESTO CORRE ANTES DE QUE EXISTA EL MARCO. 07-marco-y-enredaderas.js
+     construye las plantas cuando se monta la escena, y esto se evalúa al
+     cargar. Así que se arranca con una estimación y se RECALIBRA una sola
+     vez, en cuanto haya flores que medir (ver recalibrarConLasRosas). */
+  function estimarElLadoDeUnaRosa() {
+    /* La misma cuenta que hace el clamp del marco, pero sin su piso: por
+       debajo de 588 px el marco se planta en 20 y las rosas no. */
+    return limitar(window.innerWidth * 0.026, 7, 46);
+  }
+
+  let ladoDeLaRosa = estimarElLadoDeUnaRosa();
+  let yaSeCalibro = false;
+  let ultimoIntentoDeCalibrar = -1000;
+
+  const tamañosDelPlano = (plano) => {
+    const tope = ladoDeLaRosa * EL_MAS_GRANDE_CONTRA_LA_ROSA;
+    const [chico, grande] = FORMA_DE_LOS_PLANOS[plano];
+    return [chico * tope, grande * tope];
+  };
+
+  const RASGOS_DEL_PLANO = {
+    fondo:  { contenedor: '#petalos-fondo',  tamaño: tamañosDelPlano('fondo'),  opacidad: [.30, .55], caida: [14, 30] },
+    medio:  { contenedor: '#petalos-medio',  tamaño: tamañosDelPlano('medio'),  opacidad: [.60, .90], caida: [18, 40] },
+    frente: { contenedor: '#petalos-frente', tamaño: tamañosDelPlano('frente'), opacidad: [.70, 1],   caida: [26, 54] },
+  };
+
+  /**
+   * Vuelve a medir las rosas y reescala los pétalos ya creados.
+   *
+   * Se llama en cuanto el marco existe. Reescalar es multiplicar un número
+   * por pétalo: no los mueve de sitio, no los reinicia, no cuesta nada.
+   *
+   * ⚠️ SE USA EL PERCENTIL 90 Y NO LA MEDIANA. Lo que el ojo compara no es
+   * el pétalo con la rosa promedio: es el pétalo con la rosa GRANDE que
+   * tiene al lado, que son las del relicario y las de los ramilletes.
+   *
+   * @returns {boolean} si pudo medir.
+   */
+  function recalibrarConLasRosas() {
+    const lados = [];
+
+    for (const movil of document.querySelectorAll('.flor-de-enredadera__movil')) {
+      const lado = ladoRealDeLaFlor(movil);
+      if (lado > 0) lados.push(lado);
+    }
+
+    if (lados.length < 8) return false;      // todavía no hay marco de verdad
+
+    lados.sort((a, b) => a - b);
+    const p90 = lados[Math.floor(lados.length * 0.9)];
+    if (!(p90 > 0)) return false;
+
+    /* ⚠️ TOPE ABSOLUTO: NINGÚN PÉTALO MÁS GRANDE QUE LA ROSA MÁS GRANDE.
+       El p90 es una buena referencia, pero el reparto de tamaños de las
+       rosas no es igual en todos los anchos: en alguno el p90 puede quedar
+       lejos del máximo y el pétalo más grande terminar dominando igual.
+       Este tope cierra esa puerta con lo que de verdad se ve en pantalla. */
+    const laMayor = lados[lados.length - 1];
+    const topeAbsoluto = laMayor / (EL_MAS_GRANDE_CONTRA_LA_ROSA *
+                                    FORMA_DE_LOS_PLANOS.frente[1]);
+
+    const antes = ladoDeLaRosa;
+    ladoDeLaRosa = Math.min(p90, topeAbsoluto);
+    const factor = ladoDeLaRosa / antes;
+    if (!(factor > 0) || Math.abs(factor - 1) < 0.02) return true;  // ya estaba bien
+
+    for (const plano of Object.keys(RASGOS_DEL_PLANO)) {
+      RASGOS_DEL_PLANO[plano].tamaño = tamañosDelPlano(plano);
+    }
+
+    for (const petalo of petalos) {
+      petalo.tamaño *= factor;
+      if (petalo.elemento) {
+        petalo.elemento.style.width  = petalo.tamaño + 'px';
+        petalo.elemento.style.height = petalo.tamaño + 'px';
+      }
+    }
+
+    /* El recorte por calidad reparte superficie, y la superficie acaba de
+       cambiar: hay que rehacerlo o el presupuesto queda mal contado. */
+    if (typeof ajustarCantidadDePetalos === 'function') {
+      ajustarCantidadDePetalos(nivelDeCalidad());
+    }
+    return true;
+  }
+
 
   /** Cuánto tira la gravedad hacia abajo (píxeles por segundo, al cuadrado). */
   const GRAVEDAD = 55;
@@ -239,6 +385,21 @@
       // El lienzo dibuja cada plano por separado, para respetar la profundidad.
       if (usaElLienzo) window.LienzoDePetalos.planos[plano].push(petalo);
     }
+
+    /* Y la reserva, en el mismo plano y a continuación. Nacen apagados y
+       marcados: `ajustarCantidadDePetalos` los deja fuera del presupuesto
+       y solo los toca cuando se pide más lluvia. Van al final de la lista
+       del plano a propósito — así los índices por encima de la base caen
+       en la reserva solos, sin ninguna cuenta aparte. */
+    const cuantosDeReserva = Math.ceil(REPARTO_POR_PLANO[plano] * RESERVA_RELATIVA);
+    for (let i = 0; i < cuantosDeReserva; i++) {
+      const petalo = crearPetalo(true, plano);
+      petalo.deReserva = true;
+      petalo.activo = false;
+      if (petalo.elemento) petalo.elemento.style.display = 'none';
+      petalos.push(petalo);
+      if (usaElLienzo) window.LienzoDePetalos.planos[plano].push(petalo);
+    }
   }
 
 
@@ -264,7 +425,39 @@
      de antes (eran 22 y 13) porque se liberó mucho margen: los pétalos ya no
      piden capa de GPU en esos niveles y se recuperaron las 24 capas que
      gastaban los SVG de las plantas. */
-  const FRACCION_ACTIVA_POR_CALIDAD = { 0: 1, 1: 0.78, 2: 0.5 };
+  /* ⚡ UNA FRACCIÓN POR PLANO, Y NO UNA SOLA PARA TODOS (2026-09-11)
+   *
+   * LO QUE CUESTA PINTAR UN PÉTALO ES SU SUPERFICIE, NO SU EXISTENCIA. Un
+   * pétalo del plano de adelante mide 66 px de lado contra 26,5 del fondo:
+   * cuesta SEIS VECES más relleno. Contarlos por unidad es contar mal.
+   *
+   * Con una fracción única, arreglar el recorte —que se comía el plano de
+   * adelante entero, ver ajustarCantidadDePetalos— habría subido el relleno
+   * un 33 % en escritorio con calidad media. O sea: arreglar lo que se ve,
+   * rompiendo lo que se siente, y en los equipos que ya venían sufriendo.
+   * Eso no se hace nunca acá.
+   *
+   * Las fracciones de abajo están elegidas para que la SUPERFICIE PINTADA
+   * quede por debajo de la que había antes, en los cuatro casos. Medido con
+   * los tamaños reales de cada plano (lado² × cuántos):
+   *
+   *     escritorio       antes      ahora     pétalos
+   *     media           49 248     47 970     29 → 25
+   *     baja            16 884     16 812     18 →  9
+   *
+   *     pantalla chica   antes      ahora     pétalos
+   *     media            6 917      4 174     15 → 14
+   *     baja             2 738      1 547     10 →  5
+   *
+   * Sale más barato en los cuatro, en relleno Y en física, y los tres
+   * planos siguen vivos en todos los niveles. La profundidad no se paga con
+   * fluidez: se paga apagando los pétalos que menos aportan de cada plano.
+   */
+  const FRACCION_ACTIVA_POR_CALIDAD = {
+    0: { fondo: 1,    medio: 1,   frente: 1    },
+    1: { fondo: 0.78, medio: 0.78, frente: 0.45 },
+    2: { fondo: 0.22, medio: 0.3,  frente: 0.12 },
+  };
 
   /* ⚡ CADA CUÁNTO SE MUEVE Y SE REDIBUJA, SEGÚN CALIDAD (2026-09-02).
      ESTE ERA EL ÚNICO SISTEMA DE DIBUJO DEL SITIO SIN FRENO POR CALIDAD.
@@ -288,18 +481,247 @@
   let calidadDeLosPetalos = nivelDeCalidad();
   let ultimoMovimiento = 0;
 
-  function ajustarCantidadDePetalos(calidad) {
-    const fraccion = FRACCION_ACTIVA_POR_CALIDAD[calidad] ?? 1;
-    const cuantosActivos = Math.ceil(petalos.length * fraccion);
+  /* ⚡ EL RECORTE POR CALIDAD SE COMÍA EL PLANO DE ADELANTE ENTERO
+     (2026-09-11)
 
-    petalos.forEach((petalo, i) => {
-      const activo = i < cuantosActivos;
-      if (petalo.activo !== activo) {
-        petalo.activo = activo;
-        // Con el lienzo alcanza con la marca: el canvas saltea los apagados.
-        if (petalo.elemento) petalo.elemento.style.display = activo ? '' : 'none';
+     Esto apagaba pétalos POR ÍNDICE sobre el array plano: `i < cuantos`.
+     Y el array se llena plano por plano, en orden —fondo, medio, frente—,
+     así que los últimos índices son siempre los del plano de adelante: los
+     grandes.
+
+     En una pantalla chica hay 8 + 5 + 6 = 19 pétalos. Las cuentas, hechas:
+
+         calidad   activos   fondo   medio   frente
+         alta        19        8       5       6
+         media       15        8       5       2     ← se pierden 4 de 6
+         baja        10        8       2       0     ← se pierden los 6
+
+     En escritorio (14 + 10 + 12 = 36) es lo mismo: en media quedan 5 de
+     los 12 de adelante, y en baja, ninguno.
+
+     Dos cosas rotas a la vez:
+
+     · SE VEÍA. Al cargar, la calidad arranca en ALTA por estimación y
+       todos los pétalos están activos, los grandes incluidos. Un instante
+       después el monitor mide el equipo de verdad, baja a media, y cuatro
+       de los seis grandes desaparecen de un cuadro al siguiente. Es
+       exactamente el «aparecen unos pétalos de tamaño que no corresponde y
+       de un frame a otro desaparecen» que se reportó.
+
+     · Y NO SE VEÍA LO OTRO. La nota de arriba de este archivo dice que lo
+       que da riqueza NO es la cantidad sino «la separación entre planos».
+       Con el plano de adelante apagado, la lluvia de pétalos quedaba
+       reducida a puntitos de fondo — en la mayoría de los equipos, que es
+       donde corre calidad media.
+
+     Ahora se recorta la MISMA fracción DENTRO de cada plano. Se mueven
+     menos pétalos igual (el ahorro es idéntico), pero los tres planos
+     sobreviven y lo que desaparece al bajar de nivel es un pétalo suelto
+     de cada profundidad, no una capa entera. */
+  /* ⚡ Y EL RECORTE SE MIDE EN SUPERFICIE, NO EN CANTIDAD (2026-09-11)
+   *
+   * La versión de más arriba —recortar la misma FRACCIÓN dentro de cada
+   * plano— arregló que el plano de adelante desapareciera, pero se le pasó
+   * lo que de verdad cuesta pintar. Un pétalo de adelante mide 66 px de
+   * lado y uno del fondo 26: el de adelante cuesta SEIS VECES más relleno.
+   * Recortar «el 22 % de cada plano» conserva las profundidades y a la vez
+   * sube la superficie total, porque deja vivos más de los caros.
+   *
+   * Medido: en un escritorio con calidad media pasaba de 49 248 px² de
+   * pétalo por cuadro a 65 394. Un 33 % más de relleno en los equipos que
+   * ya venían sufriendo — y Carlos lo notó: «los FPS bajan ligeramente».
+   *
+   * Así que el presupuesto ahora es de SUPERFICIE. Se apagan pétalos
+   * —siempre el más grande de los que quedan, que es el que más ahorra—
+   * hasta entrar en el presupuesto, con una sola regla por encima: NINGÚN
+   * PLANO SE PUEDE VACIAR. Los tres sobreviven, el coste no sube, y lo que
+   * se pierde al bajar de nivel es densidad y no profundidad.
+   *
+   * Los presupuestos son la superficie que pintaba el recorte por índice
+   * ORIGINAL, medida: 0,617 en media y 0,211 en baja. O sea que esto cuesta
+   * lo mismo que costaba antes de que yo lo tocara, con los tres planos
+   * vivos en vez de uno.
+   *
+   * ⚠️ SE RECORTA LA MISMA FRACCIÓN EN LOS TRES PLANOS, NO «EL MÁS CARO
+   * PRIMERO». La primera versión de esto apagaba siempre el pétalo más
+   * grande que quedara, que es lo que más ahorra — y en calidad baja
+   * terminaba dejando 14 del fondo, 1 del medio y 1 de adelante. Ahorraba
+   * perfecto y volvía a romper la profundidad, que era justo lo que este
+   * bloque vino a arreglar. Se busca entonces la fracción MÁS ALTA que
+   * entre en el presupuesto y se aplica igual a los tres.
+   */
+  const PRESUPUESTO_DE_AREA_POR_CALIDAD = { 0: 1, 1: 0.617, 2: 0.211 };
+
+  /* ⚡ HASTA DÓNDE PUEDE ARRECIAR, SEGÚN CALIDAD (2026-09-13)
+
+     El techo se expresa en ÁREA —la misma moneda que
+     PRESUPUESTO_DE_AREA_POR_CALIDAD, que es lo que de verdad cuesta un
+     pétalo— y como fracción del área del reparto base:
+
+         calidad   en reposo   lloviendo fuerte
+         alta        1,000          1,600
+         media       0,617          0,950
+         baja        0,211          0,400
+
+     La regla que ordena la tabla: EN SU PICO, UN EQUIPO LENTO SIGUE
+     PAGANDO MENOS QUE UNO MEDIO EN REPOSO, y uno medio menos que uno
+     alto en reposo. Así la lluvia fuerte nunca empuja a un equipo a un
+     coste que ya sabemos que no aguanta — 0,40 en baja es casi el doble
+     de pétalos que en reposo, y aun así menos de la mitad de lo que un
+     escritorio normal paga sin despeinarse.
+
+     Quien pide la lluvia no conoce esta tabla ni tiene por qué: pide un
+     número y acá se lo acota. El módulo que sabe lo que cuesta pintar es
+     este, así que el freno vive acá. */
+  const TECHO_DE_AREA_CON_LLUVIA_POR_CALIDAD = { 0: 1.6, 1: 0.95, 2: 0.4 };
+
+  /**
+   * Cuánto se está pidiendo que llueva. 1 = lo de siempre.
+   *
+   * ⚠️ BANDERA GENÉRICA, IGUAL QUE `PausaDeEscena`. Este archivo no sabe
+   * por qué llueve más ni quién lo pide, y no tiene que saberlo: recibe
+   * «llové más fuerte» y lo hace dentro de lo que su equipo aguanta.
+   * Lectura defensiva —el que la escribe puede no existir— y sin creerle
+   * el número: lo acota la tabla de arriba.
+   *
+   * @returns {number} 1 o más.
+   */
+  function intensidadDeLaLluvia() {
+    const pedido = window.IntensidadDeLaLluvia;
+    return (typeof pedido === 'number' && pedido > 1) ? pedido : 1;
+  }
+
+  /** Lo último que se le hizo caso, ×50, para no recalcular por gusto. */
+  let ultimaLluvia = 50;
+
+  /**
+   * Un pétalo que se enciende entra CAYENDO, no apareciendo.
+   *
+   * ⚠️ ESTO ES EL DEFECTO DE «APARECEN PÉTALOS DE LA NADA», OTRA VEZ. Un
+   * pétalo dormido quedó con la posición que tenía cuando se apagó —o la
+   * que le tocó al crearse—, y el bucle no se la actualizó ni una vez
+   * mientras dormía. Encenderlo sin más lo hace materializarse a mitad de
+   * pantalla. Se lo manda arriba del borde con velocidades frescas, que
+   * es exactamente lo que hace el reciclado de abajo cuando un pétalo
+   * sale por el pie.
+   *
+   * @param {Object} petalo
+   * @returns {void}
+   */
+  function entrarPorArriba(petalo) {
+    petalo.y = numeroAlAzar(-160, -30);
+    petalo.x = numeroAlAzar(0, anchoDePantalla);
+    petalo.velocidadX = numeroAlAzar(-12, 12);
+    petalo.velocidadY = numeroAlAzar(petalo.rasgos.caida[0], petalo.rasgos.caida[1]);
+    petalo.velocidadAngular = numeroAlAzar(-45, 45);
+  }
+
+  function ajustarCantidadDePetalos(calidad) {
+    const presupuesto = PRESUPUESTO_DE_AREA_POR_CALIDAD[calidad] ?? 1;
+
+    /* Lo que cuesta un pétalo es su superficie: el lado al cuadrado. */
+    const coste = (p) => p.tamaño * p.tamaño;
+
+    const porPlano = {};
+    let todoElArea = 0;
+
+    const reservaPorPlano = {};
+
+    for (const petalo of petalos) {
+      /* ⚠️ LA RESERVA NO ENTRA EN EL PRESUPUESTO, Y ES LO QUE HACE QUE
+         TODAS LAS MEDICIONES DE ARRIBA SIGAN SIENDO CIERTAS. Si sumara
+         su área a `todoElArea`, el techo crecería con ella y en reposo
+         quedarían activos MÁS pétalos que hoy en todos los niveles —el
+         presupuesto es relativo—. La reserva existe para la lluvia
+         fuerte y para nada más. */
+      if (petalo.deReserva) {
+        (reservaPorPlano[petalo.plano] =
+          reservaPorPlano[petalo.plano] || []).push(petalo);
+        continue;
       }
-    });
+      todoElArea += coste(petalo);
+      (porPlano[petalo.plano] = porPlano[petalo.plano] || []).push(petalo);
+    }
+
+    const techo = todoElArea * presupuesto;
+    const planos = Object.keys(porPlano);
+
+    /* Cuánta superficie queda si cada plano conserva esta fracción. Los
+       que sobreviven son los PRIMEROS de cada plano, en el orden en que se
+       crearon — que es aleatorio en tamaño, así que el plano conserva su
+       reparto de grandes y chicos y sigue leyéndose como lo que es. */
+    /* Base primero, reserva después. La fracción siempre se mide contra
+       el largo de la BASE, así que mientras no pase de 1 esto lee
+       exactamente los mismos pétalos que leía antes de que la reserva
+       existiera — y las cuentas documentadas más arriba siguen valiendo
+       al pie de la letra. Pasando de 1, los índices sobrantes caen en la
+       reserva sin ninguna rama aparte. */
+    const completa = {};
+    for (const plano of planos) {
+      completa[plano] = porPlano[plano].concat(reservaPorPlano[plano] || []);
+    }
+
+    const areaCon = (fraccion) => {
+      let area = 0;
+      for (const plano of planos) {
+        const cuantos = Math.max(1, Math.ceil(porPlano[plano].length * fraccion));
+        for (let i = 0; i < cuantos && i < completa[plano].length; i++) {
+          area += coste(completa[plano][i]);
+        }
+      }
+      return area;
+    };
+
+    /* La fracción más alta que entra. Veinte pasos alcanzan de sobra para
+       una lista de treinta y seis pétalos, y esto corre dos o tres veces
+       en toda la visita. */
+    let fraccion = 1;
+    for (let paso = 0; paso <= 20; paso++) {
+      const f = 1 - paso / 20;
+      if (areaCon(f) <= techo) { fraccion = f; break; }
+      fraccion = f;
+    }
+
+    /* ⚡ Y SI ALGUIEN PIDIÓ QUE LLUEVA MÁS, SE BUSCA DE NUEVO MÁS ARRIBA.
+       Va como una segunda pasada y NUNCA por debajo de lo que dio la
+       primera: el piso de la calidad queda intacto y esto solo puede
+       sumar. Cuando nadie pide nada —el caso de siempre, y el de todas
+       las visitas que no ven el ritual— este bloque no se ejecuta y la
+       función se comporta exactamente como antes. */
+    const pedido = intensidadDeLaLluvia();
+    if (pedido > 1) {
+      const techoDeLluvia = todoElArea *
+        Math.min(TECHO_DE_AREA_CON_LLUVIA_POR_CALIDAD[calidad] ?? 1,
+                 presupuesto * pedido);
+      /* 80 pasos y no 20 como la primera pasada: acá la resolución de la
+         grilla ES la suavidad de la escalera. Con 20 la fracción saltaba
+         de a 0,08 —medio pétalo del plano del fondo por escalón— y la
+         subida se sentía a tirones; con 80 salta de a 0,02 y los pétalos
+         se encienden de a uno. Cuesta cuarenta sumas más, y solo en los
+         pocos cuadros en que el pedido cambió de verdad. */
+      const MAXIMA = 1 + RESERVA_RELATIVA;
+      for (let paso = 0; paso <= 80; paso++) {
+        const f = MAXIMA - paso * (MAXIMA / 80);
+        if (f <= fraccion) break;
+        if (areaCon(f) <= techoDeLluvia) { fraccion = f; break; }
+      }
+    }
+
+    for (const plano of planos) {
+      const cuantos = Math.max(1, Math.ceil(porPlano[plano].length * fraccion));
+      for (let i = 0; i < completa[plano].length; i++) {
+        const petalo = completa[plano][i];
+        const activo = i < cuantos;
+        if (petalo.activo !== activo) {
+          petalo.activo = activo;
+          /* Encender sin esto es hacerlo aparecer donde durmió. */
+          if (activo) entrarPorArriba(petalo);
+          /* Con el lienzo alcanza con la marca: el canvas saltea los
+             apagados. El <div> solo existe en el camino viejo. */
+          if (petalo.elemento) petalo.elemento.style.display = activo ? '' : 'none';
+        }
+      }
+    }
   }
 
   // Se aplica YA, con la estimación de arranque: nada de flash de más.
@@ -727,6 +1149,32 @@
    * @param {number} momentoActual - Marca de tiempo que da el navegador.
    * @returns {void}
    */
+  /* ⚡ LA ESCENA SE PUEDE QUEDAR QUIETA, Y ESO NO ES ACOPLARSE (2026-09-13)
+   *
+   * Misma disciplina que ya usan 23-lienzo-de-luz.js, 24-lienzo-de-petalos.js
+   * y 19-velas.js con su `pausado`: la bandera dice «quedáte quieto», no dice
+   * «hay un eclipse». Este archivo no sabe quién la levanta ni por qué, y
+   * sigue funcionando igual si nadie la levanta nunca.
+   *
+   * DE DÓNDE SALIÓ EL NÚMERO. Un perfil real en la máquina objetivo —Intel
+   * HD 4600, 2560×1277— durante el minuto del eclipse repartió el cuadro
+   * así: Layerize 28,4 %, Recalculate style 15,3 %, Paint 10,1 %, Layout
+   * 7,5 %. Todo el JavaScript del eclipse junto pesaba 1,6 %. O sea que el
+   * costo no lo ponía la secuencia: lo ponían los módulos que seguían
+   * animándose debajo de ella, este incluido.
+   *
+   * ⚠️ CONGELA EN EL SITIO, NO APAGA. Se engancha en la guarda que este
+   * archivo YA tenía para la pestaña oculta: el bucle sigue vivo, el reloj se
+   * mantiene al día y las piezas quedan con su último valor. Al soltarla,
+   * retoman sin salto y sin recargar.
+   *
+   * Lectura defensiva: el registro puede no existir según el orden de carga,
+   * y un módulo que se cae por esto sería peor que el costo que ahorra. */
+  function laEscenaEstaQuieta() {
+    var registro = window.PausaDeEscena;
+    return !!(registro && registro.fisica);
+  }
+
   function dibujarCuadro(momentoActual) {
     if (!animacionActiva) return;   // pausa por pestaña oculta
 
@@ -737,7 +1185,7 @@
        El reloj se adelanta igual (momentoDelCuadroAnterior) aunque no se
        mueva nada: si no, al reanudar el `dt` sería el de todo el rato que
        estuvo detenido y los pétalos aparecerían teletransportados. */
-    if (!hayAlgoQueMirar()) {
+    if (!hayAlgoQueMirar() || laEscenaEstaQuieta()) {
       momentoDelCuadroAnterior = momentoActual;
       requestAnimationFrame(dibujarCuadro);
       return;
@@ -751,6 +1199,29 @@
       return;
     }
     ultimoMovimiento = momentoActual;
+
+    /* ⚡ ¿CAMBIÓ CUÁNTO LLUEVE? Una lectura de un número por tick, y se
+       recalcula solo cuando cambió de verdad. Se cuantiza a 1/50 para que
+       una subida de veinte segundos dé unas pocas decenas de recalculadas
+       en total —no una por cuadro— y para que los pétalos se despierten
+       de a uno, escalonados, en vez de todos en el mismo instante. */
+    const cuantoLlueve = Math.round(Math.min(intensidadDeLaLluvia(), 4) * 50);
+    if (cuantoLlueve !== ultimaLluvia) {
+      ultimaLluvia = cuantoLlueve;
+      ajustarCantidadDePetalos(calidadDeLosPetalos);
+    }
+
+    /* ⚠️ EL MARCO NACE DESPUÉS QUE ESTO, ASÍ QUE HAY QUE ESPERARLO.
+       07-marco-y-enredaderas.js construye las plantas cuando se monta la
+       escena —o sea al abrir el sobre—, y este módulo se evalúa al cargar.
+       Hasta que haya flores que medir, los pétalos usan la estimación de
+       arranque; en cuanto las hay, se reescalan una sola vez y esto no
+       vuelve a preguntar nunca más. Preguntar cuesta un querySelectorAll
+       cada medio segundo, y solo mientras no hay marco. */
+    if (!yaSeCalibro && momentoActual - ultimoIntentoDeCalibrar > 500) {
+      ultimoIntentoDeCalibrar = momentoActual;
+      yaSeCalibro = recalibrarConLasRosas();
+    }
 
     // dt en segundos. Se limita a 0,05 (20 cuadros por segundo) porque si
     // la pestaña estuvo minimizada, el salto sería enorme y los pétalos
