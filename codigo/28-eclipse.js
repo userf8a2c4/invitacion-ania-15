@@ -2324,11 +2324,14 @@
    * Y empiezan ANTES: a los 10 s, cuando las flores todavía casi no se
    * movieron. La planta se entera con el cuerpo antes que con la cabeza.
    *
-   * @param {number} t
-   * @param {number} retirada - 0 a 1, cuánto se está retirando todo.
+   * Y se desmayan con su planta: `loQueLeQuedaDelGesto()` les da la misma
+   * oleada y la misma curva que a las flores. Si la flor cediera y el
+   * tallo se quedara tenso, el tallo volvería a separarse de su flor.
+   *
+   * @param {number} t - Milisegundos desde el arranque del ritual.
    * @returns {void}
    */
-  function moverLasRamas(t, retirada) {
+  function moverLasRamas(t) {
     if (recortado('ramas')) return;
     if (!ramas.length) return;
 
@@ -2347,16 +2350,24 @@
       var suTurno = PENUMBRA * 0.25 + (r.distancia / lejaniaMaxima) * UMBRA * 0.6;
       var despierta = suave(limitar((t - suTurno) / 7000, 0, 1));
 
-      var fervor = despierta * (1 - retirada) *
+      /* La rama se desmaya con su planta, en la misma oleada y con la
+         misma curva: si la flor cediera y el tallo se quedara tenso, el
+         tallo volvería a separarse de su flor — que es el defecto que
+         costó cuatro causas encadenadas arreglar. */
+      var fervor = despierta * loQueLeQuedaDelGesto(t, r.distancia) *
         (t >= SHOCK ? 0.6 + tramo(t, SHOCK, SHOCK + 2500) * 0.4
          : enShock   ? 0.6
          :             tramo(t, PENUMBRA * 0.25, PROFUNDA) * 0.6);
 
-      if (fervor <= 0.001) {
+      /* `Math.abs` por lo mismo que en las flores: el sobrepaso es
+         negativo y tiene que dibujarse. Ver EL DESMAYO. */
+      if (Math.abs(fervor) <= 0.001) {
         if (r.tocada) {
           r.nodo.style.removeProperty('rotate');
           r.nodo.style.removeProperty('scale');
           r.tocada = false;
+          r.ultimoDobla = null;
+          r.ultimoCrece = null;
         }
         continue;
       }
@@ -2845,13 +2856,33 @@
 
     /* Entra en el segundo 18 y tarda 2,5 s en completarse: una corriente
        que aparece, no un interruptor. */
-    var atraccion = tramo(t, 18000, 20500);
+    /* ⚡ LAS LLAMAS SE ENDEREZAN, EN VEZ DE CONGELARSE (2026-09-13)
+     *
+     * Esto no tenía retirada NINGUNA: `atraccion` quedaba saturada en 1
+     * desde el segundo 20,5 y `alto` en 1,22 desde el 45,8, y ninguno de
+     * los dos volvía nunca. Las 32 llamas se quedaban ladeadas y estiradas
+     * hasta el cuadro 60 000, donde `devolverLasLlamas()` les borraba el
+     * estilo de golpe. Era el ÚNICO corte seco que de verdad estaba en el
+     * segundo 60.
+     *
+     * Ahora se enderezan con la misma curva que todo lo demás — pero
+     * acotada a cero: una llama no se pasa hacia el otro lado, porque su
+     * reposo es la vertical y no hay nada que la empuje más allá. Las
+     * velas son lo único que no se apaga en el minuto; tampoco se
+     * desmayan, sólo dejan de mirar.
+     *
+     * ⚠️ VAN CON RETRASO MÁXIMO, o sea el mismo turno que la flor de al
+     * lado del nombre: se les pasa distancia 0. Son la única luz que
+     * desobedece, así que ceden ÚLTIMAS, cuando ya cedió todo lo demás. */
+    var lesQueda = Math.max(0, loQueLeQuedaDelGesto(t, 0));
+
+    var atraccion = tramo(t, 18000, 20500) * lesQueda;
 
     /* En la totalidad se quedan QUIETAS: los dos segundos de vacío también
        son suyos. Y en el frenesí arden altas — es lo único que sube
        cuando todo lo demás ya se apagó. */
     var enShock = t >= TOTALIDAD && t < SHOCK;
-    var alto = 1 + tramo(t, SHOCK, SHOCK + 1800) * 0.22;
+    var alto = 1 + tramo(t, SHOCK, SHOCK + 1800) * 0.22 * lesQueda;
 
     var ahora = t / 1000;
 
@@ -4030,40 +4061,129 @@
    *   `u` va de 0 a 1 a lo largo del frenesí; `empuje` de -0,9 (comprimida
    *   contra la raíz) a 1 (lanzada más allá del tope).
    */
-  /** Cuánto tarda el empujón del 54 en devolverlas. Corto a propósito. */
-  var DURA_EL_EMPUJON = 200;
+  /* ⚡ EL DESMAYO · LA SALIDA DURA 2,5 s Y NO 200 ms (2026-09-13)
+   *
+   * Carlos, mirando el minuto en un iPhone 12 Pro Max: «las flores que se
+   * estiran pasan de un momento a otro en un corte de estar estiradas a
+   * desaparecer».
+   *
+   * Tenía razón, y el corte NO estaba donde parecía. Cuando `terminar()`
+   * corre, en el segundo 60, las flores llevan 5,8 s en reposo con los
+   * estilos ya borrados: ahí no se ve nada. El corte estaba en el 54,
+   * y eran cuatro cosas apiladas en 125 ms:
+   *
+   *   1. `tironDelFrenesi` cortaba seco en `t = FRENESI`, sin cruce. El
+   *      fervor caía 29 % y el tope 19 grados DE UN CUADRO AL OTRO — en un
+   *      teléfono 22, porque con menos flores `TOPE_DE_INCLINACION` sube.
+   *   2. El sobrepaso ya existía y NUNCA SE DIBUJABA. `elEmpujon` baja a
+   *      valores negativos, pero el guard de más abajo decía
+   *      `if (fervor <= 0.001)` y convertía todo negativo en un
+   *      `removeProperty`. La ventana visible era de 125 ms, no de 200.
+   *      La prueba no lo vio porque ejecuta la curva aislada, no el render.
+   *   3. Con esos 125 ms y `TANDAS` en 4-6, cada planta recibía CERO O UNA
+   *      muestras: un solo paso de estirada al máximo a reposo.
+   *   4. Las llamas no tenían retirada ninguna.
+   *
+   * ⚠️ ESTO REESCRIBE UNA DECISIÓN ANTERIOR, Y CON PERMISO. El motivo
+   * viejo era que «una rampa larga se lee como las plantas aceptando que
+   * se acabó». Sigue siendo cierto — y por eso el desmayo NO es una rampa
+   * que baja parejo: se pasa de largo hacia el otro lado y vuelve floja.
+   * Aceptar es una cosa; desmayarse es otra. La diferencia está en el
+   * sobrepaso, que es justo lo que antes no se dibujaba.
+   */
+
+  /** Cuánto tarda una flor en desmayarse, desde que le toca. */
+  var DURA_EL_EMPUJON = 2500;
+
+  /** El cruce entre el último tirón del frenesí y el desmayo. */
+  var DURA_EL_CRUCE = 150;
+
+  /* ⚡ LA OLEADA VA AL REVÉS QUE LA CONCIENCIA, Y ESO ES EL GESTO.
+   *
+   * La conciencia llega DESDE el nombre hacia afuera: las flores más
+   * cercanas despiertan primero (ver `suTurno`, más abajo). El desmayo
+   * vuelve al revés, de la más lejana hacia adentro, así que LA ÚLTIMA EN
+   * CEDER ES LA QUE ESTÁ JUNTO AL NOMBRE. Aguanta sola, un rato, después
+   * de que todo el resto ya se cayó — y después también cae.
+   *
+   * No es adorno: es la misma jerarquía que ordena el minuto entero. A la
+   * masa no se le concede ser individuo; a la que está más cerca, sí. */
+  var RETRASO_DE_LA_OLEADA = 900;
 
   /** Cuándo se desliza la rosa muerta: 2,2 s después del empujón. */
   var CAE_LA_MARTIR = 56200;
 
   /**
-   * La curva del empujón: de 1 a 0 en 200 ms, pasándose un 8 %.
+   * La curva del desmayo: de 1 a 0, pasándose un 18 % hacia el otro lado.
    *
-   * Cae rápido y se PASA: a los tres cuartos del recorrido ya está en
-   * -0,08 —o sea, la flor cruzó su postura de reposo hacia el otro lado— y
-   * en el último cuarto vuelve a cero. Ese sobrepaso es la diferencia
-   * entre «la empujaron» y «se detuvo»: un cuerpo frenado por una fuerza
-   * externa rebota, uno que decide pararse no.
+   * Dos tercios de caída y un tercio largo de vuelta. El sobrepaso es lo
+   * que separa «se desmayó» de «se detuvo»: un cuerpo al que se le cortó
+   * la fuerza cruza su postura de reposo, queda un momento del otro lado
+   * —flojo— y recién ahí se acomoda. Uno que decide pararse, no.
    *
-   * @param {number} x - De 0 (recién empujada) a 1 (ya quieta).
+   * ⚠️ EL SOBREPASO TIENE QUE SER VISIBLE, Y ANTES NO LO ERA. Con -0,08
+   * el ángulo resultante quedaba en unos 2°; con la vuelta repartida en
+   * los últimos 380 ms de 2,5 s, se lee. Y la vuelta es MÁS LENTA que la
+   * caída a propósito: lo que se aflojó no tiene con qué volver rápido.
+   *
+   * @param {number} x - De 0 (recién soltada) a 1 (ya quieta).
    * @returns {number} Cuánto le queda de su gesto: 1 entero, 0 en reposo,
-   *   negativo mientras está pasada.
+   *   negativo mientras está pasada del otro lado.
    */
   function elEmpujon(x) {
     if (x <= 0) return 1;
     if (x >= 1) return 0;
-    if (x < 0.75) return 1 - suave(x / 0.75) * 1.08;
-    return -0.08 + 0.08 * suave((x - 0.75) / 0.25);
+    if (x < 0.62) return 1 - suave(x / 0.62) * 1.18;
+    return -0.18 + 0.18 * suave((x - 0.62) / 0.38);
+  }
+
+  /**
+   * Cuánto le queda del gesto a una pieza que está a `distancia` del
+   * nombre, en el instante `t`. 1 = entera; 0 = en reposo; negativo =
+   * pasada del otro lado.
+   *
+   * Fuera del desmayo devuelve 1: la pieza sigue con su gesto entero y
+   * quien la llama decide qué hacer con él.
+   *
+   * @param {number} t - Milisegundos desde el arranque del ritual.
+   * @param {number} distancia - Su distancia al nombre.
+   * @returns {number}
+   */
+  function loQueLeQuedaDelGesto(t, distancia) {
+    if (t < FRENESI) return 1;
+    var lejos = lejaniaMaxima > 0 ? limitar(distancia / lejaniaMaxima, 0, 1) : 1;
+    /* Las de afuera ceden primero; las de al lado del nombre, últimas. */
+    var suRetraso = (1 - lejos) * RETRASO_DE_LA_OLEADA;
+    var x = (t - FRENESI - suRetraso) / DURA_EL_EMPUJON;
+    return elEmpujon(limitar(x, 0, 1));
   }
 
   var PERIODO_INICIAL_DEL_TIRON = 1200;
   var PERIODO_FINAL_DEL_TIRON   = 300;
 
   function tironDelFrenesi(t) {
-    if (t < SHOCK || t >= FRENESI) return { u: 0, fase: 0, empuje: 0 };
+    if (t < SHOCK) return { u: 0, fase: 0, empuje: 0 };
+
+    /* ⚡ DESPUÉS DEL 54 EL TIRÓN NO DESAPARECE: SE DESVANECE (2026-09-13)
+     *
+     * Esto decía `t >= FRENESI` en el mismo `if` de arriba, o sea que el
+     * empuje pasaba de su último valor a cero en un cuadro. En el borde,
+     * la fase cae en el tramo de lanzamiento y el empuje vale ~+0,40: el
+     * salto medido era de 19° de tope (22° en un teléfono) y −49 % de
+     * amplitud del temblor, todo en 16 ms. Ver EL DESMAYO.
+     *
+     * Ahora la fase se CONGELA en el borde y lo que se apaga es la fuerza:
+     * la flor se queda con el último envión que alcanzó a dar y se le va
+     * drenando. Es la misma imagen, sin el escalón. */
+    var desvanece = t >= FRENESI
+      ? 1 - limitar((t - FRENESI) / DURA_EL_CRUCE, 0, 1)
+      : 1;
+    if (desvanece <= 0) return { u: 1, fase: 0, empuje: 0 };
+
+    var congelado = t < FRENESI ? t : FRENESI - 1;
 
     var total = FRENESI - SHOCK;
-    var u = limitar((t - SHOCK) / total, 0, 1);
+    var u = limitar((congelado - SHOCK) / total, 0, 1);
 
     var p0 = PERIODO_INICIAL_DEL_TIRON;
     var p1 = PERIODO_FINAL_DEL_TIRON;
@@ -4082,7 +4202,7 @@
       empuje = 1 - suave((fase - 0.52) / 0.48);
     }
 
-    return { u: u, fase: fase, empuje: empuje };
+    return { u: u, fase: fase, empuje: empuje * desvanece };
   }
 
   function moverLasFloresReales(t) {
@@ -4135,33 +4255,37 @@
        planta— así que se calcula UNA vez por cuadro y no doscientas. */
     var tiron = tironDelFrenesi(t);
 
-    /* ⚡ EL EMPUJÓN DEL SEGUNDO 54, QUE NO EXISTÍA (2026-09-11)
+    /* ⚡ EL SEGUNDO 54 · HISTORIA DE LAS TRES VERSIONES
      *
-     * Acá decía `var retirada = 0;` y una nota explicando que las plantas
-     * NO se calman: que siguen estirando hasta el 60 y que terminar() las
-     * devuelve de golpe en el último cuadro.
+     * v1 — `var retirada = 0;`. Las plantas NO se calmaban: seguían
+     *   estirando hasta el 60 y `terminar()` las devolvía de golpe en el
+     *   último cuadro. El scratch de disco rayado sonaba en el 54 y en
+     *   pantalla no pasaba nada durante seis segundos: un sonido sin gesto.
      *
-     * Eso contradice la instrucción de Carlos, que es literal: «el final
-     * es abrupto porque una fuerza superior las empuja violentamente de
-     * vuelta a la normalidad», y el guion, que pone el retorno forzado en
-     * la franja 54-60 y no en el 60 pelado.
+     * v2 — el empujón, 200 ms, todas a la vez, con un 8 % de retroceso.
+     *   Resolvió el sonido huérfano y era la lectura correcta de la
+     *   instrucción de Carlos —«una fuerza superior las empuja
+     *   violentamente de vuelta a la normalidad»—, pero nunca llegó a
+     *   verse: el retroceso caía en un guard que lo convertía en borrado,
+     *   y 125 ms con TANDAS 4-6 son cero o una muestras por planta.
      *
-     * Y dejaba al scratch huérfano: el disco se rayaba en el 54 y en
-     * pantalla no pasaba nada durante seis segundos. Un sonido sin gesto.
+     * v3 — el desmayo, que es lo que hay ahora. Carlos, mirando su
+     *   iPhone: «pasan de un momento a otro en un corte de estar estiradas
+     *   a desaparecer». No se sueltan: se les acaba el cuerpo. Ceden en
+     *   OLEADA, de la más lejana al nombre hacia adentro, se pasan de
+     *   largo y vuelven flojas. La última en ceder es la de al lado del
+     *   nombre, sola, después de que todo el resto ya se cayó.
      *
-     * ⚠️ EL EMPUJÓN VIENE DE AFUERA, Y SE TIENE QUE VER ASÍ. No es una
-     * rampa suave —eso sería las plantas aceptando— ni el frenazo mudo del
-     * 60. Son 200 ms, todas a la vez, con un RETROCESO del 8 %: se pasan
-     * de su postura de reposo y vuelven, que es lo que hace un cuerpo al
-     * que empujaron, no uno que se detuvo solo.
+     * Lo que sobrevive de v2 y no se toca: el gesto viene DE AFUERA, no es
+     * una rampa pareja —eso sería las plantas aceptando— y el sobrepaso es
+     * lo que separa «se desmayó» de «se detuvo».
      *
-     * De los 54,2 a los 60 quedan quietas, fingiendo docilidad delante de
+     * Los últimos segundos quedan quietos, fingiendo docilidad delante de
      * quien acaba de verlas intentar arrancarse. Eso sigue siendo lo más
-     * perturbador del minuto — pero ahora es una quietud impuesta y
-     * visible, no seis segundos de seguir tirando. */
-    var retirada = t >= FRENESI
-      ? 1 - elEmpujon(limitar((t - FRENESI) / DURA_EL_EMPUJON, 0, 1))
-      : 0;
+     * perturbador del minuto.
+     *
+     * Ya no hay una sola `retirada` para todas: cada flor tiene la suya.
+     * Ver loQueLeQuedaDelGesto(). */
 
     for (var i = 0; i < floresReales.length; i++) {
       var f = floresReales[i];
@@ -4170,8 +4294,19 @@
       if (f.martir && muerte.suelta) continue;
 
       /* Si no es el turno de su planta, este cuadro no la toca. Ver la
-         nota de LOS TURNOS: lo caro es invalidar el SVG, no la flor. */
-      if (!esSuTurno(f)) continue;
+         nota de LOS TURNOS: lo caro es invalidar el SVG, no la flor.
+
+         ⚡ SALVO EN EL CRUCE DEL 54, que es un acontecimiento de un
+         instante: si le cae fuera de turno se lo pierde y vuelve el
+         escalón que este arreglo vino a sacar. Es el mismo criterio —y el
+         mismo comentario— que el latigazo de las ramas.
+
+         ⚠️ Y SOLO EL CRUCE. El resto del desmayo NO se exime: dura 2,5 s,
+         y con TANDAS 4 a 24 fps eso son ~15 muestras por planta, de sobra
+         para un gesto lento. Eximirlo entero costaría los 9,08 ms del
+         cuadro completo durante dos segundos y medio a cambio de nada. */
+      var enElCruce = t >= FRENESI && (t - FRENESI) < DURA_EL_CRUCE;
+      if (!enElCruce && !esSuTurno(f)) continue;
 
       /* ── 1. LA CONCIENCIA, QUE LLEGA COMO UNA ONDA ──
          Las flores más cercanas al nombre despiertan primero y las de las
@@ -4192,20 +4327,46 @@
          lo saben», y es lo que enciende el frenesí. */
       var vueltaColectiva = enShock ? tramo(t, SHOCK - 200, SHOCK) : 0;
 
+      /* ⚡ UNA SOLA RAMA PARA TODO LO QUE PASA DESPUÉS DEL SHOCK, Y ESO ES
+         LO QUE LO VUELVE CONTINUO (2026-09-13)
+
+         Antes eran dos: una para el frenesí y otra para la sumisión, y el
+         salto del 54 vivía justo en la costura. Ahora es la misma
+         expresión de punta a punta: el tirón se desvanece solo (ver
+         tironDelFrenesi) y `leQueda` corre la curva del desmayo, que vale
+         1 mientras el frenesí sigue. En `t = FRENESI` las dos formas dan
+         el mismo número. */
+      var leQueda = loQueLeQuedaDelGesto(t, f.distancia);
+
       var fervor =
           enShock    ? despierta * (0.55 + vueltaColectiva * 0.18)
-        : (t >= SHOCK && t < FRENESI)
-                     ? despierta * (0.55 + tiron.empuje * 0.55)
-        : t >= FRENESI ? despierta * 0.55 * (1 - retirada)
+        : t >= SHOCK ? despierta * (0.55 + tiron.empuje * 0.55) * leQueda
         :              despierta * tramo(t, PENUMBRA * 0.3, PROFUNDA) * 0.55;
 
-      if (fervor <= 0.001) {
-        // Todavía dócil: se la deja exactamente como la dejó 07.
+      /* ⛔ `Math.abs`, Y ES EL ARREGLO DEL CORTE (2026-09-13)
+       *
+       * Decía `fervor <= 0.001`, que es verdadero para CUALQUIER valor
+       * negativo. O sea que el sobrepaso del desmayo —lo único que separa
+       * «se desmayó» de «se detuvo»— en vez de dibujarse disparaba el
+       * borrado de los estilos. La flor se iba de su postura estirada al
+       * reposo en un solo paso.
+       *
+       * La prueba que cuidaba la curva no lo vio porque la ejecuta
+       * aislada, con `new Function`, y la curva estaba bien: lo que estaba
+       * mal era que su mitad negativa nunca llegaba a la pantalla. */
+      if (Math.abs(fervor) <= 0.001) {
+        // Todavía dócil, o ya asentada: se la deja como la dejó 07.
         if (f.tocada) {
           f.nodo.style.removeProperty('rotate');
           f.nodo.style.removeProperty('scale');
           f.nodo.style.removeProperty('translate');
           f.tocada = false;
+          /* ⚠️ Y la memoria del último valor escrito se va con el estilo.
+             Si sobreviviera, una escritura futura que diera el mismo
+             número se saltearía por «no cambió» y la flor se quedaría sin
+             poner, con el estilo borrado y el recuerdo de tenerlo. */
+          f.ultimoGesto = null;
+          f.ultimoCrece = null;
         }
         continue;
       }
@@ -4366,7 +4527,7 @@
       }
     }
 
-    moverLasRamas(t, retirada);
+    moverLasRamas(t);
   }
 
   /* ⚡ QUE SE VEA IGUAL EN UN TELÉFONO (2026-09-10)
