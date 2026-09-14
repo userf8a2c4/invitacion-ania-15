@@ -1577,19 +1577,98 @@ comprobar('las ramas se devuelven',
  * Ahora se comprueba lo contrario, y las tres cosas que lo hacen un
  * empujón y no una frenada: que empiece en el 54, que dure poco, y que se
  * PASE de la postura de reposo. */
-comprobar('el empujón existe y empieza en el segundo 54',
-  /var retirada = t >= FRENESI/.test(eclipseCodigo) &&
-  /1 - elEmpujon\(limitar\(\(t - FRENESI\) \/ DURA_EL_EMPUJON, 0, 1\)\)/
-    .test(eclipseCodigo),
+comprobar('el desmayo existe y empieza en el segundo 54',
+  /if \(t < FRENESI\) return 1;/.test(eclipseCodigo) &&
+  /var x = \(t - FRENESI - suRetraso\) \/ DURA_EL_EMPUJON;/.test(eclipseCodigo),
   'sin esto el scratch suena y en pantalla no pasa nada');
 
 comprobar('y las flores lo obedecen, no solo las ramas',
-  /t >= FRENESI \? despierta \* 0\.55 \* \(1 - retirada\)/.test(eclipseCodigo),
+  /t >= SHOCK \? despierta \* \(0\.55 \+ tiron\.empuje \* 0\.55\) \* leQueda/
+    .test(eclipseCodigo),
   'si solo se calman las ramas, las cabezas quedan estiradas solas');
 
-comprobar('y dura 200 ms, no una rampa',
-  /var DURA_EL_EMPUJON = 200;/.test(eclipseCodigo),
-  'una rampa larga se lee como las plantas aceptando que se acabó');
+comprobar('y las ramas se desmayan con su planta',
+  /despierta \* loQueLeQuedaDelGesto\(t, r\.distancia\)/.test(eclipseCodigo),
+  'si la flor cede y el tallo se queda tenso, el tallo se separa de su ' +
+  'flor — que es el defecto que costó cuatro causas encadenadas arreglar');
+
+/* ⚡ DURABA 200 ms Y AHORA DURA 2500 (2026-09-13)
+ *
+ * Esta comprobación exigía `DURA_EL_EMPUJON = 200` con el motivo escrito:
+ * «una rampa larga se lee como las plantas aceptando que se acabó».
+ *
+ * El motivo SIGUE SIENDO CIERTO, y por eso el desmayo no es una rampa: se
+ * pasa de largo hacia el otro lado y vuelve flojo. Aceptar es una cosa;
+ * desmayarse es otra, y la diferencia está en el sobrepaso.
+ *
+ * Lo que obligó al cambio fue la aritmética, no el gusto. Carlos, sobre su
+ * iPhone: «pasan de un momento a otro en un corte de estar estiradas a
+ * desaparecer». Con 200 ms la ventana RENDERIZADA era de 125 —el resto se
+ * lo comía el guard, ver más abajo— y con TANDAS 4-6 a 20-30 fps eso son
+ * CERO O UNA muestras por planta. Un solo paso no es un gesto: es un
+ * salto. A 24 fps, 2,5 s son ~15 muestras por planta con TANDAS 4.
+ *
+ * El cambio lo aprobó Carlos explícitamente. */
+comprobar('y dura lo suficiente para verse, aun con tandas',
+  /var DURA_EL_EMPUJON = 2500;/.test(eclipseCodigo),
+  'con 200 ms y TANDAS 4-6 cada planta recibía 0 o 1 muestras: un salto');
+
+/* ⛔ LA COMPROBACIÓN QUE FALTABA, Y QUE DEJÓ PASAR EL DEFECTO
+ *
+ * La prueba de la curva (más abajo) ejecuta `elEmpujon` aislada con
+ * `new Function` y verifica que se pase de cero. Pasaba. Pero en pantalla
+ * el sobrepaso NUNCA SE DIBUJÓ: el guard del bucle decía
+ * `if (fervor <= 0.001)`, que es verdadero para cualquier negativo, así
+ * que en vez de dibujar la mitad negativa de la curva ejecutaba el
+ * borrado de los estilos.
+ *
+ * O sea: la curva estaba bien y el render la tiraba. Una prueba que mira
+ * la curva sola no puede ver eso. Ésta mira el guard. */
+comprobar('y el sobrepaso LLEGA A LA PANTALLA, no solo a la curva',
+  /if \(Math\.abs\(fervor\) <= 0\.001\) \{/.test(eclipseCodigo) &&
+  !/if \(fervor <= 0\.001\) \{/.test(eclipseCodigo),
+  'con `fervor <= 0.001` cualquier negativo dispara el removeProperty: ' +
+  'la flor salta de estirada a reposo en un paso y el sobrepaso no existe');
+
+comprobar('y al borrar el estilo se borra también su memoria',
+  /f\.ultimoGesto = null;/.test(eclipseCodigo) &&
+  /f\.ultimoCrece = null;/.test(eclipseCodigo),
+  'si la memoización sobrevive al removeProperty, una escritura futura ' +
+  'que coincida con ella se saltea y la flor queda sin poner');
+
+/* ⚡ EL CRUCE DEL 54 */
+comprobar('el tirón del frenesí se desvanece en vez de cortar',
+  /var desvanece = t >= FRENESI/.test(eclipseCodigo) &&
+  /var congelado = t < FRENESI \? t : FRENESI - 1;/.test(eclipseCodigo) &&
+  /empuje: empuje \* desvanece/.test(eclipseCodigo),
+  'cortando seco, el empuje pasaba de ~+0,40 a 0 en un cuadro: 19° de ' +
+  'tope (22° en un teléfono) y −49 % de amplitud del temblor, en 16 ms');
+
+comprobar('y el cruce está exento de las tandas, como el latigazo',
+  /var enElCruce = t >= FRENESI && \(t - FRENESI\) < DURA_EL_CRUCE;/
+    .test(eclipseCodigo) &&
+  /if \(!enElCruce && !esSuTurno\(f\)\) continue;/.test(eclipseCodigo),
+  'es un acontecimiento de un instante: si le cae fuera de turno se lo ' +
+  'pierde y vuelve el escalón');
+
+/* ⚠️ Y SOLO EL CRUCE. Eximir el desmayo entero costaría los 9,08 ms del
+   cuadro completo durante 2,5 s a cambio de nada: el gesto es lento y las
+   tandas lo muestrean de sobra. */
+comprobar('pero el desmayo entero NO está exento',
+  !/t - FRENESI\) < DURA_EL_EMPUJON[\s\S]{0,80}?esSuTurno/.test(eclipseCodigo),
+  'serían 9,08 ms por cuadro durante dos segundos y medio, para nada');
+
+/* ⚡ LA OLEADA VA AL REVÉS QUE LA CONCIENCIA */
+comprobar('el desmayo es una oleada, no un apagón',
+  /var suRetraso = \(1 - lejos\) \* RETRASO_DE_LA_OLEADA;/.test(eclipseCodigo),
+  'sin retraso por distancia se caen las 234 a la vez, que es otra forma ' +
+  'del mismo salto');
+
+comprobar('y la última en ceder es la de al lado del nombre',
+  /var lejos = lejaniaMaxima > 0 \? limitar\(distancia \/ lejaniaMaxima, 0, 1\) : 1;/
+    .test(eclipseCodigo),
+  'la conciencia llega DESDE el nombre hacia afuera; el desmayo vuelve al ' +
+  'revés y termina en la que está más cerca. Es la jerarquía del minuto');
 
 {
   /* Y ejecutada: la curva tiene que PASARSE de cero. Es la diferencia
@@ -1906,8 +1985,26 @@ comprobar('las llamas se inclinan hacia el nombre',
   /moverLasLlamas\(t\);/.test(eclipseCodigo));
 
 comprobar('empieza en el segundo 18',
-  /var atraccion = tramo\(t, 18000, 20500\);/.test(eclipseCodigo),
+  /var atraccion = tramo\(t, 18000, 20500\) \* lesQueda;/.test(eclipseCodigo),
   'es el beat del guion: «las velas notan algo»');
+
+/* ⛔ Y TERMINA, QUE ES LO QUE NO HACÍA (2026-09-13)
+ *
+ * `atraccion` quedaba saturada en 1 desde el segundo 20,5 y `alto` en 1,22
+ * desde el 45,8, y ninguno de los dos volvía nunca. Las 32 llamas se
+ * quedaban ladeadas y estiradas hasta el cuadro 60 000, donde
+ * `devolverLasLlamas()` les borraba el estilo de golpe. Era el ÚNICO corte
+ * seco que de verdad estaba en el segundo 60. */
+comprobar('y se enderezan antes del final, en vez de congelarse',
+  /var lesQueda = Math\.max\(0, loQueLeQuedaDelGesto\(t, 0\)\);/
+    .test(eclipseCodigo) &&
+  /tramo\(t, SHOCK, SHOCK \+ 1800\) \* 0\.22 \* lesQueda/.test(eclipseCodigo),
+  'sin esto quedan al 122 % y ladeadas hasta que se les borra el estilo');
+
+comprobar('y no se pasan hacia el otro lado, como sí hacen las plantas',
+  /Math\.max\(0, loQueLeQuedaDelGesto/.test(eclipseCodigo),
+  'el reposo de una llama es la vertical y no hay nada que la empuje más ' +
+  'allá: las velas no se desmayan, solo dejan de mirar');
 
 /* ⚠️ ACÁ ESTÁ LA TRAMPA DEL BLOQUE, Y ES LA MISMA QUE CON LOS NUDOS.
    19-velas.js le escribe a cada .llama su propio style.transform (el
@@ -3100,8 +3197,16 @@ console.log('\nEl frenesí, ejecutado\n');
 
   const limitar = (v, a, b) => (v < a ? a : v > b ? b : v);
   const suave = (x) => { x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); };
+  /* `DURA_EL_CRUCE` se declara junto a DURA_EL_EMPUJON, fuera de este
+     recorte, asi que se lee del archivo y se inyecta. Sin el, el cruce del
+     54 no se puede ejecutar aca. */
+  const DURA_EL_CRUCE = Number((eclipse.match(
+    /var DURA_EL_CRUCE = (\d+);/) || [])[1]);
+
   const tiron = new Function('SHOCK', 'FRENESI', 'limitar', 'suave',
-    fuente + '; return tironDelFrenesi;')(curva.SHOCK, curva.FRENESI, limitar, suave);
+    'DURA_EL_CRUCE',
+    fuente + '; return tironDelFrenesi;')(
+      curva.SHOCK, curva.FRENESI, limitar, suave, DURA_EL_CRUCE);
 
   /* Los bordes de ciclo: donde la fase vuelve a empezar. */
   const ciclos = [];
@@ -3156,9 +3261,75 @@ console.log('\nEl frenesí, ejecutado\n');
     'la peor compresión fue ' + Math.max(...compresiones).toFixed(2) +
     ' — sin envión hacia atrás es estirarse, no arrancarse');
 
-  comprobar('y fuera de los diez segundos no existe',
-    tiron(curva.SHOCK - 1).empuje === 0 && tiron(curva.FRENESI).empuje === 0,
-    'el frenesí no puede desbordarse ni al shock ni al frenazo');
+  /* ⚡ EL BORDE DE ARRIBA CAMBIÓ, Y EL DE ABAJO NO (2026-09-13)
+   *
+   * Esto exigía `tiron(FRENESI).empuje === 0`, o sea que el frenesí se
+   * apagara EXACTAMENTE en el 54. Eso era precisamente el defecto: el
+   * empuje pasaba de su último valor a cero en un cuadro.
+   *
+   * Lo que la comprobación quería proteger sigue en pie —el frenesí no
+   * puede desbordarse— pero el borde ya no es un instante, es el cruce.
+   * Antes del shock: cero duro. Después del cruce: cero duro. En el medio:
+   * se desvanece. */
+  comprobar('el frenesí no empieza antes del shock',
+    tiron(curva.SHOCK - 1).empuje === 0,
+    'el frenesí no puede desbordarse hacia atrás');
+
+  comprobar('y está del todo apagado al terminar el cruce',
+    tiron(curva.FRENESI + DURA_EL_CRUCE).empuje === 0 &&
+    tiron(curva.FRENESI + DURA_EL_CRUCE + 500).empuje === 0,
+    'pasado el cruce no puede quedar ni un resto de tirón');
+
+  /* ⛔ LA COMPROBACIÓN QUE ATRAPA EL DEFECTO DE VERDAD.
+   *
+   * El salto medido era de 19° de tope y −49 % de amplitud del temblor en
+   * un solo cuadro (22° en un teléfono, donde `TOPE_DE_INCLINACION` sube
+   * porque hay menos flores). Lo que lo causaba era esta discontinuidad.
+   *
+   * Se mide en el cuadro real de 24 fps: si de un cuadro al siguiente el
+   * empuje se mueve más que lo que se mueve DENTRO del frenesí, es un
+   * escalón y no una transición. */
+  {
+    /* ⚠️ LA PRIMERA VERSIÓN DE ESTO MEDÍA MAL, Y VALE DEJARLO ESCRITO.
+     *
+     * Comparaba el empuje del borde contra el de un cuadro ENTERO antes
+     * (42 ms). Pero al final del frenesí el período es de 300 ms, así que
+     * dentro de un cuadro el empuje ya se mueve hasta 1,04 por su cuenta:
+     * la medición daba 1,10 contra 1,04 y ponía en rojo algo que estaba
+     * bien. Estaba midiendo la violencia del frenesí, no la costura.
+     *
+     * Lo que hay que medir es la COSTURA: que en el instante del cambio de
+     * fórmula no haya escalón. Eso es lo que antes valía ~0,40 de golpe. */
+    const saltoEnLaCostura = Math.abs(
+      tiron(curva.FRENESI).empuje - tiron(curva.FRENESI - 1).empuje);
+
+    comprobar('el cruce no tiene costura: el empuje no salta al cambiar',
+      saltoEnLaCostura < 0.01,
+      'saltó ' + saltoEnLaCostura.toFixed(4) + ' en 1 ms. Cortando seco ' +
+      'esto valía ~0,40, que en pantalla eran 19° de tope (22° en un ' +
+      'teléfono) y −49 % de amplitud del temblor, en un solo cuadro');
+
+    /* Y que lo que queda del tirón se vaya más suave que el propio
+       frenesí: si el desvanecido fuera más brusco que lo que venía
+       pasando, habríamos cambiado un escalón por otro. */
+    const CUADRO = 42;                       // 24 fps
+    let peorEnElCruce = 0;
+    for (let t = curva.FRENESI; t <= curva.FRENESI + DURA_EL_CRUCE; t += 4) {
+      peorEnElCruce = Math.max(peorEnElCruce,
+        Math.abs(tiron(t + CUADRO).empuje - tiron(t).empuje));
+    }
+
+    let peorDentro = 0;
+    for (let t = curva.SHOCK + CUADRO; t < curva.FRENESI - CUADRO; t += CUADRO) {
+      peorDentro = Math.max(peorDentro,
+        Math.abs(tiron(t).empuje - tiron(t - CUADRO).empuje));
+    }
+
+    comprobar('y se apaga más suave de lo que el frenesí ya se movía',
+      peorEnElCruce < peorDentro,
+      'en el cruce se mueve hasta ' + peorEnElCruce.toFixed(3) +
+      ' por cuadro y el frenesí llegaba a ' + peorDentro.toFixed(3));
+  }
 }
 
 /* ─── 18. EL FRENAZO LO IMPONE ALGO DE AFUERA ──────────────────────── */
