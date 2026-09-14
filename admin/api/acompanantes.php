@@ -586,11 +586,43 @@ function moverElCupo($confirmacionId, $tipo, $cuanto) {
         'SELECT id, pases FROM invitaciones WHERE confirmacion_id = :c LIMIT 1',
         [':c' => $confirmacionId]
     );
-    if (!$inv) return;
+    /* ⚡ UNA CONFIRMACIÓN SIN INVITACIÓN TAMBIÉN ES ÉXITO (2026-09-14)
+       Acá había un `return;` pelado. En PHP eso es null, no `false`, y el
+       contrato de arriba promete bool — pero el daño no fue de tipos:
+       quien llama desde «agregar» pregunta `if (!moverElCupo(...))`, y
+       null es falso igual que false.
+
+       Resultado: las confirmaciones que entraron por el formulario
+       abierto —sin token, y por eso sin fila en `invitaciones`— recibían
+       un 409 «No se pudo reservar el lugar de más, así que no se agregó a
+       nadie» DESPUÉS de que el cupo ya se había movido en
+       `confirmaciones`, once líneas más arriba. El mensaje mentía en sus
+       dos mitades: el lugar sí se reservó, y por eso mismo nadie lo ocupa.
+
+       Y en esta salida no hay nada que arreglar además del return: una
+       confirmación sin invitación no tiene `pases` que mover. «No había
+       nada que hacer» es éxito, no fallo. */
+    if (!$inv) return true;
 
     actualizar('invitaciones', (int) $inv['id'], [
         'pases' => max(1, (int) $inv['pases'] + $cuanto),
     ]);
+
+    /* ⛔ Y ESTE `return true` NO ES DECORACIÓN (2026-09-14)
+       La función terminaba acá sin return, y en PHP caer al final devuelve
+       null: el mismo falso que el `return;` de arriba, pero en el camino
+       de éxito NORMAL — el de una familia que sí tiene invitación, que son
+       casi todas.
+
+       O sea que sumar un primo a una familia completa movía
+       `confirmaciones.adultos`, movía `invitaciones.pases`, y recién
+       entonces contestaba 409 sin insertar a nadie. Lo peor es lo que el
+       propio mensaje invita a hacer: «volvé a intentar». Cada reintento
+       vuelve a subir el cupo y sigue sin agregar a nadie, así que la
+       familia queda al revés que la de Carolina: «(4 DE 7)» en vez de
+       «(5 DE 4)» — y ese desfase no lo cuenta nadie, porque el panel solo
+       avisa cuando sobra gente, no cuando sobran lugares. */
+    return true;
 }
 
 function cupoDeLaConfirmacion($confirmacionId) {
