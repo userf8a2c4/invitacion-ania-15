@@ -108,8 +108,15 @@ if (fuenteMenus && fuenteGuion) {
   comprobar('a quien no eligió también se lo nombra',
     conFaltante.includes('Ana') && conFaltante.includes('sin elegir'), conFaltante);
 
-  comprobar('sin personas cargadas cae al resumen de siempre',
-    fn([], '2 pollo, 1 res') === '2 pollo, 1 res');
+  /* ⚡ (2026-09-14) EL RESUMEN AHORA SALE MARCADO. Antes caía al texto
+     del grupo tal cual, y eso hacía indistinguible una familia que
+     eligió plato por plato de una de la que no sabemos nada: las dos
+     salían iguales en el papel. Sigue estando el resumen —no se pierde
+     ningún dato—, pero ahora se ve que es un resumen. */
+  const soloResumen = fn([], '2 pollo, 1 res');
+  comprobar('sin personas cargadas, el resumen sale pero MARCADO',
+    soloResumen.includes('2 pollo, 1 res') && /sin desglose/i.test(soloResumen),
+    soloResumen);
   comprobar('y sin nada, un guion',
     fn([], '') === '—');
 }
