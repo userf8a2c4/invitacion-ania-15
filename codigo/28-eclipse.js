@@ -656,8 +656,36 @@
    */
   function medirElLienzoDeLaOfrenda() {
     if (!pincelDeLaOfrenda) return;
-    var radio = LADO * (muerte.escala0 || muerte.escala || 1) * 0.75 *
-                MARGEN_DE_LA_DIAGONAL;
+
+    /* ⛔ ESTO LANZABA Y SE LLEVABA EL ECLIPSE ENTERO (2026-09-14)
+     *
+     * Decía `(muerte.escala0 || muerte.escala || 1)`. Pero `muerte` se
+     * ASIGNA 700 líneas más abajo (línea 1521) y acá se llega desde el
+     * NIVEL SUPERIOR del archivo: la línea 806 llama a medirElLienzo(), y
+     * ésa llama a esta función en la 790. `var` se iza, así que en esa
+     * primera medición `muerte` vale `undefined` y leerle `.escala0` tira
+     * un TypeError.
+     *
+     * Y una excepción sin atrapar en el nivel superior ABORTA EL IIFE
+     * ENTERO: no se crea `muerte`, no se arma la puerta de la sección 17,
+     * no queda registrado `empezar()`. El ritual no podía correr NINGUNA
+     * vez. Medido en pbe.aniaxv.com con el sobre abierto y la escena
+     * montada; la traza decía, de adentro hacia afuera:
+     *
+     *     medirElLienzoDeLaOfrenda ← medirElLienzo ← nivel superior ← IIFE
+     *
+     * ⚠️ LA GUARDA DE ARRIBA NO ALCANZABA. `pincelDeLaOfrenda` ya existe a
+     * esa altura —el lienzo se crea antes de la 806—; lo que no existe es
+     * el objeto. Son dos cosas distintas y hacían falta las dos.
+     *
+     * El respaldo `|| 1` ya estaba escrito y era el correcto: lo único que
+     * faltaba era no reventar antes de llegar a él. Cuando la rosa existe
+     * no cambia nada —`ladoDeLaOfrenda` se resetea a 0 antes de cada
+     * medición y medirElLienzo() se vuelve a llamar más adelante—, así que
+     * el lienzo se re-mide con la escala de verdad en cuanto la hay. */
+    var escalaDeLaRosa = muerte ? (muerte.escala0 || muerte.escala || 1) : 1;
+
+    var radio = LADO * escalaDeLaRosa * 0.75 * MARGEN_DE_LA_DIAGONAL;
     var ladoCss = Math.max(24, Math.ceil(radio * 2));
     if (ladoCss === ladoDeLaOfrenda) return;
 
