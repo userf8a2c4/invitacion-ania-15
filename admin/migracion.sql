@@ -962,6 +962,22 @@ CREATE TABLE IF NOT EXISTS acompanantes (
   menu             VARCHAR(120) NOT NULL DEFAULT '',
   alergias         VARCHAR(200) NOT NULL DEFAULT '',
   notas            VARCHAR(300) NOT NULL DEFAULT '',
+  -- ⚡ EN QUÉ ORDEN SE MUESTRA CADA NOMBRE (2026-09-14)
+  -- Carlos: «que lucila pueda modificar el orden de los nombres en la
+  -- app y esto se vea reflejado en la invitacion».
+  --
+  -- 0 = NUNCA SE ACOMODÓ A MANO, y eso es lo que hace que esta columna
+  -- no necesite migración. Con ORDER BY orden, id, una familia entera en
+  -- 0 sale exactamente en el orden de siempre (el de creación). Recién
+  -- cuando alguien la acomoda, ESA familia pasa a 1..N; las otras
+  -- cincuenta siguen en 0 sin que nadie las toque.
+  orden            INT NOT NULL DEFAULT 0,
+
+Y en el bloque de prosa de arriba (el que empieza «LOS NOMBRES DENTRO DE CADA CONFIRMACIÓN», línea 939), agregar el mismo ⚠️ que ya llevan las líneas 866-869 y 901-903:
+
+-- ⚠️ `orden` NO se agrega desde acá para las instalaciones que YA tienen
+-- la tabla: "ADD COLUMN IF NOT EXISTS" no existe en MySQL. La agrega
+-- api/instalar.php, que antes comprueba si ya está.
   creado_en        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY por_confirmacion (confirmacion_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -2515,10 +2515,10 @@
      que pesa un 80% menos. Acá abajo se pide la copia liviana; el
      original comentado sigue intacto en codigo/, es el que se edita.
 ═══════════════════════════════════════════════════════════════════ -->
-<script defer src="codigo/produccion/01-configuracion.js?v=314"></script>
-<script defer src="codigo/produccion/02-utilidades.js?v=314"></script>
-<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=314"></script>
-<script defer src="codigo/produccion/04-invitado-personalizado.js?v=314"></script>
+<script defer src="codigo/produccion/01-configuracion.js?v=316"></script>
+<script defer src="codigo/produccion/02-utilidades.js?v=316"></script>
+<script defer src="codigo/produccion/03-sobre-de-apertura.js?v=316"></script>
+<script defer src="codigo/produccion/04-invitado-personalizado.js?v=316"></script>
 
 <!-- BOTÓN DE ANIMACIONES (arriba a la izquierda) — es MARCADO, no script.
      Enciende o apaga TODO el movimiento de la web. Está desde el inicio
@@ -2576,7 +2576,7 @@
      para EXISTIR, solo para reaccionar al clic — y ese clic no puede
      llegar antes de que la lista termine de bajar el archivo 20. -->
 <script type="application/json" id="scripts-de-la-escena">
-["codigo/produccion/10-reproductor-de-musica.js?v=314", "codigo/produccion/05-cursor-personalizado.js?v=314", "codigo/produccion/24-lienzo-de-petalos.js?v=314", "codigo/produccion/06-petalos-con-fisica.js?v=314", "codigo/produccion/07-marco-y-enredaderas.js?v=314", "codigo/produccion/08-efectos-de-scroll.js?v=314", "codigo/produccion/09-cuenta-regresiva.js?v=314", "codigo/produccion/11-formulario-confirmacion.js?v=314", "codigo/produccion/12-pase-de-acceso.js?v=314", "codigo/produccion/13-agregar-al-calendario.js?v=314", "codigo/produccion/23-lienzo-de-luz.js?v=314", "codigo/produccion/27-fauna-nocturna.js?v=314", "codigo/produccion/14-haces-de-luz.js?v=314", "codigo/produccion/15-registro-de-confirmaciones.js?v=314", "codigo/produccion/16-volver-arriba.js?v=314", "codigo/produccion/17-joyas-colgantes.js?v=314", "codigo/produccion/18-motas-de-polvo.js?v=314", "codigo/produccion/19-velas.js?v=314", "codigo/produccion/20-boton-de-animaciones.js?v=314", "codigo/produccion/21-monitor-de-rendimiento.js?v=314", "codigo/produccion/22-luz-de-la-hora.js?v=314", "codigo/produccion/25-preguntas-frecuentes.js?v=314", "codigo/produccion/26-mapa-a-pedido.js?v=314"]
+["codigo/produccion/10-reproductor-de-musica.js?v=316", "codigo/produccion/05-cursor-personalizado.js?v=316", "codigo/produccion/24-lienzo-de-petalos.js?v=316", "codigo/produccion/06-petalos-con-fisica.js?v=316", "codigo/produccion/07-marco-y-enredaderas.js?v=316", "codigo/produccion/08-efectos-de-scroll.js?v=316", "codigo/produccion/09-cuenta-regresiva.js?v=316", "codigo/produccion/11-formulario-confirmacion.js?v=316", "codigo/produccion/12-pase-de-acceso.js?v=316", "codigo/produccion/13-agregar-al-calendario.js?v=316", "codigo/produccion/23-lienzo-de-luz.js?v=316", "codigo/produccion/27-fauna-nocturna.js?v=316", "codigo/produccion/14-haces-de-luz.js?v=316", "codigo/produccion/15-registro-de-confirmaciones.js?v=316", "codigo/produccion/16-volver-arriba.js?v=316", "codigo/produccion/17-joyas-colgantes.js?v=316", "codigo/produccion/18-motas-de-polvo.js?v=316", "codigo/produccion/19-velas.js?v=316", "codigo/produccion/20-boton-de-animaciones.js?v=316", "codigo/produccion/21-monitor-de-rendimiento.js?v=316", "codigo/produccion/22-luz-de-la-hora.js?v=316", "codigo/produccion/25-preguntas-frecuentes.js?v=316", "codigo/produccion/26-mapa-a-pedido.js?v=316"]
 </script>
 
 <!-- ══════════════════════════════════════════════════════════════════
@@ -2605,7 +2605,77 @@
      ══════════════════════════════════════════════════════════════════ -->
 <script>
   (function vigiaDelEclipse() {
-    var HORA_UTC = 12, MINUTO_UTC = 30;   // 06:30 en Toluca
+    /* ⚡ LA HORA YA NO ESTÁ ESCRITA A MANO (2026-09-14)
+     *
+     * Carlos: «pon en la app un control específico para controlar la hora
+     * de trigger». Hasta hoy esto era una constante: cambiarla obligaba a
+     * editar el archivo, empaquetar y subir, o sea que no era un control.
+     *
+     * Ahora hay TRES fuentes, en este orden, y la de más abajo siempre
+     * funciona:
+     *
+     *   1. Lo que dijo el servidor en ESTA visita (eclipse.php, o el
+     *      campo `eclipse_utc` que invitacion.php ya manda de regalo).
+     *   2. Lo que dijo la última vez, guardado en localStorage. Se lee
+     *      SINCRÓNICO, antes de la primera resta: no hay un instante en
+     *      que el vigía crea la hora equivocada.
+     *   3. Esto de acá, horneado en el archivo.
+     *
+     * ⚠️ LA HORNEADA NO ES UNA EMERGENCIA, ES EL CASO NORMAL. Sin señal,
+     * con la base caída, con eclipse.php sin subir, en la primera visita
+     * de un teléfono nuevo: el vigía corre con estos dos números y se
+     * comporta exactamente igual que antes de este cambio. Un homenaje
+     * que depende de que un PHP conteste es peor que uno que no.
+     *
+     * ⚠️ MANTENERLA AL DÍA ES UN PASO MANUAL, Y SE AVISA SOLO.
+     * subir-version.mjs compara esta hora contra la que Lucila tiene
+     * puesta y avisa si se separaron. */
+    var HORA_UTC = 12, MINUTO_UTC = 30;   // 06:30 en Toluca · el respaldo
+
+    /** Dónde se recuerda la hora que dijo el servidor. */
+    var LLAVE_DE_LA_HORA = 'ania-hora-eclipse';
+
+    /** Cada cuánto se le vuelve a preguntar al servidor. */
+    var VIGENCIA_DE_LA_HORA = 3600000;    // una hora
+
+    /** Una hora en UTC tiene que ser HH:MM, de 00:00 a 23:59. */
+    var FORMA_DE_LA_HORA = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+
+    /**
+     * Adopta una hora "HH:MM" si tiene forma de hora. Devuelve si cambió.
+     *
+     * ⛔ NO LLAMA A clearTimeout NI CANCELA NADA, Y ES A PROPÓSITO.
+     * Cancelar la mirada en curso parece lo prolijo, pero `mirar()` ya
+     * duerme como mucho 60 s de una vez (el Math.min de abajo), así que
+     * el plan se reacomoda solo en menos de un minuto sin una sola línea
+     * más. Y hay una razón más fuerte: `clearTimeout` NO está entre lo
+     * que herramientas/prueba-vigia-reloj.mjs le inyecta al vigía, así
+     * que adentro del banco caería al de Node, no cancelaría nada, y
+     * una mordida sobre esa línea pasaría siempre. Código que el banco
+     * no puede medir es código que no está probado.
+     *
+     * @param {*} texto
+     * @returns {boolean}
+     */
+    function adoptarLaHora(texto) {
+      if (typeof texto !== 'string' || !FORMA_DE_LA_HORA.test(texto)) return false;
+
+      var h = parseInt(texto.slice(0, 2), 10);
+      var m = parseInt(texto.slice(3, 5), 10);
+      if (h === HORA_UTC && m === MINUTO_UTC) return false;
+
+      HORA_UTC = h;
+      MINUTO_UTC = m;
+      return true;
+    }
+
+    /* Lo que dijo el servidor la última vez. Sincrónico y gratis: pasa
+       antes de que nadie haga una resta. Si no hay nada, o si quedó algo
+       con forma rara, se sigue con la horneada. */
+    try {
+      var recordada = localStorage.getItem(LLAVE_DE_LA_HORA);
+      if (recordada) adoptarLaHora(String(recordada).split('|')[0]);
+    } catch (e) { /* modo privado: se sigue con la horneada */ }
     var DURA     = 60000;
     /* ⚡ VEINTICINCO SEGUNDOS, NO DIEZ (2026-09-13)
 
@@ -2622,7 +2692,16 @@
        momento sigue sin bajarlo, sin parsearlo y sin ejecutarlo. Son los
        mismos bytes, quince segundos antes, y solo para quien ya está. */
     var AVISO    = 25000;                 // cuánto antes se pide el archivo
-    var ARCHIVO  = 'codigo/produccion/28-eclipse.js?v=314';
+    var ARCHIVO  = 'codigo/produccion/28-eclipse.js?v=316';
+
+    /** El día UTC (AAAA-MM-DD) en que esta pestaña ya vio el eclipse. */
+    var ELDIAQUEYACORRIO = '';
+
+    /** El día UTC de un instante, como texto comparable. */
+    function diaUtcDe(ms) {
+      var d = new Date(ms);
+      return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
+    }
 
     /** Milisegundos hasta el próximo arranque. Negativo = ya empezó. */
     function faltaPara() {
@@ -2630,8 +2709,25 @@
       var hoy = new Date(ahora);
       var cuando = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate(),
                             HORA_UTC, MINUTO_UTC, 0, 0);
+
       // Si el de hoy ya terminó, el próximo es el de mañana.
       if (ahora >= cuando + DURA) cuando += 86400000;
+
+      /* ⛔ Y SI YA CORRIÓ HOY, TAMPOCO (2026-09-14)
+       *
+       * La guarda de arriba sola no alcanza desde que la hora se puede
+       * cambiar en caliente. El caso concreto: el eclipse corre a las
+       * 12:30, y a las 13:00 Lucila mueve la hora a las 14:00 pensando
+       * en mañana. `cuando` pasa a ser hoy 14:00, que todavía no pasó,
+       * así que la guarda de arriba lo deja quieto — y el homenaje
+       * ocurre DOS VECES el mismo día.
+       *
+       * Un homenaje que se repite deja de ser un homenaje. Si esta
+       * pestaña ya lo vio hoy, el próximo es mañana y punto. */
+      if (ELDIAQUEYACORRIO && diaUtcDe(cuando) === ELDIAQUEYACORRIO) {
+        cuando += 86400000;
+      }
+
       return cuando - ahora;
     }
 
@@ -2661,17 +2757,226 @@
       if (foco && (foco.tagName === 'INPUT' || foco.tagName === 'TEXTAREA' ||
                    foco.tagName === 'SELECT')) return false;
 
-      // Sin escena montada no hay nada que eclipsar (el sobre sigue cerrado).
-      return !!document.querySelector('.portada__nombre');
+      /* ⛔ ESTA GUARDA NUNCA GUARDÓ NADA (2026-09-14)
+       *
+       * Decía `return !!document.querySelector('.portada__nombre');` con el
+       * comentario «sin escena montada no hay nada que eclipsar (el sobre
+       * sigue cerrado)». Pero `.portada__nombre` es MARCADO ESTÁTICO de
+       * este mismo archivo (línea 1895): está ahí desde el primer byte,
+       * con el sobre abierto o cerrado. Ningún JavaScript lo crea ni lo
+       * quita. O sea que la condición era verdadera SIEMPRE.
+       *
+       * Y lo que describía sí importa: los 23 archivos de la escena se
+       * inyectan al ABRIR el sobre (03-sobre-de-apertura.js:231-235). Con
+       * el sobre cerrado no existen ni el marco, ni las velas, ni los
+       * lienzos — el eclipse correría sobre una página vacía, con cero
+       * flores, que es justo el caso que 28-eclipse.js:5826 señala como
+       * «con cero, el eclipse corre sin que las plantas se muevan y no se
+       * entiende nada».
+       *
+       * La pregunta de verdad es si el sobre sigue cerrado, y eso sí se
+       * puede leer: `03-sobre-de-apertura.js:62` pone la clase
+       * `sobre-visible` mientras está cerrado, y la quita al abrirlo.
+       * Es sincrónico y no depende de que ningún módulo haya cargado.
+       *
+       * Carlos eligió que ESPERE a que lo abran: si el sobre se abre
+       * durante el minuto, el reintento lo engancha dentro del segundo. */
+      if (raiz.classList.contains('sobre-visible')) return false;
+
+      return true;
     }
 
     var yaSePidio = false;
+
+    /* ─── UNA PESTAÑA ABIERTA NO SE ENTERA DE NADA ──────────────────────
+     *
+     * ⛔ (2026-09-14) Es la otra mitad de por qué el 14 de septiembre no
+     * pasó nada. Medido contra aniaxv.com ese día:
+     *
+     *     lo que servía la red ………………… v314
+     *     lo que ejecutaba el navegador … v258
+     *
+     * Una pestaña sigue corriendo para siempre la versión con la que
+     * cargó. Nada la recarga sola. Y la v258 no tenía el camino para
+     * engancharse con el minuto ya empezado, así que ese día no había
+     * ninguna posibilidad de que corriera.
+     *
+     * ⚠️ NO ES CULPA DEL SERVICE WORKER, y conviene dejarlo escrito porque
+     * fue lo primero que pareció: sw.js ya llama a `skipWaiting()` y
+     * `clients.claim()`, ya borra las cachés viejas y ya sirve el HTML
+     * red-primero; y .htaccess manda `no-cache, must-revalidate` para el
+     * HTML. Todo eso está bien. Lo que no existe en la web es que una
+     * página abierta se entere de que salió otra.
+     *
+     * Por eso, unos minutos antes de la hora —y SOLO ahí, una vez al día—
+     * esta pestaña pregunta qué versión sirve el servidor y, si no
+     * coincide con la suya, se recarga.
+     *
+     * ⚠️ POR QUÉ NO SE USA `controllerchange`. Sería lo idiomático, pero se
+     * dispara también la PRIMERA vez que un service worker toma el
+     * control, o sea en la visita inicial de cualquiera: una recarga que
+     * nadie pidió, para todos. Esto pregunta exactamente lo que importa
+     * —«¿estoy corriendo el código de hoy?»— y solo cuando importa.
+     * ---------------------------------------------------------------- */
+
+    /** Cuánto antes de la hora se comprueba la versión. */
+    var REVISAR_ANTES = 300000;      // cinco minutos
+
+    /** La versión de ESTA pestaña, sacada de la dirección del eclipse. */
+    var MI_VERSION = (ARCHIVO.match(/[?&]v=(\d+)/) || [])[1] || '';
+
+    var yaSeRevisoLaVersion = false;
+
+    /* ─── LA HORA, PREGUNTADA AL SERVIDOR ───────────────────────────
+     *
+     * Dos caminos, y el barato cubre a casi todos:
+     *
+     *   · GRATIS · invitacion.php ya se pide cuando la dirección trae
+     *     ?i=TOKEN (codigo/04-invitado-personalizado.js:207), ya abre su
+     *     PDO y ya lee la tabla `ajustes`. Ahora manda `eclipse_utc` en
+     *     la misma respuesta. Con las invitaciones repartidas por
+     *     WhatsApp, por ahí entra casi todo el mundo: cero requests
+     *     nuevos para esa gente.
+     *
+     *   · eclipse.php · para quien abre la invitación pelada, sin token.
+     *     Ése no le pide NADA al servidor en toda la visita, así que no
+     *     tiene por dónde enterarse. Son ~200 bytes, después de cargar,
+     *     y como mucho una vez por hora.
+     *
+     * ⚠️ POR QUÉ NO SE PIDE SIEMPRE. La regla del vigía es que la
+     * invitación no puede pesar ni un gramo más. Una hora de vigencia
+     * sobre el valor guardado hace que abrir, mirar y cerrar —que es lo
+     * que hace la mayoría— no pida nada la segunda vez.
+     * -------------------------------------------------------------- */
+
+    var yaSePreguntoLaHora = false;
+
+    /** Guarda la hora con su fecha, para saber después si sigue fresca. */
+    function recordarLaHora(texto) {
+      try {
+        localStorage.setItem(LLAVE_DE_LA_HORA, texto + '|' + Date.now());
+      } catch (e) { /* modo privado: se pregunta de nuevo la próxima vez */ }
+    }
+
+    /** ¿Lo guardado es de hace menos de una hora? */
+    function laHoraSigueFresca() {
+      try {
+        var crudo = localStorage.getItem(LLAVE_DE_LA_HORA);
+        if (!crudo) return false;
+        var cuando = parseInt(String(crudo).split('|')[1], 10);
+        return !!cuando && (Date.now() - cuando) < VIGENCIA_DE_LA_HORA;
+      } catch (e) { return false; }
+    }
+
+    /**
+     * Le pregunta la hora a eclipse.php y la adopta si cambió.
+     *
+     * @param {boolean} igualSiEstaFresca - saltarse la vigencia.
+     * @returns {void}
+     */
+    function revisarLaHora(igualSiEstaFresca) {
+      if (yaSePreguntoLaHora) return;
+      if (!igualSiEstaFresca && laHoraSigueFresca()) return;
+      yaSePreguntoLaHora = true;
+
+      try {
+        fetch('eclipse.php?mirando=' + Date.now(), { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (datos) {
+            if (!datos || !datos.utc) return;
+            recordarLaHora(datos.utc);
+            /* Adoptar no recarga la página: por eso esto funciona aunque
+               haya un formulario a medio llenar, que es la ventaja grande
+               frente a resolverlo con un número de versión. `mirar()`
+               duerme 60 s como mucho, así que el plan se reacomoda solo. */
+            adoptarLaHora(datos.utc);
+          })
+          .catch(function () { /* sin red: se sigue con la que hay */ });
+      } catch (e) { /* nada */ }
+    }
+
+    /* ⚡ Y SI LA INVITACIÓN PERSONAL YA LO PREGUNTÓ, SE APROVECHA.
+       Llega antes que nada y no costó un solo byte extra. */
+    document.addEventListener('invitacion-lista', function (evento) {
+      var datos = evento && evento.detail;
+      var texto = datos && datos.eclipse_utc;
+      if (typeof texto === 'string' && FORMA_DE_LA_HORA.test(texto)) {
+        yaSePreguntoLaHora = true;      // ya no hace falta pedir eclipse.php
+        recordarLaHora(texto);
+        adoptarLaHora(texto);
+      }
+    });
+
+    /**
+     * Si el servidor tiene otra versión, esta pestaña se recarga una vez.
+     *
+     * @returns {void}
+     */
+    function revisarLaVersion() {
+      if (yaSeRevisoLaVersion || !MI_VERSION) return;
+      yaSeRevisoLaVersion = true;
+
+      try {
+        fetch('index.html?mirando=' + Date.now(), { cache: 'reload' })
+          .then(function (r) { return r.ok ? r.text() : ''; })
+          .then(function (html) {
+            var laDeAllá = (html.match(/28-eclipse\.js\?v=(\d+)/) || [])[1];
+            if (!laDeAllá || laDeAllá === MI_VERSION) return;
+            if (!sePuedeRecargar()) return;
+
+            /* Una sola vez por pestaña, pase lo que pase: si el servidor
+               contestara raro, una recarga en bucle sería mucho peor que
+               una versión vieja. */
+            try { sessionStorage.setItem('ania-version-recargada', laDeAllá); }
+            catch (e) { /* modo privado: se recarga igual, una vez */ }
+            location.reload();
+          })
+          .catch(function () { /* sin red: se sigue con lo que hay */ });
+      } catch (e) { /* nada */ }
+    }
+
+    /**
+     * ⛔ RECARGAR NO PUEDE PISARLE UNA CONFIRMACIÓN A MEDIO LLENAR.
+     *
+     * Es el mismo criterio que ya usa `sePuede()` con el foco: el
+     * homenaje no puede hacerle daño real a nadie. Acá es más estricto
+     * todavía, porque una recarga se lleva lo escrito aunque el campo no
+     * esté en foco en ese instante.
+     *
+     * @returns {boolean}
+     */
+    function sePuedeRecargar() {
+      try {
+        if (sessionStorage.getItem('ania-version-recargada')) return false;
+      } catch (e) { /* sin sessionStorage: se sigue */ }
+
+      var campos = document.querySelectorAll('input, textarea, select');
+      for (var i = 0; i < campos.length; i++) {
+        var campo = campos[i];
+        if (campo === document.activeElement) return false;
+        if (campo.type === 'checkbox' || campo.type === 'radio') {
+          if (campo.checked !== campo.defaultChecked) return false;
+        } else if ((campo.value || '') !== (campo.defaultValue || '')) {
+          return false;
+        }
+      }
+      return true;
+    }
 
     function pedirElArchivo(desfase) {
       window.ECLIPSE_EMPIEZA_EN = desfase;   // lo lee 28-eclipse.js
       var s = document.createElement('script');
       s.src = ARCHIVO;
-      s.onerror = function () { /* sin eclipse, la invitación anda igual */ };
+      /* ⚡ UN PEDIDO FALLIDO SE PUEDE REINTENTAR (2026-09-14)
+         Esto era un cuerpo vacío: un 404, un corte de red o un service
+         worker devolviendo un error mataban el eclipse sin dejar rastro y
+         con `yaSePidio` ya marcado. Ahora se suelta el flag para que el
+         reintento de cada segundo vuelva a probar mientras quede minuto.
+         La invitación sigue andando igual si nunca llega: eso no cambia. */
+      s.onerror = function () {
+        yaSePidio = false;
+        if (s.parentNode) s.parentNode.removeChild(s);
+      };
       document.body.appendChild(s);
     }
 
@@ -2725,29 +3030,164 @@
        El mecanismo para entrar a mitad ya existía (empezar(-faltan) en
        28-eclipse.js): lo único que faltaba era preguntarlo al abrir la
        página en vez de esperar al próximo sondeo. */
-    try {
-      var yaVaEmpezado = faltaPara();
-      if (yaVaEmpezado < 0 && yaVaEmpezado > -DURA) {
-        yaSePidio = true;
-        if (sePuede()) pedirElArchivo(yaVaEmpezado);
-      }
-    } catch (e) { /* nada */ }
+    /* ⛔ ACÁ EL FLAG SE QUEDABA PEGADO PARA SIEMPRE (2026-09-14)
+     *
+     * Decía:
+     *     yaSePidio = true;
+     *     if (sePuede()) pedirElArchivo(yaVaEmpezado);
+     *
+     * `yaSePidio` se marcaba SIN el re-armado que sí tiene la rama de
+     * `mirar()`. Dos consecuencias, las dos graves:
+     *
+     *   · Quien abría la página durante el minuto con una guarda en contra
+     *     dejaba el flag en `true` por el resto de la vida de esa pestaña.
+     *     Ni ese día ni ningún otro volvía a intentarlo.
+     *
+     *   · Y aun saliendo bien: una pestaña dejada abierta 24 horas NO
+     *     disparaba el eclipse del día siguiente.
+     *
+     * Ahora no hay rama aparte NI llamada aparte: `mirar()` corre al
+     * cargar y, si ya estamos en la ventana, llama a `intentarAhora()` él
+     * mismo. Es el mismo camino para los tres momentos —al cargar, en cada
+     * reintento del minuto, y al volver la pestaña al frente— y el flag se
+     * marca SOLO si de verdad se pidió el archivo.
+     *
+     * ⚠️ ACÁ HUBO UNA LLAMADA DUPLICADA, Y LA CAZÓ UNA MORDIDA
+     * (prueba-vigia-reloj.mjs). El arreglo del 14 de septiembre dejó en
+     * este punto un `try { intentarAhora(); } catch (e) {}` extra. Quitarlo
+     * no rompía ningún escenario del banco —porque `mirar()` ya hacía lo
+     * mismo dos líneas después—, así que no estaba protegiendo nada.
+     *
+     * Lo único que sí aportaba era el `try/catch`, y eso se movió adentro
+     * de `mirar()`, que es donde de verdad hace falta: ver ahí. */
+
+    /* ⛔ EL 14 DE SEPTIEMBRE LLEGÓ LA HORA Y NO PASÓ NADA (2026-09-14)
+     *
+     * Acá había UNA sola muestra, y eso costó el minuto entero:
+     *
+     *     if (!yaSePidio && falta <= AVISO) {
+     *       yaSePidio = true;              // ⛔ se marca ANTES de consultar
+     *       if (sePuede()) pedirElArchivo(falta);
+     *       setTimeout(..., DURA + 2000);
+     *       return;
+     *     }
+     *
+     * `sePuede()` se preguntaba una vez, veinticinco segundos antes. Si en
+     * ESE instante la pestaña estaba de fondo, el sobre sin abrir o había
+     * un campo en foco, `yaSePidio` ya quedaba marcado y el día se perdía
+     * —aunque diez segundos después la persona volviera con el minuto
+     * todavía corriendo—.
+     *
+     * Ahora la ventana entera es un reintento: desde AVISO antes hasta que
+     * el minuto termina, se pregunta cada segundo. En cuanto una guarda
+     * deja de estorbar, arranca con el desfase que corresponda y
+     * `empezar(-faltan)` entra a mitad, que es algo que el eclipse ya sabe
+     * hacer desde hace versiones.
+     *
+     * ⚠️ Y el reintento por sí solo NO alcanza en una pestaña de fondo: el
+     * navegador congela los temporizadores hasta una vez por minuto. Por
+     * eso, además, se escucha volver al frente — ver más abajo. */
+
+    /** Intenta arrancar AHORA si estamos en la ventana y las guardas dejan. */
+    function intentarAhora() {
+      if (yaSePidio) return;
+
+      var falta = faltaPara();
+      if (falta > AVISO) return;      // todavía no es la ventana
+      if (!sePuede()) return;         // alguna guarda dice que no: se reintenta
+
+      yaSePidio = true;
+      pedirElArchivo(falta);
+    }
 
     function mirar() {
       var falta = faltaPara();
 
-      if (!yaSePidio && falta <= AVISO) {
-        yaSePidio = true;
-        if (sePuede()) pedirElArchivo(falta);
-        // Se vuelve a mirar pasado el minuto, para el de mañana.
-        setTimeout(function () { yaSePidio = false; mirar(); }, DURA + 2000);
+      /* Unos minutos antes de la hora, esta pestaña comprueba que está
+         corriendo la versión que sirve el servidor, y que la hora que
+         cree sigue siendo la hora. Ver revisarLaVersion y revisarLaHora.
+
+         ⚠️ Acá la hora se pregunta SALTÁNDOSE la vigencia: es el único
+         momento en que de verdad importa, y es una vez al día. */
+      if (falta <= REVISAR_ANTES) { revisarLaVersion(); revisarLaHora(true); }
+
+      if (falta <= AVISO) {
+        /* ⛔ ESTE try/catch ES LA DIFERENCIA ENTRE PERDER UN DÍA Y PERDER
+           LA PESTAÑA PARA SIEMPRE.
+
+           `mirar()` es lo único que vuelve a agendarse. Si algo de acá
+           adentro tira una excepción —`appendChild` sobre un `body` que
+           una extensión dejó raro, una CSP que rechaza el `<script>`— y no
+           se atrapa, no corre ningún `setTimeout` más: esa pestaña no
+           vuelve a mirar el reloj ni hoy ni ningún otro día.
+
+           Atrapándola, `yaSePidio` queda como esté y el reintento de abajo
+           agenda la próxima vuelta igual. */
+        try { intentarAhora(); } catch (e) { /* se reintenta abajo */ }
+
+        /* Si no se pudo, se insiste cada segundo hasta que el minuto pase.
+           Es barato: son sesenta y pico de restas, una vez al día. */
+        if (!yaSePidio) { setTimeout(mirar, 1000); return; }
+
+        /* Ya arrancó: se duerme hasta pasado el minuto y se rearma para
+           mañana. `falta` es negativo si el minuto ya empezó, así que esta
+           suma da lo que queda de ritual más el margen.
+
+           ⛔ ACÁ SE REARMA TODO LO QUE ES «UNA VEZ POR DÍA», Y HASTA HOY
+           SE REARMABA UNA SOLA COSA. `yaSeRevisoLaVersion` y
+           `yaSePreguntoLaHora` se marcaban una vez y no volvían nunca:
+           una pestaña abierta tres días comprobaba su versión UNA vez en
+           su vida, y no se enteraba de un cambio de hora jamás. Era el
+           mismo defecto que se acababa de arreglar con `yaSePidio`,
+           repetido dos veces al lado. */
+        ELDIAQUEYACORRIO = diaUtcDe(Date.now());
+
+        setTimeout(function () {
+          yaSePidio = false;
+          yaSeRevisoLaVersion = false;
+          yaSePreguntoLaHora = false;
+          mirar();
+        }, Math.max(1000, falta + DURA + 2000));
         return;
       }
 
       setTimeout(mirar, Math.max(1000, Math.min(falta - AVISO, 60000)));
     }
 
+    /* ⚡ VOLVER AL FRENTE ES UN INTENTO MÁS (2026-09-14)
+     *
+     * En una pestaña de fondo el navegador congela los temporizadores, así
+     * que el reintento de cada segundo no corre. Estas dos escuchas son lo
+     * que convierte «volví a la pestaña» en «arranca ahora, con el minuto
+     * ya empezado».
+     *
+     * ⚠️ SON DOS Y NO UNA. iOS usa bfcache y restaura la página sin
+     * disparar `visibilitychange`: hace falta `pageshow` también. Está
+     * documentado en codigo/10-reproductor-de-musica.js, que se comió ese
+     * mismo problema con la música.
+     *
+     * ⚠️ Y HAY UN TECHO QUE NO SE PUEDE SUBIR: con la pantalla bloqueada,
+     * iOS puede no entregar ninguno de los dos hasta que se desbloquea. Si
+     * el teléfono está bloqueado el minuto entero, no hay forma. Arranca
+     * en cuanto se desbloquee, si todavía queda ritual. */
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) intentarAhora();
+    });
+    window.addEventListener('pageshow', intentarAhora);
+
+    /* Y abrir el sobre también: sin él no existe el nombre que hay que
+       eclipsar, así que `sePuede()` dice que no hasta ese momento. */
+    document.addEventListener('sobre-abierto', intentarAhora);
+
     mirar();
+
+    /* ⚡ Y AL CARGAR SE PREGUNTA LA HORA, PERO AL FINAL DE LA FILA.
+       Es lo que hace que un cambio de hora llegue AL DÍA SIGUIENTE a
+       cualquiera que abra la invitación con señal, en vez de solo a las
+       pestañas que justo estén vivas cerca de la hora vieja.
+       Va después de mirar() y con la vigencia puesta, para no competir
+       con nada de lo que la página está cargando. */
+    setTimeout(function () { revisarLaHora(false); }, 2000);
   })();
 </script>
 

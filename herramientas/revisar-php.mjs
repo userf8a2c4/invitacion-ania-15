@@ -128,7 +128,10 @@ const pedidos = process.argv.slice(2);
 const archivos = pedidos.length
   ? pedidos.map(p => (isAbsolute(p) ? p : join(raiz, p)))
   : [...buscarPhp(join(raiz, 'admin/api')),
-     ...['invitacion.php', 'confirmar.php', 'mi-pase.php', 'reiniciar-prueba.php']
+     /* ⚠️ LISTA A MANO: un PHP publico nuevo que no se agregue aca queda
+        SIN revisar, y el revisor igual dice que todo esta bien. */
+     ...['invitacion.php', 'confirmar.php', 'mi-pase.php', 'reiniciar-prueba.php',
+         'eclipse.php']
        .map(n => join(raiz, n))];
 
 console.log('\nREVISIÓN ESTRUCTURAL DEL PHP');
