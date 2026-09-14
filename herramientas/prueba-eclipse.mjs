@@ -2341,11 +2341,67 @@ comprobar('y no se reescribe lo que no cambió',
  *
  * Decisión suya para esta ronda: la escalera cede SUAVIDAD, nunca reparto.
  * Y cuando se acaba la suavidad, el gobernador se calla. */
-comprobar('el umbral del gobernador se MIDE, no es una constante',
-  /objetivoDeCuadro = Math\.max\(28, \(medianaDe\(muestrasDeLaBase\)/
-    .test(eclipseCodigo) &&
+/* ⚡ LA REGLA ERA CORRECTA PARA INTERVALOS, Y YA NO SE MIDEN INTERVALOS
+ *   (2026-09-13)
+ *
+ * Esto exigía `Math.max(28, mediana × 1,15)` con el motivo escrito: «un
+ * número fijo no puede servir a un teléfono de 0,8 Mpx y a un monitor de
+ * 3,3». Era cierto MIENTRAS SE MEDÍA EL INTERVALO entre cuadros, que
+ * depende de la pantalla, del navegador y de todo lo demás que corra.
+ *
+ * Pero medir así tenía un defecto que se ve con el resultado: en la
+ * máquina de Carlos la mediana dio 86,4 ms, el objetivo quedó en 99, y el
+ * gobernador aceptó 10 fps como normal. Cuanto peor andaba el equipo, más
+ * tolerante se volvía — al revés de para qué existe.
+ *
+ * Ahora se mide TRABAJO contra un PRESUPUESTO: cuánto tarda unCuadro() de
+ * punta a punta, contra la fracción de los 41,7 ms de cine que puede
+ * gastar sin dejar sin aire al resto de la página. Ese presupuesto SÍ es
+ * el mismo en todos lados, porque no es una propiedad del equipo: es la
+ * cadencia que se eligió. La mediana se sigue midiendo —el Diagnóstico la
+ * muestra— pero ya no manda. */
+comprobar('el gobernador mide TRABAJO, no el intervalo entre cuadros',
+  /var intervalo = costoDelCuadro;/.test(eclipseCodigo) &&
+  /costoDelCuadro = performance\.now\(\) - empiezaElTrabajo;/
+    .test(eclipseCodigo),
+  'con la cadencia fija el intervalo es siempre 41,7 ms: mediría la ' +
+  'cadencia, no el equipo, y le diría a Carlos que todo anda bien mientras ' +
+  'la escena se arrastra');
+
+comprobar('y su objetivo es una fracción del presupuesto, no la lentitud que encuentra',
+  /objetivoDeCuadro = MS_DE_CINE \* 0\.8;/.test(eclipseCodigo) &&
+  !/objetivoDeCuadro = Math\.max\(28,/.test(eclipseCodigo) &&
   !/promedio > 21/.test(eclipseCodigo),
-  'un número fijo no puede servir a un teléfono de 0,8 Mpx y a un monitor de 3,3');
+  'calibrarse contra la mediana del propio equipo hacía que cuanto peor ' +
+  'anduviera, más tolerante se volviera: en la máquina de Carlos aceptó ' +
+  '99 ms como objetivo, o sea 10 fps');
+
+/* ⚠️ Y LA CADENCIA NO PUEDE COMERSE EL BUCLE. El próximo cuadro se pide
+   SIEMPRE, se pinte éste o no: si el pedido dependiera de que el trabajo
+   llegue a hacerse, un cuadro salteado cortaría la secuencia entera. */
+{
+  /* Se compara el ORDEN dentro de `cuadro()`: el pedido del próximo tiene
+     que estar ANTES del `return` que saltea. Mirar el comentario no sirve
+     —`eclipseCodigo` viene justamente sin comentarios— y mirar solo que
+     las dos líneas existan tampoco: lo que importa es cuál va primero. */
+  const cuerpoDelBucle =
+    (eclipseCodigo.match(/function cuadro\(ahora\)[\s\S]*?\n  \}/) || [''])[0];
+  const dondePide = cuerpoDelBucle.indexOf(
+    'pedidoDeCuadro = requestAnimationFrame(cuadro);');
+  const dondeSaltea = cuerpoDelBucle.indexOf(
+    'if (ahora < proximoCuadroDeCine) return;');
+
+  comprobar('el bucle pide el próximo cuadro ANTES de saltear éste',
+    dondePide >= 0 && dondeSaltea > dondePide,
+    'pedir el rAF después del salteo corta el minuto en el primer cuadro ' +
+    'que no toque pintar');
+}
+
+comprobar('y la deuda de cuadros no se acumula',
+  /if \(proximoCuadroDeCine < ahora\) proximoCuadroDeCine = ahora \+ MS_DE_CINE;/
+    .test(eclipseCodigo),
+  'perseguir cuadros perdidos es como se llega a una espiral: cada cuadro ' +
+  'atrasado pide dos, que atrasan más');
 
 comprobar('y tira los primeros cuadros antes de creerle nada al equipo',
   /cuadrosVistos > CALENTAMIENTO && cuadrosVistos <= CUADROS_PARA_JUZGAR/
@@ -2399,9 +2455,45 @@ comprobar('el lienzo del eclipse ya lee la perilla de calidad',
   'era el único lienzo de la página a densidad plena: 3,269 Mpx contra los ' +
   '0,817 de los otros tres, que ya usan FACTOR_POR_CALIDAD');
 
-comprobar('y el de la reliquia usa la misma trama',
-  /var tramaDeLaReliquia = dpr \* ESCALA_DEL_LIENZO;/.test(eclipseCodigo),
-  'si uno escala y el otro no, la ofrenda se ve de otra nitidez que el mundo');
+/* ⚡ LOS OTROS DOS YA NO SON DE PANTALLA COMPLETA (2026-09-13), pero la
+ * trama tiene que seguir siendo la misma en los tres: si uno escala y el
+ * otro no, la rosa se ve de otra nitidez que el mundo en el que cae. */
+comprobar('y los tres lienzos comparten la trama',
+  (eclipseCodigo.match(/dpr \* ESCALA_DEL_LIENZO/g) || []).length >= 3,
+  'la ofrenda y la reliquia la calculan cada una en su propia medición; ' +
+  'si alguna se desengancha, se ve de otra nitidez que el mundo');
+
+/* ⛔ Y NO PUEDEN VOLVER A SER DEL TAMAÑO DE LA PANTALLA.
+ *
+ * Eran `inset: 0` con el bitmap del viewport entero: 3,27 megapíxeles de
+ * capa de compositor a 2560×1277, cada uno, para dibujar UN objeto de
+ * menos de cien píxeles. Y el de la reliquia además borraba esos 3,27
+ * megapíxeles CADA CUADRO durante hasta nueve segundos.
+ *
+ * Ahora cada uno mide lo que mide su objeto y viaja con un `translate3d`,
+ * que el compositor resuelve sin rasterizar nada. */
+comprobar('y ninguno de los dos se estira a la pantalla',
+  !/lienzoDeLaOfrenda\.width  = lienzo\.width;/.test(eclipseCodigo) &&
+  !/lienzoDeLaReliquia\.width  = Math\.floor\(window\.innerWidth/
+    .test(eclipseCodigo) &&
+  !/lienzoDeLaOfrenda\.style\.cssText = 'position:fixed;inset:0/
+    .test(eclipseCodigo),
+  'un lienzo de pantalla completa para un objeto de 90 px es una capa de ' +
+  '3,27 Mpx que hay que componer en cada cuadro');
+
+comprobar('y los dos siguen a su objeto con un transform',
+  /lienzoDeLaOfrenda\.style\.transform =\s*\n?\s*'translate3d\(/
+    .test(eclipseCodigo) &&
+  /lienzoPropio\.style\.transform =\s*\n?\s*'translate3d\(/
+    .test(eclipseCodigo),
+  'mover una capa ya compuesta es gratis; agrandarla para que el objeto ' +
+  'quepa donde sea, no');
+
+/* ⛔ Y EL BORRADO DE LA RELIQUIA NO PUEDE VOLVER A SER LA PANTALLA. */
+comprobar('la reliquia borra su caja, no la pantalla',
+  !/clearRect\(0, 0, window\.innerWidth, window\.innerHeight\)/
+    .test(eclipseCodigo),
+  'eran 3,27 Mpx por cuadro durante nueve segundos para un pétalo de 40 px');
 
 /* ⚡ Y EL VELO TAMBIÉN, QUE ES LO QUE CARLOS VIO (2026-09-11)
  *
@@ -3024,9 +3116,14 @@ comprobar('el margen del borrado cubre la diagonal de un pétalo girado',
 
 /* ⚠️ Y AL CAMBIAR DE TAMAÑO SE OLVIDAN. Asignar el ancho de un canvas lo
    borra entero: las cajas viejas ya no apuntan a nada. */
+/* ⚠️ EL ANCLA VA CON PARÉNTESIS, Y ESTO COSTÓ UNA FALLA FALSA.
+   Decía `function medirElLienzo[\s\S]*?` sin el paréntesis, y cuando
+   apareció `medirElLienzoDeLaOfrenda` —que en el archivo va ANTES— el
+   match no codicioso se quedaba con esa otra función y daba rojo sobre
+   código correcto. */
 comprobar('y las cajas se olvidan al redimensionar',
   /cajasDelCuadroAnterior\.length = 0;/.test(
-    (eclipseCodigo.match(/function medirElLienzo[\s\S]*?\n  \}/) || [''])[0]),
+    (eclipseCodigo.match(/function medirElLienzo\([\s\S]*?\n  \}/) || [''])[0]),
   'asignar canvas.width borra el lienzo: las cajas viejas quedan mintiendo');
 
 
@@ -3468,16 +3565,18 @@ console.log('\nLos lienzos declaran su tamaño en pantalla\n');
 
 comprobar('los lienzos del eclipse declaran tamaño CSS, no solo bitmap',
   /lienzo\.style\.width  = anchoCss \+ 'px';/.test(eclipseCodigo) &&
-  /lienzoDeLaOfrenda\.style\.width  = anchoCss \+ 'px';/.test(eclipseCodigo) &&
-  /lienzoDeLaReliquia\.style\.width  = window\.innerWidth  \+ 'px';/
-    .test(eclipseCodigo),
+  /lienzoDeLaOfrenda\.style\.width  = ladoCss \+ 'px';/.test(eclipseCodigo) &&
+  /lienzoDeLaReliquia\.style\.width  = ladoCss \+ 'px';/.test(eclipseCodigo),
   'sin tamaño CSS la caja del canvas es la del bitmap: a trama 0,72 se ' +
   'corta el dibujo al 72 % de la pantalla');
 
 comprobar('y la reliquia se re-mide con los otros dos',
-  /if \(lienzoDeLaReliquia && pincelDeLaReliquia\) \{/.test(eclipseCodigo),
+  /if \(lienzoDeLaReliquia && pincelDeLaReliquia\) \{/.test(eclipseCodigo) &&
+  /ladoDeLaReliquia = 0;\s*\n\s*medirElLienzoDeLaReliquia\(\);/
+    .test(eclipseCodigo),
   'si el gobernador baja un escalón después del segundo 42, la reliquia ' +
-  'quedaría a otra escala y la rosa saltaría de tamaño');
+  'quedaría a otra trama que el lienzo del mundo y la rosa se vería de ' +
+  'otra nitidez');
 
 for (const [archivo, cual] of [['24-lienzo-de-petalos.js', 'plano.lienzo'],
                                ['23-lienzo-de-luz.js', 'lienzo']]) {
@@ -3731,6 +3830,150 @@ console.log('\nLa oscuridad de abajo\n');
       'si el lienzo se llevara un z-index propio dejaría de heredar el ' +
       'lugar del contenedor y podría caer debajo del velo');
   }
+}
+
+/* ─── LOS DOS SEGUNDOS DE VACÍO, Y EL EQUIPO QUE LOS PINTA ─────────
+ * ---------------------------------------------------------------- */
+
+console.log('\nEl silencio, y quién lo escucha\n');
+
+/* ⚡ NO HABÍA UN SOLO INSTANTE DE SILENCIO EN TODO EL MINUTO. El código
+ * llama a este tramo «dos segundos de vacío» y la escena lo cumple —las
+ * flores se congelan, la marea se detiene—, pero la música seguía sonando
+ * ahogada al 65 %. El silencio es material: un corte de sonido hace más
+ * fuerte lo que viene después que cualquier cosa que se agregue encima. */
+comprobar('los dos segundos de vacío también lo son para el oído',
+  /var elVacio =/.test(eclipseCodigo) &&
+  /\(1 - hundimiento \* 0\.35\) \* \(1 - elVacio\)/.test(eclipseCodigo),
+  'el tramo se llama «vacío» y la canción seguía sonando adentro');
+
+comprobar('y entra y sale con rampa, no con un corte',
+  /limitar\(\(t - TOTALIDAD\) \/ 250, 0, 1\)/.test(eclipseCodigo) &&
+  /1 - \(t - SHOCK\) \/ 250/.test(eclipseCodigo),
+  'un corte a cero instantáneo chasquea');
+
+/* ⛔ Y SE TOCA LA GANANCIA, NUNCA EL GRAFO. `createMediaElementSource()`
+   solo se puede llamar una vez por elemento; desconectar deja la canción
+   muda para siempre. */
+comprobar('y se toca la ganancia, nunca el grafo',
+  /sonido\.ganancia\.gain\.value/.test(eclipseCodigo) &&
+  !/sonido\.(fuente|forma|filtro)\.disconnect\(/.test(eclipseCodigo),
+  'desconectar el grafo deja la canción muda para el resto de la visita');
+
+
+/* ─── EL FRENESÍ, EN EMBESTIDAS ────────────────────────────────────── */
+
+console.log('\nEl frenesí, en embestidas\n');
+
+{
+  const fuenteDelTiron = eclipseCodigo.slice(
+    eclipseCodigo.indexOf('var PERIODO_INICIAL_DEL_TIRON'),
+    eclipseCodigo.indexOf('function moverLasFloresReales'));
+
+  const lim = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const sua = (x) => { x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); };
+  const DURA_EL_CRUCE = Number((eclipse.match(/var DURA_EL_CRUCE = (\d+);/) || [])[1]);
+  const fn = new Function('SHOCK', 'FRENESI', 'limitar', 'suave', 'DURA_EL_CRUCE',
+    fuenteDelTiron + '; return tironDelFrenesi;')(
+      curva.SHOCK, curva.FRENESI, lim, sua, DURA_EL_CRUCE);
+
+  /* ⛔ LA COMPROBACIÓN QUE VALE: cuántos cuadros del frenesí no mueven
+   * NADA. Es lo que permite que se dispare el `continue` de
+   * moverLasFloresReales(), que el archivo mide en 9,08 ms → 1,97.
+   *
+   * Con la cesión continua que había antes —`1 - suave((fase-0.52)/0.48)`—
+   * el ángulo cambiaba en 238 de 241 cuadros: el ahorro no se disparaba ni
+   * una vez en diez segundos. Ahí estaban los 2117 ms que Carlos midió. */
+  const MS_DE_CINE = 1000 / 24;
+  const PASO = 0.25, TOPE = 52;
+  let quietos = 0, total = 0, ultimo = null;
+  for (let t = curva.SHOCK; t < curva.FRENESI; t += MS_DE_CINE) {
+    const e = fn(t).empuje;
+    const fervor = 0.55 + e * 0.55;
+    const extra = e > 0 ? 1 + e * 0.9 : 1;
+    const g = Math.max(-TOPE * extra, Math.min(TOPE * extra, 60 * fervor * 0.85 * 0.58));
+    const q = Math.round(g / PASO);
+    if (q === ultimo) quietos++;
+    ultimo = q;
+    total++;
+  }
+  const porcentaje = quietos / total * 100;
+
+  comprobar('hay quietud REAL entre embestidas, no una cesión continua',
+    porcentaje >= 15,
+    'solo ' + porcentaje.toFixed(1) + ' % de los cuadros del frenesí no ' +
+    'cambian nada. Con la cesión continua era 1,2 %: el ahorro del archivo ' +
+    'no se disparaba ni una vez en diez segundos');
+
+  comprobar('y el empuje llega a CERO exacto, no solo cerca',
+    (() => {
+      for (let t = curva.SHOCK; t < curva.FRENESI; t += 3) {
+        if (fn(t).empuje === 0) return true;
+      }
+      return false;
+    })(),
+    'si solo se acerca a cero, el ángulo sigue cambiando y no hay quietud');
+}
+
+
+/* ─── LA CALIDAD QUE SE ADIVINA EN EL ARRANQUE ─────────────────────── */
+
+console.log('\nLa adivinanza de calidad del arranque\n');
+
+/* ⛔ NO SABER CUÁNTA MEMORIA HAY NO ES PRUEBA DE QUE SOBRE.
+ *
+ * Decía `(typeof mem !== 'number' || mem >= 8)`, o sea que la AUSENCIA del
+ * dato contaba como memoria de sobra. Y hay un navegador entero que nunca
+ * expone `deviceMemory`: Safari. Resultado: TODO iPhone con 6 o más
+ * núcleos arrancaba en calidad ALTA —la configuración más cara que
+ * existe— sobre un documento de casi 6000 px. Y una vez degradado, el
+ * monitor no vuelve a subirlo en toda la visita. */
+comprobar('un navegador que no informa memoria no cuenta como equipo holgado',
+  /nucleos >= 6\s*\n?\s*&& typeof mem === 'number' && mem >= 8/.test(indice) &&
+  /* sinComentarios: la nota que explica el bug CITA el bug, y una
+     comprobacion de ausencia no puede tropezarse con su propia
+     explicacion. Es para esto que existe el helper. */
+  !/typeof mem !== 'number' \|\| mem >= 8/.test(sinComentarios(indice)),
+  'Safari nunca expone deviceMemory: con la versión vieja, todo iPhone de ' +
+  '6 núcleos arrancaba en la configuración más cara que existe');
+
+comprobar('y el que no informa cae en media, que es el respaldo seguro',
+  /calidad = 1;   \/\/ el caso más común y el más seguro por defecto/
+    .test(indice),
+  'no pierde nada: el monitor puede subirlo a alta en vivo si lo aguanta');
+
+/* ─── EL REPARTO DE TURNOS ───────────────────────────────── */
+
+console.log('\nEl reparto de turnos\n');
+
+{
+  /* ⛔ EL `% 8` VOLVÍA INÚTIL EL DIAL DEL GOBERNADOR.
+   *
+   * Repartía las raíces en ocho cubetas fijas y después `esSuTurno` hacía
+   * `turno % TANDAS`. Con 28 raíces, el peor cuadro era SIETE con TANDAS 4,
+   * siete con 5 y siete con 6: cuatro de los seis escalones del gobernador
+   * no bajaban el pico ni un punto, solo volvían el movimiento irregular.
+   */
+  const peorCuadro = (raices, tandas, conModulo) => {
+    const grupos = {};
+    for (let i = 0; i < raices; i++) {
+      const turno = conModulo ? i % 8 : i;
+      const k = turno % tandas;
+      grupos[k] = (grupos[k] || 0) + 1;
+    }
+    return Math.max(...Object.values(grupos));
+  };
+
+  comprobar('los turnos no se aplastan en ocho cubetas',
+    /var turno = turnosPorRaiz\.length;/.test(eclipseCodigo) &&
+    !/turnosPorRaiz\.length % 8/.test(eclipseCodigo),
+    'con el módulo, TANDAS 4, 5 y 6 dan el mismo peor cuadro: subir tandas ' +
+    'no baja el pico');
+
+  comprobar('y cada escalón del gobernador baja el peor cuadro de verdad',
+    peorCuadro(28, 6, false) < peorCuadro(28, 4, false) &&
+    peorCuadro(28, 6, true) === peorCuadro(28, 4, true),
+    'con 28 raíces: antes 7 / 7 / 7 para tandas 4 / 5 / 6; ahora 7 / 6 / 5');
 }
 
 console.log('');
