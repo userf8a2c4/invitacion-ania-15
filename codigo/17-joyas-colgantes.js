@@ -188,7 +188,26 @@
   let calidad = nivelDeCalidad();
   const SALTO_DEL_MOUSE_POR_CALIDAD = { 0: 1, 1: 2, 2: 3 };
   let saltoDelMouse = SALTO_DEL_MOUSE_POR_CALIDAD[calidad] ?? 1;
-  const SE_MECE_POR_CALIDAD = { 0: true, 1: true, 2: false };
+  /* ⚡ Y LAS JOYAS TAMBIÉN, EN TODOS LOS NIVELES (2026-09-13)
+   *
+   * Mismo pedido de Carlos que en 07-marco-y-enredaderas.js, y el mismo
+   * guard: esto es un `return` al tope del cuadro, así que en calidad baja
+   * no se apagaba solo el balanceo por scroll — se apagaban también la
+   * reacción al puntero y la respiración. Colgaban muertas.
+   *
+   * ⚠️ ACÁ EL ARGUMENTO ES ESTRUCTURAL Y NO HAY MEDICIÓN EN VIVO, Y HAY QUE
+   * DECIRLO. Lo que se midió es el techo: son 5 piezas (2 borlas + 3
+   * eslabones) que comparten UNA SOLA raíz `<svg>`, así que por caro que
+   * salga un cuadro ensucian como mucho 1 raíz. Las plantas de 07 son 26 y
+   * en su peor cuadro ensuciaban las 26 a la vez: ése era el problema, y
+   * este módulo no puede tenerlo.
+   *
+   * La cuenta vieja de «15,2 ms por cuadro» es anterior al culling por
+   * posición (margen de 150 px) y a SALTO_DEL_MOUSE_POR_CALIDAD, que ya
+   * ralean la raíz cuadrada de la cercanía en media y baja.
+   *
+   * Si el Diagnóstico dice que no, volver a `false` es una línea. */
+  const SE_MECE_POR_CALIDAD = { 0: true, 1: true, 2: true };
   let seMece = SE_MECE_POR_CALIDAD[calidad] ?? true;
   let contadorDeCuadro = 0;
   document.addEventListener('calidad-cambio', evento => {
@@ -215,11 +234,64 @@
 
   let mouseX = -9999;
   let mouseY = -9999;
-  window.addEventListener('mousemove', evento => {
+  /* ⚡ PUNTEROS, Y NO `mousemove` (2026-09-13)
+   *
+   * Carlos: «¿es posible permitir el balanceo de las rosas al tacto y al
+   * scroll, así como de las joyas al scroll, sin perder calidad?».
+   *
+   * ⛔ NO ES QUE PERDIERA CALIDAD: ES QUE NO EXISTÍA. Esto escuchaba
+   * `mousemove`, que en un iPhone NO DISPARA NUNCA. Ni las joyas ni las rosas no
+   * reaccionaban al dedo en ningún nivel de calidad, en ningún teléfono.
+   * No hay nada que perder acá porque no había nada.
+   *
+   * Es el patrón de 06-petalos-con-fisica.js, que ya está probado en
+   * celular real y ya se copió una vez en 27-fauna-nocturna.js:
+   *
+   *   · UN SOLO PUNTERO A LA VEZ. Un segundo dedo pisaba las coordenadas
+   *     del primero con las suyas y el cuadro siguiente calculaba un salto
+   *     que nunca ocurrió.
+   *
+   *   · `pointercancel` ES OBLIGATORIO. En el teléfono la forma más común
+   *     de terminar un toque NO es levantar el dedo quieto: es deslizarlo
+   *     para hacer SCROLL, y ahí el navegador se queda el gesto y manda
+   *     `pointercancel`. Sin escucharlo, las coordenadas se quedan clavadas
+   *     donde estaba el dedo y las joyas y la cadena quedan dobladas para
+   *     siempre, mirando a un dedo que ya no está.
+   *
+   *   · ⚠️ EL MOUSE NO SE SUELTA EN `pointerup`. Un clic termina en
+   *     `pointerup` y el mouse SIGUE AHÍ: soltarlo ahí haría que todo
+   *     volviera de golpe a su sitio cada vez que alguien hace clic. Solo
+   *     el dedo y el lápiz sueltan; el mouse se suelta al salirse de la
+   *     ventana, que es cuando de verdad se fue.
+   *
+   * `{ passive: true }` en todos: el dedo tiene que poder scrollear. */
+  let punteroActivo = null;
+
+  const esDedo = (evento) =>
+    evento.pointerType === 'touch' || evento.pointerType === 'pen';
+
+  const seguirElPuntero = (evento) => {
+    if (punteroActivo !== null && evento.pointerId !== punteroActivo) return;
+    punteroActivo = evento.pointerId;
     mouseX = evento.clientX;
     mouseY = evento.clientY;
-  }, { passive: true });
-  window.addEventListener('mouseleave', () => { mouseX = -9999; mouseY = -9999; });
+  };
+
+  const soltarElPuntero = (evento) => {
+    if (evento && evento.pointerId !== undefined &&
+        punteroActivo !== null && evento.pointerId !== punteroActivo) return;
+    punteroActivo = null;
+    mouseX = -9999;
+    mouseY = -9999;
+  };
+
+  const soltarSiEsDedo = (evento) => { if (esDedo(evento)) soltarElPuntero(evento); };
+
+  window.addEventListener('pointermove', seguirElPuntero, { passive: true });
+  window.addEventListener('pointerdown', seguirElPuntero, { passive: true });
+  window.addEventListener('pointerup', soltarSiEsDedo, { passive: true });
+  window.addEventListener('pointercancel', soltarSiEsDedo, { passive: true });
+  window.addEventListener('mouseleave', soltarElPuntero, { passive: true });
 
 
   /* ─── 4. EL BUCLE ──────────────────────────────────────────────────── */
