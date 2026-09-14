@@ -71,10 +71,13 @@
    la web sigue sirviendo la copia vieja de codigo/produccion/.
    ══════════════════════════════════════════════════════════════════════ */
 
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync , existsSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { minify } from 'terser';
+/* La lista vive en un solo archivo: subir-version.mjs la necesita
+   tambien, y duplicarla es como se desincronizan. */
+import { SOLO_PARA_ENSAYAR } from './_solo-para-ensayar.mjs';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 const carpetaFuente = join(raiz, 'codigo');
@@ -82,8 +85,39 @@ const carpetaProduccion = join(carpetaFuente, 'produccion');
 
 mkdirSync(carpetaProduccion, { recursive: true });
 
+/* ⛔ LO QUE NO VIAJA AL HOSTING (2026-09-13)
+ *
+ * El panel de ensayo del eclipse (29-ensayo-del-eclipse.js) solo existe
+ * para poder mirar el minuto sin esperar a las 6:30 de la mañana. En
+ * producción no se ejecuta nunca: hay un triple candado por hostname —el
+ * vigía de index.html, el propio 28-eclipse.js (que solo crea
+ * `window.ECLIPSE` si es PBE) y el panel, que se auto-veta— y hay pruebas
+ * que lo custodian.
+ *
+ * Pero este script minificaba TODOS los `.js` sin excepción, así que el
+ * archivo igual se escribía en codigo/produccion/ y de ahí subía al
+ * hosting: 16 KB que nadie ejecuta, accesibles por URL directa.
+ *
+ * El riesgo funcional era nulo. Lo que sobra es peso muerto y superficie:
+ * un archivo que describe cómo disparar el ritual a voluntad no tiene por
+ * qué estar publicado en aniaxv.com.
+ *
+ * ⚠️ SE BORRA SI YA ESTABA. Quien corra esto después de una versión que
+ * sí lo publicaba tiene el archivo viejo en la carpeta; sin este barrido
+ * seguiría subiendo para siempre.
+ */
+
+for (const nombre of SOLO_PARA_ENSAYAR) {
+  const viejo = join(carpetaProduccion, nombre);
+  if (existsSync(viejo)) {
+    unlinkSync(viejo);
+    console.log(`  se quitó de produccion/: ${nombre} (solo sirve para ensayar)`);
+  }
+}
+
 const archivos = readdirSync(carpetaFuente)
   .filter(nombre => nombre.endsWith('.js') && statSync(join(carpetaFuente, nombre)).isFile())
+  .filter(nombre => !SOLO_PARA_ENSAYAR.includes(nombre))
   .sort();
 
 if (archivos.length === 0) {

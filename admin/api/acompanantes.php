@@ -59,6 +59,11 @@ case 'listar':
     responderBien([
         'filas' => $filas,
         'cupo'  => cupoDeLaConfirmacion($confirmacionId),
+        /* ⚡ CUÁNTA GENTE HAY DE VERDAD (2026-09-13). El panel compara los
+           dos: si hay más nombres que lugares, la ficha está desfasada y
+           tiene que decirlo en vez de dibujar «(5 DE 4)» como si fuera
+           normal. Ver `cuadrar` acá abajo. */
+        'personas' => count($filas),
     ]);
     break;
 
@@ -154,7 +159,20 @@ case 'agregar':
                 400
             );
         }
-        moverElCupo($confirmacionId, $tipoNuevo, +1);
+        /* ⛔ Y SI NO SE PUDO, NO SE INSERTA (2026-09-13)
+           Antes esto era `moverElCupo(...)` a secas, con el resultado
+           tirado. Si la función salía por alguna de sus tres puertas
+           silenciosas, la persona entraba igual y la familia quedaba con
+           más gente que lugares — el «(5 DE 4)» de la ficha de Carolina.
+           Ahora falla acá, antes de escribir nada, y lo dice. */
+        if (!moverElCupo($confirmacionId, $tipoNuevo, +1)) {
+            responderMal(
+                'No se pudo reservar el lugar de más, así que no se agregó a ' .
+                'nadie. Corrige el número de adultos o niños en «Editar ' .
+                'invitación» y volvé a intentar.',
+                409
+            );
+        }
     }
 
     $fila = [
@@ -176,6 +194,71 @@ case 'agregar':
 
     anotarEnBitacora($yo, 'agregó un acompañante', 'acompanantes', $id, $nombre);
     responderBien(['id' => $id, 'mensaje' => 'Agregado.'], 201);
+    break;
+
+
+/* ─── CUADRAR EL CUPO ──────────────────────────────────────────────────
+ *
+ * ⚡ (2026-09-13) Carlos: «debemos hacer que agregar un nombre agregue un
+ * puesto en las invitaciones y que esto se vea reflejado, todo debe
+ * concordar».
+ *
+ * Lo de arriba impide que el desfase VUELVA a producirse. Esto repara los
+ * que ya existen, y no hay otra forma: la ficha de Carolina Leyva ya está
+ * guardada con cinco personas y cuatro lugares, y eso no se arregla solo.
+ *
+ * ⚠️ MANDA LA GENTE, NO EL NÚMERO. Los nombres los escribió alguien a
+ * propósito, uno por uno; el número de adultos y niños es una declaración
+ * vieja que quedó atrás. Así que se cuentan las filas POR TIPO y se
+ * escriben esos dos números. Después de esto, «5 de 4» es imposible.
+ * ------------------------------------------------------------------- */
+
+case 'cuadrar':
+    exigirMetodo('POST');
+    $datos = cuerpoJson();
+    $confirmacionId = campoEntero($datos, 'confirmacion_id', 0);
+    if ($confirmacionId < 1) responderMal('Falta decir de qué confirmación.', 400);
+
+    if (!existeTabla('confirmaciones')) responderMal('No hay confirmaciones.', 404);
+    $columnas = columnasDe('confirmaciones');
+    if (!in_array('adultos', $columnas, true) || !in_array('ninos', $columnas, true)) {
+        responderMal('Esta base no guarda adultos y niños por separado.', 409);
+    }
+
+    $gente = consultarTodo(
+        'SELECT tipo FROM acompanantes WHERE confirmacion_id = :c',
+        [':c' => $confirmacionId]
+    );
+    if (!$gente) responderMal('Esa confirmación no tiene gente cargada.', 409);
+
+    $ninos = 0;
+    foreach ($gente as $uno) if (($uno['tipo'] ?? '') === 'nino') $ninos++;
+    $adultos = count($gente) - $ninos;
+
+    $cambios = ['adultos' => $adultos, 'ninos' => $ninos];
+    if (in_array('total', $columnas, true)) $cambios['total'] = $adultos + $ninos;
+    actualizar('confirmaciones', $confirmacionId, $cambios);
+
+    /* Y lo que ve el invitado, con el mismo criterio que moverElCupo. */
+    if (existeTabla('invitaciones')) {
+        $inv = consultarUno(
+            'SELECT id FROM invitaciones WHERE confirmacion_id = :c LIMIT 1',
+            [':c' => $confirmacionId]
+        );
+        if ($inv && in_array('pases', columnasDe('invitaciones'), true)) {
+            actualizar('invitaciones', (int) $inv['id'], ['pases' => $adultos + $ninos]);
+        }
+    }
+
+    anotarEnBitacora($yo, 'cuadró los lugares', 'confirmaciones', $confirmacionId,
+                     $adultos . ' adultos y ' . $ninos . ' niños');
+
+    responderBien([
+        'adultos' => $adultos,
+        'ninos'   => $ninos,
+        'cupo'    => $adultos + $ninos,
+        'mensaje' => 'Listo: ' . ($adultos + $ninos) . ' lugares.',
+    ]);
     break;
 
 
@@ -301,18 +384,35 @@ default:
  * @param int    $cuanto  +1 para sumar un lugar, -1 para quitarlo.
  * @return void
  */
+/**
+ * Mueve el cupo declarado de una confirmación.
+ *
+ * ⛔ AHORA DEVUELVE SI PUDO, Y ESO NO ES COSMÉTICO (2026-09-13)
+ *
+ * Esta función tenía TRES salidas silenciosas —sin tabla, sin columna, sin
+ * fila— y quien la llamaba no miraba el resultado. Cuando alguna se
+ * disparaba, el acompañante se insertaba igual y la familia quedaba con
+ * más gente que lugares: es exactamente el «(5 DE 4)» que Carlos encontró
+ * en la ficha de Carolina Leyva, con la invitación diciendo 4 lugares y
+ * cinco personas nombradas.
+ *
+ * Un lugar que no se pudo reservar tiene que ser un error que se ve, no un
+ * silencio que aparece tres pantallas después.
+ *
+ * @return bool true solo si el cupo quedó movido de verdad.
+ */
 function moverElCupo($confirmacionId, $tipo, $cuanto) {
-    if (!existeTabla('confirmaciones')) return;
+    if (!existeTabla('confirmaciones')) return false;
 
     $columnas = columnasDe('confirmaciones');
     $cual = $tipo === 'nino' ? 'ninos' : 'adultos';
-    if (!in_array($cual, $columnas, true)) return;
+    if (!in_array($cual, $columnas, true)) return false;
 
     $fila = consultarUno(
         "SELECT $cual FROM confirmaciones WHERE id = :id",
         [':id' => $confirmacionId]
     );
-    if (!$fila) return;
+    if (!$fila) return false;
 
     $cambios = [$cual => max(0, (int) $fila[$cual] + $cuanto)];
 
@@ -337,7 +437,7 @@ function moverElCupo($confirmacionId, $tipo, $cuanto) {
        confirmacion_id: una confirmación puede no tener invitación (las
        que entraron por el formulario abierto, sin token), y ahí no hay
        nada que mover. */
-    if (!existeTabla('invitaciones')) return;
+    if (!existeTabla('invitaciones')) return true;
     $inv = consultarUno(
         'SELECT id, pases FROM invitaciones WHERE confirmacion_id = :c LIMIT 1',
         [':c' => $confirmacionId]

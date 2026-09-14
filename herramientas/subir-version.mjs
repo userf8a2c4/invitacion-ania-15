@@ -64,6 +64,7 @@ import { spawnSync } from 'node:child_process';
 /* La comprobación del CSS la hace el propio empaquetador: así no hay
    una copia del minificador ni del orden de los archivos acá. */
 import { comprobarElCssInline } from './empaquetar.mjs';
+import { SOLO_PARA_ENSAYAR } from './_solo-para-ensayar.mjs';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -93,6 +94,20 @@ if (existsSync(dirProduccion)) {
 
   for (const archivo of readdirSync(dirFuente)) {
     if (!archivo.endsWith('.js')) continue;
+
+    /* ⛔ LOS QUE NO SE PUBLICAN NO PUEDEN ESTAR DESACTUALIZADOS
+     *   (2026-09-13)
+     *
+     * Esta comprobación existe para que no se suba una versión con el
+     * minificado viejo — pasó de verdad con el reproductor de música y
+     * nada lo advirtió. Pero desde que `minificar-js.mjs` deja de publicar
+     * el panel de ensayo, ese archivo NUNCA va a tener minificado, y sin
+     * esta línea el despliegue quedaba cortado para siempre por un archivo
+     * que está ausente a propósito.
+     *
+     * La lista es la misma que usa el minificador, importada y no copiada:
+     * ver herramientas/_solo-para-ensayar.mjs. */
+    if (SOLO_PARA_ENSAYAR.includes(archivo)) continue;
 
     const fuente = join(dirFuente, archivo);
     const minificado = join(dirProduccion, archivo);

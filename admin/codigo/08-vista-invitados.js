@@ -1977,10 +1977,40 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
   const puedeAgregarMas = filas.length < cupo;
   const sinNombre = Math.max(0, cupo - filas.length);
 
+  /* ⛔ MÁS GENTE QUE LUGARES: NO SE DIBUJA COMO SI FUERA NORMAL
+   *   (2026-09-13)
+   *
+   * Carlos encontró la ficha de Carolina Leyva diciendo «(5 DE 4)», con
+   * cinco personas nombradas y la invitación reservando cuatro lugares.
+   *
+   * La causa está arreglada del lado del servidor —`moverElCupo()` tenía
+   * tres salidas silenciosas y nadie miraba si había funcionado, así que
+   * el acompañante se insertaba igual—, pero eso solo impide que vuelva a
+   * pasar. Las fichas que YA quedaron torcidas no se enderezan solas.
+   *
+   * Así que se muestra, con todas las letras, y se ofrece arreglarlo de un
+   * toque. Un número que no cuadra y no se explica es peor que un error:
+   * es algo que se mira todos los días sin saber si importa. */
+  const faltanLugares = Math.max(0, filas.length - cupo);
+
   contenedor.innerHTML =
     '<p class="detalle__rotulo" style="margin-top:var(--esp-2)">' +
       'Quién ocupa cada lugar (' + filas.length + ' de ' + cupo + ')' +
     '</p>' +
+
+    (faltanLugares
+      ? '<div class="aviso-error" style="margin-bottom:var(--esp-1)">' +
+          '<strong>Hay ' + filas.length + ' personas y solo ' + cupo +
+          (cupo === 1 ? ' lugar' : ' lugares') + ' reservados.</strong><br>' +
+          'La invitación le va a decir ' + cupo + ' a esta familia, y la cocina ' +
+          'y las mesas van a contar ' + cupo + '. Los nombres son lo que alguien ' +
+          'escribió a propósito, uno por uno; el número quedó atrás.' +
+          '<button class="boton boton--ancho" id="cuadrar-cupo" ' +
+                  'style="margin-top:var(--esp-1)">' +
+            'Dejar ' + filas.length + ' lugares, como personas hay' +
+          '</button>' +
+        '</div>'
+      : '') +
 
     /* La explicación va acá arriba y no en un tooltip: es la idea que
        ordena toda la sección, y un tooltip es algo que hay que descubrir
@@ -2134,6 +2164,36 @@ function pintarAcompanantes(confirmacionId, cupo, filas, contenedor) {
       }
     });
   });
+
+  const cuadrar = buscar('#cuadrar-cupo', contenedor);
+  if (cuadrar) {
+    cuadrar.addEventListener('click', async () => {
+      if (!await confirmarAccion(
+        '¿Dejar ' + filas.length + ' lugares?\n\n' +
+        'La invitación va a pasar a decir ' + filas.length + ', y la cocina y ' +
+        'las mesas van a contar ' + filas.length + '.',
+        { confirmar: 'Dejar ' + filas.length })) return;
+
+      cuadrar.disabled = true;
+      try {
+        const r = await mandar('acompanantes.php?accion=cuadrar',
+                               { confirmacion_id: confirmacionId });
+        avisar(r.mensaje || 'Listo.');
+        /* Se redibuja con el cupo nuevo, y se ensucian las vistas que
+           cuentan gente: el resumen, el plano de mesas y la cocina. */
+        dibujarAcompanantes(confirmacionId, r.cupo, contenedor);
+        ensuciarVistas('resumen');
+        /* ⚠️ Y LA FICHA DE ARRIBA TAMBIÉN, que es donde dice «PERSONAS 4
+           (2 adultos, 2 niños)». Sin esto el desfase desaparece de esta
+           sección y sigue estando tres renglones más arriba, que es
+           justamente la mitad del problema que Carlos reportó. */
+        ensuciarVistas('invitados');
+      } catch (error) {
+        avisar(error.message, true);
+        cuadrar.disabled = false;
+      }
+    });
+  }
 
   const agregar = buscar('#agregar-acompanante', contenedor);
   if (agregar) {

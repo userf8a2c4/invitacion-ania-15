@@ -16,7 +16,7 @@
        node herramientas/prueba-eclipse.mjs
    ══════════════════════════════════════════════════════════════════════ */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -3974,6 +3974,91 @@ console.log('\nEl reparto de turnos\n');
     peorCuadro(28, 6, false) < peorCuadro(28, 4, false) &&
     peorCuadro(28, 6, true) === peorCuadro(28, 4, true),
     'con 28 raíces: antes 7 / 7 / 7 para tandas 4 / 5 / 6; ahora 7 / 6 / 5');
+}
+
+/* ─── EL PANEL DE ENSAYO NO VIAJA AL HOSTING ───────────────────────
+ *
+ * El ancla a las 12:30:00 UTC y el triple candado por hostname ya estaban
+ * y ya tenían pruebas (comprobaciones 12 a 15). Lo que faltaba era esto:
+ * `minificar-js.mjs` minificaba TODOS los `.js` sin excepción, así que
+ * 29-ensayo-del-eclipse.js se escribía en codigo/produccion/ y de ahí
+ * subía a aniaxv.com. 16 KB que nadie ejecuta, accesibles por URL.
+ *
+ * El riesgo funcional era nulo —el panel se auto-veta fuera de PBE y
+ * `window.ECLIPSE` no existe— pero un archivo que describe cómo disparar
+ * el ritual a voluntad no tiene por qué estar publicado.
+ * ---------------------------------------------------------------- */
+
+console.log('\nLo que no viaja al hosting\n');
+
+{
+  const minificador = leer('herramientas', 'minificar-js.mjs');
+
+  /* ⚠️ LA LISTA VIVE EN UN SOLO ARCHIVO, Y ESO ES PARTE DE LO QUE SE
+     COMPRUEBA. La usan DOS herramientas que se contradicen si se
+     desincronizan: el minificador no publica esos archivos, y
+     subir-version.mjs cortaría el despliegue para siempre por un
+     minificado que nunca va a existir. Duplicar la lista es exactamente
+     cómo se llega a que una excluya y la otra exija. */
+  const listaCompartida = leer('herramientas', '_solo-para-ensayar.mjs');
+
+  comprobar('hay una lista de exclusión, en un solo lugar',
+    /export const SOLO_PARA_ENSAYAR = \[/.test(listaCompartida) &&
+    /'29-ensayo-del-eclipse\.js',/.test(listaCompartida),
+    'sin lista, todo .js de codigo/ termina publicado');
+
+  comprobar('y las dos herramientas la importan, no la copian',
+    /import \{ SOLO_PARA_ENSAYAR \} from '\.\/_solo-para-ensayar\.mjs';/
+      .test(minificador) &&
+    /import \{ SOLO_PARA_ENSAYAR \} from '\.\/_solo-para-ensayar\.mjs';/
+      .test(leer('herramientas', 'subir-version.mjs')),
+    'una copia es cómo se llega a que el minificador excluya un archivo y ' +
+    'el verificador de versión lo siga exigiendo');
+
+  comprobar('y el verificador de versión no lo exige minificado',
+    /if \(SOLO_PARA_ENSAYAR\.includes\(archivo\)\) continue;/
+      .test(leer('herramientas', 'subir-version.mjs')),
+    'cortaría el despliegue para siempre por un archivo que está ausente ' +
+    'a propósito');
+
+  comprobar('y la aplica al armar la lista de archivos',
+    /\.filter\(nombre => !SOLO_PARA_ENSAYAR\.includes\(nombre\)\)/.test(minificador),
+    'declarar la lista y no usarla es peor que no tenerla: parece resuelto');
+
+  /* ⚠️ Y BORRA EL QUE YA ESTABA. Quien corra esto después de una versión
+     que sí lo publicaba tiene el archivo viejo en la carpeta; sin el
+     barrido seguiría subiendo para siempre. */
+  comprobar('y borra el que hubiera quedado de antes',
+    /unlinkSync\(viejo\);/.test(minificador),
+    'excluirlo de acá en adelante no saca el que ya está en la carpeta');
+
+  /* ⛔ LA COMPROBACIÓN QUE MIRA EL DISCO, no el código que debería
+     haberlo hecho. Es la única que no se puede engañar. */
+  const enProduccion = (() => {
+    try {
+      return readdirSync(join(raiz, 'codigo', 'produccion'));
+    } catch (error) { return null; }
+  })();
+
+  if (enProduccion === null) {
+    comprobar('se puede mirar codigo/produccion/', false,
+      'sin poder leerla, esta comprobación no dice nada');
+  } else {
+    const colados = enProduccion.filter(n => /ensayo/i.test(n));
+    comprobar('y en codigo/produccion/ no hay ningún archivo de ensayo',
+      colados.length === 0,
+      'está publicado: ' + colados.join(', '));
+  }
+
+  /* ⛔ Y SI NO SE PUBLICA, NO SE PUEDE PEDIR DE AHÍ. Apuntar el panel a
+     produccion/ después de excluirlo devuelve un 404 y el ensayo no abre
+     — que es exactamente la clase de rotura que solo se descubre el día
+     que querés mirar el minuto. */
+  comprobar('y el panel se pide del fuente, no de produccion/',
+    /panel\.src = 'codigo\/29-ensayo-del-eclipse\.js';/.test(indice) &&
+    !/produccion\/29-ensayo-del-eclipse/.test(indice),
+    'pedirlo de produccion/ después de excluirlo es un 404: el panel de ' +
+    'ensayo no abriría en PBE');
 }
 
 console.log('');
