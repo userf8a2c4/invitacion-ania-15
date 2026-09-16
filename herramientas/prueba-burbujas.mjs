@@ -78,44 +78,50 @@ console.log('\nCuántos avisos son nuevos\n');
 const fuenteNuevos = sacar(campana, 'cuantosAvisosSonNuevos');
 comprobar('existe cuantosAvisosSonNuevos()', !!fuenteNuevos);
 
+/* ⚡ ESTA FUNCIÓN CAMBIÓ DE CONTRATO (2026-09-16)
+ *
+ * Recibía un NÚMERO —cuántos avisos hay— y lo restaba contra un número
+ * guardado. Ese modelo tenía un agujero que no se veía restando: tres
+ * resueltas y tres nuevas dan el mismo total, la resta da cero, y la
+ * campana se queda apagada con tres cosas que nadie va a ver.
+ *
+ * Ahora recibe la LISTA de ids de los avisos de este momento. Los ids ya
+ * eran estables y derivan de la base ('dinero-pago-42').
+ *
+ * El caso de las tres compensadas, y todo lo demás del arreglo, vive en
+ * prueba-avisos-y-numeros.mjs. Acá se comprueba lo mínimo para que esta
+ * prueba no dé por buena una función que ya no existe con esa forma. */
 if (fuenteNuevos) {
-  /* El mundo alrededor: una memoria de mentira que se puede espiar. */
-  const correr = (hayAhora, yaVistos) => {
-    const memoria = { valor: yaVistos };
-    const salida = new Function(
-      'const memoria = arguments[0];' +
-      "const AVISOS_VISTOS = 'avisos-vistos';" +
-      'const recordadoDeLaCuenta = (c, r) => memoria.valor === null ? r : memoria.valor;' +
-      'const recordarDeLaCuenta = (c, v) => { memoria.valor = v; };' +
-      fuenteNuevos + '\nreturn cuantosAvisosSonNuevos(' + hayAhora + ');'
-    )(memoria);
-    return { burbuja: salida, marca: memoria.valor };
-  };
+  const correr = (idsAhora, yaVistos) => new Function(
+    "const AVISOS_VISTOS = 'avisos-vistos';" +
+    'const recordadoDeLaCuenta = (c, r) => ' + JSON.stringify(yaVistos) + ';' +
+    fuenteNuevos + '\nreturn cuantosAvisosSonNuevos(' +
+    JSON.stringify(idsAhora) + ');'
+  )();
+
+  const nueve = Array.from({ length: 9 }, (_, i) => 'pendiente:pago:' + i);
 
   comprobar('la primera vez, los 9 que hay son 9 nuevos',
-    correr(9, null).burbuja === 9,
+    correr(nueve, []) === 9,
     'sin marca previa todo es nuevo');
 
   comprobar('dados por vistos los 9, la burbuja queda en 0',
-    correr(9, 9).burbuja === 0,
+    correr(nueve, nueve) === 0,
     'ESTE es el bug que tuvo el 9+ encendido días: mirar no apagaba nada');
 
   comprobar('llega uno más y se enciende sola, marcando 1',
-    correr(10, 9).burbuja === 1,
+    correr(nueve.concat(['pendiente:tarea:99']), nueve) === 1,
     'y tiene que decir 1, no 10: lo nuevo es uno');
 
-  /* ⚠️ El caso que se escapa si uno solo prueba "sube". */
-  const bajo = correr(3, 9);
-  comprobar('si se resolvieron, la marca baja con ellos',
-    bajo.burbuja === 0 && bajo.marca === 3,
-    'sin esto: 9 vistos, quedan 3, llegan 2 → 5 < 9 y los 2 nuevos no se anuncian nunca');
-
-  comprobar('y después de bajar, los nuevos SÍ se anuncian',
-    correr(5, 3).burbuja === 2,
-    'el caso completo del anterior');
+  comprobar('si solo se resolvieron, no se enciende',
+    correr(nueve.slice(0, 3), nueve) === 0);
 
   comprobar('sin nada pendiente, nada que mostrar',
-    correr(0, 0).burbuja === 0);
+    correr([], []) === 0);
+
+  comprobar('la función toma ids, no un total',
+    /idsDeAhora\.filter/.test(fuenteNuevos),
+    'restar totales esconde el caso de las compensadas');
 }
 
 
@@ -125,9 +131,9 @@ console.log('\nAbrir la bandeja apaga la burbuja\n');
 
 const abrir = sacar(campana, 'abrirBandejaDeAvisos') || '';
 
-comprobar('al abrir se guarda cuántos había',
-  /recordarDeLaCuenta\(AVISOS_VISTOS, await contarAvisosPendientes\(\)\)/.test(abrir),
-  'se guarda el número, no un sí/no: si no, el aviso siguiente no se anuncia');
+comprobar('al abrir se guarda CUÁLES había, no cuántos',
+  /darAvisosPorVistos\(await avisosDeAhora\(\)\)/.test(abrir),
+  'guardar un total esconde el caso de tres resueltas y tres nuevas');
 
 comprobar('y la burbuja se apaga en el acto',
   /ponerBurbuja\('#burbuja-campana', 0\)/.test(abrir),

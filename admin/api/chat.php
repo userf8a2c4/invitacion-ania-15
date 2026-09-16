@@ -89,6 +89,7 @@ require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
 require_once __DIR__ . '/_lib/mesas.php';
+require_once __DIR__ . '/_lib/gente.php';
 // Para saber si se puede cobrar SIN volver a escribir la regla: la
 // definición vive en un solo sitio y compras.php lee la misma.
 require_once __DIR__ . '/_lib/pagos.php';
@@ -363,11 +364,36 @@ function construirContexto($pantalla, $usuario) {
                 ? (int) (consultarUno('SELECT COALESCE(SUM(capacidad),0) AS t FROM mesas')['t'] ?? 0)
                 : 0;
             $personas = (int) ($t['personas'] ?? 0);
+
+            /* ⛔ MEGABOT NO SABÍA CUÁNTOS CONFIRMARON (2026-09-16)
+             *
+             * Su contexto solo traía `asiste = 1` —lugares apartados—,
+             * así que a «¿cuántos vienen?» solo podía contestar el cupo:
+             * «114/140». La pantalla Hoy decía 34 al mismo tiempo. Dos
+             * pantallas de la misma app dando números distintos sobre la
+             * misma pregunta.
+             *
+             * `asiste = 1` es el TECHO: la fila nace así junto con la
+             * invitación, antes de que nadie conteste. Los nombres de
+             * estas claves lo dicen ahora, para que el modelo no pueda
+             * confundirlas aunque quiera. */
+            $cuenta = cuentaDeConfirmados();
+
             $contexto['cupo'] = [
-                'capacidad_salon'  => $capacidad,
-                'personas_asisten' => $personas,
-                'filas_asisten'    => (int) ($t['filas'] ?? 0),
-                'libres'           => max(0, $capacidad - $personas),
+                'capacidad_salon'       => $capacidad,
+                'personas_con_lugar'    => $personas,
+                'personas_asisten'      => $personas,   // nombre viejo, se deja por compatibilidad
+                'filas_asisten'         => (int) ($t['filas'] ?? 0),
+                'libres'                => max(0, $capacidad - $personas),
+
+                'personas_confirmadas'  => $cuenta['personas'],
+                'grupos_confirmados'    => $cuenta['grupos'],
+                'faltan_por_responder'  => max(0, $personas - $cuenta['personas']),
+
+                'que_significa_cada_uno' =>
+                    'personas_con_lugar = cupo apartado, incluye a quien todavia no contesto. ' .
+                    'personas_confirmadas = los que de verdad respondieron la invitacion. ' .
+                    'Para "cuantos vienen" usa personas_confirmadas, nunca personas_con_lugar.',
             ];
         }
     }
@@ -643,8 +669,26 @@ function mandarWebhookDeMegabot($payload) {
         ],
     ]);
 
+    /* ⛔ ESTE FALLO ERA COMPLETAMENTE MUDO (2026-09-16)
+     *
+     * La `@` silenciaba el warning y no había ni un `error_log`. Clave
+     * mal puesta, DNS caído, TLS, timeout de 3 s: todo colapsaba en el
+     * mismo `return false`, y del otro lado solo se veía un mensaje en
+     * estado «error» sin decir por qué.
+     *
+     * Eso importó de verdad el día que se cambiaron las claves de
+     * MegaBot: el síntoma visible era «no contesta», y la causa —un 401—
+     * no aparecía en ningún lado.
+     *
+     * La `@` se queda (el warning de PHP en medio de un JSON lo rompe),
+     * pero ahora el motivo se guarda donde se puede mirar. */
     $resultado = @file_get_contents($url, false, $contexto);
-    if ($resultado === false) return false;
+
+    if ($resultado === false) {
+        $porQue = error_get_last();
+        anotarPorQueFalloMegabot(0, (string) ($porQue['message'] ?? 'sin detalle'));
+        return false;
+    }
 
     // $http_response_header la llena file_get_contents() al usar un
     // wrapper http:// — se lee el primer renglón ("HTTP/1.1 200 OK").
@@ -652,7 +696,71 @@ function mandarWebhookDeMegabot($payload) {
     if (isset($http_response_header[0]) && preg_match('/\s(\d{3})\s/', $http_response_header[0], $m)) {
         $codigo = (int) $m[1];
     }
-    return $codigo >= 200 && $codigo < 300;
+
+    if ($codigo < 200 || $codigo >= 300) {
+        /* El cuerpo se miraba y se tiraba. Es justo donde el servicio
+           explica qué no le gustó («invalid api key», «unknown route»). */
+        anotarPorQueFalloMegabot($codigo, mb_substr((string) $resultado, 0, 300));
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * Deja escrito por qué no salió el webhook.
+ *
+ * Va a `ajustes.megabot_salud`, que ya existe y que la pantalla de
+ * MegaBot ya lee: así el motivo se ve donde se busca el problema, en vez
+ * de solo en un log del hosting que nadie abre.
+ *
+ * ⚠️ NUNCA guarda la clave. Se guarda el código HTTP y lo que contestó
+ * el servicio, que es lo que hace falta para distinguir «clave mal
+ * puesta» (401) de «dirección equivocada» (404) de «no hay nadie
+ * escuchando» (timeout).
+ *
+ * @param int    $codigo  HTTP, o 0 si ni siquiera hubo respuesta.
+ * @param string $detalle Lo que contestó el servicio, recortado.
+ * @return void
+ */
+function anotarPorQueFalloMegabot($codigo, $detalle) {
+    $comoSeLee = $codigo === 401 || $codigo === 403
+        ? 'La clave de MegaBot no fue aceptada.'
+        : ($codigo === 404
+            ? 'La dirección del webhook no existe.'
+            : ($codigo === 0
+                ? 'No hubo respuesta: sin red, DNS, TLS o tardó más de 3 segundos.'
+                : 'El servicio contestó ' . $codigo . '.'));
+
+    error_log('[Ania XV · MegaBot] webhook falló (' . $codigo . '): ' . $detalle);
+
+    if (!existeTabla('ajustes')) return;
+
+    /* ⚠️ `cuando` VA COMO MARCA DE TIEMPO UNIX, no como fecha ISO.
+     *
+     * megabotEstaDisponible() (más abajo) hace
+     * `(time() - (int) $salud['cuando']) >= 90` para el reposo tras un
+     * fallo. Con una fecha ISO, `(int)` se queda con el año —2026— y la
+     * resta da millones: el freno quedaría desactivado y el panel
+     * castigaría a un servicio caído con un POST por mensaje.
+     *
+     * Mismo formato que anotarSaludDeMegabot(), a propósito: las dos
+     * escriben la misma clave. */
+    try {
+        ejecutar(
+            "INSERT INTO ajustes (clave, valor) VALUES ('megabot_salud', :v)
+             ON DUPLICATE KEY UPDATE valor = VALUES(valor)",
+            [':v' => json_encode([
+                'vivo'    => false,
+                'cuando'  => time(),
+                'codigo'  => $codigo,
+                'porque'  => $comoSeLee,
+                'detalle' => $detalle,
+            ], JSON_UNESCAPED_UNICODE)]
+        );
+    } catch (Throwable $e) {
+        // Si ni esto se puede guardar, queda el error_log de arriba.
+    }
 }
 
 /**

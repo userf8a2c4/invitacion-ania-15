@@ -182,8 +182,19 @@ case 'ultimas':
             LEFT JOIN mesas m ON m.id = am.mesa_id'
         : '';
 
+    /* ⚡ EL CÓDIGO DEL PASE TAMBIÉN VIAJA (2026-09-16)
+     *
+     * El aviso «1 pase que ya habían entrado, leídos otra vez» llevaba a
+     * una hoja con el nombre y la hora, y no decía CUÁL código se había
+     * leído. No era un olvido de la pantalla: esta consulta no lo
+     * devolvía, así que verPasesReleidos() (30-vista-hoy.js) no tenía de
+     * dónde sacarlo.
+     *
+     * Y el código es justo lo que hace falta ahí: es lo que se compara
+     * contra el pase que la persona tiene en la mano, en la puerta, con
+     * fila detrás. */
     $filas = consultarTodo(
-        "SELECT l.llegada_en, l.intentos, c.nombre, c.alergias $selectMesa
+        "SELECT l.llegada_en, l.intentos, c.nombre, c.alergias, c.codigo $selectMesa
          FROM llegadas l
          JOIN confirmaciones c ON c.id = l.confirmacion_id
          $joinMesa
@@ -200,8 +211,13 @@ case 'ultimas':
             'nombre'      => $f['nombre'] ?? '',
             'llegada_en'  => $f['llegada_en'] ?? null,
             'mesa'        => $f['mesa'] ?? '',
+            'codigo'      => $f['codigo'] ?? '',
             'tiene_alergia' => $tieneAlergia,
             'reintentado' => (int) ($f['intentos'] ?? 0) > 0,
+            /* Cuántas veces de más, no solo si hubo alguna: «leído 2
+               veces» y «leído 5 veces» son dos situaciones distintas en
+               la puerta. */
+            'veces_de_mas'  => (int) ($f['intentos'] ?? 0),
         ];
     }, $filas);
 
