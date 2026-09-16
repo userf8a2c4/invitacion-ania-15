@@ -1050,10 +1050,62 @@ for (const archivo of ['24-lienzo-de-petalos.js', '23-lienzo-de-luz.js',
 
 comprobar('y el eclipse los pausa a los tres, y los devuelve',
   /LienzoDePetalos\.pausado = \(t >= 1000\)/.test(eclipseCodigo) &&
-  /LienzoDeLuz\.pausado = \(t >= 26000 && t < 52000\)/.test(eclipseCodigo) &&
-  /EstadoDelLienzoDeVelas\.pausado = \(t >= 26000 && t < 52000\)/.test(eclipseCodigo) &&
+  /LienzoDeLuz\.pausado = \(t >= 26000 && t < \d+\)/.test(eclipseCodigo) &&
+  /EstadoDelLienzoDeVelas\.pausado = \(t >= 26000 && t < \d+\)/.test(eclipseCodigo) &&
   /function soltarLosLienzos/.test(eclipseCodigo),
   'una pausa que no se suelta deja la pagina sin luz hasta que alguien recargue');
+
+/* ⛔ Y LAS TRES NO VUELVEN EN EL MISMO CUADRO (2026-09-16)
+ *
+ * Volvian las tres a la vez en el segundo 52, encima de los rayos, el sol
+ * creciendo y trescientos SVG en pleno frenesi. Medido con
+ * `medir.mjs --eclipse --cpu=4`, esa ventana de dos segundos recibio UN
+ * cuadro en todo el minuto. Carlos: «esta tan saturada que no se entiende
+ * nada».
+ *
+ * Ahora la luz vuelve a los 46 —cuando vuelven los rayos, que es lo que
+ * el propio archivo decia querer y no lograba—, el halo de las velas a
+ * los 49, y las motas y la fauna a los 52. No se quita nada: vuelve todo,
+ * en tres respiros. */
+const finDeLaLuz   = (eclipseCodigo.match(/LienzoDeLuz\.pausado = \(t >= 26000 && t < (\d+)\)/) || [])[1];
+const finDeLasVelas = (eclipseCodigo.match(/EstadoDelLienzoDeVelas\.pausado = \(t >= 26000 && t < (\d+)\)/) || [])[1];
+const finDeLaFauna  = (eclipseCodigo.match(/var sinFauna = t >= 33000 && t < (\d+)/) || [])[1];
+
+comprobar('y las tres vueltas estan escalonadas, no todas en el mismo cuadro',
+  finDeLaLuz && finDeLasVelas && finDeLaFauna &&
+  new Set([finDeLaLuz, finDeLasVelas, finDeLaFauna]).size === 3,
+  'volvian juntas en el 52 y esa ventana recibia UN cuadro: luz ' +
+  finDeLaLuz + ', velas ' + finDeLasVelas + ', fauna ' + finDeLaFauna);
+
+comprobar('y la luz deja de estar pausada cuando vuelven los rayos',
+  finDeLaLuz === '46000' &&
+  /var sinLuz = t >= 26000 && t < 46000/.test(eclipseCodigo),
+  'con el array lleno a los 46 y el lienzo pausado hasta los 52, los rayos ' +
+  'seguian apareciendo de golpe: el arreglo del 2026-09-11 no llegaba a verse');
+
+/* ⛔ EL MARCO SE ANIMABA DEBAJO DEL ECLIPSE TODO EL MINUTO (2026-09-16)
+ *
+ * `07-marco-y-enredaderas.js` construyo la bandera `PausaDeEscena.marco`
+ * el 2026-09-13, con el perfil que la justifica escrito al lado: durante
+ * el minuto del eclipse el cuadro se repartia en Layerize 28,4 %,
+ * Recalculate style 15,3 %, Paint 10,1 % y Layout 7,5 %, y «todo el
+ * JavaScript del eclipse junto pesaba 1,6 %».
+ *
+ * Se construyo la bandera, se documento, y nadie la levantaba. 07 seguia
+ * escribiendo `transform` sobre las MISMAS ~200 flores que el eclipse
+ * mueve: cada SVG invalidado dos veces por cuadro.
+ *
+ * ⚠️ Congela, no apaga: las flores siguen estirandose hacia el nombre,
+ * lo que se detiene es el meceo por scroll. */
+comprobar('el eclipse congela el marco mientras dura',
+  /registro\.marco = true;/.test(eclipseCodigo),
+  '07 escribia transform sobre las mismas flores que el eclipse mueve: ' +
+  'cada SVG invalidado dos veces por cuadro, y la bandera para evitarlo ' +
+  'ya existia sin que nadie la levantara');
+
+comprobar('y lo suelta al terminar',
+  /window\.PausaDeEscena\.marco = false;/.test(eclipseCodigo),
+  'una pausa que no se suelta deja el marco quieto hasta que alguien recargue');
 
 comprobar('y se sueltan ANTES de cualquier guard, por si el eclipse revienta',
   /soltarLosLienzos\(\);\s*\n\s*if \(!mundo\) return;/.test(eclipseCodigo),
@@ -2369,13 +2421,36 @@ comprobar('y no se reescribe lo que no cambió',
  * el mismo en todos lados, porque no es una propiedad del equipo: es la
  * cadencia que se eligió. La mediana se sigue midiendo —el Diagnóstico la
  * muestra— pero ya no manda. */
-comprobar('el gobernador mide TRABAJO, no el intervalo entre cuadros',
-  /var intervalo = costoDelCuadro;/.test(eclipseCodigo) &&
-  /costoDelCuadro = performance\.now\(\) - empiezaElTrabajo;/
-    .test(eclipseCodigo),
-  'con la cadencia fija el intervalo es siempre 41,7 ms: mediría la ' +
-  'cadencia, no el equipo, y le diría a Carlos que todo anda bien mientras ' +
-  'la escena se arrastra');
+/* ⛔ MEDIR SOLO EL TRABAJO LO DEJABA CIEGO (2026-09-16)
+ *
+ * La regla del 2026-09-13 era «mide el TRABAJO, no el intervalo», y su
+ * motivo sigue en pie: con la cadencia fija el intervalo es siempre
+ * 41,7 ms y no dice nada del equipo.
+ *
+ * Pero al soltar el intervalo se solto la unica senal que avisa cuando la
+ * cadencia NO se cumple. Medido con `medir.mjs --eclipse --cpu=4`: el
+ * eclipse gastaba 2,4 ms de los 41,7 y concluia que sobraba margen,
+ * mientras la pagina entregaba 8 cuadros por segundo y el lienzo se
+ * quedaba a densidad plena. Cuanta MENOS culpa tenia, MENOS hacia.
+ *
+ * Ahora mira las dos y gobierna con la peor, contando del intervalo solo
+ * lo que EXCEDE al presupuesto —si no, la cadencia de cine se leeria como
+ * un equipo sufriendo—. Y `promedio` sigue siendo el trabajo a secas,
+ * porque es lo que el Diagnostico le muestra a Carlos. */
+comprobar('el gobernador mide el trabajo Y el retraso, y usa el peor',
+  /costoDelCuadro = performance\.now\(\) - empiezaElTrabajo;/.test(eclipseCodigo) &&
+  /presion \+= \(Math\.max\(costoDelCuadro, seRetrasa\) - presion\)/.test(eclipseCodigo) &&
+  /var intervalo = presion;/.test(eclipseCodigo),
+  'midiendo solo su propio trabajo se creia holgado mientras la pagina iba a 8 fps');
+
+comprobar('y del intervalo solo cuenta lo que se pasa del presupuesto',
+  /seRetrasa = intervaloReal > MS_DE_CINE/.test(eclipseCodigo),
+  'contando el intervalo entero, la cadencia de cine se leeria como lentitud');
+
+comprobar('y el numero que ve Carlos sigue siendo el TRABAJO, no el retraso',
+  /promedio \+= \(costoDelCuadro - promedio\)/.test(eclipseCodigo) &&
+  /msPorCuadro: promedio/.test(eclipseCodigo),
+  'el Diagnostico diria «el cuadro cuesta 128 ms» cuando el eclipse gasta 2,4');
 
 comprobar('y su objetivo es una fracción del presupuesto, no la lentitud que encuentra',
   /objetivoDeCuadro = MS_DE_CINE \* 0\.8;/.test(eclipseCodigo) &&
@@ -2417,10 +2492,33 @@ comprobar('y tira los primeros cuadros antes de creerle nada al equipo',
     .test(eclipseCodigo),
   'los cuadros del arranque son los caros y no dicen nada del equipo');
 
-comprobar('y no juzga antes del segundo 6',
-  /var NO_JUZGAR_ANTES_DE = 6000;/.test(eclipseCodigo) &&
-  /t >= NO_JUZGAR_ANTES_DE/.test(eclipseCodigo),
-  'juzgar durante el arranque es lo que produjo la cascada');
+/* ⛔ LLEGABA TARDE A SU PROPIA FIESTA (2026-09-16)
+ *
+ * Esperar estaba bien cuando la escalera APAGABA partes de la escena: ahi
+ * equivocarse se veia, y la nota del 2026-09-12 cuenta como tardar poco
+ * dio «todo se congela, desde el s10 hasta el 35 solo flota una rosa».
+ *
+ * Pero la escalera ya no apaga nada — solo cede pixeles, y eso no se ve.
+ * Con los numeros viejos, a 8 fps el primer escalon de lienzo caia en el
+ * segundo 22 de 60: veintidos segundos a densidad plena en un telefono
+ * que ya se estaba calentando, y los peores son los primeros.
+ *
+ * Sigue habiendo calentamiento y sigue sin juzgarse en el arranque: lo
+ * que cambia es cuanto dura esa prudencia. */
+comprobar('sigue sin juzgar en pleno arranque, pero ya no tarda 22 segundos',
+  /var NO_JUZGAR_ANTES_DE = (\d+);/.test(eclipseCodigo) &&
+  /t >= NO_JUZGAR_ANTES_DE/.test(eclipseCodigo) &&
+  Number((eclipseCodigo.match(/var NO_JUZGAR_ANTES_DE = (\d+);/) || [])[1]) >= 1000 &&
+  Number((eclipseCodigo.match(/var NO_JUZGAR_ANTES_DE = (\d+);/) || [])[1]) <= 3000,
+  'juzgar en el primer cuadro produjo la cascada; juzgar en el segundo 22 ' +
+  'deja medio minuto sin corregir');
+
+comprobar('y cuando el retraso es grave va derecho al lienzo',
+  /var esGrave = objetivoDeCuadro && presion > objetivoDeCuadro \* 2;/
+    .test(eclipseCodigo) &&
+  /if \(esGrave && bajarLaEscalaDelLienzo\(\)\) return true;/.test(eclipseCodigo),
+  'TANDAS reparte escrituras de SVG: no devuelve nada cuando el atasco esta ' +
+  'en el compositor, y son cuatro escalones antes de tocar lo que importa');
 
 comprobar('la degradación por recorte ya NO EXISTE',
   !/var LASTRE/.test(eclipseCodigo) &&
@@ -2458,11 +2556,19 @@ comprobar('la escalera cede TANDAS y después resolución, y nada más',
     'desarmada');
 }
 
-comprobar('el lienzo del eclipse ya lee la perilla de calidad',
-  /var ESCALA_DEL_LIENZO = esBaja \? 0\.72 : 1;/.test(eclipseCodigo) &&
+/* ⛔ EL 0,72 SOLO SE APLICABA EN CALIDAD BAJA (2026-09-16)
+ *
+ * Las treinta lineas que justifican el 0,72 no dicen en ningun momento
+ * «cuando la calidad sea baja». El codigo si: `esBaja ? 0.72 : 1`. En
+ * alta y en media —donde cae CUALQUIER iPhone, porque WebKit no expone
+ * deviceMemory— el eclipse seguia siendo exactamente lo que ese
+ * comentario dice que dejo de ser. */
+comprobar('el lienzo del eclipse dibuja a 0,72 SIEMPRE, no solo en calidad baja',
+  /var ESCALA_DEL_LIENZO = 0\.72;/.test(eclipseCodigo) &&
+  !/ESCALA_DEL_LIENZO = esBaja \?/.test(eclipseCodigo) &&
   /var trama = dpr \* ESCALA_DEL_LIENZO;/.test(eclipseCodigo),
-  'era el único lienzo de la página a densidad plena: 3,269 Mpx contra los ' +
-  '0,817 de los otros tres, que ya usan FACTOR_POR_CALIDAD');
+  'era el unico lienzo de la pagina a densidad plena: en un iPhone 12 Pro Max ' +
+  'son 1,585 Mpx por cuadro contra los ~0,22 de los otros lienzos');
 
 /* ⚡ LOS OTROS DOS YA NO SON DE PANTALLA COMPLETA (2026-09-13), pero la
  * trama tiene que seguir siendo la misma en los tres: si uno escala y el
@@ -2539,10 +2645,15 @@ comprobar('la reliquia borra su caja, no la pantalla',
    * ensayo, la primera corrida que activara el gobernador dejaba TODAS las
    * siguientes a 0,50 hasta recargar. O sea que lo que se mirara después
    * ya no era lo que el código hace. */
-  comprobar('la trama del lienzo se reinicia entre corridas',
-    /ESCALA_DEL_LIENZO = esBaja \? 0\.72 : 1;/.test(reinicio) &&
+  comprobar('la trama del lienzo se reinicia entre corridas, al mismo techo',
+    /ESCALA_DEL_LIENZO = 0\.72;/.test(reinicio) &&
     /medirElLienzo\(\);/.test(reinicio),
-    'una corrida degradada envenenaba todas las siguientes del panel');
+    'una corrida degradada envenenaba todas las siguientes del panel; y si ' +
+    'el reinicio volviera a densidad plena, el arreglo solo valdria para la primera');
+
+  comprobar('y la presion del gobernador tambien',
+    /presion = 16\.7;/.test(reinicio),
+    'sin esto la corrida siguiente arranca apretando por lo que sufrio la anterior');
 
 
 }
