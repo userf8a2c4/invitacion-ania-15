@@ -235,13 +235,13 @@ function actualizarBurbujasDeLaBarra(datosDeHoy) {
      entró a mirar. Es el aviso que faltaba: hasta ahora, que alguien
      confirmara no se notaba en ninguna parte de la app. */
   const respondidas = Number(datosDeHoy.respondidas) || 0;
-  const vistas = recordado('gente-respuestas-vistas', null);
+  const vistas = recordadoDeLaCuenta('gente-respuestas-vistas', null);
 
   /* La primera vez no hay con qué comparar: se guarda el número de ahora y
      no se avisa de nada. Si no, la primera apertura de la app diría "38
      respuestas nuevas", que es cierto y a la vez inútil. */
   if (vistas === null) {
-    recordar('gente-respuestas-vistas', respondidas);
+    recordarDeLaCuenta('gente-respuestas-vistas', respondidas);
     ponerBurbuja('#burbuja-gente', 0);
   } else {
     ponerBurbuja('#burbuja-gente', Math.max(0, respondidas - (Number(vistas) || 0)));
@@ -354,7 +354,7 @@ function engancharTresAcciones(vista, alertas) {
       /* Se guarda CUÁNTOS había, no un simple "visto": así el cartel
          vuelve solo si aparece uno nuevo, sin necesitar que nadie lo
          reactive. */
-      recordar(alerta.darPorVisto, alerta.cuantos);
+      recordarDeLaCuenta(alerta.darPorVisto, alerta.cuantos);
       dibujarHoy();
     });
   });
@@ -463,7 +463,14 @@ function pintarBloqueDeUltimasLlegadas(donde, ultimas) {
  * @param {Object} datosDeHoy - Lo que devuelve hoy.php entero.
  * @returns {Array<{texto:string, accion:Function}>}
  */
-/** Cuántos pases releídos se dieron por vistos en ESTE dispositivo. */
+/* Cuántos pases releídos se dieron por vistos.
+ *
+ * ⚠️ POR CUENTA, NO POR DISPOSITIVO (2026-09-15). Antes era por
+ * navegador: si Lucila y Carlos entraban desde el mismo teléfono, el
+ * primero que lo daba por visto se lo apagaba al otro. Lo mismo valía
+ * para las respuestas nuevas de Gente y para los avisos de la campana,
+ * así que las cuatro marcas pasaron a recordarDeLaCuenta()
+ * (02-utilidades.js). */
 const ALERTA_RELEIDOS_VISTA = 'alerta-releidos-vista';
 
 function alertasDelDia(datosDeHoy) {
@@ -487,7 +494,7 @@ function alertasDelDia(datosDeHoy) {
    * CRECE. Así no molesta en los 50 días previos, y la noche del evento
    * reaparece en cuanto alguien intenta entrar dos veces. */
   const releidos = Number(dia.pases_reintentados) || 0;
-  const releidosYaVistos = Number(recordado(ALERTA_RELEIDOS_VISTA, 0)) || 0;
+  const releidosYaVistos = Number(recordadoDeLaCuenta(ALERTA_RELEIDOS_VISTA, 0)) || 0;
 
   if (releidos > releidosYaVistos) {
     alertas.push({

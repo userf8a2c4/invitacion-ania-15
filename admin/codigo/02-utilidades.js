@@ -561,3 +561,55 @@ function olvidar(clave) {
     // Si no se pudo borrar, no hay nada mejor que hacer.
   }
 }
+
+/**
+ * Lo mismo que recordar(), pero separado por cuenta.
+ *
+ * ⚡ LAS MARCAS DE «YA LO VI» ERAN DEL TELÉFONO, NO DE LA PERSONA
+ *    (2026-09-15).
+ *
+ * recordar() guarda todo bajo el prefijo 'ania-admin:', que es el mismo
+ * para cualquiera que entre desde ese navegador. Para casi todo está
+ * bien —el último filtro usado, una sección abierta—, pero para las
+ * marcas de avisos no: si Lucila y Carlos usan el mismo teléfono, el
+ * primero que abre la campana le apaga los avisos al otro, y el segundo
+ * nunca se entera de que hubo algo.
+ *
+ * 45-novedades.js ya lo hacía bien con claveDeNovedadesVistas(). Esto es
+ * lo mismo, disponible para todos.
+ *
+ * ⚠️ 'anon' antes de entrar, igual que allá: hay marcas que se pueden
+ * escribir mientras la sesión todavía se está restaurando, y es mejor
+ * que caigan en un cajón aparte a que se mezclen con las de alguien.
+ *
+ * @param {string} clave
+ * @returns {string} La clave con la cuenta adentro.
+ */
+function claveDeLaCuenta(clave) {
+  const quien = (typeof USUARIO !== 'undefined' && USUARIO && USUARIO.id)
+    ? USUARIO.id
+    : 'anon';
+  return 'cuenta:' + quien + ':' + clave;
+}
+
+/**
+ * Guarda algo que vale solo para la cuenta que está adentro.
+ *
+ * @param {string} clave
+ * @param {*} valor
+ * @returns {boolean}
+ */
+function recordarDeLaCuenta(clave, valor) {
+  return recordar(claveDeLaCuenta(clave), valor);
+}
+
+/**
+ * Lee algo guardado con recordarDeLaCuenta().
+ *
+ * @param {string} clave
+ * @param {*} [respaldo=null]
+ * @returns {*}
+ */
+function recordadoDeLaCuenta(clave, respaldo) {
+  return recordado(claveDeLaCuenta(clave), respaldo);
+}

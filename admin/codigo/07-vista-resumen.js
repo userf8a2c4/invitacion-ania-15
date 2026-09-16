@@ -678,6 +678,12 @@ function ponerBurbuja(selector, cuantos) {
   burbuja.textContent = n > 9 ? '9+' : String(n);
   burbuja.classList.toggle('oculto', n === 0);
 
+  /* El número exacto, aparte del que se ve. Lo que se muestra se corta
+     en «9+» —doce avisos y trece se ven igual—, y quien quiera decir
+     de qué se trata necesita el número de verdad. Lo usa dibujarMas()
+     para ponerle a Correo la misma cuenta que tiene el punto. */
+  burbuja.dataset.exacto = String(n);
+
   /* ⚡ UN NÚMERO SUELTO NO DICE NADA (2026-09-06)
    *
    * Había cinco burbujas en pantalla y las cinco cuentan cosas
@@ -691,10 +697,12 @@ function ponerBurbuja(selector, cuantos) {
    * más importante, para quien usa lector de pantalla: antes leía "6" y
    * nada más.
    *
-   * ⚠️ ESTO NO ARREGLA EL CASO DE «MÁS». Esa burbuja cuenta correos sin
-   * leer, pero al abrir «Más» no hay ningún renglón que lleve el mismo
-   * número, así que el aviso muere ahí. Eso es del reordenamiento de ese
-   * menú, que va en su propia ronda. */
+   * ⚡ Y EL CASO DE «MÁS» YA ESTÁ (2026-09-15). Acá decía que esa
+   * burbuja contaba correos sin leer y que al abrir «Más» no había
+   * ningún renglón con ese número, así que el aviso moría ahí. Ahora
+   * dibujarMas() (05-navegacion.js) le pone la cuenta al renglón de
+   * Correo leyendo el `data-exacto` de acá arriba: el punto y el
+   * renglón dicen el mismo número porque salen del mismo lugar. */
   const queCuenta = burbuja.dataset.cuenta;
   if (queCuenta) {
     const frase = n + ' ' + queCuenta;

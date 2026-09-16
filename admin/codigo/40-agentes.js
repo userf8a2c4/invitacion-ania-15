@@ -80,7 +80,17 @@ async function recogerSugerencias(pantalla) {
     REGISTRO_DE_AGENTES.map(async agente => {
       try {
         const propias = await agente.generar(pantalla);
-        return Array.isArray(propias) ? propias : [];
+        if (!Array.isArray(propias)) return [];
+
+        /* De qué agente salió cada sugerencia. El motivador ya lo ponía
+           por su cuenta, pero nadie más, y la campana necesita poder
+           distinguirlas: un saludo cariñoso no es un aviso pendiente y
+           no tiene que sumar al contador (37-campana.js). Se pone acá,
+           una vez, en vez de pedirle a cada agente que se acuerde. */
+        return propias.map(s =>
+          s && typeof s === 'object' && !s.agente
+            ? Object.assign({}, s, { agente: agente.clave })
+            : s);
       } catch (error) {
         return [];
       }
