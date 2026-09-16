@@ -15,8 +15,8 @@ No está maquillado. Los días en que rompí algo están acá. Los días en que
 descubrí que llevaba una semana arreglando lo que no era, también. Y los
 días en que no hice nada.
 
-La segunda noche del proyecto escribí esto, pidiendo que todo el código
-estuviera en español y explicado hasta el último detalle:
+La segunda noche del proyecto dejé escrito esto, para que todo el código
+quedara en español y explicado hasta el último detalle:
 
 > *«Ojo, esta está pensada específicamente para mi novia, Lucila, que es
 > quien ideó esta web y la inició. Mi intención es que ella pueda entender
@@ -48,7 +48,7 @@ recorrerlo rápido, alcanza con leer solo esas.
 |---|---|---|
 | [Día 1](2026-07-20-dia-01.md) | lun 20 | La primera noche, y seis cosas escritas de corrido |
 | [Día 2](2026-07-21-dia-02.md) | mar 21 | Diez horas seguidas, y lo que de verdad quería |
-| [Día 3](2026-07-22-dia-03.md) | mié 22 | Una sola pregunta: cómo vamos |
+| [Día 3](2026-07-22-dia-03.md) | mié 22 | Una sola anotación: cómo vamos |
 | [Día 4](2026-07-23-dia-04.md) | jue 23 | El proyecto pasa a tener historia |
 | [Día 5](2026-07-24-dia-05.md) | vie 24 | El rendimiento aparece el día cinco, no al final |
 | [Día 8](2026-07-27-dia-08.md) | lun 27 | «Ojo a los datos», y la luz que sabe qué hora es |
