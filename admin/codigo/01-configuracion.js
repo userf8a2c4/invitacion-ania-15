@@ -18,9 +18,15 @@ const CONFIGURACION = {
   fiesta: {
     nombre: 'Ania',
 
-    /* Misma fecha que la invitación (codigo/01-configuracion.js de la
-       raíz). Si cambia allá, tiene que cambiar acá: de esto sale la
-       cuenta regresiva del Resumen. */
+    /* ⛔ ESTAS DOS LÍNEAS LAS ESCRIBE LA COMPILACIÓN.
+
+       Antes decían "misma fecha que la invitación; si cambia allá, tiene
+       que cambiar acá" — o sea, dos copias y una nota pidiendo que
+       alguien se acuerde. Ya no: las dos salen de FIESTA_DIA, en
+       admin/api/_lib/entorno.php, estampadas por
+       herramientas/_fecha-de-la-fiesta.mjs al correr empaquetar.mjs.
+
+       De esto sale la cuenta regresiva del Resumen. */
     fechaYHora: '2026-10-24T17:00:00',
     fechaEnPalabras: '24 de octubre de 2026',
     lugar: 'Salones Alvi, Toluca',

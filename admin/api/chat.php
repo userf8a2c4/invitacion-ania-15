@@ -341,10 +341,14 @@ function construirContexto($pantalla, $usuario) {
     ];
 
     // El evento: fecha/hora/lugar fijos del quince — no vive en una
-    // tabla, es texto conocido del proyecto (mismo dato que ya muestra
-    // el sitio público). Si algún día se vuelve editable, este es el
-    // único lugar que hay que tocar.
-    $contexto['evento'] = ['fecha' => '2026-10-24', 'hora' => '17:00', 'lugar' => 'Salones Alvi, Toluca'];
+    // tabla, es texto conocido del proyecto. La fecha la da
+    // _lib/entorno.php (entra por bd.php), que es el único lugar donde
+    // está escrita; el chatbot ya no lleva su propia copia.
+    $contexto['evento'] = [
+        'fecha' => diaDeLaFiesta(),
+        'hora'  => '17:00',
+        'lugar' => 'Salones Alvi, Toluca',
+    ];
 
     // Cupo: misma cuenta que ya hace admin/api/estadisticas.php.
     if (existeTabla('confirmaciones')) {

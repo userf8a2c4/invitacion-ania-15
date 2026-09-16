@@ -44,10 +44,15 @@
   const momentoDeLaFiesta = new Date(CONFIGURACION.fiesta.fechaYHora);
 
   if (isNaN(momentoDeLaFiesta.getTime())) {
+    /* ⚠️ Apunta a entorno.php, NO a 01-configuracion.js. La fecha de
+       ese archivo la estampa la compilación; corregirla ahí se pierde
+       en la próxima. El dueño de verdad es FIESTA_DIA. */
     console.warn(
-      'La fecha de la fiesta está mal escrita en 01-configuracion.js. ' +
-      'Tiene que tener el formato AÑO-MES-DÍAThora:minutos:segundos, ' +
-      'por ejemplo 2026-10-24T17:00:00'
+      'La fecha de la fiesta está mal escrita. Se corrige en ' +
+      'admin/api/_lib/entorno.php (FIESTA_DIA y FIESTA_HORA), que es el ' +
+      'único lugar donde vive, y después se compila con ' +
+      'herramientas/empaquetar.mjs. El formato es ' +
+      'AÑO-MES-DÍAThora:minutos:segundos, por ejemplo 2031-07-19T20:30:00'
     );
     return;
   }

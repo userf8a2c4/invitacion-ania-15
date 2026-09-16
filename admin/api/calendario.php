@@ -33,9 +33,11 @@ exigirMetodo('GET');
 
 $accion = (string) ($_GET['accion'] ?? 'mes');
 
-/** La fecha de la fiesta. Se repite acá porque el servidor arma avisos
- *  por su cuenta, sin depender de que haya un teléfono abierto. */
-const DIA_DE_LA_FIESTA = '2026-10-24';
+/** La fecha de la fiesta la da diaDeLaFiesta() (_lib/entorno.php, que
+ *  entra por bd.php). El servidor arma los avisos por su cuenta, sin
+ *  depender de que haya un teléfono abierto, pero ya no con su propia
+ *  copia de la fecha. */
+define('DIA_DE_LA_FIESTA', diaDeLaFiesta());
 
 
 /* ─── QUÉ RANGO SE PIDIÓ ──────────────────────────────────────────────── */

@@ -61,7 +61,7 @@ function telefonoParaWhatsApp($telefono) {
 
 /** El encabezado que lleva todo lo que se manda. */
 function encabezado($titulo) {
-    return "*XV de Ania · 24 de octubre de 2026*\n" .
+    return "*XV de Ania · " . fiestaEnPalabras() . "*\n" .
            "_" . $titulo . "_\n" .
            str_repeat('—', 24) . "\n\n";
 }
@@ -486,7 +486,7 @@ if ($cual === 'modista') {
     /* La fecha de la fiesta va al final: es contra lo que la modista
        calcula cuándo tiene que estar terminado el vestido. */
     $texto .= str_repeat('—', 24) . "\n";
-    $texto .= "*La fiesta es el 24 de octubre de 2026.*\n";
+    $texto .= "*La fiesta es el " . fiestaEnPalabras() . ".*\n";
 }
 
 
