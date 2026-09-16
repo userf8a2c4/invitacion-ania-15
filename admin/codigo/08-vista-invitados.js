@@ -478,6 +478,25 @@ async function dibujarInvitados() {
     '<button class="filtro" id="inv-orden" type="button"></button>' +
     '</div>' +
 
+    /* ⚡ EL RESUMEN VA ACÁ: DESPUÉS DE LOS FILTROS, ANTES DE LOS BOTONES
+       (2026-09-16)
+       Es el mismo criterio con el que el 14 de septiembre el chip de
+       orden se pegó a los filtros: filtrar, ordenar y resumir son la
+       misma idea —QUÉ ESTOY MIRANDO—, y los botones de abajo son la otra
+       —QUÉ ESTOY HACIENDO—. Juntar las que se parecen y separarlas de las
+       que no es lo que evita tocar una creyendo tocar la otra.
+
+       Y pegado a los filtros tiene además una razón práctica: las cifras
+       se cuentan sobre la lista filtrada, así que al cambiar de chip el
+       renglón de abajo cambia con él. Puestos juntos, esa relación se ve;
+       separados por dos botones, parecería un dato fijo que se mueve
+       solo.
+
+       Sale vacío del molde y lo llena actualizarElResumenDeGente() en
+       cada repintado, igual que el chip de «Sin responder»: acá todavía
+       no hay datos que contar. */
+    '<div id="resumen-gente" class="resumen-gente"></div>' +
+
     /* ⚡ "AGREGAR INVITADO" SUBIÓ ACÁ, ANTES DE LA LISTA (2026-09-03).
        Estaba al fondo, después de la lista COMPLETA y del botón de fecha
        límite. O sea que el costo de dar de alta a alguien crecía con cada
@@ -900,6 +919,9 @@ function abrirMasDeInvitados() {
       'Ajustes de la invitación</div>' +
     item('mas-fecha', 'Fecha límite para confirmar',
          'Hasta cuándo puede cada grupo cambiar su respuesta.') +
+    item('mas-fecha-fiesta', '📅 Fecha de la fiesta',
+         'Qué día es. Avisa antes de dejarte cambiarla: toca el correo, el pase y los recordatorios.') +
+
     item('mas-eclipse', '🌑 Eclipse de Sangre',
          'La hora del minuto en que la invitación se transforma, y el botón para lanzarlo ahora.') +
 
@@ -924,6 +946,7 @@ function abrirMasDeInvitados() {
     abrirHojaDeFormatos('Descargar invitados', exportarInvitados);
   });
   alToque('mas-fecha', () => { cerrarHoja(true); abrirConfiguracionDeInvitaciones(); });
+  alToque('mas-fecha-fiesta', () => { cerrarHoja(true); abrirLaFechaDeLaFiesta(); });
   alToque('mas-eclipse', () => { cerrarHoja(true); abrirLaHoraDelEclipse(); });
 
   /* Estos dos escriben su resultado DENTRO de la hoja: son revisiones,
@@ -967,6 +990,117 @@ function actualizarElNumeroDeQuienFalta() {
   if (!chip) return;
   const faltan = INVITADOS.reduce((suma, fila) => suma + (yaRespondio(fila) ? 0 : 1), 0);
   chip.textContent = faltan ? 'Sin responder · ' + faltan : 'Sin responder';
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   EL RENGLÓN DE RESUMEN
+
+   ⚡ POR QUÉ UN RENGLÓN Y NO LA REJILLA DE TARJETAS (2026-09-16, a pedido)
+
+   El panel ya tiene una forma de mostrar cifras: .rejilla-datos con
+   .tarjeta-dato, que usan Resumen, Mesas, Evento, Importar y Métricas.
+   Lo obvio era copiarla acá. Siete tarjetas de 34 px son ~200 px de alto,
+   y el 14 de septiembre sacamos cinco filas de botones de esta misma
+   pantalla porque el primer invitado empezaba a 560 px de 744. Poner 200
+   de vuelta deshace ese trabajo el mismo mes en que se hizo.
+
+   Un renglón de 28 px da la misma información. La rejilla queda para las
+   pantallas que SON un resumen; ésta es una lista, y su resumen tiene que
+   caber arriba sin empujarla.
+
+   ⚡ QUÉ MUESTRA, Y POR QUÉ NO REPITE LO QUE YA DICE EL ENCABEZADO
+
+   Arriba ya está «50 invitaciones · 34 de 113 personas confirmadas». Este
+   renglón NO vuelve a decir ninguno de esos tres números: los desarma.
+
+     Adultos + Niños = las 113 apartadas del encabezado.
+     Faltan          = 113 − 34, la resta que nadie tendría que hacer de
+                       cabeza, y que es el trabajo #1 de la app.
+     Alergias        = lo que necesita la cocina.
+     Sin mesa        = lo que necesita el acomodo.
+
+   Los dos últimos son información que hoy no está en ninguna parte de
+   esta pantalla sin tocar un filtro.
+
+   ⚠️ SE CUENTA SOBRE `visibles`, EL MISMO ARREGLO QUE SE PINTA.
+
+   No sobre INVITADOS. Es la misma razón que ya está escrita en
+   actualizarElNumeroDeQuienFalta(): en septiembre hubo dos cuentas de
+   "sin responder" hechas por separado y se contradecían en pantalla.
+   Contando acá, sobre el arreglo que se filtra y se dibuja dos líneas más
+   abajo, el resumen y la lista no pueden separarse.
+
+   Y además lo deja alineado con el encabezado, que también respeta el
+   filtro (ver la nota de ponerTituloDeInvitados): con «Con alergias»
+   puesto, las dos líneas hablan del mismo subconjunto. Si una fuera
+   global y la otra filtrada, la pantalla se contradiría sola a dos
+   renglones de distancia.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Un dato del renglón: rótulo chico y cifra.
+ *
+ * @param {string} rotulo
+ * @param {number} numero
+ * @param {string} [tono] - '', 'pendiente' o 'logrado'
+ * @returns {string} HTML
+ */
+function datoDelResumen(rotulo, numero, tono) {
+  return '' +
+    '<span class="resumen-gente__dato">' +
+      '<span class="resumen-gente__rotulo">' + seguro(rotulo) + '</span>' +
+      '<span class="resumen-gente__cifra' +
+        (tono ? ' resumen-gente__cifra--' + tono : '') + '">' +
+        seguro(numero) +
+      '</span>' +
+    '</span>';
+}
+
+/**
+ * Escribe el renglón de resumen sobre la lista que se está viendo.
+ *
+ * @param {Array<Object>} visibles - las filas que se van a pintar
+ * @returns {void}
+ */
+function actualizarElResumenDeGente(visibles) {
+  const caja = buscar('#resumen-gente');
+  if (!caja) return;
+
+  let adultos = 0, ninos = 0, confirmados = 0, alergias = 0, sinMesa = 0;
+
+  visibles.forEach(fila => {
+    const cuantos = (Number(fila.adultos) || 0) + (Number(fila.ninos) || 0);
+
+    if (Number(fila.asiste) === 1) {
+      adultos += Number(fila.adultos) || 0;
+      ninos   += Number(fila.ninos)   || 0;
+    }
+
+    /* Mismo criterio que el encabezado: «confirmadas» son PERSONAS de
+       quien contestó que viene, no filas. */
+    if (comoEstaLaAsistencia(fila) === 'confirmo') confirmados += cuantos;
+
+    if (tieneAlergiaDeVerdad(fila)) alergias++;
+    if (leFaltaMesa(fila)) sinMesa++;
+  });
+
+  /* Idéntico a hoy.php: apartados − confirmados, en personas. Las dos
+     pantallas tienen que poder leerse una al lado de la otra sin
+     traducir nada. */
+  const faltan = Math.max(0, (adultos + ninos) - confirmados);
+
+  /* Con la lista vacía no hay nada que resumir, y cinco ceros en fila son
+     ruido: el cartel de «Nada coincide» ya dice todo lo que hay que
+     decir. */
+  if (!visibles.length) { caja.innerHTML = ''; return; }
+
+  caja.innerHTML =
+    datoDelResumen('Faltan', faltan, faltan ? 'pendiente' : 'logrado') +
+    datoDelResumen('Adultos', adultos) +
+    datoDelResumen('Niños', ninos) +
+    datoDelResumen('Alergias', alergias) +
+    datoDelResumen('Sin mesa', sinMesa);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -1139,6 +1273,12 @@ function pintarListaDeInvitados() {
      orden no le cambia nada. No hay que tocarlo. */
   const visibles = enElOrdenElegido(INVITADOS.filter(invitadoPasaElFiltro));
 
+  /* ⚠️ ACÁ Y NO MÁS ABAJO: tiene que correr también cuando la lista sale
+     vacía, para que el renglón se borre en vez de quedar con las cifras
+     del filtro anterior. Un resumen viejo sobre una lista vacía es
+     exactamente la clase de número que no se puede detectar mirando. */
+  actualizarElResumenDeGente(visibles);
+
   if (!visibles.length) {
     if (!INVITADOS.length) {
       pintarVacio(lista, 'Todavía no hay nadie confirmado',
@@ -1296,6 +1436,46 @@ function yaRespondio(fila) {
          fila.invitacion_estado === 'declinada';
 }
 
+/* ⚠️ LAS DOS REGLAS DE ABAJO SALIERON DE ADENTRO DEL FILTRO (2026-09-16)
+ *
+ * Estaban escritas sueltas dentro de invitadoPasaElFiltro(). Al agregar
+ * el renglón de resumen habrían quedado copiadas en dos lugares, y ésa es
+ * exactamente la familia de bug que ya mordió tres veces en este panel:
+ * dos cuentas de lo mismo, hechas por separado, que un día empiezan a
+ * decir cosas distintas sobre la misma persona.
+ *
+ * Con la regla en una sola función, el número del resumen y la lista que
+ * sale al tocar el filtro son la misma pregunta hecha una vez. No pueden
+ * discrepar aunque alguien cambie la regla mañana. */
+
+/** Las maneras en que alguien escribe "no tengo alergias". */
+const MANERAS_DE_DECIR_NINGUNA = ['', 'ninguna', 'ninguno', 'no', 'n/a', '-'];
+
+/**
+ * ¿Esta persona tiene una alergia de verdad?
+ *
+ * @param {Object} fila
+ * @returns {boolean}
+ */
+function tieneAlergiaDeVerdad(fila) {
+  return !MANERAS_DE_DECIR_NINGUNA.includes(paraBuscar(fila.alergias || ''));
+}
+
+/**
+ * ¿A esta persona le falta mesa?
+ *
+ * ⚠️ NO PIDE asiste = 1, A PROPÓSITO — es exactamente lo que hacía el
+ * filtro antes de esta refactorización y no se cambia acá: cambiar de
+ * callado a quién mete «Sin mesa» es otra decisión, no parte de agregar
+ * un resumen. Queda anotado para tomarla aparte.
+ *
+ * @param {Object} fila
+ * @returns {boolean}
+ */
+function leFaltaMesa(fila) {
+  return !fila.mesa;
+}
+
 /**
  * Dice si una confirmación pasa el filtro y la búsqueda actuales.
  *
@@ -1307,13 +1487,9 @@ function invitadoPasaElFiltro(fila) {
   if (FILTRO_INVITADOS === 'asisten'    && Number(fila.asiste) !== 1) return false;
   if (FILTRO_INVITADOS === 'no_asisten' && Number(fila.asiste) !== 0) return false;
 
-  if (FILTRO_INVITADOS === 'alergias') {
-    const alergias = paraBuscar(fila.alergias || '');
-    const nada = ['', 'ninguna', 'ninguno', 'no', 'n/a', '-'];
-    if (nada.includes(alergias)) return false;
-  }
+  if (FILTRO_INVITADOS === 'alergias' && !tieneAlergiaDeVerdad(fila)) return false;
 
-  if (FILTRO_INVITADOS === 'sin_mesa' && fila.mesa) return false;
+  if (FILTRO_INVITADOS === 'sin_mesa' && !leFaltaMesa(fila)) return false;
 
   /* ⚡ QUIÉNES DIJERON QUE VENÍAN Y NO VINIERON (2026-09-15)
      Es la pregunta del día después, y no se podía responder: la tarjeta
@@ -1574,9 +1750,19 @@ function filaDeInvitado(fila) {
   const asiste = Number(fila.asiste) === 1;
   const gente  = (Number(fila.adultos) || 0) + (Number(fila.ninos) || 0);
 
-  const alergiaBuscada = paraBuscar(fila.alergias || '');
-  const nada = ['', 'ninguna', 'ninguno', 'no', 'n/a', '-'];
-  const tieneAlergia = asiste && !nada.includes(alergiaBuscada);
+  /* ⚠️ LA ETIQUETA PIDE ADEMÁS asiste = 1, Y EL FILTRO NO (2026-09-16)
+     Esta era la tercera copia de la lista de "maneras de decir ninguna".
+     Al unificarla en tieneAlergiaDeVerdad() salió a la luz que las tres
+     no decían lo mismo: acá la etiqueta solo se pinta si la persona
+     viene, mientras que el filtro «Con alergias» lista a cualquiera que
+     haya escrito algo, venga o no. O sea que el filtro puede mostrar
+     filas sin etiqueta de alergia, y no hay forma de entender por qué
+     mirando la pantalla.
+     El `asiste &&` se deja tal cual —para la cocina solo cuenta quien se
+     sienta a la mesa— y la diferencia queda escrita acá en vez de
+     escondida en dos listas iguales. Unificar las dos reglas es otra
+     decisión, aparte de esta. */
+  const tieneAlergia = asiste && tieneAlergiaDeVerdad(fila);
 
   const pie = [];
   if (asiste && gente)  pie.push(pluralizar(gente, 'persona', 'personas'));

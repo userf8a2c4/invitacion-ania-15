@@ -140,6 +140,26 @@ case 'guardar':
     /* El disparo manual es un instante en milisegundos y nada más. Se
        valida por lo mismo que la hora: esto lo termina leyendo el vigía
        en el teléfono de cada invitado. */
+    /* ⛔ LA FECHA DE LA FIESTA (2026-09-16)
+       La valida el formulario, pero acá se vuelve a mirar porque esta
+       es la única de todas las claves que, si entra mal, cambia lo que
+       dice el correo de confirmación, el pase que el invitado lleva a
+       la puerta y los recordatorios automáticos. Una cadena rara
+       guardada acá no rompe nada visible: simplemente entorno.php la
+       descarta y sigue con la fecha compilada, y nadie se entera de que
+       lo que se guardó no era una fecha.
+
+       checkdate() además del formato: 2026-02-30 tiene forma de fecha y
+       no existe.
+
+       Se admite vacío, que es como se vuelve a la fecha de fábrica. */
+    if ($clave === 'fecha_de_la_fiesta' && $valor !== '') {
+        if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $valor, $p)
+            || !checkdate((int) $p[2], (int) $p[3], (int) $p[1])) {
+            responderMal('La fecha tiene que ser un día real en formato AAAA-MM-DD.', 400);
+        }
+    }
+
     if ($clave === 'eclipse_disparo' && $valor !== '') {
         if (!preg_match('/^\d{13}$/', $valor)) {
             responderMal('El disparo tiene que ser un instante en milisegundos.', 400);

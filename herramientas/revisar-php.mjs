@@ -178,6 +178,52 @@ for (const ruta of archivos) {
     });
   }
 
+  /* ⛔ ARGUMENTOS HUÉRFANOS: LO QUE EL BALANCE NO VE (2026-09-16)
+   *
+   * Esto pasó de verdad, y estuvo subido. En acompanantes.php había
+   * quedado, de una edición mal aplicada:
+   *
+   *     $filas = consultarTodo(          ← abre y nunca cierra
+   *     $porOrden = in_array(…);
+   *     $filas = consultarTodo(
+   *         "SELECT …",
+   *         [':c' => $confirmacionId]
+   *     );
+   *         [':c' => $confirmacionId]    ← argumento huérfano
+   *     );                                ← cierre de más
+   *
+   * Es un error de sintaxis: el archivo entero no compila, y con él se
+   * cae TODO el endpoint. En la app se vio como que el PDF de invitados
+   * decía «(sin desglose por persona)» y nadie podía saber por qué.
+   *
+   * Y esta misma revisión lo dio por bueno. El paréntesis que sobraba
+   * arriba y el que sobraba abajo se compensaban, así que el saldo daba
+   * cero y el archivo salía «ok». Contar aperturas y cierres no alcanza:
+   * dos errores opuestos se tapan entre sí.
+   *
+   * Esta comprobación mira otra cosa: una línea que es solo un argumento
+   * —empieza con [ o con comilla, no termina en ; y no asigna nada—
+   * colgando justo después de un cierre. Eso no es código válido en
+   * ninguna circunstancia, y no se compensa con nada. */
+  {
+    const lineas = codigo.split('\n');
+    const esCierre    = l => /^\s*\]?\s*\)\s*;?\s*$/.test(l) && /\)/.test(l);
+    const esArgSuelto = l => {
+      const t = l.trim();
+      return t !== '' && /^[\[\'"]/.test(t) && !/;\s*$/.test(t) && !/^\S+\s*=[^>]/.test(t);
+    };
+
+    for (let i = 0; i < lineas.length - 1; i++) {
+      if (!esCierre(lineas[i])) continue;
+      let j = i + 1;
+      while (j < lineas.length && lineas[j].trim() === '') j++;
+      if (j < lineas.length && esArgSuelto(lineas[j])) {
+        problemas.push('argumento huérfano en la línea ' + (j + 1) +
+                       ': «' + lineas[j].trim().slice(0, 44) + '» cuelga después de un cierre');
+      }
+    }
+  }
+
   const corta = relative(raiz, ruta).replace(/\\/g, '/');
 
   if (problemas.length) {

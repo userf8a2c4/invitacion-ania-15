@@ -45,7 +45,6 @@ case 'listar':
     $confirmacionId = (int) ($_GET['confirmacion_id'] ?? 0);
     if ($confirmacionId < 1) responderMal('Falta decir de qué confirmación.', 400);
 
-    $filas = consultarTodo(
     /* ⚡ EL ORDEN LO ELIGE LUCILA, NO EL TECLADO (2026-09-14)
        Antes era ORDER BY id: el orden en que se fueron cargando. La
        familia ve esa misma lista en su invitación (invitacion.php:176),
@@ -63,8 +62,6 @@ case 'listar':
 
     $filas = consultarTodo(
         "SELECT * FROM acompanantes WHERE confirmacion_id = :c ORDER BY $porOrden",
-        [':c' => $confirmacionId]
-    );
         [':c' => $confirmacionId]
     );
 

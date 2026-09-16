@@ -254,6 +254,71 @@
 .filtros--una-linea::-webkit-scrollbar { display: none; }
 .filtros--una-linea > .filtro { flex: 0 0 auto; }
 
+
+/* ⚡ EL RESUMEN DE GENTE, EN UN RENGLÓN Y SIN CAJAS (2026-09-16)
+ *
+ * Acá iba a ir la rejilla de .tarjeta-dato que usan Resumen, Mesas y
+ * Métricas: siete cajas con el número a 34 px. Medido sobre la captura
+ * de esta misma pantalla, esa rejilla son ~200 px de alto, y el 14 de
+ * septiembre ya habíamos sacado cinco filas de botones de acá justamente
+ * porque el primer invitado empezaba a 560 px de 744. Volver a meter 200
+ * deshace ese trabajo entero.
+ *
+ * Así que el resumen es UN renglón de ~28 px: rótulo chico en versalitas
+ * y la cifra al lado. Cinco datos entran en el ancho de un teléfono y, si
+ * algún día son siete, se desliza igual que la línea de filtros de arriba
+ * — mismo gesto, mismo comportamiento, nada nuevo que aprender.
+ *
+ * ⚠️ LA CIFRA VA EN --texto, NO EN --oro. Las de .tarjeta-dato son
+ * moradas y a 34 px eso se lee perfecto, pero a 15 px el morado sobre
+ * este fondo pierde legibilidad — y encima en este panel el morado
+ * significa «toca aquí», y estas cifras no se tocan. Blanco para el dato,
+ * gris para el rótulo, y el único color reservado para la cifra que pide
+ * acción (ver --cifra--pendiente abajo).
+ */
+.resumen-gente {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: baseline;
+  gap: var(--esp-3);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  margin: calc(var(--esp-1) * -1) 0 var(--esp-2);
+  padding: 0 0 var(--gota);
+}
+.resumen-gente::-webkit-scrollbar { display: none; }
+
+.resumen-gente__dato {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: var(--gota-y-media);
+  white-space: nowrap;
+}
+
+.resumen-gente__rotulo {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--texto-tenue);
+}
+
+.resumen-gente__cifra {
+  font-size: var(--letra-bloque);
+  font-weight: 600;
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* El único color del renglón, y solo cuando significa algo: gente que
+   todavía no contestó. En cero se apaga a gris, porque «Faltan 0» no es
+   una alarma — es la meta cumplida, y pintarla de ámbar entrenaría a
+   Lucila a ignorar el ámbar. */
+.resumen-gente__cifra--pendiente { color: var(--ojo); }
+.resumen-gente__cifra--logrado   { color: var(--bien); }
+
 /* ⚡ 44 PX, COMO MANDA LA REGLA DE LA CASA (2026-09-03). Esto medía 34 y era
    el peor caso de todo el panel por pura frecuencia: con estos chips se
    cambia de sección dentro de Gente y se filtra la lista de invitados, o

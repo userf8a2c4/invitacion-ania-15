@@ -146,9 +146,73 @@ comprobar(
 
 console.log('\n2. Cambiar la fecha solo en entorno.php alcanza (mordida)\n');
 
+/* ⚡ EL CONTRATO CAMBIÓ EL 2026-09-16, Y ESTA PRUEBA SIGUE VALIENDO
+ *
+ * Desde hoy la fecha se puede cambiar desde el panel: se guarda en el
+ * ajuste `fecha_de_la_fiesta` y entorno.php la prefiere sobre la
+ * constante. O sea que FIESTA_DIA dejó de ser «la fecha» y pasó a ser
+ * DOS cosas distintas:
+ *
+ *   · la semilla que se estampa en los cuatro archivos del navegador
+ *     cuando se compila —de eso se trata todo lo que sigue acá abajo—;
+ *   · y el respaldo de cuando no hay nada guardado.
+ *
+ * Lo que esta prueba cuida no cambió: que nadie escriba la fecha A MANO
+ * en un quinto lugar. El ajuste de la base no es una copia escrita a
+ * mano, es un valor que se pone desde una pantalla.
+ *
+ * Quien comprueba el otro lado —que la base mande y que la constante
+ * respalde— es prueba-fecha-de-la-fiesta.mjs.
+ */
 const FECHA_INVENTADA = '2027-03-07';   // un sábado distinto, otro año
 const ESPERADO_EN_PALABRAS = '7 de marzo de 2027';
 const ESPERADO_CON_DIA = 'Domingo 7 de marzo de 2027';
+
+/* ⛔ EL CERROJO: NO ARRANCAR SI LA FECHA DE DISCO YA ES LA INVENTADA
+ *  (2026-09-16 — pasó de verdad, hoy)
+ *
+ *  Esta prueba muerde el archivo dueño, mira qué se movió, y en el
+ *  `finally` restaura desde `respaldo`, que se leyó del disco al
+ *  empezar. Eso aguanta un fallo de comprobación, pero NO aguanta que
+ *  la corrida se muera a la mitad: si alguien la corta, o el proceso se
+ *  cae entre la mordida y el finally, la fecha inventada queda escrita
+ *  en los cinco archivos.
+ *
+ *  Y ahí viene lo feo. La corrida SIGUIENTE lee esos archivos ya
+ *  mordidos, los guarda como `respaldo` —o sea, toma 2027-03-07 por la
+ *  fecha buena—, y al terminar informa «los 5 archivos quedaron byte a
+ *  byte como estaban». Verde. Con la fiesta corrida cinco meses en la
+ *  web pública, en el panel y en el chatbot.
+ *
+ *  Hoy pasó exactamente eso: el proyecto quedó anunciando «Domingo 7 de
+ *  marzo de 2027» y la prueba lo dio por bueno.
+ *
+ *  Con este cerrojo, una corrida muerta no se puede lavar: la próxima
+ *  se planta y lo grita. La fecha de esta fiesta es el 24 de octubre de
+ *  2026 y no se cambia por ningún motivo — ver el aviso de
+ *  admin/api/_lib/entorno.php. */
+{
+  const fechaEnDisco = (respaldo.get(ARCHIVO_DUENO) || '')
+    .match(/^const FIESTA_DIA\s*=\s*'(\d{4}-\d{2}-\d{2})';/m);
+
+  if (fechaEnDisco && fechaEnDisco[1] === FECHA_INVENTADA) {
+    console.log('');
+    console.log('─'.repeat(70));
+    console.log('⛔ NO SE CORRE NADA: el archivo dueño de la fecha tiene');
+    console.log('   escrita la fecha INVENTADA de esta prueba (' + FECHA_INVENTADA + ').');
+    console.log('');
+    console.log('   Eso significa que una corrida anterior se murió a mitad');
+    console.log('   y dejó la fiesta corrida de fecha en todo el proyecto.');
+    console.log('');
+    console.log('   ARREGLALO ANTES DE SEGUIR:');
+    console.log('     git checkout -- ' + ARCHIVO_DUENO);
+    console.log('     node herramientas/empaquetar.mjs');
+    console.log('');
+    console.log('   Y comprobá que vuelva a decir la fecha de verdad.');
+    console.log('─'.repeat(70));
+    process.exit(1);
+  }
+}
 
 let mordidaAplicada = false;
 
