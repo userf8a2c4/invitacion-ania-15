@@ -68,10 +68,12 @@
  * ⚠️ EL JAVASCRIPT NO PUEDE LEER PHP. codigo/01-configuracion.js y
  * admin/codigo/01-configuracion.js son dos paquetes que se sirven al
  * navegador, así que no pueden llamar a estas funciones. Sus copias las
- * estampa herramientas/subir-version.mjs leyendo de ACÁ, igual que ya
- * reescribe los `?v=NN` y las dos VERSION de los service workers. Si
- * algún día cambia la forma de estas dos líneas de abajo, ese script
- * se detiene y avisa: no sigue con la fecha vieja.
+ * estampa herramientas/_fecha-de-la-fiesta.mjs leyendo de ACÁ, y a ese
+ * lo llama empaquetar.mjs — NO subir-version.mjs, como decía este
+ * comentario hasta el 2026-09-16. Importa cuál de los dos: el estampado
+ * tiene que correr antes de minificar, y subir-version.mjs va al final
+ * de la cadena. Si algún día cambia la forma de estas dos líneas de
+ * abajo, ese script se detiene y avisa: no sigue con la fecha vieja.
  *
  * ⚠️ Por eso estas dos líneas se escriben así, planas y en una sola
  * línea cada una. No las envuelvas ni les pongas la fecha en un
@@ -80,13 +82,143 @@
 const FIESTA_DIA  = '2026-10-24';
 const FIESTA_HORA = '17:00:00';
 
+/* ══════════════════════════════════════════════════════════════════
+   DE DÓNDE SALE LA FECHA, Y EN QUÉ ORDEN
+
+   Hasta el 2026-09-16 la fecha era la constante de acá arriba y nada
+   más: para moverla había que editar PHP a mano y volver a compilar.
+   Desde hoy se puede cambiar desde el panel, y eso cambia el contrato:
+
+     · la constante FIESTA_DIA es la SEMILLA — lo que se estampa en los
+       cuatro archivos del navegador al compilar, y el respaldo de
+       siempre;
+     · el ajuste 'fecha_de_la_fiesta' de la base MANDA en ejecución, si
+       está y si tiene forma de fecha.
+
+   Con eso, los nueve lugares que preguntan por la fecha —el correo de
+   confirmación, el pase que se lleva a la puerta, los recordatorios
+   automáticos, la cuenta regresiva, el calendario, el asistente— quedan
+   al día en cuanto Lucila toca Guardar. No hace falta tocar ninguno.
+
+   ⚠️ POR QUÉ ESTO SE DEFIENDE TANTO
+   Este archivo lo carga TODO, y no siempre con una base de datos al
+   lado. bd.php lo requiere en su línea 24 —o sea que cuando este
+   archivo se lee, consultarUno() todavía no existe—, y confirmar.php e
+   invitacion.php lo cargan directo, con su propio PDO y sin los
+   ayudantes del panel.
+
+   Por eso el orden de abajo prueba dos caminos y ninguno puede tumbar
+   la página: si no hay base, si la tabla no existe, si la consulta
+   falla o si lo guardado no es una fecha, se usa la constante. Una
+   fecha equivocada sería mala; una página que no abre porque no pudo
+   leer la fecha sería peor.
+
+   ⛔ NO SE CACHEA ENTRE PETICIONES. El static de abajo dura lo que dura
+   una petición, a propósito. Si se guardara en disco, Lucila cambiaría
+   la fecha y el sitio seguiría diciendo la vieja sin que nada avisara,
+   que es exactamente el problema que esto viene a resolver.
+   ══════════════════════════════════════════════════════════════════ */
+
+/**
+ * ¿Esto tiene forma de día, y además existe en el calendario?
+ *
+ * Rechaza el 2026-02-30 igual que rechaza "mañana": lo que no se puede
+ * poner en un DateTime no entra.
+ *
+ * @param mixed $texto
+ * @return bool
+ */
+function esUnDiaDeCalendario($texto) {
+    if (!is_string($texto)) return false;
+    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', trim($texto), $p)) return false;
+    return checkdate((int) $p[2], (int) $p[3], (int) $p[1]);
+}
+
+/**
+ * Lo que diga la base, o cadena vacía si no se pudo saber.
+ *
+ * @return string
+ */
+function fechaDeLaFiestaGuardada() {
+    /* 1. El camino del panel: bd.php ya está cargado y con su conexión
+          hecha. Es el caso de los 39 endpoints y de mi-pase.php. */
+    if (function_exists('consultarUno') && function_exists('existeTabla')) {
+        try {
+            if (!existeTabla('ajustes')) return '';
+            $fila = consultarUno(
+                'SELECT valor FROM ajustes WHERE clave = :c LIMIT 1',
+                [':c' => 'fecha_de_la_fiesta']
+            );
+            return $fila && isset($fila['valor']) ? trim((string) $fila['valor']) : '';
+        } catch (Throwable $e) {
+            return '';
+        }
+    }
+
+    /* 2. El camino de la invitación pública: confirmar.php e
+          invitacion.php cargan este archivo sin bd.php. Se abre una
+          conexión chica, propia, con el mismo .env que este archivo ya
+          sabe leer. Es UNA consulta por petición, y solo en las páginas
+          que no tienen otra conexión a mano. */
+    try {
+        $base = env('DB_NAME', '');
+        $usr  = env('DB_USER', '');
+        if ($base === '' || $usr === '') return '';
+
+        $pdo = new PDO(
+            'mysql:host=' . env('DB_HOST', 'localhost') .
+            ';dbname=' . $base . ';charset=utf8mb4',
+            $usr, env('DB_PASS', ''),
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 3]
+        );
+        $st = $pdo->prepare('SELECT valor FROM ajustes WHERE clave = :c LIMIT 1');
+        $st->execute([':c' => 'fecha_de_la_fiesta']);
+        $valor = $st->fetchColumn();
+        return $valor === false ? '' : trim((string) $valor);
+    } catch (Throwable $e) {
+        /* La tabla puede no existir todavía, o el .env puede no estar:
+           las dos cosas son normales en una instalación recién hecha. */
+        return '';
+    }
+}
+
+/**
+ * El día de la fiesta que rige AHORA: la base si dijo algo con sentido,
+ * y si no, la constante.
+ *
+ * @return string AAAA-MM-DD
+ */
+function fiestaDiaVigente() {
+    static $resuelto = null;
+    if ($resuelto !== null) return $resuelto;
+
+    $guardado = fechaDeLaFiestaGuardada();
+    $resuelto = esUnDiaDeCalendario($guardado) ? trim($guardado) : FIESTA_DIA;
+    return $resuelto;
+}
+
+/**
+ * ¿La fecha que rige quedó distinta de la que se estampó al compilar?
+ *
+ * Sirve para avisar en el panel que los cuatro archivos del navegador
+ * —index.html, los dos de configuración y el del chatbot— todavía dicen
+ * la vieja, y que hace falta recompilar y subir. Sin esto el desfase
+ * sería invisible, que es como se llega a que la web anuncie un día y
+ * el correo anuncie otro.
+ *
+ * @return bool
+ */
+function laFechaEstampadaQuedoVieja() {
+    return fiestaDiaVigente() !== FIESTA_DIA;
+}
+
 /**
  * El día de la fiesta, en el formato que entiende MySQL y DateTime.
  *
  * @return string AAAA-MM-DD
  */
 function diaDeLaFiesta() {
-    return FIESTA_DIA;
+    return fiestaDiaVigente();
 }
 
 /**
@@ -95,7 +227,7 @@ function diaDeLaFiesta() {
  * @return string Ej: '2026-10-24T17:00:00'
  */
 function fiestaFechaYHora() {
-    return FIESTA_DIA . 'T' . FIESTA_HORA;
+    return fiestaDiaVigente() . 'T' . FIESTA_HORA;
 }
 
 /**
@@ -116,7 +248,7 @@ function fiestaEnPalabras($conDiaDeLaSemana = false) {
     $dias  = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves',
               'viernes', 'sábado'];
 
-    $cuando = new DateTime(FIESTA_DIA);
+    $cuando = new DateTime(fiestaDiaVigente());
     $texto  = ((int) $cuando->format('j')) . ' de '
             . $meses[(int) $cuando->format('n')] . ' de '
             . $cuando->format('Y');
@@ -138,7 +270,7 @@ function fiestaEnPalabras($conDiaDeLaSemana = false) {
  */
 function diasParaLaFiesta() {
     return (int) (new DateTime('today'))
-        ->diff(new DateTime(FIESTA_DIA))->format('%r%a');
+        ->diff(new DateTime(fiestaDiaVigente()))->format('%r%a');
 }
 
 

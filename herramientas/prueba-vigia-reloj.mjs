@@ -52,7 +52,25 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
-const leer = (...p) => readFileSync(join(raiz, ...p), 'utf8');
+/* ⚡ SE NORMALIZAN LOS FINES DE LÍNEA AL LEER (2026-09-16)
+ *
+ * Las mordidas de más abajo buscan trozos de código de varias líneas,
+ * escritos acá con saltos de línea sueltos. Pero empaquetar.mjs y
+ * subir-version.mjs reescriben index.html, y en Windows lo dejan con
+ * retorno de carro: entonces ninguna mordida encuentra dónde morder, y
+ * la prueba se pone roja sin que nadie haya tocado el vigía.
+ *
+ * Pasó hoy, y costó un rato entender que el código estaba intacto —byte
+ * a byte igual al del repositorio— y que lo único que había cambiado era
+ * el final de cada línea. Una prueba que se pone roja sola es peor que
+ * no tenerla: enseña a ignorarla, y el día que se ponga roja de verdad
+ * nadie va a mirar.
+ */
+const RETORNO = String.fromCharCode(13);
+const SALTO   = String.fromCharCode(10);
+
+const leer = (...p) => readFileSync(join(raiz, ...p), 'utf8')
+  .split(RETORNO + SALTO).join(SALTO);
 
 let fallos = 0;
 const comprobar = (que, bien, detalle) => {
