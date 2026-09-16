@@ -739,7 +739,29 @@
     ? calidad() === CALIDAD_GRAFICA.BAJA
     : String(calidad()).toLowerCase().indexOf('baja') !== -1;
 
-  var ESCALA_DEL_LIENZO = esBaja ? 0.72 : 1;
+  /* ⛔ EL 0,72 SOLO SE APLICABA EN CALIDAD BAJA. ERA UN DESCUIDO, NO UNA
+   *    DECISIÓN (2026-09-16)
+   *
+   * Las treinta líneas de arriba explican por qué este lienzo tiene que
+   * dibujar a 0,72 y en ningún momento dicen «cuando la calidad sea
+   * baja». Pero el código decía `esBaja ? 0.72 : 1`, así que en alta y en
+   * media —que es donde cae CUALQUIER iPhone, porque WebKit no expone
+   * `deviceMemory` y el arranque lo pone en media— el eclipse seguía
+   * siendo exactamente lo que ese comentario dice que dejó de ser: el
+   * único lienzo de la página a densidad plena.
+   *
+   * Medido: en un iPhone 12 Pro Max eso son 1,585 Mpx de trama por
+   * cuadro contra los ~0,22 de los otros lienzos. SIETE VECES los
+   * píxeles del resto de la escena.
+   *
+   * Carlos, mirándolo en su teléfono: «no es fluido y me recalienta».
+   *
+   * Ahora 0,72 es el techo para todos, que es lo que el comentario de
+   * arriba argumenta y lo que el resto del proyecto ya hace. Los
+   * escalones 0,60 y 0,50 del gobernador siguen debajo, por si el equipo
+   * pide más. No se quita nada de la escena: son los mismos pétalos, las
+   * mismas flores y el mismo rito, con menos píxeles detrás. */
+  var ESCALA_DEL_LIENZO = 0.72;
 
   /** Los escalones que el gobernador puede pedir, en orden. */
   var ESCALONES_DE_ESCALA = [0.60, 0.50];
@@ -3220,14 +3242,46 @@
          * vacía y ya se vuelve a llenar, y eso está visto y aceptado.
          * Detenerlo antes sí se notaría: a los 8 s el velo va en alfa
          * 0,08 y apagar la luz ambiente ahí sería un salto. */
-        window.LienzoDeLuz.pausado = (t >= 26000 && t < 52000);
+        /* ⛔ LOS RAYOS SEGUÍAN APARECIENDO DE GOLPE EN EL 52 (2026-09-16)
+         *
+         * La nota de acá arriba cuenta que se corrigió que los rayos
+         * volvieran «de golpe a los 57 s, ya crecidos», moviendo el
+         * array de `haces` al segundo 46. Pero esta línea dejó el lienzo
+         * PAUSADO hasta el 52: de 46 a 52 los rayos estaban en el array
+         * y nadie los dibujaba. El síntoma visible no cambió, solo se
+         * mudó de los 57 a los 52.
+         *
+         * El pausado termina donde termina su motivo: cuando los rayos
+         * vuelven, hay algo que dibujar. */
+        window.LienzoDeLuz.pausado = (t >= 26000 && t < 46000);
       }
 
-      /* El halo de las velas, en la misma ventana y por el mismo motivo.
+      /* El halo de las velas, por el mismo motivo que el lienzo de luz.
          Las llamas NO se detienen: son SVG y siguen titilando el minuto
-         entero. Ver la nota en 19-velas.js. */
+         entero. Ver la nota en 19-velas.js.
+
+         ⛔ Y NO VUELVE EN EL MISMO CUADRO QUE TODO LO DEMÁS (2026-09-16)
+
+         Carlos, mirando el minuto en su teléfono: «está tan saturada que
+         no se entiende nada». Medido acá, el instante peor del minuto no
+         es la muerte de la rosa: es el segundo 52, donde volvían EN EL
+         MISMO CUADRO el lienzo de luz, el halo de las velas, las motas y
+         las luciérnagas — encima de los rayos, el sol creciendo y
+         trescientos SVG retorciéndose en el frenesí. En el banco, esa
+         ventana de dos segundos recibió UN cuadro.
+
+         Ahora las tres vueltas están escalonadas, y en el orden que el
+         propio archivo declara — «la luz es física, los bichos son vida,
+         y la vida vuelve última»:
+
+             46 s …… la luz ambiente y los rayos
+             49 s …… el halo de las velas
+             52 s …… las motas y las luciérnagas
+
+         No se quita nada: vuelve todo, en tres respiros en vez de en un
+         golpe. */
       if (window.EstadoDelLienzoDeVelas) {
-        window.EstadoDelLienzoDeVelas.pausado = (t >= 26000 && t < 52000);
+        window.EstadoDelLienzoDeVelas.pausado = (t >= 26000 && t < 49000);
       }
 
       /* Los pétalos de la invitación ya están en opacidad 0 con una
@@ -4966,6 +5020,11 @@
   var costoDelCuadro = 0;
 
   var ultimoCuadro = 0, promedio = 16.7;
+  /* La senal con la que se gobierna: la peor entre el trabajo propio y
+     lo que el cuadro se retrasa respecto del presupuesto de cine. Ver
+     la nota de gobernar(). Arranca igual que promedio para no apretar
+     en los primeros cuadros. */
+  var presion = 16.7;
   var cuadrosVistos = 0;
 
   /** Los cuadros que se tiran antes de creerle nada al equipo. */
@@ -4973,13 +5032,38 @@
       ya no depende de ella, pero el Diagnóstico la muestra. */
   var baseMedida = 0;
 
-  var CALENTAMIENTO = 20;
+  /* ⛔ LLEGABA TARDE A SU PROPIA FIESTA (2026-09-16)
+   *
+   * Estos cuatro números estaban pensados para cuando la escalera
+   * APAGABA partes de la escena: entonces sí convenía tardar en decidir,
+   * porque equivocarse se veía. La nota de 2026-09-12 cuenta cómo tardar
+   * poco dio «todo se congela, desde el s10 hasta el 35 solo flota una
+   * rosa».
+   *
+   * Pero la escalera ya no apaga nada: lo único que cede son píxeles
+   * detrás de los pétalos, y eso no se ve. Con esa escalera, tardar es
+   * puro costo.
+   *
+   * La cuenta con los números viejos, medida a 8 fps:
+   *
+   *     60 cuadros de muestra a 8 fps ……………………… 7,5 s
+   *     + el piso de «no antes del segundo 6» …… 7,5 s
+   *     + 4 escalones de TANDAS × 3 s ……………………… 19,5 s
+   *     + el primer escalón de lienzo ……………………… 22,5 s
+   *
+   * Veintidós segundos de los sesenta a densidad plena, en un teléfono
+   * que ya se está calentando. Y los peores son los primeros, que es
+   * cuando uno decide si entiende lo que está viendo.
+   *
+   * Ahora juzga al segundo y medio, con 24 cuadros —un segundo de
+   * cadencia de cine— y se mueve cada 1,2 s. */
+  var CALENTAMIENTO = 8;
   /** Hasta acá se junta la muestra; recién después se juzga. */
-  var CUADROS_PARA_JUZGAR = 60;
-  /** Y nunca antes del segundo 6 de la secuencia. */
-  var NO_JUZGAR_ANTES_DE = 6000;
+  var CUADROS_PARA_JUZGAR = 24;
+  /** Y nunca antes del segundo y medio de la secuencia. */
+  var NO_JUZGAR_ANTES_DE = 1500;
   /** Mínimo entre un escalón y el siguiente, para que el promedio reaccione. */
-  var MS_ENTRE_ESCALONES = 3000;
+  var MS_ENTRE_ESCALONES = 1200;
 
   var muestrasDeLaBase = [];
   var objetivoDeCuadro = 0;
@@ -5019,17 +5103,87 @@
    * calla para el resto de la corrida.
    */
   function apretarUnEscalon() {
+    /* ⛔ EL ORDEN IMPORTA CUANDO EL ATASCO NO ES NUESTRO (2026-09-16)
+     *
+     * TANDAS reparte las escrituras a los SVG en más turnos. Sirve
+     * cuando el que se pasa de cuadro es este archivo escribiendo
+     * transformaciones — que era el caso que le dio origen (ver la nota
+     * de 2026-09-11 sobre los SVG invalidados).
+     *
+     * Pero medido acá, el trabajo propio es de 2,4 ms sobre 41,7: el
+     * atasco está en el compositor, no en las escrituras. Subir TANDAS
+     * en ese caso no devuelve NADA, y son cuatro escalones —casi cinco
+     * segundos— antes de tocar lo único que sí importa, que son los
+     * píxeles del lienzo.
+     *
+     * Así que cuando el retraso es grave —más del doble del objetivo— se
+     * va derecho al lienzo. TANDAS queda para el caso en que la culpa sí
+     * es nuestra, que es para lo que se inventó. */
+    var esGrave = objetivoDeCuadro && presion > objetivoDeCuadro * 2;
+
+    if (esGrave && bajarLaEscalaDelLienzo()) return true;
     if (TANDAS < 6) { TANDAS++; return true; }
     return bajarLaEscalaDelLienzo();
   }
 
   function gobernar(ahora, t) {
     if (ultimoCuadro) {
-      /* El trabajo del cuadro ANTERIOR, medido de punta a punta de
-         unCuadro(). Ver la nota de costoDelCuadro. */
-      var intervalo = costoDelCuadro;
-      promedio += (intervalo - promedio) * 0.08;
+      /* ⛔ EL GOBERNADOR SE MIRABA SOLO A SÍ MISMO, Y POR ESO NUNCA
+       *    HIZO NADA (2026-09-16)
+       *
+       * Medía `costoDelCuadro` —lo que tarda unCuadro()— y nada más. La
+       * nota del 2026-09-13 que hizo ese cambio tenía razón en lo suyo:
+       * con la cadencia fija, el intervalo es siempre 41,7 ms y no dice
+       * si el equipo sufre. Pero al soltar el intervalo se soltó también
+       * la única señal que avisa cuando la cadencia NO se está
+       * cumpliendo.
+       *
+       * Medido en el banco, con la CPU frenada 4×:
+       *
+       *     trabajo del eclipse, mediana ……………………  2,4 ms
+       *     intervalo real entre cuadros ……………………  125 ms  (8 fps)
+       *     escala del lienzo al terminar …………………  1,00  (nunca bajó)
+       *
+       * O sea: el eclipse se veía a sí mismo gastando 2,4 de 41,7 ms,
+       * concluía que sobraba margen, y dejaba el lienzo a densidad plena
+       * mientras la página entregaba ocho cuadros por segundo. Cuanto
+       * menos culpa tenía el eclipse del atasco, MENOS hacía por
+       * aliviarlo — y el lienzo a densidad plena es justo lo que más
+       * pesa en el compositor, que es donde estaba el atasco.
+       *
+       * Ahora mira las dos cosas y se queda con la peor:
+       *
+       *   · `costoDelCuadro` — culpa propia; si se dispara, el eclipse
+       *     se está pasando de rosca él solo.
+       *   · el INTERVALO contra el presupuesto de cine — si los cuadros
+       *     llegan cada 125 ms, da igual de quién sea la culpa: hay que
+       *     soltar píxeles igual, porque es lo único que este archivo
+       *     puede soltar.
+       *
+       * ⚠️ El intervalo se cuenta solo por lo que EXCEDE al presupuesto.
+       * Sin eso, la cadencia de cine —41,7 ms de intervalo a propósito—
+       * se leería como un equipo sufriendo y el gobernador apretaría en
+       * una máquina que va perfecta. */
+      /* ⚠️ DOS PROMEDIOS, Y NO SE MEZCLAN.
+       *
+       * `promedio` sigue siendo EL TRABAJO y nada más, porque es lo que
+       * `recuento()` publica como `msPorCuadro` y lo que el Diagnóstico
+       * del panel le muestra a Carlos. Si acá se le metiera el retraso,
+       * esa pantalla diría «el cuadro cuesta 128 ms» cuando el eclipse
+       * gasta 2,4 — y sería mentir en la pantalla que existe justamente
+       * para no mentir.
+       *
+       * `presion` es la señal de gobierno: la peor de las dos. */
+      var intervaloReal = ahora - ultimoCuadro;
+      var seRetrasa = intervaloReal > MS_DE_CINE
+        ? intervaloReal - MS_DE_CINE
+        : 0;
+
+      promedio += (costoDelCuadro - promedio) * 0.08;
+      presion += (Math.max(costoDelCuadro, seRetrasa) - presion) * 0.08;
       cuadrosVistos++;
+
+      var intervalo = presion;
 
       /* La muestra de la base: cuadros 21 a 60, ya sin el arranque. */
       if (cuadrosVistos > CALENTAMIENTO && cuadrosVistos <= CUADROS_PARA_JUZGAR) {
@@ -5059,7 +5213,7 @@
       if (objetivoDeCuadro &&
           t >= NO_JUZGAR_ANTES_DE &&
           ahora - ultimoEscalon > MS_ENTRE_ESCALONES &&
-          promedio > objetivoDeCuadro) {
+          presion > objetivoDeCuadro) {
         if (apretarUnEscalon()) ultimoEscalon = ahora;
       }
     }
@@ -5197,6 +5351,35 @@
     try {
       var registro = window.PausaDeEscena || (window.PausaDeEscena = {});
       registro.motas = (t >= TOTALIDAD && t < SHOCK);
+
+      /* ── EL MARCO SE QUEDA QUIETO TODO EL MINUTO ──
+       *
+       * ⛔ ESTA BANDERA EXISTÍA Y NADIE LA LEVANTABA (2026-09-16)
+       *
+       * `07-marco-y-enredaderas.js` la construyó el 2026-09-13 con el
+       * perfil que la justifica escrito al lado (su línea 2403): en la
+       * máquina objetivo, durante el minuto del eclipse, el cuadro se
+       * repartía en Layerize 28,4 %, Recalculate style 15,3 %, Paint
+       * 10,1 % y Layout 7,5 % — «todo el JavaScript del eclipse junto
+       * pesaba 1,6 %. O sea que el costo no lo ponía la secuencia: lo
+       * ponían los módulos que seguían animándose debajo de ella».
+       *
+       * Se construyó la bandera, se documentó, y nunca se la levantó.
+       * Durante los sesenta segundos, 07 seguía escribiendo `transform`
+       * sobre LAS MISMAS ~200 flores que el eclipse mueve con `rotate` y
+       * `scale`. Los dos módulos se habían separado de canal justamente
+       * para no pisarse (ver la nota de moverLasFloresReales), pero eso
+       * no evita lo caro: cada SVG queda invalidado dos veces por cuadro.
+       *
+       * ⚠️ CONGELA, NO APAGA. Las flores no desaparecen ni dejan de
+       * moverse: dejan de MECERSE POR EL SCROLL, que es lo único que
+       * pone 07. Lo que hace el eclipse —estirarse hacia el nombre— es
+       * exactamente lo que se sigue viendo. Y narrativamente es mejor:
+       * durante el rito las plantas reptan hacia el nombre, no se mecen
+       * en la brisa.
+       *
+       * Se suelta en terminar(), como las motas. */
+      registro.marco = true;
     } catch (error) { /* nada */ }
 
     /* ── LA FAUNA ──
@@ -5251,6 +5434,10 @@
     laQueMuere = null;
     ultimoCuadro = 0;
     promedio = 16.7;
+    /* La presión también, o la corrida siguiente del panel de ensayo
+       arrancaría apretando por lo que sufrió la anterior. Es el mismo
+       escape que ya tuvieron `muerte.suelta`, `promedio` y la escala. */
+    presion = 16.7;
     ultimoIntentoDeFlores = -1000;
     ultimoIntentoDeLlamas = -1000;
 
@@ -5287,7 +5474,11 @@
      *
      * Es el tercer estado de este archivo que se escapa de la misma forma
      * (antes fueron `muerte.suelta`, `promedio` y `mezclaDelVelo`). */
-    ESCALA_DEL_LIENZO = esBaja ? 0.72 : 1;
+    /* El mismo techo que al evaluar el archivo — ver la nota larga de
+       ESCALA_DEL_LIENZO. Si acá quedara `esBaja ? 0.72 : 1`, la segunda
+       corrida del panel de ensayo arrancaría a densidad plena y el
+       arreglo solo valdría para la primera. */
+    ESCALA_DEL_LIENZO = 0.72;
     medirElLienzo();
 
     /* La luz vuelve al reloj y el escalón se suelta: sin esto, la corrida
@@ -5653,7 +5844,13 @@
     /* Y el aire vuelve a correr. Si el ritual muriera durante el shock,
        las motas quedarían suspendidas para el resto de la visita. */
     try {
-      if (window.PausaDeEscena) window.PausaDeEscena.motas = false;
+      if (window.PausaDeEscena) {
+        window.PausaDeEscena.motas = false;
+        /* El marco vuelve a mecerse. La bandera «congela en el sitio»,
+           así que retoma desde donde quedó, sin salto y sin recargar
+           (ver la nota de laEscenaEstaQuieta en 07). */
+        window.PausaDeEscena.marco = false;
+      }
     } catch (error) { /* nada */ }
 
     /* Y las joyas vuelven a colgar hacia abajo. */

@@ -35,7 +35,7 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { readFile, mkdtemp, rm } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -85,6 +85,23 @@ const conBateria = args.includes('--bateria');
 const frenoDeCpu = Number((args.find(a => a.startsWith('--cpu=')) || '--cpu=1').slice(6));
 const sinSuelto  = (args.find(a => a.startsWith('--sin=')) || '').slice(6);
 
+/* ⚡ MEDIR EL ECLIPSE, NO LA INVITACIÓN (2026-09-16)
+ *
+ * Este banco medía la escena normal: abría el sobre y hacía scroll. El
+ * eclipse —los 60 segundos del ritual— no lo tocaba nunca, así que
+ * cuando Carlos reportó que en su iPhone «no es fluido y recalienta»
+ * no había un número que mirar, solo el video.
+ *
+ * `--eclipse` conduce la secuencia entera con `window.ECLIPSE` y anota
+ * el trabajo de cada cuadro tramo por tramo. Así se ve DÓNDE sufre, que
+ * en una coreografía de un minuto no es lo mismo que cuánto sufre.
+ *
+ * ⚠️ Vale lo mismo que el resto del banco: Chrome sin ventana rasteriza
+ * por software y los milisegundos absolutos NO son los del teléfono. Lo
+ * que vale es la comparación antes/después, y el reparto entre tramos.
+ */
+const conEclipse = args.includes('--eclipse');
+
 /* Las variantes de la batería. Cada una apaga un pedazo con ?sin= y
    sirve para saber qué se lleva el tiempo. Ver los interruptores en
    codigo/02-utilidades.js (apagadoParaMedir). */
@@ -122,6 +139,17 @@ function levantarElServidor() {
       /* Se corta la query (?v=170) y se normaliza para que nadie pueda
          pedir algo de afuera de la carpeta del proyecto. */
       let ruta = decodeURIComponent(pedido.url.split('?')[0]);
+
+      /* ⚡ `/pbe/` SE SIRVE COMO LA RAÍZ, Y ES LO QUE DESTRABA MEDIR EL
+         ECLIPSE (2026-09-16)
+         `window.ECLIPSE` —la consola que deja correr la secuencia cuando
+         uno quiere y no a las 12:30 UTC— solo existe si el hostname es de
+         pruebas o si la ruta empieza con `/pbe/` (28-eclipse.js:5770).
+         Pidiendo `/pbe/index.html` el banco entra por esa puerta sin
+         tocar una línea del sitio ni relajar el candado: en el hosting
+         real la ruta sigue sin existir. */
+      if (ruta.indexOf('/pbe/') === 0) ruta = ruta.slice(4);
+
       if (ruta.endsWith('/')) ruta += 'index.html';
       const destino = join(RAIZ, normalize(ruta).replace(/^(\.\.[/\\])+/, ''));
 
@@ -302,6 +330,215 @@ async function esperarA(cdp, sesion, expresion, limiteMs, queEspera) {
   throw new Error(`Se acabó la espera: ${queEspera}`);
 }
 
+/**
+ * Una corrida del ECLIPSE: los 60 segundos completos, tramo por tramo.
+ *
+ * ⚠️ NO SE ACELERA CON `velocidad`. La consola de ensayo deja correr la
+ * secuencia más rápido, y sería tentador para que la medición tarde 15 s
+ * en vez de 60. Pero acelerar mete MÁS coreografía en cada cuadro: se
+ * mediría un eclipse que nadie va a ver. Se corre en tiempo real.
+ *
+ * @param {Object} cdp
+ * @param {string} base
+ * @returns {Promise<Object>}
+ */
+/* Los actos, tal como los declara 28-eclipse.js (sección 1). Se reparten
+   las muestras acá porque el promedio del minuto entero no dice nada: lo
+   que importa es EN QUÉ ACTO se cae. */
+const ACTOS_DEL_ECLIPSE = [
+  ['Penumbra',      0,     8000],
+  ['Despiertan',    8000,  22000],
+  ['La secta',      22000, 35000],
+  ['El esfuerzo',   35000, 38500],
+  ['Muere la rosa', 38500, 42000],
+  ['Shock',         42000, 44000],
+  ['Frenesí',       44000, 52000],
+  ['⚠ vuelve todo', 52000, 54000],
+  ['Sumisión',      54000, 60000],
+];
+
+/** La mediana de una lista de números. */
+function medianaDe(lista) {
+  if (!lista.length) return 0;
+  const o = lista.slice().sort((a, b) => a - b);
+  const m = o.length >> 1;
+  return o.length % 2 ? o[m] : (o[m - 1] + o[m]) / 2;
+}
+
+/**
+ * La tabla del eclipse: un renglón por acto.
+ *
+ * @param {Object} r - Lo que devolvió unaCorridaDelEclipse().
+ * @returns {void}
+ */
+function informeDelEclipse(r) {
+  const col = (t, n) => String(t).padStart(n);
+
+  console.log('  ' + 'acto'.padEnd(16) + col('sitúa', 9) + col('cuadros', 9) +
+              col('fps', 6) + col('trabajo', 9) + col('peor', 8));
+  console.log('  ' + '─'.repeat(57));
+
+  for (const [nombre, desde, hasta] of ACTOS_DEL_ECLIPSE) {
+    const dentro = r.muestras.filter(m => m.t >= desde && m.t < hasta);
+    if (!dentro.length) {
+      console.log('  ' + nombre.padEnd(16) + col(`${desde / 1000}-${hasta / 1000}s`, 9) +
+                  col('—', 9) + col('—', 6) + col('—', 9) + col('—', 8));
+      continue;
+    }
+    const intervalos = dentro.map(m => m.intervalo);
+    const mediana = medianaDe(intervalos);
+    console.log('  ' + nombre.padEnd(16) +
+      col(`${desde / 1000}-${hasta / 1000}s`, 9) +
+      col(dentro.length, 9) +
+      col(mediana ? (1000 / mediana).toFixed(1) : '—', 6) +
+      col(medianaDe(dentro.map(m => m.trabajo)).toFixed(1) + ' ms', 9) +
+      col(Math.round(Math.max(...intervalos)) + ' ms', 8));
+  }
+
+  const todos = r.muestras.map(m => m.intervalo);
+  const mediana = medianaDe(todos);
+  console.log('  ' + '─'.repeat(57));
+  console.log('  ' + 'TODO EL MINUTO'.padEnd(16) + col('0-60s', 9) +
+    col(r.muestras.length, 9) +
+    col(mediana ? (1000 / mediana).toFixed(1) : '—', 6) +
+    col(medianaDe(r.muestras.map(m => m.trabajo)).toFixed(1) + ' ms', 9) +
+    col(Math.round(r.peorCuadro) + ' ms', 8));
+
+  /* ⚠️ LA ESCALA SE LEE DE LAS MUESTRAS, NO DEL FINAL.
+     `terminar()` devuelve `ESCALA_DEL_LIENZO` a su techo antes de que
+     esto pueda preguntarle nada (ver la nota de «LA TRAMA SOBREVIVÍA A
+     LA CORRIDA» en 28-eclipse.js). Preguntando al final, el informe
+     contaba siempre el valor de arranque y nunca lo que el gobernador
+     llegó a ceder — que es justo lo que se quiere saber. */
+  const f = r.alFinal || {};
+  const escalas = r.muestras.map(m => m.escala).filter(Boolean);
+  const arranco = escalas.length ? escalas[0] : 0;
+  const bajoHasta = escalas.length ? Math.min(...escalas) : 0;
+
+  console.log(`\n  Lienzo: arrancó en ${arranco} y bajó hasta ${bajoHasta}` +
+              (bajoHasta < arranco ? '  (el gobernador cedió)' : '  (el gobernador nunca actuó)') +
+              `\n  Tandas al final ${f.tandas}` +
+              ` · presupuesto de cine ${Number(f.msDeCine || 0).toFixed(1)} ms` +
+              ` · pétalos ${f.petalos}\n`);
+
+  /* ⚠️ Un cuadro que tarda más que el presupuesto de cine (41,7 ms) es
+     un cuadro que la cadencia no pudo sostener: ahí es donde se ve el
+     tirón, por más que el promedio del minuto parezca decente. */
+  const perdidos = r.muestras.filter(m => m.trabajo > Number(f.msDeCine || 41.7)).length;
+  const porciento = r.muestras.length
+    ? Math.round(perdidos * 100 / r.muestras.length) : 0;
+  console.log(`  Cuadros cuyo TRABAJO se pasó del presupuesto de cine: ` +
+              `${perdidos} de ${r.muestras.length} (${porciento} %)\n`);
+}
+
+async function unaCorridaDelEclipse(cdp, base) {
+  const { targetId } = await cdp.enviar('Target.createTarget', { url: 'about:blank' });
+  const { sessionId } = await cdp.enviar('Target.attachToTarget', { targetId, flatten: true });
+
+  await cdp.enviar('Page.enable', {}, sessionId);
+  await cdp.enviar('Runtime.enable', {}, sessionId);
+  await cdp.enviar('Performance.enable', {}, sessionId);
+  await cdp.enviar('Emulation.setDeviceMetricsOverride', {
+    width: ANCHO, height: ALTO, deviceScaleFactor: 1, mobile: false,
+  }, sessionId);
+  if (frenoDeCpu > 1) {
+    await cdp.enviar('Emulation.setCPUThrottlingRate', { rate: frenoDeCpu }, sessionId);
+  }
+  await cdp.enviar('Network.enable', {}, sessionId);
+  await cdp.enviar('Network.clearBrowserCache', {}, sessionId);
+  await cdp.enviar('Page.addScriptToEvaluateOnNewDocument', { source: OBSERVADOR }, sessionId);
+
+  /* `/pbe/` es lo que hace existir a window.ECLIPSE — ver la nota del
+     servidor. `?eclipse=ensayo` es el segundo candado. */
+  await cdp.enviar('Page.navigate',
+    { url: `${base}/pbe/index.html?eclipse=ensayo` }, sessionId);
+
+  await esperarA(cdp, sessionId,
+    `document.querySelector('#ilustracion-del-sobre') &&
+     !document.querySelector('#sobre-de-apertura').classList.contains('esta-cargando')`,
+    30000, 'que apareciera el sobre');
+
+  await evaluar(cdp, sessionId, `
+    document.querySelector('#ilustracion-del-sobre')
+      .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+  `);
+
+  await esperarA(cdp, sessionId, `window.__medicion.marcas.invitacionVisible`,
+    30000, 'que la invitación se hiciera visible');
+
+  /* La escena tiene que estar montada antes de empezar: si no, se
+     mediría la construcción del marco mezclada con el ritual. */
+  await evaluar(cdp, sessionId, `
+    (async () => {
+      let anterior = -1, quieto = 0;
+      while (quieto < 10) {
+        const cuantas = document.querySelectorAll('.flor-de-enredadera').length;
+        if (cuantas === anterior && cuantas > 0) quieto++; else quieto = 0;
+        anterior = cuantas;
+        await new Promise(r => setTimeout(r, 100));
+      }
+    })()
+  `);
+
+  /* El archivo del eclipse lo baja el vigía diez segundos antes de la
+     hora; acá no hay hora que esperar, así que se comprueba que la
+     consola exista antes de pedirle nada. */
+  await esperarA(cdp, sessionId,
+    `typeof window.ECLIPSE === 'object' && window.ECLIPSE && typeof window.ECLIPSE.correr === 'function'`,
+    30000, 'que apareciera window.ECLIPSE (¿se cargó 28-eclipse.js?)');
+
+  /* ── Correr los 60 s, anotando el trabajo POR TRAMO ──
+     Cada muestra lleva el segundo de la secuencia en el que se tomó, y
+     de ahí sale la curva: en un minuto con nueve actos, saber que el
+     promedio es X no dice nada; lo que dice algo es en qué acto se cae. */
+  const crudo = await evaluar(cdp, sessionId, `
+    (async () => {
+      const M = window.__medicion;
+      const muestras = [];
+      let peorCuadro = 0;
+
+      window.ECLIPSE.correr(0, 1);
+
+      const arranque = performance.now();
+      let anterior = arranque;
+
+      while (window.ECLIPSE.enCurso()) {
+        await new Promise(r => requestAnimationFrame(r));
+        const ahora = performance.now();
+        const delta = ahora - anterior;
+        anterior = ahora;
+
+        /* Un salto enorme es la pestaña congelada, no lentitud real:
+           mismo criterio que 21-monitor-de-rendimiento.js. */
+        if (delta < 500) {
+          const r = window.ECLIPSE.recuento ? window.ECLIPSE.recuento() : {};
+          muestras.push({
+            t: Math.round(window.ECLIPSE.dondeVa() || (ahora - arranque)),
+            intervalo: delta,
+            trabajo: Number(r.msPorCuadro) || 0,
+            escala: Number(r.escalaDelLienzo) || 0,
+            tandas: Number(r.tandas) || 0,
+          });
+          if (delta > peorCuadro) peorCuadro = delta;
+        }
+
+        if (ahora - arranque > 70000) break;   // red de seguridad
+      }
+
+      const fin = window.ECLIPSE.recuento ? window.ECLIPSE.recuento() : {};
+      return JSON.stringify({
+        muestras: muestras,
+        peorCuadro: peorCuadro,
+        duroMs: performance.now() - arranque,
+        alFinal: fin,
+      });
+    })()
+  `);
+
+  await cdp.enviar('Target.closeTarget', { targetId });
+  return JSON.parse(crudo);
+}
+
 async function unaCorrida(cdp, base, sin) {
   /* Una pestaña nueva por corrida: sin restos de la anterior. */
   const { targetId } = await cdp.enviar('Target.createTarget', { url: 'about:blank' });
@@ -470,6 +707,50 @@ const base = `http://127.0.0.1:${servidor.address().port}`;
 const perfil = await mkdtemp(join(tmpdir(), 'medir-ania-'));
 const { proceso, ws } = await abrirChrome(perfil);
 const cdp = conectar(ws);
+
+/* ─── El modo eclipse sale por su propia puerta ───────────────────── */
+if (conEclipse) {
+  /* ⛔ index.html SIRVE codigo/produccion/, NO EL FUENTE (2026-09-16)
+   *
+   * La primera medición después de tocar 28-eclipse.js dio exactamente
+   * los mismos números que antes, y la escala del lienzo seguía en 1
+   * cuando el fuente ya decía 0,72. No es que el arreglo no sirviera: es
+   * que el banco estaba midiendo la copia minificada vieja.
+   *
+   * Un banco que mide otra cosa que la que uno acaba de cambiar es peor
+   * que no tener banco: da números con cara de verdad. Así que se avisa
+   * fuerte y se dice el comando exacto. */
+  const fuente = statSync(join(RAIZ, 'codigo', '28-eclipse.js')).mtimeMs;
+  const servido = existsSync(join(RAIZ, 'codigo', 'produccion', '28-eclipse.js'))
+    ? statSync(join(RAIZ, 'codigo', 'produccion', '28-eclipse.js')).mtimeMs
+    : 0;
+
+  if (fuente > servido) {
+    console.log('\n  ⛔ codigo/produccion/28-eclipse.js está más viejo que el fuente.');
+    console.log('     index.html sirve la copia minificada, así que esta medición');
+    console.log('     NO mediría lo que acabás de cambiar.\n');
+    console.log('     node herramientas/minificar-js.mjs\n');
+    process.exit(1);
+  }
+
+  console.log(`\n  Midiendo EL ECLIPSE en ${ANCHO}×${ALTO}` +
+              (frenoDeCpu > 1 ? `, CPU frenada ${frenoDeCpu}×` : '') +
+              ' · 60 s en tiempo real\n');
+  try {
+    process.stdout.write('  corriendo la secuencia … ');
+    const r = await unaCorridaDelEclipse(cdp, base);
+    console.log(`${(r.duroMs / 1000).toFixed(1)} s, ${r.muestras.length} cuadros\n`);
+    informeDelEclipse(r);
+  } catch (error) {
+    console.log(`\n  ✗ ${error.message}\n`);
+  } finally {
+    cdp.cerrar();
+    proceso.kill();
+    servidor.close();
+    await rm(perfil, { recursive: true, force: true }).catch(() => {});
+  }
+  process.exit(0);
+}
 
 const variantes = sinSuelto ? [sinSuelto] : conBateria ? VARIANTES_DE_LA_BATERIA : [''];
 const resultados = [];
