@@ -49,6 +49,10 @@ const FILTROS_DE_GENTE = [
   ['alergias',      'Con alergias'],
   ['sin_mesa',      'Sin mesa'],
   ['sin_telefono',  'Sin teléfono'],
+  /* Solo tiene sentido después de la fiesta, pero no se esconde antes:
+     un filtro que aparece y desaparece solo es más confuso que uno que
+     da cero. Antes del evento da cero, que es la verdad. */
+  ['no_vinieron',   'No vinieron'],
 ];
 
 /** Qué se escribió en el buscador. */
@@ -1310,6 +1314,19 @@ function invitadoPasaElFiltro(fila) {
   }
 
   if (FILTRO_INVITADOS === 'sin_mesa' && fila.mesa) return false;
+
+  /* ⚡ QUIÉNES DIJERON QUE VENÍAN Y NO VINIERON (2026-09-15)
+     Es la pregunta del día después, y no se podía responder: la tarjeta
+     del cierre sabe CUÁNTOS —resta confirmados menos llegados— pero al
+     tocar ese número no había ninguna lista. `llego` lo trae ahora
+     confirmaciones.php con un LEFT JOIN a `llegadas`.
+
+     ⚠️ Pide asiste = 1 además de no haber llegado: quien dijo que NO
+     venía tampoco llegó, obviamente, y meterlo acá haría el número
+     inútil. Lo que se busca es la gente que apartó lugar y dejó la silla
+     vacía. */
+  if (FILTRO_INVITADOS === 'no_vinieron' &&
+      (Number(fila.asiste) !== 1 || Number(fila.llego) === 1)) return false;
 
 
   // ⚡ (2026-08-28) Estos tres vienen de la extinta pestaña Envíos.

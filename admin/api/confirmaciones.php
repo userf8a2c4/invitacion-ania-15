@@ -173,6 +173,31 @@ case 'listar':
           ' LEFT JOIN mesas m ON m.id = am.mesa_id'
         : '';
 
+    /* ⚡ SI LLEGÓ O NO, PARA EL CIERRE DEL EVENTO (2026-09-15)
+     *
+     * Después de la fiesta, la pregunta que no se podía responder era
+     * «¿quiénes dijeron que venían y no vinieron?». La pantalla Hoy
+     * sabía CUÁNTOS —resta `confirmados` menos `llegaron`— pero al
+     * tocar ese número no había ninguna lista que abrir, porque esta
+     * consulta no traía nada de `llegadas`.
+     *
+     * Es el mismo LEFT JOIN opcional que la mesa de acá arriba, y por
+     * el mismo motivo: la tabla puede no existir si no se corrió esa
+     * parte de la migración, y una lista de invitados que revienta
+     * porque falta el control de puerta sería absurda.
+     *
+     * ⚠️ Va como 0/1 y no como la hora: el nombre de quien atendió la
+     * puerta y el minuto exacto no son asunto de esta lista, y cada
+     * columna de más viaja en las 115 filas. La hora vive en
+     * llegadas.php, que es donde se la mira. */
+    $conLlegada = $TIENE_ID && existeTabla('llegadas');
+    $selectLlegada = $conLlegada
+        ? ', CASE WHEN lleg.id IS NULL THEN 0 ELSE 1 END AS llego'
+        : '';
+    $joinLlegada = $conLlegada
+        ? ' LEFT JOIN llegadas lleg ON lleg.confirmacion_id = confirmaciones.id'
+        : '';
+
     /* ⚡ (2026-08-28) FUSIÓN DE "INVITADOS" E "INVITACIONES", A PEDIDO DEL
        USUARIO: dos pestañas para la misma info repartida confundían más
        de lo que ayudaban ("comparten raíz, se leen como la misma tarea
@@ -244,8 +269,8 @@ case 'listar':
         : '';
 
     $filas = consultarTodo(
-        "SELECT confirmaciones.* $selectMesa $selectInv
-         FROM confirmaciones $joinMesa $joinInv $donde $orden",
+        "SELECT confirmaciones.* $selectMesa $selectInv $selectLlegada
+         FROM confirmaciones $joinMesa $joinInv $joinLlegada $donde $orden",
         $parametros
     );
 

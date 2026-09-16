@@ -199,6 +199,55 @@ if (fuenteNotas) {
     /loQueEscribio\(f\.notas\)/.test(codigo) &&
     !/f\.notas \|\| ''/.test(codigo),
     'eran dos lugares, no uno');
+
+  /* ⛔ Y EL CENTINELA TAMBIÉN ENTRABA POR LOS MENÚS (2026-09-15)
+   *
+   * No eran dos lugares: eran cuatro. El formulario manda `', '` también
+   * en `resumen_menus` y en `detalle_menus` cuando la persona dice que NO
+   * viene (11-formulario-confirmacion.js:973-974). Ese texto llega como
+   * respaldo a menusPersonaPorPersona(), que hacía `(respaldo||'').trim()`
+   * — y `','` es truthy. Resultado en el PDF, para CADA invitado que
+   * declinó: «,  ·  (sin desglose por persona)».
+   *
+   * Es el mismo centinela y la misma función de siempre; solo que nadie
+   * había mirado esta puerta. */
+  comprobar('el respaldo de Menús también lo filtra',
+    !/const r = \(respaldo \|\| ''\)\.trim\(\);/.test(codigo),
+    'quien dijo «no viene» imprimía una coma suelta en la columna Menús');
+
+  const menus = sacar('menusPersonaPorPersona');
+  const alergias = sacar('alergiasPersonaPorPersona');
+
+  if (menus && alergias) {
+    const f = new Function(fuenteNotas + menus + alergias +
+      '\nreturn {menus: menusPersonaPorPersona, alergias: alergiasPersonaPorPersona};')();
+
+    comprobar('quien no viene no deja una coma en Menús',
+      f.menus([], ', ') === '—',
+      'devolvió ' + JSON.stringify(f.menus([], ', ')));
+
+    comprobar('ni en Alergias',
+      f.alergias([], ', ') === 'Ninguna',
+      'devolvió ' + JSON.stringify(f.alergias([], ', ')));
+
+    /* ⚠️ Y LA MITAD QUE IMPORTA: que el resumen de verdad siga marcado. */
+    comprobar('un resumen real sigue saliendo, y marcado',
+      /^2 Estándar, 1 Infantil {2}· {2}\(sin desglose por persona\)$/
+        .test(f.menus([], '2 Estándar, 1 Infantil')),
+      'devolvió ' + JSON.stringify(f.menus([], '2 Estándar, 1 Infantil')));
+
+    /* LO QUE LA COCINA TIENE QUE LEER. */
+    comprobar('con personas cargadas, dice quién come qué',
+      f.menus([{ nombre: 'Alan Reyes', tipo: 'adulto', menu: 'Estándar' },
+               { nombre: 'Mavita', tipo: 'nino', menu: 'Infantil' }], '')
+        === 'Alan Reyes: Estándar · Mavita: Infantil  ·  Menú infantil: 1');
+
+    comprobar('y quién es alérgico a qué',
+      f.alergias([{ nombre: 'Mavita', tipo: 'nino', alergias: 'Maní' },
+                  { nombre: 'Alan Reyes', tipo: 'adulto', alergias: 'Ninguna' }], '')
+        === 'Mavita: Maní',
+      'una alergia sin nombre al lado no le sirve a nadie en la cocina');
+  }
 }
 
 /* ─── 2. Los menús, persona por persona ──────────────────────────── */
@@ -209,7 +258,10 @@ const fuenteMenus = sacar('menusPersonaPorPersona');
 comprobar('existe menusPersonaPorPersona()', !!fuenteMenus);
 
 if (fuenteMenus && fuenteGuion) {
-  const fn = new Function(fuenteGuion + '\n' + fuenteMenus +
+  /* loQueEscribio() entra al mundo: menusPersonaPorPersona lo usa para
+     filtrar el centinela ', ' que manda el formulario cuando la persona
+     no viene. Sin él, la función existe y revienta al llamarla. */
+  const fn = new Function(fuenteGuion + '\n' + fuenteNotas + '\n' + fuenteMenus +
                           '\nreturn menusPersonaPorPersona;')();
 
   const familia = [
