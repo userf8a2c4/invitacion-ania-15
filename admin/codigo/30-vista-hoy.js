@@ -617,12 +617,23 @@ function verPasesReleidos() {
         return;
       }
 
+      /* ⚡ Y CON SU CÓDIGO (2026-09-16)
+         Decía el nombre y la hora, y no cuál pase. En la puerta, con
+         fila detrás, el código es lo que se compara contra el papel que
+         la persona tiene en la mano. Va con `.codigo-pase`, la clase que
+         ya se puede tocar para copiar. */
       donde.innerHTML = releidos.map(u =>
         '<div class="lista__fila" style="padding:8px 0">' +
           '<span class="lista__cuerpo">' +
             '<span class="lista__titulo">' + seguro(u.nombre) + '</span>' +
             '<span class="lista__pie">' +
+              (u.codigo
+                ? '<span class="codigo-pase">' + seguro(u.codigo) + '</span> · '
+                : '') +
               'Entró a las ' + seguro(String(u.llegada_en || '').slice(11, 16)) +
+              (Number(u.veces_de_mas) > 1
+                ? ' · leído ' + seguro(Number(u.veces_de_mas) + 1) + ' veces'
+                : '') +
               (u.mesa ? ' · ' + seguro(comoSeLlamaLaMesa(u.mesa)) : '') +
             '</span>' +
           '</span>' +
@@ -718,7 +729,26 @@ function alertasDelDia(datosDeHoy) {
    * dispositivo, sin tocar la base— y el cartel vuelve solo si el número
    * CRECE. Así no molesta en los 50 días previos, y la noche del evento
    * reaparece en cuanto alguien intenta entrar dos veces. */
-  const releidos = Number(dia.pases_reintentados) || 0;
+  /* ⛔ Y AVISABA 38 DÍAS ANTES, SIN QUE NADIE HUBIERA ESCANEADO NADA
+   *    (2026-09-16)
+   *
+   * `pases_reintentados` cuenta `llegadas WHERE intentos > 0` SIN NINGÚN
+   * filtro de fecha. Una sola prueba del escáner —que es exactamente lo
+   * que hay que hacer antes del evento— deja esa fila puesta para
+   * siempre, y el cartel rojo aparece todos los días desde entonces
+   * anunciando un problema de puerta cuando todavía no hay puerta.
+   *
+   * Esto es control de acceso: solo significa algo el día del evento y
+   * después. Antes, la respuesta correcta a «un pase se leyó dos veces»
+   * es «claro, lo estabas probando».
+   *
+   * ⚠️ `<= 0` y no `=== 0`: la fiesta sigue después de medianoche, y el
+   * 25 a las 02:00 —con la gente todavía adentro— este aviso tiene que
+   * seguir funcionando. Ver la nota de tarjetaDelCierre() sobre por qué
+   * el corte del día no puede ser a medianoche. */
+  const hayPuerta = Number(datosDeHoy.dias_para_la_fiesta) <= 0;
+
+  const releidos = hayPuerta ? (Number(dia.pases_reintentados) || 0) : 0;
   const releidosYaVistos = Number(recordadoDeLaCuenta(ALERTA_RELEIDOS_VISTA, 0)) || 0;
 
   if (releidos > releidosYaVistos) {

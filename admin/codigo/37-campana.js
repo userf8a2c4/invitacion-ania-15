@@ -45,6 +45,20 @@ let ULTIMO_HOY = null;
 let CANTIDAD_SUGERENCIAS_DE_AGENTES = 0;
 
 /**
+ * Las sugerencias mismas, no solo cuántas.
+ *
+ * ⛔ ANTES SOLO SE GUARDABA EL NÚMERO (2026-09-16), y por eso la bandeja
+ * no podía mostrarlas: tenía el 15 y nada más. El comentario de arriba
+ * explicaba por qué se cacheaba «la CANTIDAD, no las sugerencias» —para
+ * no volver a correr los agentes en cada cambio de pantalla— y eso sigue
+ * valiendo: los agentes se corren cuando toca, y ACÁ queda lo que
+ * devolvieron, listo para pintar sin pedir nada de nuevo.
+ *
+ * Guardar la lista no cuesta más viajes que guardar su longitud.
+ */
+let SUGERENCIAS_DE_AGENTES = [];
+
+/**
  * Cuántos avisos se dieron por vistos en ESTA cuenta.
  *
  * ⚡ LA BURBUJA DE LA CAMPANA NO SE PODÍA APAGAR (2026-09-15).
@@ -101,14 +115,21 @@ async function refrescarSugerenciasDeAgentesParaLaCampana() {
      * datos del evento y que no propone ninguna acción. Se sigue
      * mostrando en el asistente, donde corresponde; lo que deja de hacer
      * es pedir atención con una burbuja. */
-    CANTIDAD_SUGERENCIAS_DE_AGENTES =
-      sugerencias.filter(s => !s || s.agente !== 'motivador').length;
+    SUGERENCIAS_DE_AGENTES =
+      sugerencias.filter(s => s && s.agente !== 'motivador');
+    CANTIDAD_SUGERENCIAS_DE_AGENTES = SUGERENCIAS_DE_AGENTES.length;
   } catch (error) {
-    // Sin señal, o algún agente falló: no hay nada nuevo que contar,
-    // pero tampoco se rompe la campana por esto.
-    CANTIDAD_SUGERENCIAS_DE_AGENTES = 0;
+    /* ⚠️ SIN SEÑAL NO SE BORRA LO QUE YA SE SABÍA (2026-09-16).
+     *
+     * Acá se ponía el contador en 0. Con eso, un refresco sin señal
+     * apagaba la campana y hacía desaparecer sugerencias que seguían
+     * siendo ciertas — la campana mentía para abajo, en silencio, que es
+     * la peor dirección: nadie revisa un aviso que no aparece.
+     *
+     * Se deja lo último que se supo. Es viejo, pero es verdad; y como el
+     * número no cambia, tampoco enciende la burbuja por las dudas. */
   }
-  actualizarBurbujaCampana();
+  await actualizarBurbujaCampana();
 }
 
 /**
@@ -119,34 +140,68 @@ async function refrescarSugerenciasDeAgentesParaLaCampana() {
  * @returns {Promise<number>}
  */
 async function contarAvisosPendientes() {
+  return (await avisosDeAhora()).length;
+}
+
+/**
+ * QUIÉNES son los avisos de este momento, cada uno con un `id` estable.
+ *
+ * ⛔ ANTES ESTO ERA UN NÚMERO Y ESE ERA EL PROBLEMA (2026-09-16).
+ *
+ * La marca de «ya lo vi» guardaba un total. Con eso, tres resueltas y
+ * tres nuevas dan el mismo número, y la campana NO SE ENCIENDE: hay tres
+ * cosas nuevas que nadie va a ver. Es el espejo exacto del caso que sí
+ * estaba previsto —cuando bajan— en la dirección que no.
+ *
+ * Las sugerencias ya traen `id` estable derivado de la base
+ * ('dinero-pago-42', contrato en 40-agentes.js:14) y los pendientes de
+ * hoy.php traen tipo + id. Con eso alcanza para saber cuál es cuál.
+ *
+ * @returns {Promise<string[]>} Ids, sin repetir.
+ */
+async function avisosDeAhora() {
   const pendientes = (ULTIMO_HOY && ULTIMO_HOY.pendientes) || [];
   const rechazados = typeof listarRechazados === 'function'
     ? await listarRechazados()
     : [];
-  return pendientes.length + rechazados.length + CANTIDAD_SUGERENCIAS_DE_AGENTES;
+
+  const ids = []
+    .concat(pendientes.map(p => 'pendiente:' + (p.tipo || '') + ':' + (p.id || 0)))
+    .concat(rechazados.map(r => 'rechazo:' + (r.id || 0)))
+    .concat(SUGERENCIAS_DE_AGENTES.map(s => 'sugerencia:' + (s.id || s.titulo || '')));
+
+  return Array.from(new Set(ids));
 }
 
 /**
  * Cuántos avisos NUEVOS hay desde la última vez que se abrió la bandeja.
  *
- * @param {number} cuantosHayAhora
+ * Compara ids contra los que ya se dieron por vistos, en vez de restar
+ * totales. Ver avisosDeAhora().
+ *
+ * @param {string[]} idsDeAhora
  * @returns {number}
  */
-function cuantosAvisosSonNuevos(cuantosHayAhora) {
-  const yaVistos = Number(recordadoDeLaCuenta(AVISOS_VISTOS, 0)) || 0;
+function cuantosAvisosSonNuevos(idsDeAhora) {
+  const vistos = recordadoDeLaCuenta(AVISOS_VISTOS, []);
+  const yaVistos = new Set(Array.isArray(vistos) ? vistos : []);
 
-  /* ⚠️ SI BAJARON, LA MARCA TAMBIÉN TIENE QUE BAJAR.
-   *
-   * Sin esto: se dan por vistos 9, se resuelven 6 —quedan 3—, y después
-   * llegan 2 nuevos. Serían 5, que sigue siendo menos que 9, y los 2
-   * nuevos no se anunciarían nunca. La marca es «cuántos había la última
-   * vez que miré», así que cuando hay menos que eso, eso es lo que hay. */
-  if (cuantosHayAhora < yaVistos) {
-    recordarDeLaCuenta(AVISOS_VISTOS, cuantosHayAhora);
-    return 0;
-  }
+  return idsDeAhora.filter(id => !yaVistos.has(id)).length;
+}
 
-  return cuantosHayAhora - yaVistos;
+/**
+ * Da por vistos los avisos de este momento.
+ *
+ * ⚠️ SE GUARDA SOLO LO QUE EXISTE AHORA, no la unión con lo de antes: si
+ * un pago se resuelve y meses después vuelve a vencer, tiene que
+ * anunciarse de nuevo. Guardar la historia entera lo dejaría mudo para
+ * siempre, y de paso haría crecer el localStorage sin techo.
+ *
+ * @param {string[]} idsDeAhora
+ * @returns {void}
+ */
+function darAvisosPorVistos(idsDeAhora) {
+  recordarDeLaCuenta(AVISOS_VISTOS, idsDeAhora);
 }
 
 /**
@@ -158,8 +213,7 @@ function cuantosAvisosSonNuevos(cuantosHayAhora) {
  * @returns {Promise<void>}
  */
 async function actualizarBurbujaCampana() {
-  const n = await contarAvisosPendientes();
-  ponerBurbuja('#burbuja-campana', cuantosAvisosSonNuevos(n));
+  ponerBurbuja('#burbuja-campana', cuantosAvisosSonNuevos(await avisosDeAhora()));
 }
 
 /**
@@ -189,7 +243,7 @@ async function abrirBandejaDeAvisos() {
      no al cerrar, porque cerrar una hoja tiene varios caminos (el botón,
      el gesto, el botón físico de atrás) y uno de ellos siempre se
      olvida. Ver AVISOS_VISTOS. */
-  recordarDeLaCuenta(AVISOS_VISTOS, await contarAvisosPendientes());
+  darAvisosPorVistos(await avisosDeAhora());
   ponerBurbuja('#burbuja-campana', 0);
 
   if (!pendientes.length && !rechazados.length && !CANTIDAD_SUGERENCIAS_DE_AGENTES) {
@@ -208,22 +262,33 @@ async function abrirBandejaDeAvisos() {
         'Cambios que el servidor rechazó</div>' +
         rechazados.map(filaDeRechazado).join('')
       : '') +
-    /* No se repintan las sugerencias acá adentro (serían las de la
-     * última corrida, potencialmente viejas) — un solo renglón que
-     * lleva al asistente, donde cargarSugerenciasDelAsistente() las
-     * vuelve a pedir frescas y ya tiene todo el mecanismo de
-     * confirmar/deshacer (40-agentes.js). Esta bandeja no duplica eso. */
-    (CANTIDAD_SUGERENCIAS_DE_AGENTES
-      ? '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">Sugerencias de los agentes</div>' +
-        '<button class="lista__fila" id="aviso-ir-a-sugerencias">' +
-          '<span class="lista__cuerpo">' +
-            '<span class="lista__titulo">' +
-              seguro(pluralizar(CANTIDAD_SUGERENCIAS_DE_AGENTES, 'sugerencia', 'sugerencias')) +
-              ' por revisar' +
-            '</span>' +
-            '<span class="lista__pie">Pagos, mesas, tareas — el asistente tiene el detalle de cada una</span>' +
-          '</span>' +
-        '</button>'
+    /* ⛔ ACÁ HABÍA UN RENGLÓN QUE PROMETÍA N Y NO LLEVABA A NINGUNA
+     *    (2026-09-16)
+     *
+     * Decía «15 sugerencias por revisar» y un pie que aseguraba que «el
+     * asistente tiene el detalle de cada una». Se tocaba, se abría
+     * MegaBot, y aparecía un chat vacío.
+     *
+     * El comentario que estaba acá justificaba no repintarlas diciendo
+     * que cargarSugerenciasDelAsistente() las volvía a pedir frescas.
+     * ESA FUNCIÓN NUNCA EXISTIÓ. Y cajaDeSugerencias() /
+     * engancharSugerencias(), que sí están escritas en 40-agentes.js con
+     * su confirmar/ejecutar/deshacer entero, no las llamaba nadie desde
+     * ningún lado.
+     *
+     * O sea: la campana contaba quince cosas que ninguna pantalla del
+     * panel mostraba. Ahora se pintan acá, que es donde la persona ya
+     * está parada cuando ve el número.
+     *
+     * ⚠️ SIN TOPE. Si son quince, se muestran quince. Un slice silencioso
+     * es precisamente lo que hizo que esto pasara desapercibido: el
+     * único camino que llegaba a pintar una sugerencia lo hacía de a
+     * tres, sin señal, y solo escribiendo algo que MegaBot no entendía. */
+    (SUGERENCIAS_DE_AGENTES.length
+      ? '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">' +
+          'Sugerencias de los agentes' +
+        '</div>' +
+        cajaDeSugerencias(SUGERENCIAS_DE_AGENTES)
       : '');
 
   buscarTodos('[data-aviso]', donde).forEach(fila => {
@@ -264,12 +329,14 @@ async function abrirBandejaDeAvisos() {
     });
   });
 
-  const irASugerencias = buscar('#aviso-ir-a-sugerencias', donde);
-  if (irASugerencias) {
-    irASugerencias.addEventListener('click', () => {
-      cerrarHoja(true);
-      abrirAsistente();
-    });
+  /* Las tarjetas de sugerencias, con su confirmar / ejecutar / deshacer.
+     Un solo listener por delegación en el contenedor —no uno por botón—
+     porque las tarjetas se reescriben a sí mismas al cambiar de estado;
+     el motivo largo está en engancharSugerencias() (40-agentes.js:149). */
+  if (SUGERENCIAS_DE_AGENTES.length &&
+      typeof engancharSugerencias === 'function') {
+    engancharSugerencias(buscar('#lista-sugerencias', donde),
+                         SUGERENCIAS_DE_AGENTES);
   }
 }
 

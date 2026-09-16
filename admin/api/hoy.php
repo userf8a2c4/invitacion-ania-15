@@ -24,6 +24,7 @@
 require_once __DIR__ . '/_lib/bd.php';
 require_once __DIR__ . '/_lib/sesion.php';
 require_once __DIR__ . '/_lib/responder.php';
+require_once __DIR__ . '/_lib/gente.php';
 
 $yo = exigirSesion();
 exigirMetodo('GET');
@@ -221,12 +222,41 @@ if ($diasQueFaltan >= 0 && $diasQueFaltan <= 14) {
            no usaba nadie: una consulta a la tabla más grande, en cada
            carga de Hoy de los últimos catorce días, para tirar el
            resultado. */
-        $gente = consultarUno(
+        /* ⛔ ESTE RENGLÓN PEDÍA 113 PLATOS CUANDO HABÍAN CONTESTADO 34
+         *    (2026-09-16)
+         *
+         * Decía «Número final para el banquete» sobre la suma de
+         * `asiste = 1`. Y ese número NO es «confirmaron»: una
+         * confirmación NACE con `asiste = 1` porque el cupo se aparta
+         * desde el día uno para que el bot de mesas pueda acomodar antes
+         * de que nadie conteste. Está documentado acá mismo, más abajo,
+         * en la nota de `esperados`.
+         *
+         * O sea que el renglón que aparece en la lista final —el de los
+         * últimos catorce días, el que se mira para llamar al salón—
+         * daba el número de lugares apartados con el rótulo del número
+         * que se le encarga a la cocina. Con 113 apartados y 34
+         * respuestas, son 79 platos de diferencia.
+         *
+         * ⚠️ NO SE REEMPLAZA UNO POR EL OTRO: se muestran LOS DOS. El
+         * apartado es el techo que hay que reservar; el confirmado es lo
+         * que de verdad está dicho. Poner solo uno es mentir en alguna
+         * de las dos direcciones, y quien llama al salón necesita saber
+         * cuánta gente todavía no contestó. */
+        $apartados = (int) (consultarUno(
             'SELECT COALESCE(SUM(adultos + ninos), 0) AS n
              FROM confirmaciones WHERE asiste = 1'
-        );
+        )['n'] ?? 0);
+
+        $confirmados = cuantasPersonasConfirmaron();
+        $faltanPorResponder = max(0, $apartados - $confirmados);
+
         $revisar($listaFinal, 'Número final para el banquete',
-            (int) $gente['n'] > 0, (int) $gente['n'] . ' personas');
+            $faltanPorResponder === 0 && $confirmados > 0,
+            $confirmados . ' confirmadas · ' . $apartados . ' apartadas' .
+            ($faltanPorResponder > 0
+                ? ' · faltan ' . $faltanPorResponder . ' por responder'
+                : ''));
     }
 
     if (existeTabla('asignacion_mesas') && existeTabla('confirmaciones')) {
@@ -359,27 +389,17 @@ if (existeTabla('llegadas') && existeTabla('confirmaciones')) {
 
        `esperados` se deja como está: sigue siendo el total apartado, y
        ahora es la mitad chica de "X de Y". */
-    if (existeTabla('invitaciones')) {
-        $colsInv = columnasDe('invitaciones');
-
-        // `respondida_en` es de una ronda posterior a la que creó la
-        // tabla: sin ella se cuenta solo por estado, que es lo que hacía
-        // yaRespondio() antes de que existiera.
-        $contesto = in_array('respondida_en', $colsInv, true)
-            ? "(i.respondida_en IS NOT NULL OR i.estado IN ('confirmada', 'declinada'))"
-            : "i.estado IN ('confirmada', 'declinada')";
-
-        $filaConfirmados = consultarUno(
-            'SELECT COALESCE(SUM(c.adultos + c.ninos), 0) AS personas,
-                    COUNT(*) AS grupos
-             FROM confirmaciones c
-             JOIN invitaciones i ON i.confirmacion_id = c.id
-             WHERE c.asiste = 1 AND ' . $contesto
-        );
-
-        $dia['confirmados'] = (int) ($filaConfirmados['personas'] ?? 0);
-        $dia['grupos_confirmados'] = (int) ($filaConfirmados['grupos'] ?? 0);
-    }
+    /* ⚡ LA CUENTA SE MUDÓ A _lib/gente.php (2026-09-16)
+     *
+     * Estaba escrita acá y repetida —con las mismas palabras— en
+     * estadisticas.php, mientras chat.php usaba `asiste = 1` a secas y
+     * por eso MegaBot contestaba el cupo cuando le preguntaban cuántos
+     * venían. Ahora hay un solo lugar, y `cuentaDeConfirmados()` protege
+     * además contra el JOIN duplicado: `invitaciones.confirmacion_id` no
+     * es UNIQUE. */
+    $cuenta = cuentaDeConfirmados();
+    $dia['confirmados'] = $cuenta['personas'];
+    $dia['grupos_confirmados'] = $cuenta['grupos'];
 }
 
 if (existeTabla('mesas')) {

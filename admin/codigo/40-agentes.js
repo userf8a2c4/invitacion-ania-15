@@ -115,8 +115,19 @@ function cajaDeSugerencias(sugerencias) {
            'Nada urgente por ahora.</p>';
   }
 
+  /* ⛔ ACÁ HABÍA UN `slice(0, 5)` SILENCIOSO (2026-09-16).
+   *
+   * Durante meses no se notó porque esta función no la llamaba NADIE
+   * —era código muerto— mientras la campana anunciaba el total. Al
+   * enchufarla desde la bandeja de avisos (37-campana.js) el tope habría
+   * reproducido el mismo bug con otra cara: la burbuja diciendo 15 y la
+   * lista mostrando 5.
+   *
+   * Si son quince, se muestran quince. El día que sean demasiadas, la
+   * respuesta es que los agentes sugieran mejor, no que la pantalla
+   * esconda diez. */
   return '<div id="lista-sugerencias" style="margin-bottom:var(--esp-2)">' +
-    sugerencias.slice(0, 5).map((s, i) =>
+    sugerencias.map((s, i) =>
       '<div class="tarjeta" style="margin-bottom:var(--esp-1)" data-sugerencia-tarjeta="' + i + '">' +
         contenidoDeTarjetaDeSugerencia(s, i) +
       '</div>'
