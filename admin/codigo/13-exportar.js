@@ -885,7 +885,7 @@ function menusPersonaPorPersona(personas, respaldo) {
    * familia no tiene filas por persona —no que el informe se haya
    * quedado corto—, y se sabe a quién hay que preguntarle. */
   if (!personas || !personas.length) {
-    const r = (respaldo || '').trim();
+    const r = loQueEscribio(respaldo);
     return r ? r + '  ·  (sin desglose por persona)' : '—';
   }
 
@@ -935,7 +935,7 @@ function alergiasPersonaPorPersona(personas, respaldo) {
     .filter((p) => p.que && !/^(ninguna|ninguno|no|n\/a|-)$/i.test(p.que));
 
   if (!conAlgo.length) {
-    const r = (respaldo || '').trim();
+    const r = loQueEscribio(respaldo);
     if (!r || /^(ninguna|ninguno|no)$/i.test(r)) return 'Ninguna';
     /* Hay texto de familia pero nadie tiene la suya cargada: se muestra,
        marcado, porque alguien lo escribió y perderlo sería peor. */

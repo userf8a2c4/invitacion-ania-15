@@ -310,6 +310,7 @@ $dia = [
     'mesas_ocupadas' => 0,
     'mesas_total'     => 0,
     'alergias_activas' => 0,
+    'mensajes_para_ania' => 0,
     'pases_reintentados' => 0,
 ];
 
@@ -405,6 +406,35 @@ if (existeTabla('confirmaciones')) {
                AND LOWER(alergias) NOT IN ('ninguna', 'ninguno', 'no', 'n/a', '-')"
         );
         $dia['alergias_activas'] = (int) ($filaAlergias['n'] ?? 0);
+    }
+
+    /* ⚡ CUÁNTOS LE ESCRIBIERON A ANIA (2026-09-15)
+     *
+     * Es la tercera cifra de la tarjeta después de la fiesta, y la única
+     * de todo el panel que hay que rescatar antes del borrado final: al
+     * invitado se le prometió que su mensaje no se guarda para siempre,
+     * en el mismo formulario donde lo escribió.
+     *
+     * ⚠️ EL CENTINELA. El formulario manda `', '` cuando la persona no
+     * escribió nada (11-formulario-confirmacion.js:989), así que contar
+     * `notas <> ''` daría el total de confirmaciones, no el de mensajes.
+     *
+     * ⚠️ Y SE FILTRA EN PHP, NO EN SQL. Es el mismo criterio —y el mismo
+     * motivo— que cuantosMensajesParaAnia() en borrado_final.php:206: el
+     * TRIM de MySQL no se lleva los saltos de línea, así que una nota con
+     * solo un enter contaría acá y no en api/mensajes.php. Que la tarjeta
+     * diga 23 y el libro muestre 22 deja a alguien buscando el que falta.
+     *
+     * Son ciento y pico de filas de una columna: leerlas no cuesta nada,
+     * y así las tres cuentas del proyecto salen del mismo criterio. */
+    if (in_array('notas', $columnas, true)) {
+        $cuantosMensajes = 0;
+        foreach (consultarTodo('SELECT notas FROM confirmaciones') as $fila) {
+            $limpio = trim((string) ($fila['notas'] ?? ''));
+            if ($limpio === '' || preg_match('/^[,\s]+$/u', $limpio)) continue;
+            $cuantosMensajes++;
+        }
+        $dia['mensajes_para_ania'] = $cuantosMensajes;
     }
 }
 

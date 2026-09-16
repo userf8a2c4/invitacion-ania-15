@@ -91,7 +91,7 @@ async function dibujarHoy() {
      resolverse en una sola petición. */
   vista.innerHTML =
     bloqueEstadoDelDia(dia, textoConexion, datosDeHoy.dias_para_la_fiesta) +
-    bloqueTresAcciones() +
+    bloqueTresAcciones(datosDeHoy.dias_para_la_fiesta) +
     bloqueAlertasDelDia(alertas) +
     '<div id="hoy-ultimas-llegadas"></div>' +
     '<div id="hoy-pendientes"></div>' +
@@ -143,8 +143,47 @@ function bloqueEstadoDelDia(dia, textoConexion, diasParaLaFiesta) {
 
      El corte es "falta más de un día y todavía no entró nadie": en cuanto
      alguien cruza la puerta, o ya es la víspera, manda el conteo de
-     llegadas. */
-  const esDiaDeFiesta = !(Number(diasParaLaFiesta) > 1) || Number(dia.llegaron) > 0;
+     llegadas.
+
+     ⛔ Y DESPUÉS DEL 24 ESTA CUENTA SE ROMPÍA SOLA (2026-09-15)
+
+     `!(Number(diasParaLaFiesta) > 1)` con días NEGATIVOS da true: el 25
+     de octubre, `!(-1 > 1)` es true. O sea que la tarjeta se quedaba
+     congelada en "Llegaron 98/115", con su barra de progreso, para
+     siempre — y `dia.llegaron > 0` la sostenía igual, porque la tabla
+     `llegadas` no se vacía nunca.
+
+     No tiraba ningún error. Simplemente la app iba a seguir gritando el
+     aforo de una fiesta que ya pasó, todos los días, en el lugar más
+     visible de la pantalla. Se encontró leyendo el código, no usándolo:
+     todavía faltan semanas para que se active.
+
+     Ahora son TRES momentos, no dos, y cada uno dice lo suyo:
+       · antes    → cuántos confirmaron
+       · el día   → cuántos llegaron, con barra
+       · después  → cuántos llegaron, ya sin barra: es un resultado, no
+                    un progreso. */
+  const yaPaso = Number(diasParaLaFiesta) < 0;
+  const esDiaDeFiesta = !yaPaso &&
+    (!(Number(diasParaLaFiesta) > 1) || Number(dia.llegaron) > 0);
+
+  /* ⚡ DESPUÉS DE LA FIESTA, ESTA TARJETA ES EL CIERRE (2026-09-15)
+   *
+   * Idea de Carlos: «quizás que en la pantalla de Hoy, el 25 aparezca
+   * esta información en lugar de lo que tenemos ahorita, pues ya no
+   * necesitaremos el scanner, mesas y alergias».
+   *
+   * Tiene razón y encaja con lo que esta pantalla declara ser
+   * (05-navegacion.js:45: «qué está pasando y qué hay que hacer en este
+   * momento»): después del 24, lo que está pasando ES el cierre.
+   *
+   * Las tres cifras cambian de pregunta. Mesas y Alergias eran datos de
+   * la puerta —dónde sentar a alguien, qué no puede comer— y el día 25
+   * no le sirven a nadie. En su lugar van las que sí se van a mirar:
+   * cuántos vinieron de los que dijeron que sí, y cuántos escribieron
+   * algo para Ania, que es lo único de todo esto que hay que rescatar
+   * antes de apagar el hosting. */
+  if (yaPaso) return tarjetaDelCierre(dia, textoConexion, diasParaLaFiesta);
 
   return '' +
     '<div class="tarjeta hoy-estado">' +
@@ -209,6 +248,85 @@ function bloqueEstadoDelDia(dia, textoConexion, diasParaLaFiesta) {
             '<div class="barra__relleno" style="width:' + faltaAforo + '%"></div>' +
           '</div>'
         : '') +
+    '</div>';
+}
+
+/**
+ * La misma tarjeta, el día después: qué pasó en vez de qué falta.
+ *
+ * ⚠️ SIN BARRA DE PROGRESO. Ya no hay nada que progresar: es un
+ * resultado. Dejarla puesta era el bug que tenía esta pantalla —ver la
+ * nota de esDiaDeFiesta— y además leía mal: una barra al 85 % sugiere
+ * que falta algo, cuando lo que hubo fue lo que hubo.
+ *
+ * ⚠️ «NO VINIERON» SE CALCULA ACÁ Y NO SE PIDE AL SERVIDOR. Es
+ * `confirmados − llegaron` con los dos números que hoy.php ya manda, así
+ * que esta pantalla sigue resolviéndose en UNA sola petición, que es la
+ * regla declarada al principio de este archivo. Una consulta nueva para
+ * una resta sería romper esa regla por nada.
+ *
+ * @param {Object} dia - datosDeHoy.dia, de hoy.php.
+ * @param {string} textoConexion
+ * @param {number} diasParaLaFiesta - Negativo: cuántos días hace.
+ * @returns {string} HTML
+ */
+function tarjetaDelCierre(dia, textoConexion, diasParaLaFiesta) {
+  const llegaron    = Number(dia.llegaron) || 0;
+  const confirmados = Number(dia.confirmados) || 0;
+
+  /* Nunca negativo: si alguien entró sin estar confirmado —pasa, se
+     agrega gente en la puerta— la resta daría menos de cero y eso no es
+     "no vinieron", es otra cosa. */
+  const noVinieron = Math.max(0, confirmados - llegaron);
+
+  const cuantosDias = Math.abs(Number(diasParaLaFiesta) || 0);
+  const cuando = cuantosDias === 1
+    ? 'Fue ayer'
+    : 'Hace ' + cuantosDias + ' días';
+
+  return '' +
+    '<div class="tarjeta hoy-estado">' +
+      estadoDeConexionHTML(textoConexion) +
+
+      '<div class="hoy-estado__rotulo" style="margin-bottom:var(--esp-1)">' +
+        seguro(cuando) + ' · así terminó' +
+      '</div>' +
+
+      '<div class="hoy-estado__cifras">' +
+        '<div class="hoy-estado__cifra">' +
+          '<div class="hoy-estado__numero">' + seguro(llegaron) +
+            '<span class="hoy-estado__de"> de ' + seguro(confirmados) +
+            '</span></div>' +
+          '<div class="hoy-estado__rotulo">Vinieron' +
+            (dia.grupos_llegaron
+              ? ' · ' + seguro(dia.grupos_llegaron) + ' grupos'
+              : '') +
+          '</div>' +
+        '</div>' +
+
+        /* Tocable y lleva a la lista filtrada: la regla de esta pantalla
+           es que un número que se puede tocar tiene que llevar a la lista
+           de ESE número. Un "17 no vinieron" que no dice quiénes obliga a
+           buscarlos a mano, que es justo lo que no se quiere el día que
+           hay que agradecer regalos y cerrar cuentas. */
+        '<div class="hoy-estado__cifra' +
+             (noVinieron > 0 ? ' hoy-estado__cifra--tocable' : '') + '"' +
+             (noVinieron > 0
+               ? ' data-hoy-ir="no-vinieron" role="button" tabindex="0"'
+               : '') + '>' +
+          '<div class="hoy-estado__numero">' + seguro(noVinieron) + '</div>' +
+          '<div class="hoy-estado__rotulo">No vinieron</div>' +
+        '</div>' +
+
+        /* Los mensajes para Ania son lo único de todo esto que hay que
+           rescatar antes del borrado: la app se lo prometió al invitado
+           en el mismo formulario donde escribió (ver mensajes.php). */
+        '<div class="hoy-estado__cifra hoy-estado__cifra--tocable" ' +
+             'data-hoy-ir="mensajes" role="button" tabindex="0">' +
+          '<div class="hoy-estado__numero">' + seguro(Number(dia.mensajes_para_ania) || 0) + '</div>' +
+          '<div class="hoy-estado__rotulo">Mensajes</div>' +
+        '</div>' +
+      '</div>' +
     '</div>';
 }
 
@@ -282,7 +400,27 @@ function estadoDeConexionHTML(texto) {
  *
  * @returns {string} HTML
  */
-function bloqueTresAcciones() {
+function bloqueTresAcciones(diasParaLaFiesta) {
+  /* ⚡ EL 25 YA NO SE ESCANEA NADA (2026-09-15)
+   *
+   * «Escanear pase» es el botón más grande de la app y es el correcto
+   * hasta la noche del 24. A partir del 25 lleva a una cámara que no
+   * tiene nada que leer, en el lugar más visible de la pantalla.
+   *
+   * Lo que sí hay que hacer ese día, en este orden:
+   *   1. Bajar el respaldo completo — es lo que hay que tener ANTES de
+   *      cualquier borrado, y sin eso lo demás no se puede deshacer.
+   *   2. Guardar los mensajes para Ania, que es lo único irrecuperable:
+   *      se le prometió al invitado que no quedan en el servidor.
+   *   3. Agradecer los regalos, que es lo que queda por hacer.
+   *
+   * ⚠️ El respaldo NO se reescribe acá. cron_respaldo.php?accion=descargar
+   * ya arma el ZIP cifrado con la base entera y los archivos, y el botón
+   * ya existe en Más (20-arranque.js, #respaldo-bajar). Esto lo lleva
+   * ahí; un segundo camino para lo mismo es un segundo camino que
+   * mantener. */
+  if (Number(diasParaLaFiesta) < 0) return bloqueAccionesDelCierre();
+
   return '' +
     '<button class="boton boton--principal boton--ancho hoy-accion-principal" ' +
             'id="hoy-escanear">' +
@@ -301,6 +439,56 @@ function bloqueTresAcciones() {
 }
 
 /**
+ * Las tres acciones del día después.
+ *
+ * @returns {string} HTML
+ */
+function bloqueAccionesDelCierre() {
+  /* ⚠️ EL RESPALDO ES DE ADMIN, Y ACÁ HAY QUE RESPETARLO.
+     Su entrada en el menú lleva el flag de solo-admin
+     (01-configuracion.js:393) y dibujarMas() la filtra; si este botón
+     llamara a atenderMenu('respaldo') sin mirar el rol, le abriría a
+     cualquiera una hoja que el menú le esconde.
+
+     Para quien no es admin, la acción principal pasa a ser el libro de
+     mensajes — y eso NO es un premio de consolación: esa entrada está a
+     propósito sin el flag de admin, con el motivo escrito al lado
+     (01-configuracion.js:362): «cuanta más gente sepa que hay que
+     guardarlo antes del borrado, mejor». */
+  const esAdmin = typeof USUARIO !== 'undefined' && USUARIO &&
+                  USUARIO.rol === 'admin';
+
+  const iconoBajar =
+    '<svg viewBox="0 0 24 24" aria-hidden="true" class="icono">' +
+      '<path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" ' +
+           'fill="none" stroke="currentColor" stroke-width="1.5" ' +
+           'stroke-linecap="round" stroke-linejoin="round"/>' +
+    '</svg>';
+
+  const principal = esAdmin
+    ? '<button class="boton boton--principal boton--ancho hoy-accion-principal" ' +
+              'id="hoy-cierre-respaldo">' + iconoBajar +
+        'Bajar el respaldo completo' +
+      '</button>'
+    : '<button class="boton boton--principal boton--ancho hoy-accion-principal" ' +
+              'id="hoy-cierre-libro-grande">' + iconoBajar +
+        'Guardar los mensajes para Ania' +
+      '</button>';
+
+  const segundo = esAdmin
+    ? '<button class="boton" style="flex:1;min-height:52px" id="hoy-cierre-libro">' +
+        'Mensajes para Ania</button>'
+    : '';
+
+  return principal +
+    '<div style="display:flex;gap:var(--esp-2);margin:var(--esp-1) 0 var(--esp-3)">' +
+      segundo +
+      '<button class="boton" style="flex:1;min-height:52px" id="hoy-cierre-regalos">' +
+        'Agradecer regalos</button>' +
+    '</div>';
+}
+
+/**
  * Engancha las tres acciones, los toques en la tarjeta de estado y las
  * alertas del día.
  *
@@ -310,9 +498,35 @@ function bloqueTresAcciones() {
  * @returns {void}
  */
 function engancharTresAcciones(vista, alertas) {
-  buscar('#hoy-escanear', vista).addEventListener('click', () => abrirEscaner());
-  buscar('#hoy-buscar', vista).addEventListener('click', () => abrirBuscadorGlobal());
-  buscar('#hoy-plano', vista).addEventListener('click', () => verPlanoDeMesas());
+  /* ⚠️ CON `si`, NO DIRECTO. Después del 24 los tres botones de arriba
+     son otros (bloqueAccionesDelCierre) y estos no existen: un
+     `.addEventListener` sobre null tira y aborta el resto de la función,
+     con lo cual también se quedarían sin enganchar las alertas y las
+     cifras tocables. Toda la pantalla dejaría de responder por un botón
+     que ya no está. */
+  const si = (selector, hacer) => {
+    const elemento = buscar(selector, vista);
+    if (elemento) elemento.addEventListener('click', hacer);
+  };
+
+  si('#hoy-escanear', () => abrirEscaner());
+  si('#hoy-buscar', () => abrirBuscadorGlobal());
+  si('#hoy-plano', () => verPlanoDeMesas());
+
+  /* Las del cierre. El respaldo no se rearma acá: lleva al botón que ya
+     existe en Más, que es el que sabe pedir el ZIP y avisar si falta la
+     clave del .env o ZipArchive en el hosting. */
+  si('#hoy-cierre-respaldo', () => atenderMenu('respaldo'));
+  si('#hoy-cierre-libro', () => {
+    if (typeof abrirElLibro === 'function') abrirElLibro();
+  });
+  si('#hoy-cierre-libro-grande', () => {
+    if (typeof abrirElLibro === 'function') abrirElLibro();
+  });
+  si('#hoy-cierre-regalos', () => {
+    SECCION_EVENTO = 'regalos';
+    irA('evento', true);
+  });
 
   /* Con role="button" hay que atender el teclado también: si no, quien
      navega con Tab llega a la cifra, aprieta Enter y no pasa nada. */
@@ -339,6 +553,17 @@ function engancharTresAcciones(vista, alertas) {
   alTocarOEnter(buscar('[data-hoy-ir="alergias"]', vista), () => {
     FILTRO_INVITADOS = 'alergias';
     irA('invitados');
+  });
+
+  /* Las dos cifras del cierre, con la misma regla: llevan a la lista de
+     ESE número, no a una pantalla donde haya que buscar. */
+  alTocarOEnter(buscar('[data-hoy-ir="no-vinieron"]', vista), () => {
+    FILTRO_INVITADOS = 'no_vinieron';
+    irA('invitados');
+  });
+
+  alTocarOEnter(buscar('[data-hoy-ir="mensajes"]', vista), () => {
+    if (typeof abrirElLibro === 'function') abrirElLibro();
   });
 
   buscarTodos('[data-hoy-alerta]', vista).forEach(boton => {

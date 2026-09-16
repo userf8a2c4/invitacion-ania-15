@@ -56,6 +56,9 @@ if (faltan.length === 0) {
   const f = new Function(
     'const oGuion = (x) => (x === undefined || x === null || ' +
     'String(x).trim() === "") ? "—" : String(x);\n' +
+    /* loQueEscribio() primero: las dos de abajo lo usan para filtrar el
+       centinela ', ' del formulario. */
+    saca('loQueEscribio') + '\n' +
     saca('menusPersonaPorPersona') + '\n' +
     saca('alergiasPersonaPorPersona') + '\n' +
     'return { menusPersonaPorPersona, alergiasPersonaPorPersona };'
