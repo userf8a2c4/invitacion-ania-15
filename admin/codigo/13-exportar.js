@@ -95,14 +95,35 @@ function armarCsv(encabezados, filas) {
  * @param {Array} bloques - [{ titulo, encabezados, filas }]
  * @returns {string}
  */
+/** Los mismos cuatro tintes del PDF, en el atributo que entiende Excel. */
+const TINTE_DE_ESTADO = {
+  sin_enviar: '#F5F5F7',
+  enviada:    '#EEF3FD',
+  confirmo:   '#ECF8F1',
+  no_viene:   '#FDEEF0',
+};
+
+/**
+ * @param {string} [estado]
+ * @returns {string} ' bgcolor="#ECF8F1"' o vacío
+ */
+function colorDeFilaExcel(estado) {
+  const tinte = TINTE_DE_ESTADO[estado];
+  return tinte ? ' bgcolor="' + tinte + '"' : '';
+}
+
 function armarExcel(titulo, bloques) {
   const tablas = bloques.map(bloque =>
     '<h2>' + seguro(bloque.titulo) + '</h2>' +
     '<table border="1">' +
       '<tr>' + bloque.encabezados.map(h =>
         '<th style="background:#f0dca2">' + seguro(h) + '</th>').join('') + '</tr>' +
-      bloque.filas.map(fila =>
-        '<tr>' + fila.map(c => '<td>' + seguro(c) + '</td>').join('') + '</tr>'
+      /* El mismo estado que el PDF, que en Excel cuesta un atributo.
+         CSV y TXT no llevan color porque no existe el concepto. */
+      bloque.filas.map((fila, i) =>
+        '<tr' + colorDeFilaExcel(bloque.estados && bloque.estados[i]) + '>' +
+          fila.map(c => '<td>' + seguro(c) + '</td>').join('') +
+        '</tr>'
       ).join('') +
     '</table><br>'
   ).join('');
@@ -177,6 +198,26 @@ function nombreConFechaYHora(base) {
  * @param {Array} bloques
  * @returns {void}
  */
+/**
+ * La clase CSS de una fila según el estado de su invitación.
+ *
+ * Devuelve la cadena entera lista para pegar —' class="e-confirmo"'— o
+ * vacío. Así el <tr> de un bloque sin estados sale exactamente como
+ * salía antes, sin un class="" colgando.
+ *
+ * ⚠️ Se acepta solo uno de los cuatro estados conocidos. Si mañana
+ * apareciera uno nuevo y nadie le escribiera su color, la fila saldría
+ * sin clase —blanca, legible— en vez de con una clase que no existe en
+ * el <style> y que se vería igual pero dejaría de avisar.
+ *
+ * @param {string} [estado] - sin_enviar | enviada | confirmo | no_viene
+ * @returns {string}
+ */
+function claseDeEstado(estado) {
+  const conocidos = ['sin_enviar', 'enviada', 'confirmo', 'no_viene'];
+  return conocidos.indexOf(estado) === -1 ? '' : ' class="e-' + estado + '"';
+}
+
 function armarPdf(titulo, bloques, extra) {
   /* ⚠️ LA VENTANA PUEDE VENIR YA ABIERTA, Y ES A PROPÓSITO (2026-09-09)
      `window.open()` solo funciona si la llamada nace de un toque del
@@ -208,8 +249,12 @@ function armarPdf(titulo, bloques, extra) {
           : '<table>' +
               '<thead><tr>' + bloque.encabezados.map(h =>
                 '<th>' + seguro(h) + '</th>').join('') + '</tr></thead>' +
-              '<tbody>' + bloque.filas.map(fila =>
-                '<tr>' + fila.map(c => '<td>' + seguro(c) + '</td>').join('') + '</tr>'
+              '<tbody>' + bloque.filas.map((fila, i) =>
+                /* La clase sale de bloque.estados[i], si el bloque la trae.
+                   Un bloque sin estados sigue emitiendo <tr> pelado. */
+                '<tr' + claseDeEstado(bloque.estados && bloque.estados[i]) + '>' +
+                  fila.map(c => '<td>' + seguro(c) + '</td>').join('') +
+                '</tr>'
               ).join('') + '</tbody>' +
             '</table>');
   }).join('');
@@ -233,6 +278,42 @@ function armarPdf(titulo, bloques, extra) {
       'table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;}' +
       'th{background:#fdf3e3;text-align:left;border:1px solid #e8d5b0;padding:6px;}' +
       'td{border:1px solid #eee;padding:6px;}' +
+
+      /* ⛔ SIN ESTO EL COLOR NO SE IMPRIME (2026-09-16)
+         Los navegadores descartan los fondos al imprimir salvo que la
+         persona marque «Gráficos de fondo» en el diálogo. Un color de
+         fila que solo se ve en pantalla no sirve para nada: este papel
+         existe para usarse impreso, sobre una mesa. Ya pasaba con el
+         fondo crema de los th, solo que era tan pálido que nadie lo
+         notó. */
+      'body,table,tr,td,th{-webkit-print-color-adjust:exact;' +
+        'print-color-adjust:exact;}' +
+
+      /* ⚡ EL ESTADO DE CADA FILA, EN COLOR (2026-09-16, a pedido)
+       *
+       * Sutil a propósito: el papel tiene ciento treinta renglones y si
+       * cada uno grita, no se lee ninguno. Tinte muy claro de fondo y
+       * una franja saturada a la izquierda.
+       *
+       * ⚠️ LA FRANJA NO ES ADORNO, ES EL RESPALDO. Los bordes SÍ se
+       * imprimen siempre, pase lo que pase con print-color-adjust. Si un
+       * día un navegador ignora la regla de arriba, el tinte desaparece
+       * y la franja queda: se sigue distinguiendo el estado.
+       *
+       * ⚠️ Y LOS TONOS SON PARA PAPEL BLANCO, no los del panel. El
+       * --bien del panel (#3DDC97) está calibrado contra fondo casi
+       * negro; sobre papel se ve fluorescente.
+       *
+       * ⚠️ EL AZUL DE «SIN RESPONDER» ES A PEDIDO EXPLÍCITO. La tabla
+       * COMO_SE_LEE_EL_ESTADO (06-piezas.js) usa ÁMBAR para ese estado,
+       * y tiene escrito por qué: «azul se lee como informativo, todo en
+       * orden». Acá va azul porque es lo que se pidió, y porque coincide
+       * con .punto--enviada, que ya es azul en el panel. No es un
+       * descuido: si alguien lo unifica algún día, que sea a propósito. */
+      'tr.e-sin_enviar{background:#f5f5f7;box-shadow:inset 3px 0 0 #9a9aa8;}' +
+      'tr.e-enviada   {background:#eef3fd;box-shadow:inset 3px 0 0 #4a7fd4;}' +
+      'tr.e-confirmo  {background:#ecf8f1;box-shadow:inset 3px 0 0 #2e9e63;}' +
+      'tr.e-no_viene  {background:#fdeef0;box-shadow:inset 3px 0 0 #c94257;}' +
       // Que una tabla no se parta a la mitad entre dos hojas.
       'table{page-break-inside:auto;} tr{page-break-inside:avoid;}' +
       // La lectura del asesor: párrafo corrido, no fila de tabla.
@@ -1053,6 +1134,17 @@ async function exportarInvitados(formato) {
         oGuion(f.invitacion_respondida_en
           ? comoFecha(f.invitacion_respondida_en) : ''),
       ]),
+      /* ⚡ EL COLOR DE CADA FILA (2026-09-16, a pedido)
+         Paralelo a `filas` por índice, y NO adentro de cada fila: los
+         cuatro renderizadores dan por hecho que una fila es un arreglo
+         de texto, y meterle un objeto reventaría CSV, Excel y TXT de
+         una. Como propiedad hermana del bloque, los tres que no saben
+         de color ni se enteran.
+
+         Sale de comoEstaLaAsistencia(), la misma función que llena la
+         columna «Estado» cuatro líneas más arriba. Un solo dueño: el
+         color y la palabra no pueden decir cosas distintas. */
+      estados: visibles.map(f => comoEstaLaAsistencia(f)),
     },
   ];
 
@@ -1097,7 +1189,24 @@ async function exportarInvitados(formato) {
    * con huecos: el hueco se ve y se pregunta, el faltante no. */
   const personas = [];
 
-  visibles.forEach(familia => {
+  /* ⛔ SOLO LOS QUE VAN A VENIR (2026-09-16, a pedido)
+   *
+   * «No necesitamos ver siquiera el campo de menú de alguien que no ha
+   * respondido o rechazado».
+   *
+   * Y el cuadro además NO CERRABA: decía 133 personas mientras el panel
+   * contaba 113 lugares apartados, porque metía a la gente de
+   * invitaciones que ya habían contestado que no. Un papel que va a la
+   * cocina y suma más platos que sillas es peor que uno incompleto: el
+   * incompleto se nota, el inflado no.
+   *
+   * ⚠️ Los lugares SIN NOMBRE de una familia que sí viene se quedan. Son
+   * «Adulto 2» con su plato ya guardado, y sacarlos devolvería el
+   * problema contrario —que el papel sume de menos—, que es justo el que
+   * se arregló esta mañana. */
+  visibles
+    .filter(familia => comoEstaLaAsistencia(familia) === 'confirmo')
+    .forEach(familia => {
     const suyos = (porFamilia[familia.id] || []).slice();
 
     const adultos = Number(familia.adultos) || 0;
@@ -1132,7 +1241,9 @@ async function exportarInvitados(formato) {
           esNino ? 'Niño' : 'Adulto',
           oGuion((p.menu || '').trim()),
           oGuion((p.alergias || '').trim()),
-          comoSeLee(familia),
+          /* Sin celda de «Estado»: acá ya son todos los que vienen. Una
+             columna repitiendo «Confirmó» en cada renglón solo le roba
+             ancho a Menú y a Alergias, que son las dos que se leen. */
         ],
       });
     });
@@ -1165,8 +1276,9 @@ async function exportarInvitados(formato) {
 
   if (personas.length) {
     bloques.push({
-      titulo: 'Persona por persona (' + personas.length + ')',
-      encabezados: ['Mesa', 'Grupo', 'Persona', 'Tipo', 'Menú', 'Alergias', 'Estado'],
+      titulo: 'Persona por persona · solo quienes confirmaron (' +
+              personas.length + ')',
+      encabezados: ['Mesa', 'Grupo', 'Persona', 'Tipo', 'Menú', 'Alergias'],
       filas: personas.map(p => p.fila),
     });
   }

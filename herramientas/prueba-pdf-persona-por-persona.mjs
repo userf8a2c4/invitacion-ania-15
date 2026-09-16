@@ -189,6 +189,47 @@ comprobar('los lugares sin nombre se nombran «Adulto 2», «Niño 1»…',
   sotoFilas.map(f => f[col('Persona')]).join(' | '));
 
 
+/* ─── 3b. Solo los que vienen ─────────────────────────────────────── */
+
+console.log('\nSolo quienes confirmaron\n');
+
+comprobar('no hay columna «Estado»: acá son todos los que vienen',
+  cols.indexOf('Estado') === -1,
+  'una columna que repite «Confirmó» ciento treinta veces roba ancho a Menú');
+
+/* Una familia que contestó que NO viene, con dos lugares y su gente
+   cargada: no tiene que aportar ni un renglón. */
+const LOS_QUE_NO = { id: 3, nombre: 'Familia Ruiz', asiste: 0, adultos: 2, ninos: 0,
+  invitacion_id: 11, invitacion_estado: 'declinada', mesa: 'Mesa 3',
+  alergias: 'Ninguna', correo: '', telefono: '' };
+
+/* Y una a la que todavía no le contestaron. */
+const LOS_CALLADOS = { id: 4, nombre: 'Familia Vega', asiste: 1, adultos: 2, ninos: 0,
+  invitacion_id: 12, invitacion_estado: 'enviada', mesa: 'Mesa 4',
+  alergias: 'Ninguna', correo: '', telefono: '' };
+
+await correr([LOS_PEREZ, LOS_SOTO, LOS_QUE_NO, LOS_CALLADOS],
+  ACOMPANANTES.concat([
+    { confirmacion_id: 3, nombre: 'Rita Ruiz', tipo: 'adulto', menu: 'Estándar', alergias: '' },
+    { confirmacion_id: 4, nombre: 'Eva Vega',  tipo: 'adulto', menu: 'Estándar', alergias: '' },
+  ]));
+
+const conTodos = bloqueLlamado('Persona por persona');
+const filas2 = conTodos ? conTodos.filas : [];
+const col2 = (n) => conTodos.encabezados.indexOf(n);
+const grupos = filas2.map(f => String(f[col2('Grupo')]));
+
+comprobar('quien dijo que no viene no aporta ningún renglón',
+  grupos.indexOf('Familia Ruiz') === -1,
+  'sale en el papel de la cocina alguien que no va a sentarse');
+comprobar('quien todavía no contestó tampoco',
+  grupos.indexOf('Familia Vega') === -1);
+comprobar('siguen las 7 de las dos familias que sí vienen',
+  filas2.length === 7, 'salieron ' + filas2.length);
+comprobar('el título dice de quiénes habla',
+  /solo quienes confirmaron/.test(String(conTodos.titulo)), String(conTodos.titulo));
+
+
 /* ─── 4. Ordenado por mesa, que es como se usa ────────────────────── */
 
 console.log('\nOrdenado como se usa\n');
