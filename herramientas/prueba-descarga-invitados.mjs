@@ -78,6 +78,129 @@ if (fuenteGuion) {
   comprobar('el cero no se confunde con "no se sabe"', oGuion(0) === '0');
 }
 
+
+/* ─── LA COLUMNA DE NOTAS NO INVENTA COMAS ───────────────────────────
+ *
+ * ⚡ SALÍAN COMAS SUELTAS EN EL PDF (2026-09-15)
+ *
+ * El formulario público manda `', '` cuando la persona no escribió nada
+ * (codigo/11-formulario-confirmacion.js:989: `notas: notas || ', '`), así
+ * que en la base queda una coma y un espacio, no una celda vacía. El PDF
+ * la imprimía tal cual y parecía un error de la app.
+ *
+ * El servidor ya lo sabía —loQueEscribio() en admin/api/mensajes.php—
+ * pero la descarga no. Dos mundos que no comparten código y decían cosas
+ * distintas del mismo dato. */
+
+/* ─── QUE LA COCINA RECIBA LO QUE CADA UNO ELIGIÓ ────────────────────
+ *
+ * ⛔ UNA CONSULTA QUE RESPONDE «NADA» SE VEÍA IGUAL QUE TODO EN ORDEN
+ *    (2026-09-15)
+ *
+ * Cada invitado elige SU plato y escribe SUS alergias en la invitación.
+ * Si el papel que llega a la cocina dice «3 Estándar, 1 Infantil» y nada
+ * más, esa elección no sirvió de nada y una alergia puede terminar en el
+ * plato equivocado.
+ *
+ * El código para transmitirlo estaba entero —menusPersonaPorPersona,
+ * alergiasPersonaPorPersona y la hoja «Persona por persona»—. Lo que
+ * faltaba era el aviso cuando NO hay con qué armarlo: `falloElDetalle`
+ * solo se enciende si la red falla, y el caso real fue otro — la
+ * consulta respondió bien y trajo cero filas. El PDF se degradaba solo,
+ * en silencio, a un resumen del grupo.
+ *
+ * Responder sin fallar no es funcionar. Es la lección del eclipse, ahora
+ * del lado de los datos. */
+
+console.log('\nCuando no hay detalle por persona\n');
+
+const iAviso = codigo.indexOf('const sinDetalle = confirmados.filter(');
+comprobar('el PDF detecta que no hay detalle por persona', iAviso !== -1,
+  'sin esto, cero filas y todo-en-orden se ven igual');
+
+if (iAviso !== -1) {
+  const trozo = codigo.slice(iAviso, codigo.indexOf('\n  }\n', iAviso) + 5);
+
+  const correr = (confirmados, porFamilia) => {
+    const bloques = [{ titulo: 'Resumen' }];
+    new Function('bloques', 'confirmados', 'porFamilia', 'falloElDetalle', 'oGuion',
+      trozo)(bloques, confirmados, porFamilia, false,
+             v => (String(v ?? '').trim() || '—'));
+    return bloques;
+  };
+  const fam = n => ({ id: n, nombre: 'Familia ' + n, adultos: 2, ninos: 1 });
+
+  /* El caso que de verdad pasó: se perdieron TODOS los acompañantes. */
+  const todos = correr([fam(1), fam(2), fam(3)], {});
+  comprobar('sin ningún detalle, el PDF lo grita',
+    /COCINA NO VA A RECIBIR NADA/.test(todos[0].titulo),
+    'salió: ' + todos[0].titulo);
+
+  comprobar('y lo grita ARRIBA de todo, no al final',
+    todos[0].titulo !== 'Resumen',
+    'un aviso al pie de la última hoja no lo lee nadie');
+
+  comprobar('dice que faltan datos, no que nadie eligió',
+    /faltan las filas de acompañantes/.test(todos[0].filas[0][0]),
+    'son dos cosas muy distintas y llevan a acciones opuestas');
+
+  /* El caso normal y útil: decir a QUIÉNES hay que preguntarles. */
+  const algunos = correr([fam(1), fam(2), fam(3)], { 1: [{ nombre: 'Ana' }] });
+  comprobar('con detalle parcial, nombra a los grupos que faltan',
+    /2 de 3 grupos confirmados/.test(algunos[0].titulo) &&
+    algunos[0].filas.length === 2,
+    'salió: ' + algunos[0].titulo);
+
+  /* ⚠️ Y LO QUE NO PUEDE HACER: gritar cuando está todo bien. Un aviso
+     que sale siempre deja de leerse. */
+  comprobar('con todo el detalle, no molesta',
+    correr([fam(1)], { 1: [{ nombre: 'Ana' }] }).length === 1);
+
+  comprobar('y si nadie confirmó todavía, tampoco',
+    correr([], {}).length === 1,
+    'antes de que conteste nadie no hay nada que reclamar');
+}
+
+
+console.log('\nLa columna de Notas\n');
+
+const fuenteNotas = sacar('loQueEscribio');
+comprobar('existe loQueEscribio()', !!fuenteNotas);
+
+if (fuenteNotas) {
+  const loQueEscribio = new Function(fuenteNotas + '\nreturn loQueEscribio;')();
+
+  const seFiltra = [
+    ['el centinela del formulario', ', '],
+    ['una coma sola', ','],
+    ['comas y espacios sueltos', '  ,   , '],
+    ['vacío', ''],
+    ['null', null],
+  ];
+  for (const [queEs, entrada] of seFiltra) {
+    comprobar(queEs + ' no llega al PDF', loQueEscribio(entrada) === '',
+      'devolvió ' + JSON.stringify(loQueEscribio(entrada)));
+  }
+
+  /* ⚠️ LA MITAD QUE IMPORTA: no romper los mensajes de verdad. Una coma
+     DENTRO de una frase es parte de la frase. */
+  const pasaEntero = ['Vamos, con gusto', 'Felicidades Ania!', ',Hola'];
+  for (const mensaje of pasaEntero) {
+    comprobar('«' + mensaje + '» pasa entero',
+      loQueEscribio(mensaje) === mensaje,
+      'devolvió ' + JSON.stringify(loQueEscribio(mensaje)));
+  }
+
+  comprobar('y la columna Notas del PDF lo usa',
+    /oGuion\(loQueEscribio\(f\.notas\)\)/.test(codigo),
+    'la función puede existir y no estar enchufada — es la lección del eclipse');
+
+  comprobar('la descarga de mudanza también',
+    /loQueEscribio\(f\.notas\)/.test(codigo) &&
+    !/f\.notas \|\| ''/.test(codigo),
+    'eran dos lugares, no uno');
+}
+
 /* ─── 2. Los menús, persona por persona ──────────────────────────── */
 
 console.log('\nQuién come qué\n');
