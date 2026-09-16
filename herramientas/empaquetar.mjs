@@ -89,6 +89,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
+import { estamparLaFecha, ARCHIVO_DUENO } from './_fecha-de-la-fiesta.mjs';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 const rutaIndex = join(raiz, 'index.html');
@@ -217,6 +218,31 @@ const meInvocaronDirecto =
   !!process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 
 if (meInvocaronDirecto) {
+  /* ─── 0. LA FECHA DE LA FIESTA ──────────────────────────────────────
+   *
+   * Va PRIMERO, y va acá y no en subir-version.mjs, aunque ese sea el
+   * script que ya reescribe archivos. El motivo es el orden de la
+   * cadena: empaquetar → minificar-js → subir-version. minificar-js
+   * saca codigo/produccion/*.js —que es lo que el sitio realmente
+   * sirve— de codigo/*.js. Estampar al final dejaría las copias
+   * minificadas con la fecha vieja.
+   *
+   * Si algo no cuadra, se detiene sin escribir nada. */
+  try {
+    const { fecha, cambios } = estamparLaFecha();
+    if (cambios.length) {
+      console.log(`✓ Fecha de la fiesta estampada: ${fecha.conDiaDeLaSemana}`);
+      console.log(`  ${cambios.length} archivo(s) actualizados desde ${ARCHIVO_DUENO}`);
+      for (const archivo of cambios) console.log(`    · ${archivo}`);
+    } else {
+      console.log(`✓ Fecha de la fiesta al día (${fecha.conDiaDeLaSemana}), sale de ${ARCHIVO_DUENO}`);
+    }
+    console.log('');
+  } catch (error) {
+    console.error(`✗ ${error.message}`);
+    process.exit(1);
+  }
+
   let paquete;
   try {
     paquete = armarCssEmpaquetado();

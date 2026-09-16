@@ -829,6 +829,33 @@ function oGuion(valor) {
 }
 
 /**
+ * Lo que el invitado escribió de verdad en «Notas», o cadena vacía.
+ *
+ * ⚡ SALÍAN COMAS SUELTAS EN LA COLUMNA NOTAS (2026-09-15)
+ *
+ * El formulario público manda `', '` cuando la persona no escribió nada
+ * —`notas: notas || ', '` en codigo/11-formulario-confirmacion.js:989—,
+ * así que la base guarda una coma y un espacio, no una celda vacía. En
+ * el PDF de invitados eso se imprimía tal cual: una coma suelta, que
+ * parece un error de la app o un mensaje que se cortó.
+ *
+ * El servidor ya sabía esto: admin/api/mensajes.php tiene
+ * loQueEscribio(), con la MISMA regla. Acá se repite porque son dos
+ * mundos distintos —PHP y el navegador— y no comparten código; lo que
+ * no se puede es que digan cosas distintas.
+ *
+ * ⚠️ SOLO comas y espacios. «Vamos, con gusto» lleva una coma adentro y
+ * es un mensaje de verdad: tiene que pasar entero.
+ *
+ * @param {*} valor
+ * @returns {string} '' si era el centinela o estaba vacío.
+ */
+function loQueEscribio(valor) {
+  const texto = String(valor === undefined || valor === null ? '' : valor).trim();
+  return /^[,\s]+$/.test(texto) ? '' : texto;
+}
+
+/**
  * Los menús de una familia, persona por persona.
  *
  * ⚡ ANTES ERA UN CONTEO Y NO ALCANZABA (2026-09-09)
@@ -1016,7 +1043,7 @@ async function exportarInvitados(formato) {
         (Number(f.adultos) || 0) + (Number(f.ninos) || 0),
         menusPersonaPorPersona(porFamilia[f.id], f.resumen_menus),
         alergiasPersonaPorPersona(porFamilia[f.id], f.alergias),
-        oGuion(f.notas),
+        oGuion(loQueEscribio(f.notas)),
         oGuion(f.codigo),
         /* ⚡ LA FECHA ERA LA DE ALTA, NO LA DE LA RESPUESTA (2026-09-09)
            Estaba `fecha_hora`, que es cuándo se creó la fila —o sea,
@@ -1094,6 +1121,54 @@ async function exportarInvitados(formato) {
                'cada alergia. Las columnas de menús y alergias de arriba ' +
                'traen el resumen del grupo. Probá descargar de nuevo con ' +
                'señal.']],
+    });
+  }
+
+  /* ⛔ UNA CONSULTA QUE RESPONDE «NADA» SE VEÍA IGUAL QUE TODO EN ORDEN
+   *    (2026-09-15)
+   *
+   * falloElDetalle solo se enciende si la red falla. Pero el caso que de
+   * verdad pasó fue otro: la consulta respondió bien y trajo CERO filas
+   * —los acompañantes se habían perdido—, y entonces el PDF se degradaba
+   * solo: las columnas mostraban el resumen del grupo con un «(sin
+   * desglose por persona)» minúsculo dentro de la celda, y la hoja
+   * «Persona por persona» directamente no se imprimía. Nada gritaba.
+   *
+   * Y esto no es un detalle de presentación. Cada invitado elige SU
+   * plato y escribe SUS alergias en la invitación; si el papel que llega
+   * a la cocina dice «3 Estándar, 1 Infantil» y nada más, esa elección
+   * no sirvió para nada y una alergia puede terminar en el plato
+   * equivocado.
+   *
+   * Es el mismo error que ya nos costó caro con el eclipse, ahora del
+   * lado de los datos: algo que responde sin fallar no es algo que
+   * funcione. Acá se nombra, y se nombra ARRIBA de todo. */
+  const sinDetalle = confirmados.filter(
+    f => !(porFamilia[f.id] && porFamilia[f.id].length));
+
+  if (!falloElDetalle && confirmados.length && sinDetalle.length) {
+    const todas = sinDetalle.length === confirmados.length;
+
+    bloques.unshift({
+      titulo: todas
+        ? '⛔ LA COCINA NO VA A RECIBIR NADA'
+        : '⚠️ Sin detalle por persona: ' + sinDetalle.length +
+          ' de ' + confirmados.length + ' grupos confirmados',
+      encabezados: todas ? ['Qué pasa'] : ['Grupo', 'Personas', 'Qué falta'],
+      filas: todas
+        ? [['Ninguno de los ' + confirmados.length + ' grupos confirmados ' +
+            'tiene cargadas sus personas, así que no hay a quién atribuirle ' +
+            'ningún plato ni ninguna alergia. Las columnas «Menús» y ' +
+            '«Alergias» de abajo traen SOLO el total del grupo, y la hoja ' +
+            '«Persona por persona» no se imprimió porque no hay con qué ' +
+            'armarla. Esto no es que nadie haya elegido: es que faltan las ' +
+            'filas de acompañantes en la base.']]
+        : sinDetalle.map(f => [
+            oGuion(f.nombre),
+            (Number(f.adultos) || 0) + (Number(f.ninos) || 0),
+            'No están cargadas sus personas: no se sabe quién come qué ' +
+            'ni quién tiene alergia.',
+          ]),
     });
   }
 
@@ -1184,7 +1259,7 @@ async function exportarParaMudanza() {
     Number(f.adultos) || 0,
     Number(f.ninos) || 0,
     (porFamilia.get(String(f.id)) || []).join('; '),
-    f.notas || '',
+    loQueEscribio(f.notas),
   ]);
 
   const csv = armarCsv(

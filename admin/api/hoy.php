@@ -36,11 +36,10 @@ exigirMetodo('GET');
    de Tesorería sin ser admin también tiene que poder ver esto. */
 $vePlata = tieneEspecial($yo, 'ver_dinero');
 
-const DIA_DE_LA_FIESTA = '2026-10-24';
-
+/* La fecha sale de _lib/entorno.php, que lo carga bd.php. Antes estaba
+   copiada acá y en otros dieciséis lugares. */
 $hoy = date('Y-m-d');
-$diasQueFaltan = (int) (new DateTime('today'))
-    ->diff(new DateTime(DIA_DE_LA_FIESTA))->format('%r%a');
+$diasQueFaltan = diasParaLaFiesta();
 
 /* Cada cosa que se devuelve lleva su urgencia. La app las ordena por
    ese número, así que agregar una fuente nueva no obliga a tocar el

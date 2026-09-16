@@ -132,6 +132,28 @@
   gap: 4px;
   font-size: 13px;
 }
+/* Cada novedad lleva a su ficha (08-vista-invitados.js). Se ve como
+   texto porque adentro de un cartel chico ocho botones con borde serían
+   ocho cajas compitiendo, pero es un botón de verdad: 36px de alto para
+   que se pueda acertar con el pulgar, y todo el ancho como blanco. */
+.que-cambio__fila {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: var(--redondeo-chico);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.que-cambio__fila:hover {
+  background: color-mix(in srgb, var(--acento-victoriano) 12%, transparent);
+}
+.que-cambio__fila:active { background: color-mix(in srgb, var(--acento-victoriano) 18%, transparent); }
+
 .que-cambio__gente { color: var(--texto-tenue); }
 .que-cambio__mas {
   margin: var(--esp-1) 0 0;
@@ -141,9 +163,98 @@
 
 /* La misma noticia, marcada en su fila: el cartel se cierra, esto queda
    mientras dure la visita. Un filete en el borde de arranque, que no le
-   quita ni un pixel de ancho al contenido de la fila. */
-.lista__fila--nueva {
+   quita ni un pixel de ancho al contenido de la fila.
+
+   El filete marca TODA novedad, sea cual sea: una baja también hay que
+   verla. Quién es cada una lo dice el punto de color de la izquierda,
+   que no se toca.
+
+   ⛔ EL SELECTOR VA DOBLE (.lista__fila.lista__fila--nueva) Y NO ES
+      ADORNO: SIN ESO ESTE FILETE NO SE PINTA (2026-09-15).
+
+   Este bloque está ESCRITO ANTES que la regla `.lista__fila` —vive acá
+   arriba, junto al cartel de novedades, porque es el mismo asunto—, y
+   la regla base declara `border: 1px solid var(--borde)`. Las dos
+   tenían la misma especificidad, así que ganaba la que va después, y
+   `border` es un atajo que borra también el `border-inline-start`.
+
+   O sea: la clase se aplicaba, el CSS existía, y el filete no aparecía
+   en pantalla NUNCA desde que se escribió (2026-09-09). La prueba lo
+   daba por bueno porque leía el texto del archivo, no lo que el
+   navegador calcula — que es exactamente la lección del eclipse.
+
+   Con el selector doble gana por especificidad y deja de depender de en
+   qué parte del archivo esté escrito. */
+.lista__fila.lista__fila--nueva {
   border-inline-start: 3px solid var(--acento-victoriano);
+}
+
+/* ⚡ EL PULSO: SOLO PARA QUIEN ACABA DE CONFIRMAR (2026-09-15)
+
+   Dos recortes, los dos a propósito:
+
+   · DORADO Y NADA MÁS. Se probó con el color de cada estado —verde
+     confirmó, rojo no viene, azul sin responder— y se descartó. Esto no
+     está para decir QUÉ pasó: para eso ya están el punto de la
+     izquierda y la palabra de la derecha, que no se van nunca. Está
+     para llevar el ojo hasta la fila. Tres colores distintos en la
+     misma fila compiten y no gana ninguno.
+
+   · SOLO LAS CONFIRMACIONES. Latir es pedir que se mire ya. Si latiera
+     cada novedad, latiría media lista y volvería a no señalar nada.
+
+   ⚠️ TRES VECES Y SE APAGA. Un latido permanente deja de ser señal y
+   pasa a ser ruido de fondo: a los diez segundos ya no se mira. El
+   filete, que es la marca duradera, se queda.
+
+   Se anima el fondo y nada de geometría: en la HP ProDesk cualquier
+   animación que mueva o redimensione se nota, y `will-change` acá
+   empeoró las cosas cuando se probó. */
+.lista__fila.lista__fila--pulso {
+  animation: pulso-novedad 2.2s ease-in-out 3;
+}
+
+@keyframes pulso-novedad {
+  0%, 100% { background: transparent; }
+  50%      { background: color-mix(in srgb, var(--acento-victoriano) 14%, transparent); }
+}
+
+/* Quien pidió que no haya movimiento se queda con el filete, que es la
+   parte que de verdad informa. */
+@media (prefers-reduced-motion: reduce) {
+  /* Doble, igual que la regla que apaga: si no, pierde por
+     especificidad y el movimiento seguiría corriendo. */
+  .lista__fila.lista__fila--pulso { animation: none; }
+}
+
+/* La fila a la que se acaba de llegar desde un aviso de la campana.
+   Dura unos segundos y se apaga sola (37-campana.js la saca): un
+   resaltado permanente deja de decir "esto es lo que venías a ver" y
+   pasa a ser decoración.
+
+   Va con el oro y no con el color de alarma: llegar a lo que uno buscaba
+   es que la app funcionó, no una urgencia.
+
+   ⛔ SELECTOR DOBLE, por lo mismo que .lista__fila--nueva de acá arriba:
+   la regla base `.lista__fila` está escrita más abajo y declara
+   `background: var(--fondo-tarjeta)`. Con especificidad pareja ganaba
+   ella y este fondo no se veía — sobrevivía solo la sombra, porque esa
+   la base no la toca. */
+.lista__fila.lista__fila--senalada {
+  background: color-mix(in srgb, var(--oro) 12%, transparent);
+  box-shadow: inset 3px 0 0 var(--oro);
+  animation: aparecer-senalada var(--transicion) ease-out;
+}
+
+@keyframes aparecer-senalada {
+  from { background: color-mix(in srgb, var(--oro) 30%, transparent); }
+}
+
+/* En la HP ProDesk una animación de más se nota, y hay quien marca que
+   no quiere movimiento. El resaltado se queda, que es lo que importa;
+   lo que se va es el destello. */
+@media (prefers-reduced-motion: reduce) {
+  .lista__fila.lista__fila--senalada { animation: none; }
 }
 
 

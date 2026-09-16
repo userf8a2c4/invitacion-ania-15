@@ -637,7 +637,7 @@ $htmlInvitado = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><met
 <table width='100%' cellpadding='0' cellspacing='0' style='max-width:560px;margin:0 auto;padding:40px 20px;'>
   <tr><td align='center' style='padding-bottom:24px;'>
     <h1 style='color:#d4a843;font-size:28px;margin:0;letter-spacing:2px;'>Ania · XV Años</h1>
-    <p style='color:#a07830;margin:4px 0 0;'>24 de octubre de 2026</p>
+    <p style='color:#a07830;margin:4px 0 0;'>" . fiestaEnPalabras() . "</p>
   </td></tr>
   <tr><td style='background:#2a1500;border:1px solid #5a3a10;border-radius:8px;padding:32px;'>
     <p style='margin:0 0 16px;'>Hola, <strong style='color:#d4a843;'>$nombre</strong> 🌹</p>

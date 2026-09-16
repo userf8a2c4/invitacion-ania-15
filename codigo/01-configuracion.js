@@ -10,11 +10,25 @@
    buscarlos por ningún otro lado.
 
    CÓMO SE EDITA
-   Cambiá solamente lo que está entre comillas. Por ejemplo, para mover
-   la fiesta al 7 de noviembre:
+   Cambiá solamente lo que está entre comillas. Por ejemplo, para cambiar
+   el nombre del salón:
 
-       ANTES:  fechaEnPalabras: '24 de Octubre de 2026',
-       DESPUÉS: fechaEnPalabras: '7 de Noviembre de 2026',
+       ANTES:  lugar: 'Salones Alvi',
+       DESPUÉS: lugar: 'Jardín Las Rosas',
+
+   ⛔ LA FECHA DE LA FIESTA ES LA EXCEPCIÓN: NO SE TOCA ACÁ.
+   Estaba escrita a mano en diecisiete lugares del proyecto —acá, en el
+   panel, en el chatbot, en las etiquetas de WhatsApp, en cinco archivos
+   de PHP— y era cuestión de tiempo que una quedara vieja.
+
+   Ahora vive en UN solo lugar:
+
+       admin/api/_lib/entorno.php  →  const FIESTA_DIA
+
+   Cambiala ahí y compilá (node herramientas/empaquetar.mjs). Las cuatro
+   líneas de acá abajo —fechaYHora, fechaYHoraDeCierre, diaDeLaSemana y
+   fechaEnPalabras— las reescribe solo la compilación. Si las editás a
+   mano, la próxima compilación te las pisa.
 
    ⚠️ Reglas de oro para no romper nada:
      1. No borres las comillas ' ' que rodean cada texto.
@@ -41,15 +55,19 @@ const CONFIGURACION = {
     /** Cuántos años cumple (se muestra como "XV Años"). */
     edadEnRomanos: 'XV',
 
-    /**
-     * Fecha y hora exactas del evento en "formato de computadora".
-     * Se escribe:  'AÑO-MES-DÍA T HORA:MINUTOS:SEGUNDOS'  (24 horas).
-     * Ejemplos:
-     *    24 de octubre de 2026 a las 5 de la tarde → '2026-10-24T17:00:00'
-     *    3 de marzo de 2027 a las 8 de la noche    → '2027-03-03T20:00:00'
+    /* ⛔ LAS CUATRO LÍNEAS DE ACÁ ABAJO LAS ESCRIBE LA COMPILACIÓN.
      *
-     * La usan la cuenta regresiva y el botón "agregar al calendario".
-     * Si la cambiás, cambiá también fechaEnPalabras para que coincida.
+     * Salen de FIESTA_DIA y FIESTA_HORA, en admin/api/_lib/entorno.php,
+     * que es el único lugar del proyecto donde la fecha está escrita a
+     * mano. Las estampa herramientas/_fecha-de-la-fiesta.mjs cada vez
+     * que se corre empaquetar.mjs.
+     *
+     * Editarlas acá no sirve: la próxima compilación las pisa. Y no hace
+     * falta acordarse de que coincidan entre sí —que era el viejo
+     * problema—: el día de la semana y la hora de cierre se calculan a
+     * partir de la fecha, no se guardan aparte.
+     *
+     * fechaYHora la usan la cuenta regresiva y "agregar al calendario".
      */
     fechaYHora: '2026-10-24T17:00:00',
 

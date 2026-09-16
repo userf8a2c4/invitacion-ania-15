@@ -143,9 +143,8 @@ $cuerpo =
         return [$nombre, cuando($a['fecha'])];
     });
 
-$diasParaLaFiesta = (int) (new DateTime('today'))
-    ->diff(new DateTime('2026-10-24'))
-    ->format('%r%a');
+/* La fecha la da _lib/entorno.php, que entra por bd.php. */
+$diasParaLaFiesta = diasParaLaFiesta();
 
 $html = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'></head>
 <body style='font-family:Arial,sans-serif;background:#f9f9f9;color:#333;margin:0;padding:0;'>

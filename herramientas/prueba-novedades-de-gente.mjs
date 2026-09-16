@@ -68,7 +68,7 @@ if (fuenteNovedades) {
      Se EJECUTA porque lo que importa es a quién devuelve. */
   const correr = (invitados, marca) => new Function(
     'const INVITADOS = ' + JSON.stringify(invitados) + ';' +
-    'const recordado = (clave, porDefecto) => ' + JSON.stringify(marca) +
+    'const recordadoDeLaCuenta = (clave, porDefecto) => ' + JSON.stringify(marca) +
       ' === null ? porDefecto : ' + JSON.stringify(marca) + ';' +
     fuenteNovedades + '\nreturn novedadesDesdeLaUltimaVisita();'
   )();
@@ -112,6 +112,27 @@ comprobar('se calcula y se guarda, en ese orden',
   iCalcula !== -1 && iGuarda !== -1 && iCalcula < iGuarda,
   'si se guarda primero, todo queda "ya visto" y el cartel no sale nunca');
 
+/* ⚡ Y NO SE PISA SOLO AL PINTAR (2026-09-15)
+ *
+ * El orden estaba bien y aun así las novedades se perdían: el cálculo y
+ * el guardado estaban pegados, así que el cartel se daba por leído en el
+ * mismo instante de aparecer. Y el refresco de fondo
+ * (26-sincronizacion.js) repinta Gente sola cada minuto mientras Lucila
+ * mira otra pantalla, o sea que se quemaban sin que nadie las viera.
+ *
+ * Ahora solo se guarda al pintar cuando NO hay nada que mostrar —que es
+ * la primera visita, donde hay que sembrar la marca—. Con novedades en
+ * pantalla, la marca espera a que se cierre el cartel o se toque una. */
+const guardadoAlPintar = codigo.slice(iCalcula, iCalcula + 200);
+comprobar('al pintar solo se guarda si NO hay novedades que mostrar',
+  /if \(!NOVEDADES_DE_GENTE\.length\) recordarLaUltimaRespuestaVista\(\);/
+    .test(guardadoAlPintar),
+  'si se guarda igual, el refresco de fondo quema el cartel sin que nadie lo lea');
+
+comprobar('cerrar el cartel es lo que lo da por leído',
+  /const darPorLeidas = \(\) => \{[\s\S]{0,400}?recordarLaUltimaRespuestaVista\(\);/
+    .test(codigo));
+
 /* ─── 3. El reloj del servidor, no el del teléfono ───────────────── */
 
 console.log('\nContra qué reloj se compara\n');
@@ -135,7 +156,7 @@ if (fuenteGuardar) {
     guardado = 'no se llamó';
     new Function(
       'const INVITADOS = ' + JSON.stringify(invitados) + ';' +
-      'const recordar = (clave, valor) => { globalThis.__marca = valor; };' +
+      'const recordarDeLaCuenta = (clave, valor) => { globalThis.__marca = valor; };' +
       'globalThis.__marca = "no se llamó";' +
       fuenteGuardar + '\nrecordarLaUltimaRespuestaVista();'
     )();
@@ -170,6 +191,18 @@ comprobar('sin novedades no se pinta nada',
   'un cartel vacío es peor que ningún cartel');
 comprobar('se puede cerrar',
   /cerrar-novedades/.test(codigo));
+
+/* ⚡ Y CADA RENGLÓN LLEVA A SU FICHA (2026-09-15). Eran <li> pelados: se
+   leía "Mayte Garcia · Confirmó" y había que bajar a buscarla a mano
+   entre 47 filas, que es la mitad del trabajo que el cartel venía a
+   ahorrar. */
+comprobar('cada novedad se puede tocar',
+  !!fuenteCartel && /data-novedad="/.test(fuenteCartel),
+  'un cartel que dice quién pero no lleva hasta quién deja el trabajo a medias');
+comprobar('y al tocarla abre su ficha',
+  /\[data-novedad\][\s\S]{0,300}?abrirDetalleDeInvitado\(id\)/.test(codigo));
+comprobar('el blanco del renglón se puede acertar con el pulgar',
+  /\.que-cambio__fila\s*\{[^}]*min-height:\s*36px/.test(css));
 comprobar('con un blanco que se pueda acertar en un teléfono',
   /\.que-cambio__cerrar\s*\{[^}]*width:\s*32px/.test(css),
   'una ✕ suelta es imposible de tocar');
@@ -183,8 +216,71 @@ comprobar('cada fila sabe si es novedad',
 comprobar('y se marca con una clase propia',
   /lista__fila--nueva/.test(codigo) && /\.lista__fila--nueva/.test(css));
 comprobar('la marca no le roba ancho al contenido',
-  /\.lista__fila--nueva\s*\{[^}]*border-inline-start/.test(css),
+  /\.lista__fila\.lista__fila--nueva\s*\{[^}]*border-inline-start/.test(css),
   'un filete en el borde, no un chip que empuje el nombre');
+
+/* ⛔ ESTE FILETE NO SE PINTÓ NUNCA, DESDE 2026-09-09 HASTA 2026-09-15.
+ *
+ * `.lista__fila--nueva` está escrito arriba en el archivo, junto al
+ * cartel; `.lista__fila` está 79 reglas más abajo y declara
+ * `border: 1px solid var(--borde)`. Misma especificidad → gana la que va
+ * después, y `border` es un atajo que borra el `border-inline-start`.
+ * Lo mismo le pasaba a `--senalada` con `background`.
+ *
+ * La clase se aplicaba. El CSS existía. Esta prueba pasaba. Y en la
+ * pantalla no había nada. Es LA MISMA lección del eclipse: leer el texto
+ * de un archivo no es comprobar que algo funcione.
+ *
+ * Desde acá no se puede calcular la cascada —no hay navegador—, pero sí
+ * se puede exigir lo que la vuelve inmune al orden: que el modificador
+ * lleve también la clase base, y así gane por especificidad esté donde
+ * esté escrito. */
+console.log('\nQue el CSS gane de verdad, no solo esté escrito\n');
+
+for (const modificador of ['nueva', 'pulso', 'senalada']) {
+  const suelto = new RegExp('(^|[^.\\w])\\.lista__fila--' + modificador + '\\s*[,{]', 'm');
+  comprobar(`.lista__fila--${modificador} siempre va con la clase base`,
+    !suelto.test(css),
+    'suelto pierde contra .lista__fila, que está escrita después y usa atajos ' +
+    '(border, background) que borran lo que este modificador pone');
+}
+
+/* ⚡ EL PULSO (2026-09-15). El filete solo se ve si uno ya estaba
+   mirando esa parte de la lista. Un pulso corto lleva el ojo.
+
+   DOS RECORTES, pedidos explícitamente después de verlo andando:
+     · dorado y nada más — no un color por estado;
+     · solo a quienes confirman — no a toda novedad. */
+console.log('\nEl pulso de las confirmaciones nuevas\n');
+
+comprobar('solo late quien acaba de CONFIRMAR',
+  /comoEstaLaAsistencia\(fila\) === 'confirmo'/.test(codigo) &&
+  /confirmoAhora \? ' lista__fila--pulso' : ''/.test(codigo),
+  'si latiera cada novedad, latiría media lista y volvería a no señalar nada');
+
+comprobar('el filete sigue marcando TODA novedad',
+  /esNovedad \? ' lista__fila--nueva' : ''/.test(codigo),
+  'una baja también hay que verla, aunque no pida que se mire ya');
+
+comprobar('el pulso es dorado, no del color del estado',
+  /@keyframes pulso-novedad[\s\S]{0,220}?var\(--acento-victoriano\)/.test(css) &&
+  !/--color-novedad/.test(css),
+  'QUÉ contestó ya lo dicen el punto de la izquierda y la palabra de la derecha');
+
+comprobar('y el punto de color de cada fila sigue intacto',
+  /COMO_SE_LEE_EL_ESTADO\[comoEstaLaAsistencia\(fila\)\] \|\| \{\}\)\.punto/.test(codigo),
+  'ese sí dice el estado, y no se tocó');
+
+comprobar('el pulso termina, no late para siempre',
+  /\.lista__fila--pulso\s*\{[^}]*animation:\s*pulso-novedad[^;]*\s3;/.test(css),
+  'un latido permanente deja de ser señal y pasa a ser ruido de fondo');
+
+comprobar('y no mueve geometría, solo el fondo',
+  !/@keyframes pulso-novedad\s*\{[^}]*(transform|width|height|margin|padding)/.test(css),
+  'en la HP ProDesk cualquier animación que mueva o redimensione se nota');
+
+comprobar('quien no quiere movimiento se queda con el filete',
+  /prefers-reduced-motion[\s\S]{0,300}?\.lista__fila--pulso\s*\{\s*animation:\s*none/.test(css));
 
 /* La burbuja de la barra sigue existiendo: el cartel la complementa, no
    la reemplaza — una dice cuántas desde afuera, el otro cuáles adentro. */

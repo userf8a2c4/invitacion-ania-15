@@ -45,6 +45,103 @@
  * en medio del JSON. */
 @date_default_timezone_set('America/Mexico_City');
 
+
+/* ─── LA FECHA DE LA FIESTA, UNA SOLA VEZ ─────────────────────────────
+ *
+ * ⚡ LA FECHA ESTABA ESCRITA A MANO EN 17 LUGARES (2026-09-15).
+ *
+ * Cinco endpoints la usaban para DECIDIR —hoy.php, calendario.php,
+ * estadisticas.php, chat.php y cron_recordatorios.php, cada uno con su
+ * propia copia— y el resto para MOSTRARLA: las etiquetas og: de
+ * index.html, confirmar.php, mi-pase.php, compartir.php y los dos
+ * archivos de configuración del JavaScript.
+ *
+ * Diecisiete copias de un dato que tiene que ser uno solo. Es el mismo
+ * problema que ya había tenido carpetaDeArchivos() acá abajo, y se
+ * arregla igual: un solo lugar, y todos los demás preguntan.
+ *
+ * VA EN ESTE ARCHIVO, y no en uno nuevo, por la misma razón que la zona
+ * horaria de acá arriba: esto lo carga TODO. El panel entra por bd.php
+ * —los 39 endpoints—, y la invitación, confirmar.php y mi-pase.php lo
+ * piden directo. No hay ningún punto de entrada que no pase por acá.
+ *
+ * ⚠️ EL JAVASCRIPT NO PUEDE LEER PHP. codigo/01-configuracion.js y
+ * admin/codigo/01-configuracion.js son dos paquetes que se sirven al
+ * navegador, así que no pueden llamar a estas funciones. Sus copias las
+ * estampa herramientas/subir-version.mjs leyendo de ACÁ, igual que ya
+ * reescribe los `?v=NN` y las dos VERSION de los service workers. Si
+ * algún día cambia la forma de estas dos líneas de abajo, ese script
+ * se detiene y avisa: no sigue con la fecha vieja.
+ *
+ * ⚠️ Por eso estas dos líneas se escriben así, planas y en una sola
+ * línea cada una. No las envuelvas ni les pongas la fecha en un
+ * define() o un env(): hay un script que las lee con una expresión
+ * regular y una prueba que lo verifica. */
+const FIESTA_DIA  = '2026-10-24';
+const FIESTA_HORA = '17:00:00';
+
+/**
+ * El día de la fiesta, en el formato que entiende MySQL y DateTime.
+ *
+ * @return string AAAA-MM-DD
+ */
+function diaDeLaFiesta() {
+    return FIESTA_DIA;
+}
+
+/**
+ * El día y la hora juntos, en el formato ISO que usa el JavaScript.
+ *
+ * @return string Ej: '2026-10-24T17:00:00'
+ */
+function fiestaFechaYHora() {
+    return FIESTA_DIA . 'T' . FIESTA_HORA;
+}
+
+/**
+ * La fecha escrita para que la lea una persona.
+ *
+ * ⚠️ EL DÍA DE LA SEMANA SE CALCULA, NO SE GUARDA. «Sábado» estaba
+ * escrito a mano en index.html y en el conocimiento del chatbot. Si la
+ * fiesta se moviera un día, esas dos copias seguirían diciendo sábado
+ * y nadie se daría cuenta hasta que un invitado llegara el día
+ * equivocado. Un dato que se puede deducir no se guarda.
+ *
+ * @param bool $conDiaDeLaSemana true → 'Sábado 24 de octubre de 2026'
+ * @return string
+ */
+function fiestaEnPalabras($conDiaDeLaSemana = false) {
+    $meses = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+              'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    $dias  = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves',
+              'viernes', 'sábado'];
+
+    $cuando = new DateTime(FIESTA_DIA);
+    $texto  = ((int) $cuando->format('j')) . ' de '
+            . $meses[(int) $cuando->format('n')] . ' de '
+            . $cuando->format('Y');
+
+    if (!$conDiaDeLaSemana) return $texto;
+
+    $nombre = $dias[(int) $cuando->format('w')];
+    return mb_strtoupper(mb_substr($nombre, 0, 1, 'UTF-8'), 'UTF-8')
+         . mb_substr($nombre, 1, null, 'UTF-8') . ' ' . $texto;
+}
+
+/**
+ * Cuántos días faltan para la fiesta, contando desde hoy.
+ *
+ * Negativo cuando ya pasó: -1 es el 25 de octubre. Ese signo es el que
+ * usa la pantalla «Hoy» para saber que la fiesta terminó.
+ *
+ * @return int
+ */
+function diasParaLaFiesta() {
+    return (int) (new DateTime('today'))
+        ->diff(new DateTime(FIESTA_DIA))->format('%r%a');
+}
+
+
 /**
  * Carga el .env de la raíz del sitio. Se puede llamar varias veces sin
  * problema: la segunda vez y las siguientes no hacen nada.

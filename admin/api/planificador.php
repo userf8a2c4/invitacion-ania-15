@@ -6,7 +6,7 @@
    Las tres cosas que se usan a diario para no olvidarse de nada:
      · notas   → apuntar algo al vuelo, desde cualquier pantalla
      · tareas  → lo que hay que hacer, con responsable y fecha
-     · agenda  → las fechas clave del camino al 24 de octubre de 2026
+     · agenda  → las fechas clave del camino a la fiesta
 
    QUÉ SE LE PUEDE PEDIR
      GET  ?accion=todo         las tres listas de una vez

@@ -41,7 +41,9 @@ const CONOCIMIENTO_CHATBOT = {
   fiesta: {
     festejada:   'Ania',                                           // ✏️
     tipo:        'XV Años',                                        // ✏️
-    fecha:       'Sábado 24 de octubre de 2026',                   // ✏️
+    /* ⛔ Esta línea la escribe la compilación: sale de FIESTA_DIA, en
+       admin/api/_lib/entorno.php. No lleva ✏️ porque no se edita acá. */
+    fecha:       'Sábado 24 de octubre de 2026',
     horaEntrada: '5:00 PM',                                        // ✏️
     horaInicio:  '5:30 PM',                                        // ✏️
     horaFin:     '1:00 AM',                                        // ✏️

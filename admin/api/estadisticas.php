@@ -410,7 +410,7 @@ if (existeTabla('requisitos_ceremonia')) {
 }
 
 // La fiesta misma, que es el hito que ordena todos los demás.
-agregarHito($linea, '2026-10-24', 'fiesta',
+agregarHito($linea, diaDeLaFiesta(), 'fiesta',
     'Los XV de Ania', 'Salones Alvi · 5:00 PM', '', '');
 
 // Del más cercano al más lejano.
@@ -423,15 +423,11 @@ $resultado['linea_de_tiempo'] = $linea;
 
 /* ─── 7. CUÁNTO FALTA ─────────────────────────────────────────────────── */
 
-/* La fecha vive en el código del panel (codigo/01-configuracion.js) y se
-   repite acá para que el servidor pueda calcular avisos por su cuenta,
-   sin depender de que haya un teléfono abierto. */
-$fecha = new DateTime('2026-10-24 17:00:00');
-$hoy   = new DateTime('today');
-
-$resultado['dias_para_la_fiesta'] = (int) $hoy->diff(
-    new DateTime($fecha->format('Y-m-d'))
-)->format('%r%a');
+/* La fecha la da _lib/entorno.php, que entra por bd.php. Antes estaba
+   copiada acá —y en otros dieciséis lugares— para que el servidor
+   pudiera calcular avisos sin depender de que hubiera un teléfono
+   abierto; eso sigue siendo cierto, pero con una sola copia. */
+$resultado['dias_para_la_fiesta'] = diasParaLaFiesta();
 
 
 responderBien($resultado);

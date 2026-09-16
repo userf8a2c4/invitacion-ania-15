@@ -625,14 +625,12 @@ async function dibujarInvitados() {
      uno — y entonces la burbuja quedaría encendida para siempre, sin forma
      de apagarla. Guardando lo que dijo la misma fuente que la enciende, la
      resta da cero seguro. Si todavía no se abrió Hoy en esta sesión, se cae
-     al conteo local, que es mejor que no apagar nada. */
-  const respondidasSegunHoy = (typeof ULTIMO_HOY !== 'undefined' && ULTIMO_HOY)
-    ? Number(ULTIMO_HOY.respondidas)
-    : NaN;
-  recordar('gente-respuestas-vistas', Number.isFinite(respondidasSegunHoy)
-    ? respondidasSegunHoy
-    : INVITADOS.filter(f => f.invitacion_respondida_en).length);
-  if (typeof ponerBurbuja === 'function') ponerBurbuja('#burbuja-gente', 0);
+     al conteo local, que es mejor que no apagar nada.
+
+     ⚠️ ESTÁ APARTE EN apagarElPuntoDeGente() porque tiene que poder
+     correrse SIN redibujar: ver la nota de VISTAS.invitados en
+     05-navegacion.js. */
+  apagarElPuntoDeGente();
 
   /* ⚡ EL NÚMERO DECÍA CUÁNTAS, NUNCA CUÁLES (2026-09-09)
      La burbuja marcaba "3" y ahí terminaba: había que abrir Gente y
@@ -641,24 +639,48 @@ async function dibujarInvitados() {
      recordara de memoria cómo estaba la lista antes.
      Acá se calculan las novedades ANTES de pisar la marca — si se
      guardara primero, todo quedaría "ya visto" y no habría nada que
-     mostrar nunca. */
+     mostrar nunca.
+
+     ⚡ Y LA MARCA SE PISABA EN ESTE MISMO INSTANTE (2026-09-15).
+     El cálculo y el guardado estaban uno debajo del otro, así que el
+     cartel se daba por leído en el momento de pintarse. Dos formas de
+     perderlo sin verlo: cambiar de pestaña y volver, y —peor— el
+     refresco de fondo (26-sincronizacion.js), que repinta Gente sola
+     cada minuto MIENTRAS Lucila está mirando otra cosa. Las novedades
+     se quemaban sin que nadie las hubiera leído nunca.
+
+     Ahora la marca se pisa cuando el cartel se cierra o se toca, que es
+     cuando de verdad se leyó. Si no hay nada que mostrar sí se guarda
+     al toque: es el caso de la primera visita, donde la marca todavía
+     es null y hay que sembrarla para que la próxima respuesta sí se
+     anuncie. */
   NOVEDADES_DE_GENTE = novedadesDesdeLaUltimaVisita();
-  recordarLaUltimaRespuestaVista();
+  if (!NOVEDADES_DE_GENTE.length) recordarLaUltimaRespuestaVista();
 
   const cajaDeNovedades = buscar('#novedades-gente-caja', vista);
   if (cajaDeNovedades) {
     cajaDeNovedades.innerHTML = carteldeNovedades();
 
+    /** Se leyó: se apaga el cartel y se guarda hasta dónde se llegó. */
+    const darPorLeidas = () => {
+      /* Se vacía el cartel, no se esconde: quien lo cerró ya lo leyó, y
+         dejarlo en el DOM oculto solo deja algo que un lector de
+         pantalla puede seguir anunciando. Las novedades quedan igual
+         marcadas en la lista, que es donde se actúa sobre ellas. */
+      cajaDeNovedades.innerHTML = '';
+      recordarLaUltimaRespuestaVista();
+    };
+
     const cerrar = buscar('#cerrar-novedades', cajaDeNovedades);
-    if (cerrar) {
-      cerrar.addEventListener('click', () => {
-        /* Se vacía el cartel, no se esconde: quien lo cerró ya lo leyó, y
-           dejarlo en el DOM oculto solo deja algo que un lector de
-           pantalla puede seguir anunciando. Las novedades quedan igual
-           marcadas en la lista, que es donde se actúa sobre ellas. */
-        cajaDeNovedades.innerHTML = '';
+    if (cerrar) cerrar.addEventListener('click', darPorLeidas);
+
+    buscarTodos('[data-novedad]', cajaDeNovedades).forEach(boton => {
+      boton.addEventListener('click', () => {
+        const id = Number(boton.dataset.novedad);
+        darPorLeidas();
+        abrirDetalleDeInvitado(id);
       });
-    }
+    });
   }
 
   engancharInvitados(vista);
@@ -970,13 +992,38 @@ function actualizarElNumeroDeQuienFalta() {
 let NOVEDADES_DE_GENTE = [];
 
 /**
+ * Apaga el punto de la pestaña Gente y anota hasta dónde se había
+ * llegado.
+ *
+ * Separado de dibujarGente() para que pueda correr cuando se vuelve a
+ * una vista YA dibujada: irA() no redibuja en ese caso, y por eso el
+ * punto solo se apagaba la primera vez de la sesión. Lo llama
+ * VISTAS.invitados.alVolver (05-navegacion.js).
+ *
+ * No repinta nada: guarda la marca y apaga el número.
+ *
+ * @returns {void}
+ */
+function apagarElPuntoDeGente() {
+  const respondidasSegunHoy = (typeof ULTIMO_HOY !== 'undefined' && ULTIMO_HOY)
+    ? Number(ULTIMO_HOY.respondidas)
+    : NaN;
+
+  recordarDeLaCuenta('gente-respuestas-vistas', Number.isFinite(respondidasSegunHoy)
+    ? respondidasSegunHoy
+    : INVITADOS.filter(f => f.invitacion_respondida_en).length);
+
+  if (typeof ponerBurbuja === 'function') ponerBurbuja('#burbuja-gente', 0);
+}
+
+/**
  * Quiénes respondieron después de la última respuesta que ya se había
  * visto.
  *
  * @returns {Object[]} Filas de INVITADOS, de la más reciente a la más vieja.
  */
 function novedadesDesdeLaUltimaVisita() {
-  const vistoHasta = recordado('gente-ultima-respuesta-vista', null);
+  const vistoHasta = recordadoDeLaCuenta('gente-ultima-respuesta-vista', null);
 
   /* La primera vez no hay con qué comparar. Se guarda y no se avisa de
      nada: decir "38 respuestas nuevas" la primera vez que se abre la app
@@ -1006,7 +1053,7 @@ function recordarLaUltimaRespuestaVista() {
      pisarlo con "" haría que la primera confirmación no se anunciara. */
   if (!fechas.length) return;
 
-  recordar('gente-ultima-respuesta-vista', fechas.sort().pop());
+  recordarDeLaCuenta('gente-ultima-respuesta-vista', fechas.sort().pop());
 }
 
 /**
@@ -1023,16 +1070,32 @@ function carteldeNovedades() {
      darse de baja son noticias opuestas y merecen leerse distinto. Se usa
      la misma función que la lista y que la descarga, así que las tres
      dicen lo mismo. */
+  /* ⚡ EL CARTEL DECÍA QUIÉN Y NO SE PODÍA TOCAR (2026-09-15).
+   *
+   * Los renglones eran <li> pelados. Se leía «Mayte Garcia · Confirmó»
+   * y había que bajar a buscarla a mano entre 47 filas — que es la
+   * mitad del trabajo que este cartel venía a ahorrar. Dos funciones más
+   * abajo, en esta misma pantalla, las filas de la lista YA son botones
+   * con data-invitado; acá se usa lo mismo.
+   *
+   * Sigue siendo <li> por adentro: es una lista de novedades y un lector
+   * de pantalla tiene que poder contarlas. */
   const renglones = NOVEDADES_DE_GENTE.slice(0, 8).map(f => {
     const como = comoEstaLaAsistencia(f);
     const dice = (COMO_SE_LEE_EL_ESTADO[como] || {}).texto || '';
     const cuantos = (Number(f.adultos) || 0) + (Number(f.ninos) || 0);
+    const nombre = f.nombre || 'Sin nombre';
+
     return '<li>' +
-      '<b>' + seguro(f.nombre || 'Sin nombre') + '</b> · ' + seguro(dice) +
-      (como === 'confirmo' && cuantos
-        ? ' <span class="que-cambio__gente">' + cuantos +
-          (cuantos === 1 ? ' persona' : ' personas') + '</span>'
-        : '') +
+      '<button type="button" class="que-cambio__fila" ' +
+              'data-novedad="' + seguro(f.id) + '" ' +
+              'aria-label="' + seguro('Abrir la ficha de ' + nombre) + '">' +
+        '<b>' + seguro(nombre) + '</b> · ' + seguro(dice) +
+        (como === 'confirmo' && cuantos
+          ? ' <span class="que-cambio__gente">' + cuantos +
+            (cuantos === 1 ? ' persona' : ' personas') + '</span>'
+          : '') +
+      '</button>' +
     '</li>';
   }).join('');
 
@@ -1576,8 +1639,32 @@ function filaDeInvitado(fila) {
      que antes había que hacer de memoria. */
   const esNovedad = NOVEDADES_DE_GENTE.some(n => n.id === fila.id);
 
+  /* ⚡ Y LA CONFIRMACIÓN NUEVA LATE UN MOMENTO (2026-09-15).
+     El filete solo se ve si uno ya estaba mirando esa parte de la lista.
+     Un pulso corto lleva el ojo hasta ahí.
+
+     ⚠️ DOS DECISIONES QUE SE TOMARON PROBANDO, Y LAS DOS RECORTAN:
+
+     · DORADO, NO EL COLOR DEL ESTADO. Se probó verde para "confirmó",
+       rojo para "no viene", azul para "sin responder". Se descartó: QUÉ
+       contestó ya lo dicen el punto de la izquierda y la palabra de la
+       derecha, que no se van nunca. Tres señales de color en la misma
+       fila compiten y no gana ninguna. El pulso no está para informar,
+       está para llevar la atención.
+
+     · SOLO A QUIENES CONFIRMAN. El filete sigue marcando TODA novedad
+       —una baja también hay que verla—, pero latir es pedir que se mire
+       ya, y eso se reserva para la noticia que suma gente a la fiesta.
+       Si latieran las cuatro clases de novedad, latiría media lista y
+       volvería a no señalar nada. */
+  const confirmoAhora = esNovedad && comoEstaLaAsistencia(fila) === 'confirmo';
+
+  const claseDeNovedad =
+    (esNovedad ? ' lista__fila--nueva' : '') +
+    (confirmoAhora ? ' lista__fila--pulso' : '');
+
   return '' +
-    '<button class="lista__fila' + (esNovedad ? ' lista__fila--nueva' : '') +
+    '<button class="lista__fila' + claseDeNovedad +
             '" data-invitado="' + seguro(fila.id) + '">' +
       (SELECCION_ACTIVA
         ? '<span class="lista__casilla' + (marcado ? ' lista__casilla--marcada' : '') + '"></span>'

@@ -57,7 +57,15 @@ const VISTAS = {
   /* La clave sigue siendo 'invitados' porque la usan los atajos del
      icono y ensuciarVistas(). Lo que se ve en pantalla es "Gente", y
      adentro están las confirmaciones y la agenda de contactos. */
-  invitados: { titulo: 'Gente',     dibujar: () => dibujarGente() },
+  /* ⚡ EL PUNTO DE GENTE SOLO SE APAGABA LA PRIMERA VEZ (2026-09-15).
+     Apagarlo vive adentro de dibujarGente() (08-vista-invitados.js),
+     pero irA() solo redibuja si la vista NO estaba cargada: la segunda
+     entrada y todas las siguientes no dibujan nada, así que el punto se
+     quedaba encendido aunque uno estuviera parado en la lista mirándola.
+     alVolver es exactamente el gancho para esto —Evento ya lo usaba— y
+     no repinta la lista: solo apaga el punto. */
+  invitados: { titulo: 'Gente',     dibujar: () => dibujarGente(),
+               alVolver: () => apagarElPuntoDeGente() },
   correo:    { titulo: 'Correo',    dibujar: () => dibujarCorreo() },
   /* La clave interna sigue siendo 'dinero' —la usan la URL de los
      atajos del icono y las llamadas a ensuciarVistas()— y lo que se lee
@@ -363,6 +371,32 @@ function prepararNavegacion() {
  *
  * @returns {void}
  */
+/**
+ * Qué número le corresponde a un renglón del menú «Más».
+ *
+ * ⚡ EL PUNTO DE «MÁS» NUNCA DECÍA DE QUÉ ERA (2026-09-15).
+ *
+ * Ese punto es #burbuja-correo (admin/index.html): cuenta correos sin
+ * leer. Pero al abrir «Más» no había ni un renglón con ese número, así
+ * que se veía el aviso, se entraba a buscarlo, y no había nada. El
+ * aviso moría ahí. Está anotado en ponerBurbuja() (07-vista-resumen.js),
+ * que ya lo había detectado y lo dejó para esta ronda.
+ *
+ * El número sale de la MISMA burbuja que pinta el punto, de su
+ * `data-exacto`, no de una cuenta paralela: dos cuentas del mismo hecho
+ * es como se desincronizan las cosas. Y es el exacto, no el «9+» que se
+ * ve: doce correos y trece se ven igual arriba, pero el renglón sí
+ * puede decirlo.
+ *
+ * @param {string} clave - La clave de la fila del menú.
+ * @returns {number} 0 si ese renglón no cuenta nada.
+ */
+function cuantosLeVanAEsteRenglon(clave) {
+  if (clave !== 'correo') return 0;
+  const burbuja = buscar('#burbuja-correo');
+  return burbuja ? (Number(burbuja.dataset.exacto) || 0) : 0;
+}
+
 function dibujarMas() {
   const vista = buscar('#vista-mas');
   // Si la sesión venció justo mientras se tocaba "Más", USUARIO ya
@@ -394,6 +428,7 @@ function dibujarMas() {
           clave: fila[0],
           nombre: fila[1],
           descripcion: fila[2],
+          cuantos: cuantosLeVanAEsteRenglon(fila[0]),
         })),
     }))
     .filter(grupo => grupo.filas.length);

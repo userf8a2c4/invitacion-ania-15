@@ -261,7 +261,7 @@ $codigoDeLaUrl = htmlspecialchars(
 
 <div class="caja">
   <h1>Ania · XV</h1>
-  <p class="bajada">24 de octubre de 2026</p>
+  <p class="bajada"><?php echo fiestaEnPalabras(); ?></p>
 
   <div id="aviso" class="aviso oculto"></div>
 
