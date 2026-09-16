@@ -128,8 +128,14 @@ function abrirEscaner() {
           '<span class="lista__titulo">' + seguro(f.nombre) + '</span>' +
           '<span class="lista__pie">' +
             (f.mesa ? seguro(comoSeLlamaLaMesa(f.mesa)) : 'Sin mesa') +
-            (f.alergias && !/^(ninguna|ninguno|no|-)$/i.test(f.alergias)
-              ? ' · ⚠ ' + seguro(f.alergias)
+            /* ⛔ textoDeLasAlergias() y no f.alergias (2026-09-16). Acá
+               estaba leyendo la caja única del grupo, que queda vacía
+               cuando cada persona cargó la suya por nombre: en la puerta
+               no aparecía ningún aviso para gente que SÍ había declarado
+               una alergia. Es la pantalla donde ese dato más importa y era
+               la que peor lo leía. */
+            (textoDeLasAlergias(f)
+              ? ' · ⚠ ' + seguro(textoDeLasAlergias(f))
               : '') +
           '</span>' +
         '</span>' +

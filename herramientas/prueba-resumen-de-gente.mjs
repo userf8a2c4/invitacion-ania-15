@@ -73,6 +73,10 @@ try {
     vista.slice(vista.indexOf('const MANERAS_DE_DECIR_NINGUNA'),
                 vista.indexOf('\n', vista.indexOf('const MANERAS_DE_DECIR_NINGUNA')) + 1),
     extraer(piezas, 'comoEstaLaAsistencia'),
+    /* textoDeLasAlergias() es de quien depende tieneAlergiaDeVerdad()
+       desde el 2026-09-16: las alergias dejaron de leerse de la caja del
+       grupo y pasaron a leerse de lo que escribió cada persona. */
+    extraer(vista,  'textoDeLasAlergias'),
     extraer(vista,  'tieneAlergiaDeVerdad'),
     extraer(vista,  'leFaltaMesa'),
     extraer(vista,  'datoDelResumen'),

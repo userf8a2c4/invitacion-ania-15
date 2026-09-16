@@ -1080,35 +1080,94 @@ async function exportarInvitados(formato) {
   const deLaFamilia = {};
   visibles.forEach(f => { deLaFamilia[f.id] = f; });
 
+  /* ⛔ TODOS LOS LUGARES, NO SOLO LOS QUE TIENEN NOMBRE (2026-09-16)
+   *
+   * Este cuadro salía SOLO con las personas que existen como fila en
+   * `acompanantes`. Una familia con cuatro lugares apartados y un solo
+   * nombre cargado aportaba una línea, no cuatro — y la cocina, contando
+   * este papel, sacaba menos platos que gente sentada.
+   *
+   * Los lugares sin nombre ahora aparecen igual, como «Adulto 2» o
+   * «Niño 1», que es exactamente como los nombra la invitación cuando la
+   * familia todavía no los completó. Su menú SÍ está guardado
+   * (confirmar.php lo escribe aunque no haya nombre, desde el
+   * 2026-09-03), así que la línea trae el plato aunque no traiga a quién.
+   *
+   * Un cuadro que suma menos que el total del banquete es peor que uno
+   * con huecos: el hueco se ve y se pregunta, el faltante no. */
   const personas = [];
-  Object.keys(porFamilia).forEach(idFamilia => {
-    const familia = deLaFamilia[idFamilia];
-    if (!familia) return;            // filtrada fuera de lo que se ve
 
-    porFamilia[idFamilia].forEach(p => {
+  visibles.forEach(familia => {
+    const suyos = (porFamilia[familia.id] || []).slice();
+
+    const adultos = Number(familia.adultos) || 0;
+    const ninos   = Number(familia.ninos)   || 0;
+
+    /* Cuántos lugares quedaron sin una fila propia, por tipo. */
+    const cargados = { adulto: 0, nino: 0 };
+    suyos.forEach(p => {
+      cargados[p.tipo === 'nino' ? 'nino' : 'adulto']++;
+    });
+
+    const faltan = [];
+    for (let i = cargados.adulto; i < adultos; i++) {
+      faltan.push({ tipo: 'adulto', puesto: i + 1, sinNombre: true });
+    }
+    for (let i = cargados.nino; i < ninos; i++) {
+      faltan.push({ tipo: 'nino', puesto: i + 1, sinNombre: true });
+    }
+
+    suyos.concat(faltan).forEach((p, orden) => {
+      const esNino = p.tipo === 'nino';
       const nombre = (p.nombre || '').trim();
-      personas.push([
-        nombre || (p.tipo === 'nino' ? 'Niño sin nombre' : 'Adulto sin nombre'),
-        p.tipo === 'nino' ? 'Niño' : 'Adulto',
-        oGuion((p.menu || '').trim()),
-        oGuion((p.alergias || '').trim()),
-        oGuion(familia.nombre),
-        oGuion(familia.mesa),
-        comoSeLee(familia),
-      ]);
+
+      personas.push({
+        mesa:   familia.mesa || '',
+        grupo:  familia.nombre || '',
+        orden:  orden,
+        fila: [
+          oGuion(familia.mesa),
+          oGuion(familia.nombre),
+          nombre || (esNino ? 'Niño ' + p.puesto : 'Adulto ' + p.puesto),
+          esNino ? 'Niño' : 'Adulto',
+          oGuion((p.menu || '').trim()),
+          oGuion((p.alergias || '').trim()),
+          comoSeLee(familia),
+        ],
+      });
     });
   });
 
-  /* Ordenadas por nombre: con el papel en la mano se busca a una persona,
-     no a una familia. El grupo va igual en su columna. */
-  personas.sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'es',
-                                                    { sensitivity: 'base' }));
+  /* ⚡ ORDENADO POR MESA, NO ALFABÉTICO (2026-09-16)
+   *
+   * Antes iba por nombre de persona, y eso dispersaba a cada familia por
+   * todo el papel: para servir la mesa 7 había que buscar ocho apellidos
+   * sueltos entre ciento sesenta renglones.
+   *
+   * Quien usa este cuadro lo recorre POR MESA —el mesero va con la
+   * bandeja a una mesa, no a una letra del abecedario—, así que ese es el
+   * orden: mesa, después grupo, después el orden en que la familia
+   * cargó a su gente. Leído de arriba abajo, cada mesa es un bloque
+   * continuo.
+   *
+   * La mesa se compara por número cuando lo tiene: si no, «Mesa 10»
+   * queda antes que «Mesa 2». */
+  const numeroDeMesa = (texto) => {
+    const m = /(\d+)/.exec(String(texto || ''));
+    return m ? Number(m[1]) : Number.MAX_SAFE_INTEGER;
+  };
+
+  personas.sort((a, b) =>
+    numeroDeMesa(a.mesa) - numeroDeMesa(b.mesa) ||
+    String(a.mesa).localeCompare(String(b.mesa), 'es', { sensitivity: 'base' }) ||
+    String(a.grupo).localeCompare(String(b.grupo), 'es', { sensitivity: 'base' }) ||
+    a.orden - b.orden);
 
   if (personas.length) {
     bloques.push({
       titulo: 'Persona por persona (' + personas.length + ')',
-      encabezados: ['Nombre', 'Tipo', 'Menú', 'Alergias', 'Grupo', 'Mesa', 'Estado'],
-      filas: personas,
+      encabezados: ['Mesa', 'Grupo', 'Persona', 'Tipo', 'Menú', 'Alergias', 'Estado'],
+      filas: personas.map(p => p.fila),
     });
   }
 

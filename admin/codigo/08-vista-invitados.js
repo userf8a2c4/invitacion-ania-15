@@ -1458,7 +1458,38 @@ const MANERAS_DE_DECIR_NINGUNA = ['', 'ninguna', 'ninguno', 'no', 'n/a', '-'];
  * @returns {boolean}
  */
 function tieneAlergiaDeVerdad(fila) {
-  return !MANERAS_DE_DECIR_NINGUNA.includes(paraBuscar(fila.alergias || ''));
+  return textoDeLasAlergias(fila) !== '';
+}
+
+/**
+ * Qué alergias tiene esta familia, con nombre y apellido cuando se puede.
+ *
+ * ⛔ HAY DOS CAMPOS Y HASTA HOY SE LEÍA EL EQUIVOCADO (2026-09-16)
+ *
+ * `confirmaciones.alergias` es la caja única del grupo, del formulario
+ * viejo. Desde que la familia carga a su gente por nombre, cada persona
+ * escribe la suya en `acompanantes.alergias` y esa caja queda en
+ * «Ninguna».
+ *
+ * O sea que preguntar por `fila.alergias` daba que no hay alergias
+ * justo en las confirmaciones que SÍ las tienen cargadas bien. Eso dejaba
+ * a alguien fuera del filtro «Con alergias», sin etiqueta en la lista, y
+ * sin aviso en el escáner de la puerta.
+ *
+ * El servidor ahora manda `alergias_personas` ya armado. Se prefiere
+ * ése, y la caja vieja queda de respaldo para las confirmaciones que
+ * entraron antes de que existieran las alergias por persona: perderlas
+ * sería perder algo que alguien escribió.
+ *
+ * @param {Object} fila
+ * @returns {string} '' si no hay ninguna
+ */
+function textoDeLasAlergias(fila) {
+  const porPersona = String(fila.alergias_personas || '').trim();
+  if (porPersona) return porPersona;
+
+  const delGrupo = String(fila.alergias || '').trim();
+  return MANERAS_DE_DECIR_NINGUNA.includes(paraBuscar(delGrupo)) ? '' : delGrupo;
 }
 
 /**
@@ -2007,7 +2038,7 @@ function abrirDetalleDeInvitado(id) {
   }
 
   renglones.push(
-    ['Alergias', fila.alergias && !/^(ninguna|ninguno|no|-)$/i.test(fila.alergias)
+    ['Alergias', textoDeLasAlergias(fila)
                  ? '<span class="etiqueta etiqueta--ojo">⚠ ' +
                    seguro(fila.alergias) + '</span>'
                  : 'Ninguna', true],

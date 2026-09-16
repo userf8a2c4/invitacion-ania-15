@@ -198,6 +198,50 @@ case 'listar':
         ? ' LEFT JOIN llegadas lleg ON lleg.confirmacion_id = confirmaciones.id'
         : '';
 
+    /* ⛔ LAS ALERGIAS DE CADA PERSONA, EN LA LISTA PRINCIPAL (2026-09-16)
+     *
+     * Hay DOS campos de alergia en este sistema y hasta hoy las pantallas
+     * que más importan miraban el equivocado:
+     *
+     *   · confirmaciones.alergias  → la caja ÚNICA del grupo. Es la del
+     *     formulario viejo. Cuando la familia carga a su gente por nombre,
+     *     el formulario nuevo ya no la usa y queda en «Ninguna».
+     *   · acompanantes.alergias    → lo que escribió CADA persona. Es el
+     *     dato de verdad, y confirmar.php lo viene guardando bien.
+     *
+     * El resultado: alguien con alergia real no salía en el filtro «Con
+     * alergias», no le aparecía la etiqueta en la lista, y —lo grave— EL
+     * ESCÁNER DE LA PUERTA no mostraba ningún aviso. La única pantalla que
+     * lo hacía bien era la descarga, que se arma las alergias por su
+     * cuenta (alergiasPersonaPorPersona, 13-exportar.js).
+     *
+     * Ahora viaja con la lista, ya armado «Nombre: qué», y con eso las
+     * cuatro pantallas leen lo mismo sin que ninguna tenga que ir a
+     * buscarlo aparte.
+     *
+     * ⚠️ SE SUMA UN JOIN A LA CONSULTA PRINCIPAL, Y ACÁ ESO SE PIENSA.
+     * Dos líneas más abajo hay una nota que explica por qué NO se sumó
+     * otra tabla por un dato «que se usa una vez, al apretar un botón».
+     * Este es el caso contrario: se usa en cuatro pantallas, una de ellas
+     * es la puerta el día de la fiesta, y el costo es un LEFT JOIN
+     * agrupado sobre una tabla de ciento sesenta filas.
+     *
+     * ⚠️ SOLO SE NOMBRA A QUIEN TIENE ALGO. Igual criterio que la
+     * descarga: una lista de alergias es corta a propósito, y meter doce
+     * «ninguna» esconde las dos que importan. */
+    $conAcomp = existeTabla('acompanantes');
+    $selectAlergias = $conAcomp
+        ? ", (SELECT GROUP_CONCAT(
+                 CONCAT(NULLIF(TRIM(ac.nombre), ''), ': ', TRIM(ac.alergias))
+                 ORDER BY ac.id SEPARATOR ' · ')
+               FROM acompanantes ac
+              WHERE ac.confirmacion_id = confirmaciones.id
+                AND TRIM(ac.alergias) <> ''
+                AND LOWER(TRIM(ac.alergias)) NOT IN
+                    ('ninguna','ninguno','no','n/a','-')
+            ) AS alergias_personas"
+        : '';
+
     /* ⚡ (2026-08-28) FUSIÓN DE "INVITADOS" E "INVITACIONES", A PEDIDO DEL
        USUARIO: dos pestañas para la misma info repartida confundían más
        de lo que ayudaban ("comparten raíz, se leen como la misma tarea
@@ -269,7 +313,7 @@ case 'listar':
         : '';
 
     $filas = consultarTodo(
-        "SELECT confirmaciones.* $selectMesa $selectInv $selectLlegada
+        "SELECT confirmaciones.* $selectMesa $selectInv $selectLlegada $selectAlergias
          FROM confirmaciones $joinMesa $joinInv $joinLlegada $donde $orden",
         $parametros
     );
