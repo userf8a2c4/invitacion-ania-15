@@ -94,8 +94,11 @@ try {
   vm.runInContext([
     extraer(exportador, 'oGuion'),
     extraer(exportador, 'loQueEscribio'),
-    extraer(exportador, 'menusPersonaPorPersona'),
-    extraer(exportador, 'alergiasPersonaPorPersona'),
+    extraer(exportador, 'platoDeLaPersona'),
+    /* gentePorFamilia() decide quiénes son las personas de cada familia,
+       y desde el 2026-09-16 los DOS cuadros del documento la usan. Sin
+       ella acá, exportarInvitados() revienta con un ReferenceError. */
+    extraer(exportador, 'gentePorFamilia'),
     extraer(exportador, 'exportarInvitados'),
   ].join(LF + LF), contexto);
 } catch (error) {
@@ -228,6 +231,31 @@ comprobar('siguen las 7 de las dos familias que sí vienen',
   filas2.length === 7, 'salieron ' + filas2.length);
 comprobar('el título dice de quiénes habla',
   /solo quienes confirmaron/.test(String(conTodos.titulo)), String(conTodos.titulo));
+
+
+/* ─── 3c. Una fila real sin nombre ────────────────────────────────── */
+
+console.log(`
+Filas reales sin nombre
+`);
+
+/* confirmar.php crea filas en acompanantes con el nombre vacío cuando la
+   familia elige plato para un lugar al que todavía no le pusieron nombre.
+   Esas filas SON reales y tienen menú: no pueden salir como «undefined». */
+await correr([LOS_PEREZ], [
+  { confirmacion_id: 1, nombre: `Ana Pérez`, tipo: `adulto`, menu: `Estándar`, alergias: `` },
+  { confirmacion_id: 1, nombre: ``,          tipo: `adulto`, menu: `Vegetariano`, alergias: `` },
+  { confirmacion_id: 1, nombre: ``,          tipo: `nino`,   menu: `Infantil`, alergias: `` },
+]);
+
+const sinNombre = bloqueLlamado(`Persona por persona`);
+const textos = (sinNombre ? sinNombre.filas : []).map(f => f.join(` | `)).join(` // `);
+
+comprobar(`ninguna fila dice «undefined»`,
+  textos.indexOf(`undefined`) === -1,
+  textos);
+comprobar(`la fila sin nombre se numera y conserva su plato`,
+  /Adulto 2/.test(textos) && /Vegetariano/.test(textos), textos);
 
 
 /* ─── 4. Ordenado por mesa, que es como se usa ────────────────────── */

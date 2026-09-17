@@ -98,8 +98,19 @@ if (existeTabla('confirmaciones')) {
             ? "(i.respondida_en IS NOT NULL OR i.estado IN ('confirmada', 'declinada'))"
             : "i.estado IN ('confirmada', 'declinada')";
 
+        /* ⛔ COUNT(DISTINCT c.id), NO COUNT(*) (2026-09-16)
+         *
+         * Mismo peligro que _lib/gente.php:91 ya tenía anotado, y que el
+         * PDF hizo visible: `invitaciones.confirmacion_id` no es UNIQUE,
+         * así que una familia con dos invitaciones —un link regenerado—
+         * hace que este JOIN la cuente dos veces.
+         *
+         * Este número es el que el panel muestra como «contestaron». Un
+         * conteo inflado acá es peor que uno roto: nadie lo revisa porque
+         * suena bien, y se toman decisiones de salón y de banquete con él.
+         * Se cuentan familias, así que se cuentan ids distintos. */
         $filaContestaron = consultarUno(
-            'SELECT COUNT(*) AS n
+            'SELECT COUNT(DISTINCT c.id) AS n
              FROM confirmaciones c
              JOIN invitaciones i ON i.confirmacion_id = c.id
              WHERE c.asiste = 1 AND ' . $yaContesto

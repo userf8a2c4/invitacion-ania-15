@@ -197,7 +197,7 @@ case 'analizar':
     if (existeTabla('confirmaciones')) {
         foreach ($leidas as $fila) {
             $yaEsta = consultarUno(
-                'SELECT id FROM confirmaciones WHERE nombre = :n LIMIT 1',
+                'SELECT id FROM confirmaciones WHERE TRIM(nombre) = TRIM(:n) LIMIT 1',
                 [':n' => $fila['nombre']]
             );
             if ($yaEsta) $repetidos[] = $fila['nombre'];
@@ -297,8 +297,17 @@ case 'invitados':
         if ($nombre === '') continue;
 
         if ($saltearRepetidos) {
+            /* ⛔ TRIM A LOS DOS LADOS (2026-09-16)
+               La comparación era exacta, así que «Familia Zelaya » con un
+               espacio de más al final —lo normal en una celda de planilla
+               copiada a mano— entraba como familia nueva. Y una familia
+               entrando dos veces bajo dos ids distintos es un duplicado
+               que el panel no puede detectar después: son dos
+               confirmaciones de verdad.
+               Los acentos y las mayúsculas ya se comparan igual sin hacer
+               nada: la tabla es utf8mb4_unicode_ci (migracion.sql). */
             $yaEsta = consultarUno(
-                'SELECT id FROM confirmaciones WHERE nombre = :n LIMIT 1',
+                'SELECT id FROM confirmaciones WHERE TRIM(nombre) = TRIM(:n) LIMIT 1',
                 [':n' => $nombre]
             );
             if ($yaEsta) { $salteados++; continue; }

@@ -224,7 +224,7 @@ async function asegurarDatosParaBuscar() {
  */
 async function traerInvitadosParaBuscar() {
   const datos = await traer('confirmaciones.php?accion=listar');
-  INVITADOS = datos.filas || [];
+  INVITADOS = sinFamiliasRepetidas(datos.filas);
   INVITADOS_EDITABLES = !!datos.editable;
 }
 

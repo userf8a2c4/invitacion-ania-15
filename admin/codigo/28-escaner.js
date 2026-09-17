@@ -88,7 +88,7 @@ function abrirEscaner() {
      seguridad, y en iPhone es el único camino. */
   let listaAlDia = false;
   traer('confirmaciones.php?accion=listar').then(r => {
-    INVITADOS = r.filas || [];
+    INVITADOS = sinFamiliasRepetidas(r.filas);
     listaAlDia = true;
   }).catch(() => { listaAlDia = false; });
 

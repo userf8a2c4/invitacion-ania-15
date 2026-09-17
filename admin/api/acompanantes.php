@@ -281,7 +281,10 @@ case 'cuadrar':
     /* Y lo que ve el invitado, con el mismo criterio que moverElCupo. */
     if (existeTabla('invitaciones')) {
         $inv = consultarUno(
-            'SELECT id FROM invitaciones WHERE confirmacion_id = :c LIMIT 1',
+            /* La más nueva, igual que abajo y que el JOIN de
+               confirmaciones.php. Ver la nota grande de ese otro SELECT. */
+            'SELECT id FROM invitaciones
+              WHERE confirmacion_id = :c ORDER BY id DESC LIMIT 1',
             [':c' => $confirmacionId]
         );
         if ($inv && in_array('pases', columnasDe('invitaciones'), true)) {
@@ -580,7 +583,18 @@ function moverElCupo($confirmacionId, $tipo, $cuanto) {
        nada que mover. */
     if (!existeTabla('invitaciones')) return true;
     $inv = consultarUno(
-        'SELECT id, pases FROM invitaciones WHERE confirmacion_id = :c LIMIT 1',
+        /* ⛔ ORDER BY id DESC: LA MÁS NUEVA MANDA (2026-09-16)
+           Una confirmación puede tener dos invitaciones —`confirmacion_id`
+           no es UNIQUE—, y un LIMIT 1 sin orden elegía cualquiera de las
+           dos según el humor del motor. Acá eso se paga caro: esta
+           consulta es la que le sube `pases` a la invitación cuando se
+           agrega gente al grupo. Si le subía el cupo a la vieja mientras
+           el invitado tenía el link de la nueva, abría su invitación y
+           veía menos lugares de los que le apartaron.
+           Es el mismo criterio que usa el JOIN de confirmaciones.php: si
+           se generó un link después, ese es el que está repartido. */
+        'SELECT id, pases FROM invitaciones
+          WHERE confirmacion_id = :c ORDER BY id DESC LIMIT 1',
         [':c' => $confirmacionId]
     );
     /* ⚡ UNA CONFIRMACIÓN SIN INVITACIÓN TAMBIÉN ES ÉXITO (2026-09-14)

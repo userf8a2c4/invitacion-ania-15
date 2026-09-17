@@ -2409,6 +2409,59 @@ function comoEstaLaAsistencia(fila) {
 }
 
 /**
+ * La misma lista, con cada familia una sola vez.
+ *
+ * ⛔ POR QUÉ EXISTE (2026-09-16)
+ *
+ * Lucila avisó que el PDF salía con familias repetidas. La causa estaba
+ * en el servidor —`invitaciones.confirmacion_id` no es UNIQUE, y el JOIN
+ * de confirmaciones.php devolvía la familia dos veces— y ahí se arregló,
+ * que es donde corresponde.
+ *
+ * Esto es la segunda vuelta de llave. La lista que devuelve esa consulta
+ * termina en cuatro pantallas y, sobre todo, en un papel que se imprime y
+ * se lleva al salón: la lista de quién viene y qué come cada uno. Un
+ * papel que nombra a la misma familia dos veces manda a pedir platos de
+ * más y sillas de más, y nadie lo va a comparar contra la base a las once
+ * de la noche. Que el arreglo del servidor sea el correcto no quita que
+ * este lado tenga que ser incapaz de imprimir a alguien dos veces.
+ *
+ * ⚠️ SE COMPARA POR `id`, que es la confirmación. Dos filas con el mismo
+ * id son la misma familia contada dos veces, sin ambigüedad posible; se
+ * queda la primera, que es la que trae la invitación más nueva desde que
+ * el JOIN elige MAX(id).
+ *
+ * ⚠️ UNA FILA SIN `id` PASA SIEMPRE. No se puede afirmar que dos filas
+ * sin identificador sean la misma, y de las dos equivocaciones posibles
+ * —mostrar de más o esconder a alguien— esconder es la grave: significa
+ * una familia que se queda sin silla.
+ *
+ * @param {Object[]} filas
+ * @returns {Object[]} las mismas filas, en el mismo orden, sin repetidas
+ */
+function sinFamiliasRepetidas(filas) {
+  if (!Array.isArray(filas)) return [];
+
+  const vistas = new Set();
+
+  return filas.filter(fila => {
+    if (!fila) return false;
+
+    const id = fila.id;
+    if (id === undefined || id === null || id === '') return true;
+
+    /* String(): según el driver, PDO devuelve los ids como número o como
+       texto, y en el mismo panel conviven listas que vinieron por
+       caminos distintos. Con un Set sin normalizar, 7 y "7" son dos. */
+    const clave = String(id);
+    if (vistas.has(clave)) return false;
+
+    vistas.add(clave);
+    return true;
+  });
+}
+
+/**
  * Cómo se lee cada estado, de qué color va el punto y de qué color la
  * etiqueta. Un solo sitio: si mañana cambia una palabra o un color,
  * cambia a la vez en la lista y en la ficha.
