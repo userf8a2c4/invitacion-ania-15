@@ -69,7 +69,7 @@ async function datosDeInvitadosParaElAsistente() {
   if (INVITADOS && INVITADOS.length) return INVITADOS;
   try {
     const r = await traer('confirmaciones.php?accion=listar');
-    INVITADOS = r.filas || [];
+    INVITADOS = sinFamiliasRepetidas(r.filas);
   } catch (error) {
     return [];
   }

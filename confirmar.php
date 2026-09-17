@@ -514,6 +514,64 @@ try {
             }
             $faltaPonerElNombre = $ningunoTieneFila;
 
+            /* ⛔ UN REENVÍO NO CREA GENTE NUEVA (2026-09-16)
+             *
+             * El comentario de acá arriba dice que este INSERT «corre una
+             * sola vez por lugar: no puede duplicar», y se apoya en que
+             * en la siguiente vuelta las personas llegan con id desde
+             * invitacion.php. Eso vale para una página RECARGADA. No vale
+             * para la misma página enviada dos veces.
+             *
+             * Y eso pasa: el botón se bloquea al enviar
+             * (codigo/11-formulario-confirmacion.js:1040) pero se vuelve a
+             * soltar al terminar (:1093). Si el envío tardó y el invitado
+             * lo dio por perdido, aprieta de nuevo — y esa segunda vuelta
+             * sale de la MISMA página, con los mismos lugares sin id.
+             * Antes de esto, eso creaba un juego COMPLETO de personas
+             * encima del anterior: una familia de cinco pasaba a tener
+             * diez filas. Este hosting ya devolvió un 429 alguna vez; la
+             * espera larga no es hipotética.
+             *
+             * La regla: si llegan lugares sin id PERO la familia ya tiene
+             * filas, esto no puede ser otra cosa que una segunda vuelta de
+             * una página vieja. No hay gente nueva que crear; hay que
+             * escribir sobre la que el primer envío ya creó, en el mismo
+             * orden y respetando el tipo.
+             *
+             * ⚠️ NO SE BORRA NI SE PISA UN NOMBRE. Solo se reusa la fila:
+             * el menú y la alergia se actualizan, y el nombre únicamente
+             * se escribe cuando hay uno para poner. Una familia que llega
+             * por primera vez no encuentra nada que reusar y sigue por el
+             * camino de siempre, sin cambios. */
+            $lugaresYaCreados = ['adulto' => [], 'nino' => []];
+            if ($ningunoTieneFila) {
+                try {
+                    $stmtYaEstan = $pdo->prepare(
+                        'SELECT id, tipo FROM acompanantes
+                          WHERE confirmacion_id = :conf ORDER BY id'
+                    );
+                    $stmtYaEstan->execute([':conf' => (int) $invitacion['confirmacion_id']]);
+                    foreach ($stmtYaEstan->fetchAll() as $yaEsta) {
+                        $deQueTipo = (($yaEsta['tipo'] ?? '') === 'nino') ? 'nino' : 'adulto';
+                        $lugaresYaCreados[$deQueTipo][] = (int) $yaEsta['id'];
+                    }
+                } catch (PDOException $noSePudo) {
+                    /* Si esto falla se sigue como siempre: crear la fila.
+                       Duplicar es malo; dejar a alguien sin su plato
+                       guardado porque una consulta de más falló es peor. */
+                    error_log('[Ania XV] no se pudieron leer los lugares ya creados: '
+                              . $noSePudo->getMessage());
+                }
+            }
+
+            /* Para el lugar reusado que además estrena nombre. El otro
+               caso —reusar sin nombre nuevo— usa $stmtPersona, que ya
+               actualiza menú y alergia sin tocar el nombre. */
+            $stmtReusarLugar = $pdo->prepare(
+                'UPDATE acompanantes SET nombre = :nombre, menu = :menu, alergias = :alergias
+                  WHERE id = :id AND confirmacion_id = :conf'
+            );
+
             foreach ($personasRecibidas as $persona) {
                 $idPersona = (int) ($persona['id'] ?? 0);
 
@@ -540,6 +598,33 @@ try {
                 if ($faltaPonerElNombre && $esAdulto) {
                     $nombreDeEsteLugar = mb_substr((string) ($invitacion['nombre'] ?? ''), 0, 150);
                     $faltaPonerElNombre = false;
+                }
+
+                /* Si este lugar ya existe de un envío anterior, se escribe
+                   sobre él. Ver la nota «UN REENVÍO NO CREA GENTE NUEVA». */
+                $deQueTipo = $esAdulto ? 'adulto' : 'nino';
+                $lugarQueYaEstaba = array_shift($lugaresYaCreados[$deQueTipo]);
+
+                if ($lugarQueYaEstaba) {
+                    if ($nombreDeEsteLugar !== '') {
+                        $stmtReusarLugar->execute([
+                            ':nombre'   => $nombreDeEsteLugar,
+                            ':menu'     => $menuElegido,
+                            ':alergias' => $alergiaElegida,
+                            ':id'       => $lugarQueYaEstaba,
+                            ':conf'     => (int) $invitacion['confirmacion_id'],
+                        ]);
+                    } else {
+                        /* Sin nombre nuevo que poner, no se toca el que
+                           haya: solo el plato y la alergia. */
+                        $stmtPersona->execute([
+                            ':menu'     => $menuElegido,
+                            ':alergias' => $alergiaElegida,
+                            ':id'       => $lugarQueYaEstaba,
+                            ':conf'     => (int) $invitacion['confirmacion_id'],
+                        ]);
+                    }
+                    continue;
                 }
 
                 $stmtNuevaPersona->execute([

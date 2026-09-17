@@ -305,8 +305,42 @@ case 'listar':
             ' . $selectApodo . ' AS invitacion_apodo,
             g.nombre AS invitacion_grupo_nombre'
         : '';
+    /* ⛔ UNA SOLA INVITACIÓN POR CONFIRMACIÓN, O LA LISTA MIENTE (2026-09-16)
+     *
+     * Lucila avisó que el PDF sale con duplicados. Esta es la consulta de
+     * la que salen: de acá se carga INVITADOS, y con eso se dibuja la
+     * lista de Gente, se cuentan los del encabezado y se arma la descarga.
+     *
+     * `invitaciones.confirmacion_id` NO es UNIQUE — migracion.sql:1147
+     * declara solo `KEY por_confirmacion`, al revés de `asignacion_mesas`
+     * (:546) y `llegadas` (:1013), que sí lo tienen. Con dos invitaciones
+     * apuntando a la misma confirmación, este LEFT JOIN devuelve la
+     * familia DOS VECES.
+     *
+     * POR QUÉ APARECIÓ AHORA Y NO ANTES. El daño estaba disimulado: el
+     * PDF ponía una fila por familia, y una fila de más se pierde entre
+     * cincuenta. Desde que «Confirmaciones» emite una fila POR PERSONA,
+     * una familia de ocho duplicada son dieciséis renglones seguidos con
+     * los mismos nombres. El bug es viejo; lo que es nuevo es que se ve.
+     *
+     * POR QUÉ NO ALCANZA CON DISTINCT. _lib/gente.php:91 describe este
+     * mismo peligro y se defiende así, pero ahí cuenta ids. Acá el SELECT
+     * trae columnas de `inv` —token, teléfono, estado—, que es justo en
+     * lo que difieren las dos filas: DISTINCT no colapsaría nada. Hay que
+     * elegir UNA invitación, y la que vale es la última. Si se generó un
+     * link nuevo, ese es el que está repartido.
+     *
+     * ⚠️ NO SE BORRA NADA. La invitación vieja sigue en la base con su
+     * token y su historial; lo único que cambia es que la lista deja de
+     * contarla como si fuera otra familia.
+     *
+     * ⚠️ Comprobado antes de tocarlo: `$donde` (línea 156) y `$orden`
+     * (160-162) solo nombran `confirmaciones.*`, nunca `inv.`. Acotar el
+     * JOIN no le cambia el filtro ni el orden a ninguna pantalla. */
     $joinInv = $conInvitacion
-        ? ' LEFT JOIN invitaciones inv ON inv.confirmacion_id = confirmaciones.id' .
+        ? ' LEFT JOIN invitaciones inv
+                 ON inv.id = (SELECT MAX(otra.id) FROM invitaciones otra
+                               WHERE otra.confirmacion_id = confirmaciones.id)' .
           (existeTabla('grupos_invitados')
               ? ' LEFT JOIN grupos_invitados g ON g.id = inv.grupo_id'
               : '')
@@ -625,8 +659,14 @@ case 'limpiar_contactos':
 
     $aplicar = !empty($_GET['aplicar']);
 
+    /* ⛔ DISTINCT, por lo mismo que el JOIN de 'listar' (2026-09-16).
+       Con dos invitaciones para la misma confirmación, esta consulta
+       devolvía la familia dos veces y el bucle de abajo le reescribía las
+       notas dos veces, dejándola anotada dos veces en `$tocadas`: el
+       informe de una acción de mantenimiento diciendo que tocó más filas
+       de las que hay. */
     $candidatas = consultarTodo(
-        "SELECT c.id, c.nombre, c.notas, i.telefono
+        "SELECT DISTINCT c.id, c.nombre, c.notas, i.telefono
            FROM confirmaciones c
            JOIN invitaciones i ON i.confirmacion_id = c.id
           WHERE c.notas LIKE '%Contacto:%'

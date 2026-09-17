@@ -545,9 +545,61 @@ async function dibujarInvitados() {
      *
      * Ahora queda lo que se usa seguido —crear— y un engranaje con lo
      * demás. Nada se borró; todo está a un toque. */
+    /* ⚡ DESCARGAR SALE DEL MENÚ OCULTO (2026-09-16, a pedido)
+     *
+     * Estaba dentro de la hoja «Más», o sea a dos toques y detrás de una
+     * puerta cerrada. Pero es de lo que más se usa: cada vez que hay que
+     * mandarle algo al salón o a la cocina se baja esta lista.
+     *
+     * Sale como ícono y no como botón con texto, a propósito: el 14 de
+     * septiembre se sacaron cinco filas de botones de esta pantalla
+     * porque el primer invitado empezaba a 560 píxeles de 744. Un tercer
+     * botón ancho devolvería parte de ese problema. Del tamaño del
+     * engranaje no cuesta una fila: cuesta el hueco que ya estaba vacío
+     * al lado de «Crear invitación».
+     *
+     * ⚠️ 56 px de ancho y 44 de alto, igual que el engranaje. Es el
+     * mínimo de la casa para que un dedo acierte sin apuntar —la misma
+     * regla que subió los chips de 34 a 44 el 3 de septiembre—. Un ícono
+     * más chico se vería más prolijo y se fallaría más.
+     *
+     * ⚠️ Y lleva title + aria-label porque un ícono solo no se lee. Sin
+     * eso, quien use lector de pantalla encuentra un botón que no dice
+     * qué hace. */
     '<div style="display:flex;gap:var(--esp-2);margin-bottom:var(--esp-2)">' +
       '<button class="boton boton--principal" style="flex:1" id="inv-nuevo">' +
         'Crear invitación</button>' +
+      /* ⚡ EL ÍCONO ES DE LA CASA, NO UN EMOJI (2026-09-16)
+       *
+       * Un ⬇️ genérico se ve como lo que es: prestado. Y encima cada
+       * sistema lo dibuja distinto —en Android es plano, en iPhone tiene
+       * brillo azul—, así que ni siquiera se puede saber cómo se va a
+       * ver en el teléfono de Lucila.
+       *
+       * Este es una flecha que baja sobre la vara de un pergamino, con
+       * las dos volutas de los extremos. Dice «descargar» por la flecha
+       * y dice de qué casa es por la vara: es la misma familia visual
+       * del enrejado ojivo y la filigrana del fondo.
+       *
+       * ⚠️ Silueta rellena y sin detalle interno, igual que los guiños
+       * de 06-piezas.js. A 22 píxeles cualquier detalle se pierde y solo
+       * ensucia el trazo.
+       *
+       * ⚠️ fill lo pone .icono con currentColor, así que el ícono sigue
+       * el color del botón sin saber nada de la paleta — y cuando Lucila
+       * cambie los colores desde el personalizador, cambia con ella. */
+      '<button class="boton" id="inv-descargar" ' +
+              'style="flex:none;min-width:56px;display:inline-flex;' +
+                     'align-items:center;justify-content:center" ' +
+              'title="Descargar la lista" aria-label="Descargar la lista">' +
+        '<svg viewBox="0 0 24 24" class="icono" aria-hidden="true">' +
+          '<path d="M10.8 2.6h2.4v4.1l1.5-.7v2.2l-1.5.7v2.6h2.9L12 17.4 ' +
+                   '7.9 11.5h2.9V8.9l-1.5-.7V6l1.5.7V2.6z"/>' +
+          '<path d="M6.2 19.1h11.6v1.8H6.2z"/>' +
+          '<circle cx="5.2" cy="20" r="1.9"/>' +
+          '<circle cx="18.8" cy="20" r="1.9"/>' +
+        '</svg>' +
+      '</button>' +
       '<button class="boton" style="flex:none;min-width:56px" id="inv-mas" ' +
               'title="Ajustes y herramientas" aria-label="Ajustes y herramientas">' +
         '⚙️</button>' +
@@ -603,7 +655,7 @@ async function dibujarInvitados() {
 
   try {
     const respuesta = await traer('confirmaciones.php?accion=listar');
-    INVITADOS = respuesta.filas || [];
+    INVITADOS = sinFamiliasRepetidas(respuesta.filas);
     INVITADOS_EDITABLES = !!respuesta.editable;
   } catch (error) {
     pintarError(lista, error.message, () => dibujarInvitados());
@@ -718,6 +770,9 @@ async function dibujarInvitados() {
  */
 function engancharInvitados(vista) {
 
+  buscar('#inv-descargar', vista).addEventListener('click', () => {
+    abrirHojaDeFormatos('Descargar invitados', exportarInvitados);
+  });
   buscar('#inv-mas', vista).addEventListener('click', abrirMasDeInvitados);
 
   buscar('#inv-orden', vista).addEventListener('click',
@@ -912,8 +967,9 @@ function abrirMasDeInvitados() {
     '<div class="tarjeta__titulo">La lista</div>' +
     item('mas-seleccionar', 'Seleccionar varios',
          'Para mandarles algo a muchas invitaciones de una vez.') +
-    item('mas-descargar', 'Descargar la lista',
-         'En PDF, Excel o CSV, con el filtro y el orden que tenés puestos.') +
+    /* «Descargar la lista» ya no está acá: salió a la barra de arriba,
+       como ícono al lado del engranaje (2026-09-16). Dejarlo en los dos
+       lugares sería tener dos puertas a lo mismo, y la de adentro sobra. */
 
     '<div class="tarjeta__titulo" style="margin-top:var(--esp-3)">' +
       'Ajustes de la invitación</div>' +
@@ -941,10 +997,6 @@ function abrirMasDeInvitados() {
   };
 
   alToque('mas-seleccionar', () => { cerrarHoja(true); entrarEnSeleccion(); });
-  alToque('mas-descargar', () => {
-    cerrarHoja(true);
-    abrirHojaDeFormatos('Descargar invitados', exportarInvitados);
-  });
   alToque('mas-fecha', () => { cerrarHoja(true); abrirConfiguracionDeInvitaciones(); });
   alToque('mas-fecha-fiesta', () => { cerrarHoja(true); abrirLaFechaDeLaFiesta(); });
   alToque('mas-eclipse', () => { cerrarHoja(true); abrirLaHoraDelEclipse(); });

@@ -872,8 +872,12 @@ case 'por_confirmacion':
     if ($confirmacionId <= 0) responderMal('Falta decir de qué confirmación.', 400);
 
     $inv = consultarUno(
+        /* La más nueva: si se generó un link después, ese es el que está
+           repartido. Mismo criterio que el JOIN de confirmaciones.php y
+           que los dos SELECT de acompanantes.php. */
         'SELECT id, token, nombre, telefono, correo, pases, estado
-         FROM invitaciones WHERE confirmacion_id = :c LIMIT 1',
+         FROM invitaciones WHERE confirmacion_id = :c
+         ORDER BY id DESC LIMIT 1',
         [':c' => $confirmacionId]
     );
 
@@ -900,8 +904,39 @@ case 'generar_link':
     $conf = consultarUno('SELECT * FROM confirmaciones WHERE id = :c', [':c' => $confirmacionId]);
     if (!$conf) responderMal('Esa confirmación no existe.', 404);
 
-    $yaTiene = consultarUno('SELECT id FROM invitaciones WHERE confirmacion_id = :c', [':c' => $confirmacionId]);
-    if ($yaTiene) responderMal('Esta confirmación ya tiene un link.', 400);
+    /* ⛔ COMPROBAR E INSERTAR TIENEN QUE SER UN SOLO ACTO (2026-09-16)
+     *
+     * Acá había un `SELECT` suelto y después un `INSERT`, con todo el
+     * ancho de la petición en el medio. Dos POST que salen juntos —un
+     * doble clic en «Generar link», o un clic en la ProDesk lenta y otro
+     * cuando parece que no pasó nada— ven los dos la consulta vacía y
+     * insertan los dos. Quedan dos invitaciones para la misma
+     * confirmación.
+     *
+     * Y eso no es un detalle: `invitaciones.confirmacion_id` no tiene
+     * UNIQUE que lo frene (migracion.sql:1147 declara solo
+     * `KEY por_confirmacion`), así que la base acepta las dos sin
+     * chistar. De ahí salían las familias repetidas del PDF.
+     *
+     * Con la transacción y el FOR UPDATE, el segundo POST espera a que el
+     * primero termine, después ve la fila y se va con el «ya tiene un
+     * link» que corresponde. El candado lo pone InnoDB sobre el índice
+     * `por_confirmacion`, así que no hace falta tocar el esquema.
+     *
+     * ⚠️ `inTransaction()` antes de abrir: si algún día esto se llama
+     * desde adentro de otra transacción, abrir una segunda lanza. El que
+     * la abrió es el que la cierra. */
+    $abriLaTransaccion = !bd()->inTransaction();
+    if ($abriLaTransaccion) bd()->beginTransaction();
+
+    $yaTiene = consultarUno(
+        'SELECT id FROM invitaciones WHERE confirmacion_id = :c FOR UPDATE',
+        [':c' => $confirmacionId]
+    );
+    if ($yaTiene) {
+        if ($abriLaTransaccion) bd()->rollBack();
+        responderMal('Esta confirmación ya tiene un link.', 400);
+    }
 
     do {
         $token = bin2hex(random_bytes(8));
@@ -924,6 +959,8 @@ case 'generar_link':
         // aparezca como "sin enviar" solo porque el link se generó después.
         'estado'          => ((int) ($conf['asiste'] ?? 0) === 1) ? 'confirmada' : 'sin_enviar',
     ]);
+
+    if ($abriLaTransaccion) bd()->commit();
 
     anotarEnBitacora($yo, 'generó un link para una confirmación existente',
                      'invitaciones', $invitacionId, (string) ($conf['nombre'] ?? ''));

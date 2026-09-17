@@ -894,6 +894,171 @@ async function exportarResumenEjecutivoDinero() {
  * @returns {void}
  */
 /**
+ * El plato de una persona, con el de fábrica cuando nadie eligió.
+ *
+ * ⚡ POR QUÉ SE COMPLETA, Y QUÉ SE ESTÁ ASUMIENDO (2026-09-16, decidido)
+ *
+ * Hay gente confirmada sin plato en la ficha. No es que el formulario no
+ * lo exija —el formulario trae Estándar o Infantil ya marcado, así que
+ * quien confirma por ahí siempre manda uno—: son las filas que se cargan
+ * desde el panel a mano, que nacen con el menú vacío y nadie vuelve a
+ * tocar.
+ *
+ * En el papel de la cocina eso salía como un guion, y un guion no se
+ * puede cocinar: el número de platos no cerraba contra la cantidad de
+ * sillas. Se completa con el de fábrica —Estándar para los adultos,
+ * Infantil para los niños— para que cierre.
+ *
+ * ⚠️ LO QUE ESTO CUESTA, ESCRITO PARA QUE NADIE SE SORPRENDA. Es un
+ * plato que esa persona NO eligió. Si alguno de esos era vegetariano y
+ * nunca lo dijo, este papel va a decir Estándar con toda seguridad y
+ * nadie se va a enterar hasta que le pongan el plato delante. Se eligió
+ * a conciencia: la alternativa era dejar el hueco a la vista y perseguir
+ * a cada uno, y con la fiesta encima no daba el tiempo.
+ *
+ * ⚠️ NO TOCA LA BASE. El dato guardado sigue vacío, que es la verdad:
+ * acá solo se rellena lo que se imprime. El día que esa persona entre a
+ * su invitación y elija, lo suyo pisa este supuesto sin que nadie tenga
+ * que deshacer nada.
+ *
+ * @param {Object} persona - con `tipo` y `menu`
+ * @returns {string}
+ */
+function platoDeLaPersona(persona, familiaConfirmo) {
+  const elegido = String((persona && persona.menu) || '').trim();
+  if (elegido) return elegido;
+
+  /* ⛔ A QUIEN NO CONTESTÓ NO SE LE INVENTA EL PLATO (2026-09-16)
+     La primera versión de esto completaba SIEMPRE, y el resultado era
+     que una invitación «Sin responder» aparecía con cinco personas
+     comiendo Estándar. Eso no es un supuesto de trabajo: es decirle a la
+     cocina que alguien confirmó cuando ni siquiera abrió el link.
+     El de fábrica solo entra cuando la familia ya dijo que viene. */
+  if (!familiaConfirmo) return '';
+
+  return (persona && persona.tipo === 'nino') ? 'Infantil' : 'Estándar';
+}
+
+/**
+ * La gente de una familia: las filas cargadas más los lugares que
+ * todavía no tienen una.
+ *
+ * ⚡ UN SOLO SITIO QUE SABE QUIÉNES SON (2026-09-16)
+ *
+ * Esta expansión vivía suelta dentro del cuadro por persona. Al pasar
+ * «Confirmaciones» a una fila por persona habría quedado copiada en dos
+ * lados, y los dos cuadros del mismo documento habrían podido contar
+ * distinta cantidad de gente para la misma familia.
+ *
+ * ⚠️ SE COMPLETAN LOS LUGARES SIN FILA PROPIA. Una familia de cuatro con
+ * un solo nombre cargado son cuatro personas, no una: los otros tres
+ * lugares están apartados y alguien se va a sentar ahí. Se nombran
+ * «Adulto 2», «Niño 1», igual que en la invitación.
+ *
+ * ⚠️ Y EL NÚMERO SE CUENTA ACÁ, sobre la lista final. Hay filas reales
+ * con el nombre vacío —confirmar.php las crea así cuando la familia
+ * elige plato para un lugar sin nombre—; si el número saliera solo de
+ * los lugares inventados, esas decían «Adulto undefined».
+ *
+ * @param {Object} familia
+ * @param {Object[]} [suyos] - sus filas de `acompanantes`
+ * @returns {Object[]} con nombre ya resuelto, tipo, menu y alergias
+ */
+function gentePorFamilia(familia, suyos) {
+  const cargados = (suyos || []).slice();
+
+  const adultos = Number(familia.adultos) || 0;
+  const ninos   = Number(familia.ninos)   || 0;
+
+  const cuantosHay = { adulto: 0, nino: 0 };
+  cargados.forEach(p => { cuantosHay[p.tipo === 'nino' ? 'nino' : 'adulto']++; });
+
+  /* ⛔ EL HUECO SE MIDE SOBRE EL TOTAL, NO POR TIPO (2026-09-16)
+   *
+   * Acá se calculaba cuántos adultos faltaban y cuántos niños, cada uno
+   * por su lado. Pero `familia.adultos` y `familia.ninos` son lo que
+   * contestó la familia, y los `tipo` de las filas cargadas los pone
+   * quien las carga: las dos cuentas pueden no coincidir.
+   *
+   * Cuando no coinciden, la cuenta por tipo INVENTA GENTE. Una familia de
+   * cinco lugares con sus cinco filas ya cargadas, pero todas tipadas
+   * «adulto», declarada como «4 adultos y 1 niño», daba `cuantosHay.nino
+   * = 0 < 1` y se agregaba un «Niño 1» que no existe: seis personas para
+   * cinco sillas, y un plato de más pedido al banquete.
+   *
+   * Midiendo sobre el total, si ya hay cinco filas no falta nadie,
+   * importa poco de qué tipo sean. El reparto por tipo se conserva para
+   * los que SÍ faltan, y en el mismo orden de siempre: adultos primero. */
+  const lugares      = adultos + ninos;
+  const faltanEnTotal = Math.max(0, lugares - cargados.length);
+
+  let debenSerAdultos = Math.max(0, adultos - cuantosHay.adulto);
+  let debenSerNinos   = Math.max(0, ninos   - cuantosHay.nino);
+
+  const faltan = [];
+  for (let i = 0; i < faltanEnTotal; i++) {
+    if (debenSerAdultos > 0)    { faltan.push({ tipo: 'adulto' }); debenSerAdultos--; }
+    else if (debenSerNinos > 0) { faltan.push({ tipo: 'nino' });   debenSerNinos--; }
+    else                          faltan.push({ tipo: 'adulto' });
+  }
+
+  /* ⛔ EL RELLENO NO PUEDE LLAMARSE IGUAL QUE ALGUIEN QUE YA ESTÁ
+   *
+   * «Adulto 2» y «Niño 1» no son solo etiquetas de pantalla: el
+   * importador las guarda como NOMBRE DE VERDAD en la base
+   * (admin/api/importar.php:492 y :500) para toda planilla que no traiga
+   * la columna `integrantes` — o sea, la lista real de Ania.
+   *
+   * Y acá se numeraba por posición, sin mirar qué nombres ya estaban
+   * ocupados. Bastaba con que una fila real quedara corrida de su número
+   * para que el relleno cayera justo encima: dos renglones seguidos
+   * diciendo «Adulto 3» en el papel que se lleva al salón. Eso es lo que
+   * se ve como un duplicado, porque es un duplicado.
+   *
+   * Se lleva la lista de los ocupados y el número salta al primero libre.
+   * Los nombres reales no se tocan nunca: solo se elige el del relleno. */
+  const nombresOcupados = new Set(
+    cargados
+      .map(p => String(p.nombre || '').trim().toLowerCase())
+      .filter(n => n !== '')
+  );
+
+  const vanContados = { adulto: 0, nino: 0 };
+
+  return cargados.concat(faltan).map(p => {
+    const esNino = p.tipo === 'nino';
+    const clave  = esNino ? 'nino' : 'adulto';
+    vanContados[clave]++;
+
+    const nombre = String(p.nombre || '').trim();
+    if (nombre) return {
+      tipo: clave, nombre: nombre,
+      menu: p.menu || '', alergias: p.alergias || '',
+    };
+
+    const comoSeLlama = esNino ? 'Niño' : 'Adulto';
+    let numero = vanContados[clave];
+    let puesto = comoSeLlama + ' ' + numero;
+
+    /* El tope es por si alguien cargara cien filas llamadas «Adulto N»:
+       vale más un nombre repetido que un panel colgado. */
+    let vueltas = 0;
+    while (nombresOcupados.has(puesto.toLowerCase()) && vueltas < 200) {
+      numero++; vueltas++;
+      puesto = comoSeLlama + ' ' + numero;
+    }
+    nombresOcupados.add(puesto.toLowerCase());
+
+    return {
+      tipo:     clave,
+      nombre:   puesto,
+      menu:     p.menu || '',
+      alergias: p.alergias || '',
+    };
+  });
+}
+
+/**
  * Un guion en vez de una celda vacía.
  *
  * ⚡ POR QUÉ (2026-09-09). Una fila con cuatro huecos en blanco no se lee
@@ -936,95 +1101,7 @@ function loQueEscribio(valor) {
   return /^[,\s]+$/.test(texto) ? '' : texto;
 }
 
-/**
- * Los menús de una familia, persona por persona.
- *
- * ⚡ ANTES ERA UN CONTEO Y NO ALCANZABA (2026-09-09)
- * La columna decía "2 pollo, 1 res": la cocina sabe cuántos platos hacer
- * y el salón no sabe delante de quién ponerlos. Ahora dice
- * "Ana: Pollo · Luis: Res · Diana: Pescado".
- *
- * Los que no eligieron plato no se omiten —se los nombra con "sin
- * elegir"— porque un nombre que falta en la lista es indistinguible de
- * un nombre que nadie cargó, y a la hora de servir esa diferencia
- * importa.
- *
- * @param {Object[]} personas - Las de esa confirmación, con su `menu`.
- * @param {string} respaldo - `resumen_menus`, para cuando no hay personas.
- * @returns {string}
- */
-function menusPersonaPorPersona(personas, respaldo) {
-  /* ⛔ ANTES ESTO DEVOLVÍA EL RESUMEN DEL GRUPO A SECAS (2026-09-14)
-   *
-   * Y eso hacía imposible distinguir dos situaciones muy distintas:
-   * una familia que eligió plato por plato, y una de la que no sabemos
-   * quién come qué. Las dos salían en la misma columna con la misma
-   * pinta. Carlos, mirando el PDF: «necesito detalle de quién elige qué
-   * plato… damos datos imprecisos cuando tenemos los detalles».
-   *
-   * Ahora el resumen sale MARCADO. Si dice «sin desglose» es que esa
-   * familia no tiene filas por persona —no que el informe se haya
-   * quedado corto—, y se sabe a quién hay que preguntarle. */
-  if (!personas || !personas.length) {
-    const r = loQueEscribio(respaldo);
-    return r ? r + '  ·  (sin desglose por persona)' : '—';
-  }
 
-  const detalle = personas.map(p => {
-    const nombre = (p.nombre || '').trim() || (p.tipo === 'nino' ? 'Niño' : 'Adulto');
-    const plato  = (p.menu || '').trim();
-    return nombre + ': ' + (plato || 'sin elegir');
-  }).join(' · ');
-
-  /* Los niños se cuentan aparte además de nombrarse: la cocina pide ese
-     número suelto y no tiene por qué contar renglones. */
-  const ninos = personas.filter(p => p.tipo === 'nino').length;
-  return detalle + (ninos ? '  ·  Menú infantil: ' + ninos : '');
-}
-
-/**
- * Las alergias, diciendo QUIÉN tiene cada una.
- *
- * ⛔ ANTES ACÁ IBA `oGuion(f.alergias)`, QUE ES DEL GRUPO (2026-09-14)
- *
- * Carlos: «en las alergias, pon por nombre QUIÉN tiene alergia a qué».
- * Y tenía razón en que era información desperdiciada: cada persona
- * guarda la suya en `acompanantes.alergias` —el formulario las pide una
- * por una— y el informe las aplastaba en un solo texto de familia. En la
- * cocina, «Acompañante: Durazno» no dice a quién no servirle durazno.
- *
- * ⚠️ SOLO SE NOMBRA A QUIEN TIENE ALGO. A diferencia de los menús, acá
- * no se listan los que no tienen: una lista de alergias es corta a
- * propósito, y meter doce «ninguna» esconde las dos que importan.
- *
- * ⚠️ Y SI NADIE DEL GRUPO CARGÓ NINGUNA pero la familia sí tiene el
- * texto viejo, se muestra ese: es el respaldo de las confirmaciones que
- * entraron antes de que existieran las alergias por persona, y perderlo
- * sería perder un dato que alguien escribió.
- *
- * @param {Object[]} personas - Las de esa confirmación, con su `alergias`.
- * @param {string} respaldo   - El texto de alergias del grupo.
- * @returns {string}
- */
-function alergiasPersonaPorPersona(personas, respaldo) {
-  const conAlgo = (personas || [])
-    .map((p) => ({
-      nombre: (p.nombre || '').trim() ||
-              (p.tipo === 'nino' ? 'Niño' : 'Adulto'),
-      que: (p.alergias || '').trim(),
-    }))
-    .filter((p) => p.que && !/^(ninguna|ninguno|no|n\/a|-)$/i.test(p.que));
-
-  if (!conAlgo.length) {
-    const r = loQueEscribio(respaldo);
-    if (!r || /^(ninguna|ninguno|no)$/i.test(r)) return 'Ninguna';
-    /* Hay texto de familia pero nadie tiene la suya cargada: se muestra,
-       marcado, porque alguien lo escribió y perderlo sería peor. */
-    return r + (personas && personas.length ? '  ·  (del grupo)' : '');
-  }
-
-  return conAlgo.map((p) => p.nombre + ': ' + p.que).join(' · ');
-}
 
 
 async function exportarInvitados(formato) {
@@ -1092,6 +1169,51 @@ async function exportarInvitados(formato) {
   const adultos = sumar(confirmados, 'adultos');
   const ninos   = sumar(confirmados, 'ninos');
 
+  /* Las filas de «Confirmaciones», una por persona, y su color en
+     paralelo. Se arman acá arriba porque el bloque de abajo las nombra
+     dos veces y calcularlas dos veces podría dar dos resultados. */
+  const filasDeConfirmaciones = [];
+  const estadosDeConfirmaciones = [];
+
+  visibles.forEach(f => {
+    const como    = comoEstaLaAsistencia(f);
+    const vienen  = como === 'confirmo';
+    const suGente = gentePorFamilia(f, porFamilia[f.id]);
+    const total   = (Number(f.adultos) || 0) + (Number(f.ninos) || 0);
+
+    /* Una familia sin nadie cargado y sin lugares igual tiene que
+       aparecer: es una invitación que existe y a la que hay que
+       perseguir. Sale con un renglón y la celda de persona en blanco. */
+    const gente = suGente.length ? suGente : [null];
+
+    gente.forEach((p, i) => {
+      const primero = i === 0;
+
+      filasDeConfirmaciones.push([
+        primero ? oGuion(f.nombre) : '',
+        primero ? oGuion(f.invitacion_telefono) : '',
+        primero ? oGuion(f.correo) : '',
+        primero ? comoSeLee(f) : '',
+        primero ? total : '',
+        p ? p.nombre : '—',
+        p ? (p.tipo === 'nino' ? 'Niño' : 'Adulto') : '—',
+        p ? oGuion(platoDeLaPersona(p, vienen)) : '—',
+        p ? oGuion(String(p.alergias || '').trim()) : '—',
+        primero ? oGuion(loQueEscribio(f.notas)) : '',
+        primero ? oGuion(f.codigo) : '',
+        primero
+          ? oGuion(f.invitacion_respondida_en
+              ? comoFecha(f.invitacion_respondida_en) : '')
+          : '',
+      ]);
+
+      /* El color va en TODOS los renglones del grupo, no solo en el
+         primero: media familia pintada y media en blanco se leería como
+         dos grupos distintos. */
+      estadosDeConfirmaciones.push(como);
+    });
+  });
+
   const bloques = [
     /* El resumen va PRIMERO y como bloque propio: así aparece en los
        cuatro formatos —no solo en el PDF— y es lo primero que se lee. */
@@ -1112,28 +1234,26 @@ async function exportarInvitados(formato) {
          volver a la app teniendo el PDF en la mano. Sale de
          `invitaciones.telefono`, que es el mismo que usa el botón de
          WhatsApp —no el de las notas, que era el que mentía—. */
-      encabezados: ['Nombre', 'Teléfono', 'Correo', 'Estado',
-                    'Adultos', 'Niños', 'Total',
-                    'Menús', 'Alergias', 'Notas', 'Código', 'Confirmó el'],
-      filas: visibles.map(f => [
-        oGuion(f.nombre),
-        oGuion(f.invitacion_telefono),
-        oGuion(f.correo),
-        comoSeLee(f),
-        Number(f.adultos) || 0, Number(f.ninos) || 0,
-        (Number(f.adultos) || 0) + (Number(f.ninos) || 0),
-        menusPersonaPorPersona(porFamilia[f.id], f.resumen_menus),
-        alergiasPersonaPorPersona(porFamilia[f.id], f.alergias),
-        oGuion(loQueEscribio(f.notas)),
-        oGuion(f.codigo),
-        /* ⚡ LA FECHA ERA LA DE ALTA, NO LA DE LA RESPUESTA (2026-09-09)
-           Estaba `fecha_hora`, que es cuándo se creó la fila —o sea,
-           cuándo Lucila cargó la invitación—. Se veía una fecha para
-           todos, incluso para quienes no contestaron nunca. La de verdad
-           es `respondida_en`, y quien no contestó no tiene ninguna. */
-        oGuion(f.invitacion_respondida_en
-          ? comoFecha(f.invitacion_respondida_en) : ''),
-      ]),
+      /* ⚡ UNA FILA POR PERSONA, NO UNA POR FAMILIA (2026-09-16, a pedido)
+       *
+       * La columna «Menús» era un párrafo entero metido en una celda:
+       * «Monserrat Barrera: sin elegir · Francisco Gonzalez: sin elegir ·
+       * Evelyn Gabriela: sin elegir · Sofía Godínez: sin elegir…». Con
+       * cinco personas ya no se leía, y con ocho tampoco se podía usar.
+       *
+       * Ahora cada persona tiene su renglón. Los datos del grupo
+       * —teléfono, estado, código, cuándo contestó— van SOLO en el
+       * primero y los siguientes los dejan en blanco: así el ojo agrupa
+       * solo, sin una línea repetida ocho veces que tape lo que cambia.
+       *
+       * ⚠️ Se fueron «Adultos» y «Niños» como columnas sueltas. Con una
+       * fila por persona, contar los renglones del grupo da lo mismo, y
+       * la columna «Tipo» lo dice por cada uno. «Total» se queda en el
+       * primer renglón, que es el número que se le canta al salón. */
+      encabezados: ['Grupo', 'Teléfono', 'Correo', 'Estado', 'Total',
+                    'Persona', 'Tipo', 'Menú', 'Alergias',
+                    'Notas', 'Código', 'Confirmó el'],
+      filas: filasDeConfirmaciones,
       /* ⚡ EL COLOR DE CADA FILA (2026-09-16, a pedido)
          Paralelo a `filas` por índice, y NO adentro de cada fila: los
          cuatro renderizadores dan por hecho que una fila es un arreglo
@@ -1142,9 +1262,15 @@ async function exportarInvitados(formato) {
          de color ni se enteran.
 
          Sale de comoEstaLaAsistencia(), la misma función que llena la
-         columna «Estado» cuatro líneas más arriba. Un solo dueño: el
-         color y la palabra no pueden decir cosas distintas. */
-      estados: visibles.map(f => comoEstaLaAsistencia(f)),
+         columna «Estado». Un solo dueño: el color y la palabra no pueden
+         decir cosas distintas.
+
+         ⚠️ SE ARMA JUNTO CON LAS FILAS, no con visibles.map(). Desde que
+         cada persona tiene su renglón hay MÁS filas que familias, y un
+         color por familia dejaría de coincidir con la fila que pinta a
+         partir del primer grupo de dos personas: el resto del documento
+         saldría con el color corrido. */
+      estados: estadosDeConfirmaciones,
     },
   ];
 
@@ -1169,8 +1295,6 @@ async function exportarInvitados(formato) {
      menú por lugar, sin nombres— no tienen esas filas, y ahí no hay
      detalle que mostrar: aparecen marcadas «sin desglose» en el bloque
      de arriba, que es la señal de a quién hay que preguntarle. */
-  const deLaFamilia = {};
-  visibles.forEach(f => { deLaFamilia[f.id] = f; });
 
   /* ⛔ TODOS LOS LUGARES, NO SOLO LOS QUE TIENEN NOMBRE (2026-09-16)
    *
@@ -1200,54 +1324,34 @@ async function exportarInvitados(formato) {
    * cocina y suma más platos que sillas es peor que uno incompleto: el
    * incompleto se nota, el inflado no.
    *
-   * ⚠️ Los lugares SIN NOMBRE de una familia que sí viene se quedan. Son
-   * «Adulto 2» con su plato ya guardado, y sacarlos devolvería el
-   * problema contrario —que el papel sume de menos—, que es justo el que
-   * se arregló esta mañana. */
+   * ⚠️ Quiénes son las personas de cada familia lo decide
+   * gentePorFamilia(), la misma que usa «Confirmaciones». Si cada cuadro
+   * las contara por su cuenta, dos tablas del mismo documento podrían
+   * decir que una familia tiene cuatro y cinco a la vez. */
   visibles
     .filter(familia => comoEstaLaAsistencia(familia) === 'confirmo')
     .forEach(familia => {
-    const suyos = (porFamilia[familia.id] || []).slice();
-
-    const adultos = Number(familia.adultos) || 0;
-    const ninos   = Number(familia.ninos)   || 0;
-
-    /* Cuántos lugares quedaron sin una fila propia, por tipo. */
-    const cargados = { adulto: 0, nino: 0 };
-    suyos.forEach(p => {
-      cargados[p.tipo === 'nino' ? 'nino' : 'adulto']++;
-    });
-
-    const faltan = [];
-    for (let i = cargados.adulto; i < adultos; i++) {
-      faltan.push({ tipo: 'adulto', puesto: i + 1, sinNombre: true });
-    }
-    for (let i = cargados.nino; i < ninos; i++) {
-      faltan.push({ tipo: 'nino', puesto: i + 1, sinNombre: true });
-    }
-
-    suyos.concat(faltan).forEach((p, orden) => {
-      const esNino = p.tipo === 'nino';
-      const nombre = (p.nombre || '').trim();
-
-      personas.push({
-        mesa:   familia.mesa || '',
-        grupo:  familia.nombre || '',
-        orden:  orden,
-        fila: [
-          oGuion(familia.mesa),
-          oGuion(familia.nombre),
-          nombre || (esNino ? 'Niño ' + p.puesto : 'Adulto ' + p.puesto),
-          esNino ? 'Niño' : 'Adulto',
-          oGuion((p.menu || '').trim()),
-          oGuion((p.alergias || '').trim()),
-          /* Sin celda de «Estado»: acá ya son todos los que vienen. Una
-             columna repitiendo «Confirmó» en cada renglón solo le roba
-             ancho a Menú y a Alergias, que son las dos que se leen. */
-        ],
+      gentePorFamilia(familia, porFamilia[familia.id]).forEach((p, orden) => {
+        personas.push({
+          mesa:  familia.mesa || '',
+          grupo: familia.nombre || '',
+          orden: orden,
+          fila: [
+            oGuion(familia.mesa),
+            oGuion(familia.nombre),
+            p.nombre,
+            p.tipo === 'nino' ? 'Niño' : 'Adulto',
+            /* true: acá ya se filtró a los que vienen, así que a quien no
+               eligió le entra el plato de fábrica. */
+            oGuion(platoDeLaPersona(p, true)),
+            oGuion(String(p.alergias || '').trim()),
+            /* Sin celda de «Estado»: acá ya son todos los que vienen. Una
+               columna repitiendo «Confirmó» en cada renglón solo le roba
+               ancho a Menú y a Alergias, que son las dos que se leen. */
+          ],
+        });
       });
     });
-  });
 
   /* ⚡ ORDENADO POR MESA, NO ALFABÉTICO (2026-09-16)
    *
